@@ -156,4 +156,9 @@ export interface FacturaRepository {
     error: Record<string, unknown>;
     retryAfterSeconds: number;
   }): Promise<DocumentoResponse | null>;
+  retryPendingEmission(input: {
+    facturadorId: string;
+    documentoId: string;
+    requestedBy: string;
+  }): Promise<DocumentoResponse | null>;
 }

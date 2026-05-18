@@ -8,8 +8,14 @@ import {
   type FiscalRefreshStatusRequest,
   type FiscalRefreshStatusResponse
 } from "../src/modules/fiscal-gateway/fiscal-gateway.types";
-import { emitFacturaAgainstFiscalGateway, getDocumentoById, listDocumentos, previewFactura, refreshDocumentoStatus } from "../src/modules/facturas/facturas.service";
-import { enqueueFacturaEmission, processNextQueuedFiscalEmission } from "../src/modules/facturas/facturas.service";
+import {
+  emitFacturaAgainstFiscalGateway,
+  getDocumentoById,
+  listDocumentos,
+  previewFactura,
+  refreshDocumentoStatus
+} from "../src/modules/facturas/facturas.service";
+import { enqueueFacturaEmission, processNextQueuedFiscalEmission, retryDocumentoEmission } from "../src/modules/facturas/facturas.service";
 import type { OperationalContextResponse } from "../src/modules/context/context.types";
 import type {
   FacturaPersistInput,
@@ -62,6 +68,8 @@ class FakeFacturaRepository implements FacturaRepository {
   public pendingEmission: PendingFiscalEmission | null = null;
   public lastCompletedInput: Parameters<FacturaRepository["completePendingEmission"]>[0] | null = null;
   public lastFailedInput: Parameters<FacturaRepository["failPendingEmission"]>[0] | null = null;
+  public retryResponse: DocumentoResponse | null = null;
+  public lastRetryInput: Parameters<FacturaRepository["retryPendingEmission"]>[0] | null = null;
 
   async findByIdempotencyKey(): Promise<DocumentoResponse | null> {
     return this.existing;
@@ -169,6 +177,11 @@ class FakeFacturaRepository implements FacturaRepository {
       estado: input.estado,
       fiscal_status: input.error
     });
+  }
+
+  async retryPendingEmission(input: Parameters<FacturaRepository["retryPendingEmission"]>[0]): Promise<DocumentoResponse | null> {
+    this.lastRetryInput = input;
+    return this.retryResponse;
   }
 }
 
@@ -488,6 +501,61 @@ describe("facturas service", () => {
     expect(gateway.lastRefreshRequest).toBeNull();
   });
 
+  it("retries recoverable queued fiscal emissions", async () => {
+    const repo = new FakeFacturaRepository();
+    repo.findByIdResponse = buildDocumento({
+      estado: "ERROR_TEMPORAL",
+      cdc: null,
+      fiscal_document_id: null,
+      numero_fiscal: null
+    });
+    repo.retryResponse = buildDocumento({
+      estado: "EMITIENDO",
+      cdc: null,
+      fiscal_document_id: null,
+      numero_fiscal: null,
+      fiscal_status: {
+        recoverable: true,
+        action: "RETRY_EMISSION_REQUESTED"
+      }
+    });
+
+    const result = await retryDocumentoEmission(context, "66666666-6666-4666-8666-666666666666", repo);
+
+    expect(result.estado).toBe("EMITIENDO");
+    expect(repo.lastRetryInput).toEqual({
+      facturadorId: context.facturador.id,
+      documentoId: "66666666-6666-4666-8666-666666666666",
+      requestedBy: context.user.id
+    });
+  });
+
+  it("rejects retry for final fiscal states", async () => {
+    const repo = new FakeFacturaRepository();
+    repo.findByIdResponse = buildDocumento({
+      estado: "EMITIDA"
+    });
+
+    await expect(retryDocumentoEmission(context, "66666666-6666-4666-8666-666666666666", repo)).rejects.toMatchObject({
+      statusCode: 409,
+      code: "CONFLICT"
+    });
+    expect(repo.lastRetryInput).toBeNull();
+  });
+
+  it("rejects retry when no recoverable outbox job exists", async () => {
+    const repo = new FakeFacturaRepository();
+    repo.findByIdResponse = buildDocumento({
+      estado: "PENDIENTE_SIFEN"
+    });
+    repo.retryResponse = null;
+
+    await expect(retryDocumentoEmission(context, "66666666-6666-4666-8666-666666666666", repo)).rejects.toMatchObject({
+      statusCode: 409,
+      code: "CONFLICT"
+    });
+  });
+
   it("rejects missing customer identity data", () => {
     expect(() =>
       previewFactura(context, {
@@ -626,7 +694,10 @@ describe("facturas service", () => {
       retryAfterSeconds: 60,
       error: {
         code: "TIMEOUT",
-        message: "Timeout fiscal"
+        message: "Timeout fiscal",
+        recoverable: true,
+        retry_after_seconds: 60,
+        suggested_action: "REFRESH_OR_RETRY"
       }
     });
   });

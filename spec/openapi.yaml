@@ -565,6 +565,34 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /facturas/{documentoId}/retry-emission:
+    post:
+      tags: [Facturas]
+      summary: Reintentar emision fiscal recuperable
+      description: |
+        Reactiva el outbox de una factura en `PENDIENTE_SIFEN` o `ERROR_TEMPORAL`
+        usando el mismo `external_ref` idempotente. No crea una nueva factura
+        operativa ni permite reintentar estados finales.
+      parameters:
+        - $ref: "#/components/parameters/DocumentoId"
+      responses:
+        "200":
+          description: Reintento encolado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DocumentoResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Documento no recuperable o sin outbox reintentable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /facturas/{documentoId}/cancelar:
     post:
       tags: [Facturas]
@@ -694,6 +722,10 @@ paths:
         "200":
           description: Vista publica del documento
           content:
+            text/html:
+              schema:
+                type: string
+                description: Pagina HTML publica para cliente final cuando el cliente HTTP acepta HTML.
             application/json:
               schema:
                 $ref: "#/components/schemas/PublicDocumentResponse"

@@ -7,7 +7,14 @@ import { getOperationalContext } from "../context/context.service";
 import { validateRequest } from "../../shared/validation/validate-request";
 import { fiscalGateway } from "../fiscal-gateway/fiscal-gateway.client";
 import { facturasRepository } from "./facturas.repository";
-import { enqueueFacturaEmission, getDocumentoById, listDocumentos, previewFactura, refreshDocumentoStatus } from "./facturas.service";
+import {
+  enqueueFacturaEmission,
+  getDocumentoById,
+  listDocumentos,
+  previewFactura,
+  refreshDocumentoStatus,
+  retryDocumentoEmission
+} from "./facturas.service";
 import { condicionesVenta, type DocumentoListFilters } from "./facturas.types";
 import { HttpError } from "../../shared/errors/http-error";
 
@@ -89,6 +96,21 @@ facturasRouter.post(
     try {
       const context = await getOperationalContext(req.user!.id, operationalContextRepository);
       const result = await refreshDocumentoStatus(context, String(req.params.documentoId), facturasRepository, fiscalGateway);
+      res.json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+facturasRouter.post(
+  "/facturas/:documentoId/retry-emission",
+  requireAuth,
+  validateRequest("params", documentoParamsSchema),
+  async (req, res, next) => {
+    try {
+      const context = await getOperationalContext(req.user!.id, operationalContextRepository);
+      const result = await retryDocumentoEmission(context, String(req.params.documentoId), facturasRepository);
       res.json(result);
     } catch (error) {
       next(error);

@@ -1,8 +1,21 @@
 import { describe, expect, it } from "vitest";
 import type { OperationalContextResponse } from "../src/modules/context/context.types";
-import { createOrGetDeliveryLink, generatePublicDeliveryToken, getEmailStatus, getPublicArtifact, getPublicDocument } from "../src/modules/entrega/entrega.service";
+import {
+  createOrGetDeliveryLink,
+  generatePublicDeliveryToken,
+  getEmailStatus,
+  getPublicArtifact,
+  getPublicDocument,
+  renderPublicDocumentHtml
+} from "../src/modules/entrega/entrega.service";
 import type { DeliveryLinkRecord, DeliveryLinkRepository, PublicDocumentRecord } from "../src/modules/entrega/entrega.types";
-import type { DocumentoResponse, FacturaPersistInput, FacturaRepository } from "../src/modules/facturas/facturas.types";
+import type {
+  DocumentoResponse,
+  FacturaPersistInput,
+  FacturaQueuedPersistInput,
+  FacturaRepository,
+  PendingFiscalEmission
+} from "../src/modules/facturas/facturas.types";
 import type { FiscalGateway } from "../src/modules/fiscal-gateway/fiscal-gateway.types";
 
 const context: OperationalContextResponse = {
@@ -57,6 +70,26 @@ class FakeFacturaRepository implements FacturaRepository {
 
   async createFromEmission(_input: FacturaPersistInput): Promise<DocumentoResponse> {
     return buildDocumento();
+  }
+
+  async createQueuedEmission(_input: FacturaQueuedPersistInput): Promise<DocumentoResponse> {
+    return buildDocumento();
+  }
+
+  async claimNextPendingEmission(): Promise<PendingFiscalEmission | null> {
+    return null;
+  }
+
+  async completePendingEmission(): Promise<DocumentoResponse | null> {
+    return this.documento;
+  }
+
+  async failPendingEmission(): Promise<DocumentoResponse | null> {
+    return this.documento;
+  }
+
+  async retryPendingEmission(): Promise<DocumentoResponse | null> {
+    return this.documento;
   }
 }
 
@@ -190,6 +223,32 @@ describe("entrega service", () => {
       }
     });
     expect("id" in result).toBe(false);
+  });
+
+  it("renders public document html with artifacts and escaped customer data", async () => {
+    const deliveryLinks = new FakeDeliveryLinkRepository();
+    deliveryLinks.publicDocument = {
+      ...buildPublicDocument(),
+      documento: {
+        ...buildPublicDocument().documento,
+        cliente: {
+          documento_tipo: "RUC",
+          documento: "800<1>",
+          razon_social: "Cliente <script>alert(1)</script>",
+          email: "cliente@example.com"
+        }
+      }
+    };
+
+    const publicDocument = await getPublicDocument("A".repeat(43), deliveryLinks);
+    const html = renderPublicDocumentHtml(publicDocument);
+
+    expect(html).toContain("<!doctype html>");
+    expect(html).toContain("Ver KUDE/PDF");
+    expect(html).toContain(`/public/d/${"A".repeat(43)}/kude.pdf`);
+    expect(html).toContain(`/public/d/${"A".repeat(43)}/xml`);
+    expect(html).toContain("Cliente &lt;script&gt;alert(1)&lt;/script&gt;");
+    expect(html).not.toContain("Cliente <script>");
   });
 
   it("fetches public artifacts by CDC through fiscal gateway", async () => {

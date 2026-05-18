@@ -134,6 +134,30 @@ export async function refreshDocumentoStatus(
   }
 }
 
+export async function retryDocumentoEmission(
+  context: OperationalContextResponse,
+  documentoId: string,
+  repository: FacturaRepository
+): Promise<DocumentoResponse> {
+  const documento = await getDocumentoById(context, documentoId, repository);
+
+  if (!["PENDIENTE_SIFEN", "ERROR_TEMPORAL"].includes(documento.estado)) {
+    throw new HttpError(409, "CONFLICT", "Solo documentos con error temporal o pendiente SIFEN pueden reintentarse.");
+  }
+
+  const retried = await repository.retryPendingEmission({
+    facturadorId: context.facturador.id,
+    documentoId,
+    requestedBy: context.user.id
+  });
+
+  if (!retried) {
+    throw new HttpError(409, "CONFLICT", "El documento no tiene una emision fiscal recuperable en cola.");
+  }
+
+  return retried;
+}
+
 export async function emitFacturaAgainstFiscalGateway(
   context: OperationalContextResponse,
   input: FacturaPreviewInput,
@@ -242,6 +266,7 @@ export async function processNextQueuedFiscalEmission(
     });
   } catch (error) {
     if (error instanceof FiscalGatewayError) {
+      const retryAfterSeconds = 60;
       return repository.failPendingEmission({
         outboxId: pending.outboxId,
         documentoId: pending.documentoId,
@@ -249,9 +274,12 @@ export async function processNextQueuedFiscalEmission(
         error: {
           code: error.code,
           message: error.message,
-          details: error.details ?? null
+          details: error.details ?? null,
+          recoverable: true,
+          retry_after_seconds: retryAfterSeconds,
+          suggested_action: error.code === "TIMEOUT" ? "REFRESH_OR_RETRY" : "RETRY_EMISSION"
         },
-        retryAfterSeconds: 60
+        retryAfterSeconds
       });
     }
     throw error;

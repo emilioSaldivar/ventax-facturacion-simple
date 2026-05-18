@@ -114,6 +114,164 @@ export async function getPublicArtifact(
   }
 }
 
+export function renderPublicDocumentHtml(documento: PublicDocumentResponse): string {
+  const title = documento.numero_fiscal ? `Comprobante ${documento.numero_fiscal}` : "Comprobante pendiente";
+  const kudeUrl = documento.artifacts.kude_pdf.available ? documento.artifacts.kude_pdf.url : null;
+  const xmlUrl = documento.artifacts.xml.available ? documento.artifacts.xml.url : null;
+
+  return `<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>${escapeHtml(title)}</title>
+    <style>
+      :root {
+        color: #18242a;
+        background: #f4f8fa;
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+      * { box-sizing: border-box; }
+      body { margin: 0; }
+      main {
+        min-height: 100vh;
+        padding: 18px;
+        background: linear-gradient(180deg, rgb(7 167 225 / 0.1), transparent 280px), #f4f8fa;
+      }
+      .shell {
+        display: grid;
+        gap: 14px;
+        width: min(100%, 760px);
+        margin: 0 auto;
+      }
+      .brand {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        color: #07a7e1;
+        font-weight: 900;
+      }
+      .brand span {
+        display: grid;
+        width: 34px;
+        height: 34px;
+        place-items: center;
+        border-radius: 8px;
+        background: #07a7e1;
+        color: #ffffff;
+      }
+      .panel {
+        display: grid;
+        gap: 14px;
+        border: 1px solid #d7e5ea;
+        border-radius: 8px;
+        background: #ffffff;
+        padding: 16px;
+      }
+      .heading {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 12px;
+      }
+      h1, h2, p { margin-top: 0; }
+      h1 { margin-bottom: 6px; font-size: 26px; line-height: 1.12; }
+      h2 { margin: 0; font-size: 18px; }
+      .muted { margin: 0; color: #65747b; overflow-wrap: anywhere; }
+      .pill {
+        flex: 0 0 auto;
+        border-radius: 999px;
+        background: ${documento.estado === "EMITIDA" ? "#e7f7ef" : "#fff1e8"};
+        color: ${documento.estado === "EMITIDA" ? "#087f5b" : "#9a3412"};
+        padding: 7px 10px;
+        font-size: 12px;
+        font-weight: 900;
+      }
+      dl {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+        margin: 0;
+      }
+      dt { color: #65747b; font-size: 12px; font-weight: 800; }
+      dd { margin: 2px 0 0; font-size: 17px; font-weight: 900; overflow-wrap: anywhere; }
+      .total {
+        border-radius: 8px;
+        background: #eef7fb;
+        padding: 14px;
+      }
+      .total dd { font-size: 26px; }
+      .actions {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 10px;
+      }
+      a {
+        display: grid;
+        min-height: 48px;
+        place-items: center;
+        border: 1px solid #c6d9df;
+        border-radius: 8px;
+        background: #ffffff;
+        color: #006b86;
+        font-weight: 900;
+        line-height: 1.15;
+        padding: 8px 12px;
+        text-decoration: none;
+      }
+      a.primary { border-color: #07a7e1; background: #07a7e1; color: #ffffff; }
+      a.disabled { pointer-events: none; color: #7a8b92; opacity: 0.58; }
+      @media (min-width: 620px) {
+        main { padding: 28px; }
+        .actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="shell" aria-labelledby="public-document-title">
+        <div class="brand"><span>V</span> VENTAX</div>
+        <article class="panel">
+          <div class="heading">
+            <div>
+              <h1 id="public-document-title">${escapeHtml(title)}</h1>
+              <p class="muted">${escapeHtml(documento.facturador.razon_social)} · RUC ${escapeHtml(documento.facturador.ruc)}</p>
+            </div>
+            <span class="pill">${escapeHtml(formatPublicEstado(documento.estado))}</span>
+          </div>
+          <dl>
+            <div>
+              <dt>Cliente</dt>
+              <dd>${escapeHtml(documento.cliente.razon_social)}</dd>
+            </div>
+            <div>
+              <dt>Documento</dt>
+              <dd>${escapeHtml(documento.cliente.documento)}</dd>
+            </div>
+            <div>
+              <dt>CDC</dt>
+              <dd>${escapeHtml(documento.cdc ?? "pendiente")}</dd>
+            </div>
+            <div>
+              <dt>Email</dt>
+              <dd>${escapeHtml(formatPublicEmailStatus(documento.email_status))}</dd>
+            </div>
+          </dl>
+          <div class="total">
+            <dt>Total</dt>
+            <dd>${escapeHtml(formatGuaranies(documento.totals.total))}</dd>
+          </div>
+          <div class="actions">
+            <a class="primary${kudeUrl ? "" : " disabled"}" href="${escapeAttribute(kudeUrl ?? "#")}">Ver KUDE/PDF</a>
+            <a class="${xmlUrl ? "" : "disabled"}" href="${escapeAttribute(xmlUrl ?? "#")}">Descargar XML</a>
+          </div>
+        </article>
+      </section>
+    </main>
+  </body>
+</html>`;
+}
+
 function buildResponse(record: DeliveryLinkRecord): DeliveryLinkResponse {
   const publicUrl = `${env.PUBLIC_APP_BASE_URL.replace(/\/$/, "")}/public/d/${record.token}`;
 
@@ -158,4 +316,54 @@ function buildEmailStatusMessage(status: EmailStatusResponse["status"], hasEmail
   }
 
   return "Estado de email delegado no disponible.";
+}
+
+function formatPublicEstado(estado: PublicDocumentResponse["estado"]): string {
+  const labels: Record<PublicDocumentResponse["estado"], string> = {
+    EMITIENDO: "Emitiendo",
+    EMITIDA: "Emitida",
+    PENDIENTE_SIFEN: "Pendiente SIFEN",
+    RECHAZADA: "Rechazada",
+    ERROR_OPERATIVO: "Error operativo",
+    ERROR_TEMPORAL: "Error temporal",
+    ANULADA: "Anulada"
+  };
+  return labels[estado];
+}
+
+function formatPublicEmailStatus(status: PublicDocumentResponse["email_status"]): string {
+  if (status === "DELEGATED") {
+    return "Delegado a Ventax FE";
+  }
+  if (status === "SENT") {
+    return "Enviado";
+  }
+  if (status === "FAILED") {
+    return "Fallido";
+  }
+  if (status === "NOT_APPLICABLE") {
+    return "Sin email";
+  }
+  return "No disponible";
+}
+
+function formatGuaranies(value: number): string {
+  return new Intl.NumberFormat("es-PY", {
+    style: "currency",
+    currency: "PYG",
+    maximumFractionDigits: 0
+  }).format(value);
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function escapeAttribute(value: string): string {
+  return escapeHtml(value).replaceAll("`", "&#96;");
 }

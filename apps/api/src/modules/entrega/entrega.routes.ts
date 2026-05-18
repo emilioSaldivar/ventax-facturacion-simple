@@ -7,7 +7,7 @@ import { facturasRepository } from "../facturas/facturas.repository";
 import { fiscalGateway } from "../fiscal-gateway/fiscal-gateway.client";
 import { validateRequest } from "../../shared/validation/validate-request";
 import { deliveryLinkRepository } from "./entrega.repository";
-import { createOrGetDeliveryLink, getEmailStatus, getPublicArtifact, getPublicDocument } from "./entrega.service";
+import { createOrGetDeliveryLink, getEmailStatus, getPublicArtifact, getPublicDocument, renderPublicDocumentHtml } from "./entrega.service";
 
 const documentoParamsSchema = z.object({
   documentoId: z.string().uuid()
@@ -66,6 +66,10 @@ publicEntregaRouter.get(
   async (req, res, next) => {
     try {
       const result = await getPublicDocument(String(req.params.token), deliveryLinkRepository);
+      if (req.accepts(["html", "json"]) === "html") {
+        res.type("html").send(renderPublicDocumentHtml(result));
+        return;
+      }
       res.json(result);
     } catch (error) {
       next(error);
