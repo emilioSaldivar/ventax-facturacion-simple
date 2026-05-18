@@ -467,6 +467,10 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/DocumentoListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "422":
+          $ref: "#/components/responses/ValidationError"
     post:
       tags: [Facturas]
       summary: Emitir Factura Electronica contado o credito
@@ -488,6 +492,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/DocumentoResponse"
+        "400":
+          description: Header `Idempotency-Key` ausente o invalido
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "409":
@@ -512,6 +522,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/DocumentoResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
 
@@ -528,6 +540,28 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/DocumentoResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Documento sin CDC fiscal para consultar
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: Backend fiscal no disponible o rechazo la consulta
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "504":
+          description: Timeout al consultar backend fiscal
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /facturas/{documentoId}/cancelar:
     post:
@@ -607,6 +641,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/DeliveryLinkResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
 
   /facturas/{documentoId}/artifacts:
     get:

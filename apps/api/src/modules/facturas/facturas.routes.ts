@@ -7,10 +7,13 @@ import { getOperationalContext } from "../context/context.service";
 import { validateRequest } from "../../shared/validation/validate-request";
 import { fiscalGateway } from "../fiscal-gateway/fiscal-gateway.client";
 import { facturasRepository } from "./facturas.repository";
-import { emitFacturaAgainstFiscalGateway, previewFactura } from "./facturas.service";
-import { condicionesVenta } from "./facturas.types";
+import { emitFacturaAgainstFiscalGateway, getDocumentoById, listDocumentos, previewFactura, refreshDocumentoStatus } from "./facturas.service";
+import { condicionesVenta, type DocumentoListFilters } from "./facturas.types";
+import { HttpError } from "../../shared/errors/http-error";
 
 const ivaTipos = ["IVA_10", "IVA_5", "EXENTA"] as const;
+const documentoTipos = ["FACTURA", "NOTA_CREDITO"] as const;
+const documentoEstados = ["EMITIENDO", "EMITIDA", "PENDIENTE_SIFEN", "RECHAZADA", "ERROR_OPERATIVO", "ERROR_TEMPORAL", "ANULADA"] as const;
 
 const facturaPreviewSchema = z.object({
   condicion_venta: z.enum(condicionesVenta),
@@ -37,7 +40,61 @@ const facturaPreviewSchema = z.object({
     .min(1)
 });
 
+const documentoListQuerySchema = z
+  .object({
+    tipo: z.enum(documentoTipos).optional(),
+    estado: z.enum(documentoEstados).optional(),
+    desde: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+    hasta: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+    q: z.string().trim().min(1).max(120).optional(),
+    limit: z.coerce.number().int().min(1).max(100).default(20),
+    offset: z.coerce.number().int().min(0).default(0)
+  })
+  .refine((value) => !value.desde || !value.hasta || value.desde <= value.hasta, {
+    message: "`desde` no puede ser posterior a `hasta`.",
+    path: ["desde"]
+  });
+
+const documentoParamsSchema = z.object({
+  documentoId: z.string().uuid()
+});
+
 export const facturasRouter = Router();
+
+facturasRouter.get("/facturas", requireAuth, validateRequest("query", documentoListQuerySchema), async (req, res, next) => {
+  try {
+    const context = await getOperationalContext(req.user!.id, operationalContextRepository);
+    const result = await listDocumentos(context, req.query as unknown as DocumentoListFilters, facturasRepository);
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+facturasRouter.get("/facturas/:documentoId", requireAuth, validateRequest("params", documentoParamsSchema), async (req, res, next) => {
+  try {
+    const context = await getOperationalContext(req.user!.id, operationalContextRepository);
+    const result = await getDocumentoById(context, String(req.params.documentoId), facturasRepository);
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+facturasRouter.post(
+  "/facturas/:documentoId/refresh-status",
+  requireAuth,
+  validateRequest("params", documentoParamsSchema),
+  async (req, res, next) => {
+    try {
+      const context = await getOperationalContext(req.user!.id, operationalContextRepository);
+      const result = await refreshDocumentoStatus(context, String(req.params.documentoId), facturasRepository, fiscalGateway);
+      res.json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
 
 facturasRouter.post("/facturas/preview", requireAuth, validateRequest("body", facturaPreviewSchema), async (req, res, next) => {
   try {
@@ -52,7 +109,7 @@ facturasRouter.post("/facturas/preview", requireAuth, validateRequest("body", fa
 facturasRouter.post("/facturas", requireAuth, validateRequest("body", facturaPreviewSchema), async (req, res, next) => {
   try {
     const context = await getOperationalContext(req.user!.id, operationalContextRepository);
-    const idempotencyKey = req.get("idempotency-key")?.trim() || undefined;
+    const idempotencyKey = parseIdempotencyKey(req.get("idempotency-key"));
     const result = await emitFacturaAgainstFiscalGateway(context, req.body, facturasRepository, fiscalGateway, {
       idempotencyKey
     });
@@ -61,3 +118,25 @@ facturasRouter.post("/facturas", requireAuth, validateRequest("body", facturaPre
     next(error);
   }
 });
+
+function parseIdempotencyKey(value: string | undefined): string {
+  const idempotencyKey = value?.trim();
+
+  if (!idempotencyKey) {
+    throw new HttpError(400, "VALIDATION_ERROR", "Header Idempotency-Key requerido.");
+  }
+
+  if (idempotencyKey.length < 8 || idempotencyKey.length > 120) {
+    throw new HttpError(400, "VALIDATION_ERROR", "Header Idempotency-Key debe tener entre 8 y 120 caracteres.");
+  }
+
+  if (!/^[A-Za-z0-9._:-]+$/.test(idempotencyKey)) {
+    throw new HttpError(
+      400,
+      "VALIDATION_ERROR",
+      "Header Idempotency-Key solo permite letras, numeros, punto, guion, guion bajo y dos puntos."
+    );
+  }
+
+  return idempotencyKey;
+}

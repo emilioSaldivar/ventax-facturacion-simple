@@ -84,6 +84,21 @@ export interface DocumentoResponse {
   created_at: string | null;
 }
 
+export interface DocumentoListFilters {
+  tipo?: DocumentoTipo;
+  estado?: DocumentoEstado;
+  desde?: string;
+  hasta?: string;
+  q?: string;
+  limit: number;
+  offset: number;
+}
+
+export interface DocumentoListResponse {
+  items: DocumentoResponse[];
+  total: number;
+}
+
 export interface FacturaPersistInput {
   tenantId: string;
   facturadorId: string;
@@ -100,5 +115,13 @@ export interface FacturaPersistInput {
 
 export interface FacturaRepository {
   findByIdempotencyKey(input: { facturadorId: string; idempotencyKey: string }): Promise<DocumentoResponse | null>;
+  findById(input: { facturadorId: string; documentoId: string }): Promise<DocumentoResponse | null>;
+  list(input: { facturadorId: string; filters: DocumentoListFilters }): Promise<DocumentoListResponse>;
+  updateFiscalStatus(input: {
+    facturadorId: string;
+    documentoId: string;
+    estado: DocumentoEstado;
+    fiscalStatus: Record<string, unknown>;
+  }): Promise<DocumentoResponse | null>;
   createFromEmission(input: FacturaPersistInput): Promise<DocumentoResponse>;
 }

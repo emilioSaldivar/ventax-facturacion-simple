@@ -9,6 +9,7 @@ import { authRouter } from "./modules/auth/auth.routes";
 import { catalogoRouter } from "./modules/catalogo/catalogo.routes";
 import { clientesRouter } from "./modules/clientes/clientes.routes";
 import { contextRouter } from "./modules/context/context.routes";
+import { entregaRouter } from "./modules/entrega/entrega.routes";
 import { facturasRouter } from "./modules/facturas/facturas.routes";
 import { fiscalGatewayRouter } from "./modules/fiscal-gateway/fiscal-gateway.routes";
 import { healthRouter } from "./modules/health/health.routes";
@@ -57,6 +58,7 @@ export function createApp() {
   app.use(env.API_BASE_PATH, clientesRouter);
   app.use(env.API_BASE_PATH, catalogoRouter);
   app.use(env.API_BASE_PATH, facturasRouter);
+  app.use(env.API_BASE_PATH, entregaRouter);
   app.use(env.API_BASE_PATH, fiscalGatewayRouter);
   app.use(env.API_BASE_PATH, healthRouter);
   app.get("/health", (_req, res) => res.redirect(307, `${env.API_BASE_PATH}/health`));

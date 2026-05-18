@@ -1,5 +1,12 @@
 import { pool } from "../../db/pool";
-import type { FacturaItemPreview, FacturaPersistInput, FacturaRepository, DocumentoResponse } from "./facturas.types";
+import type {
+  DocumentoListFilters,
+  DocumentoListResponse,
+  FacturaItemPreview,
+  FacturaPersistInput,
+  FacturaRepository,
+  DocumentoResponse
+} from "./facturas.types";
 
 interface FacturaRow {
   id: string;
@@ -31,6 +38,40 @@ interface FacturaItemRow {
 }
 
 export class PgFacturaRepository implements FacturaRepository {
+  async findById(input: { facturadorId: string; documentoId: string }): Promise<DocumentoResponse | null> {
+    const result = await pool.query<FacturaRow>(
+      `
+        select
+          id,
+          tipo,
+          estado,
+          condicion_venta,
+          external_ref,
+          cliente_snapshot,
+          totals_snapshot,
+          fiscal_response_snapshot,
+          fiscal_document_id,
+          cdc,
+          numero_fiscal,
+          email_estado,
+          created_at
+        from facturas_operativas
+        where facturador_id = $1
+          and id = $2
+          and deleted_at is null
+        limit 1
+      `,
+      [input.facturadorId, input.documentoId]
+    );
+
+    const factura = result.rows[0];
+    if (!factura) {
+      return null;
+    }
+
+    return mapFacturaRow(factura, await this.findItems(factura.id));
+  }
+
   async findByIdempotencyKey(input: { facturadorId: string; idempotencyKey: string }): Promise<DocumentoResponse | null> {
     const result = await pool.query<FacturaRow>(
       `
@@ -55,6 +96,95 @@ export class PgFacturaRepository implements FacturaRepository {
         limit 1
       `,
       [input.facturadorId, input.idempotencyKey]
+    );
+
+    const factura = result.rows[0];
+    if (!factura) {
+      return null;
+    }
+
+    return mapFacturaRow(factura, await this.findItems(factura.id));
+  }
+
+  async list(input: { facturadorId: string; filters: DocumentoListFilters }): Promise<DocumentoListResponse> {
+    const { where, params } = buildListWhere(input.facturadorId, input.filters);
+    const limitParam = params.length + 1;
+    const offsetParam = params.length + 2;
+
+    const listResult = await pool.query<FacturaRow>(
+      `
+        select
+          id,
+          tipo,
+          estado,
+          condicion_venta,
+          external_ref,
+          cliente_snapshot,
+          totals_snapshot,
+          fiscal_response_snapshot,
+          fiscal_document_id,
+          cdc,
+          numero_fiscal,
+          email_estado,
+          created_at
+        from facturas_operativas
+        ${where}
+        order by created_at desc, id desc
+        limit $${limitParam}
+        offset $${offsetParam}
+      `,
+      [...params, input.filters.limit, input.filters.offset]
+    );
+
+    const countResult = await pool.query<{ total: string }>(
+      `
+        select count(*)::text as total
+        from facturas_operativas
+        ${where}
+      `,
+      params
+    );
+
+    const itemsByFacturaId = await this.findItemsByFacturaIds(listResult.rows.map((row) => row.id));
+
+    return {
+      items: listResult.rows.map((row) => mapFacturaRow(row, itemsByFacturaId.get(row.id) ?? [])),
+      total: Number(countResult.rows[0]?.total ?? 0)
+    };
+  }
+
+  async updateFiscalStatus(input: {
+    facturadorId: string;
+    documentoId: string;
+    estado: DocumentoResponse["estado"];
+    fiscalStatus: Record<string, unknown>;
+  }): Promise<DocumentoResponse | null> {
+    const result = await pool.query<FacturaRow>(
+      `
+        update facturas_operativas
+        set
+          estado = $3,
+          fiscal_response_snapshot = $4::jsonb,
+          updated_at = now()
+        where facturador_id = $1
+          and id = $2
+          and deleted_at is null
+        returning
+          id,
+          tipo,
+          estado,
+          condicion_venta,
+          external_ref,
+          cliente_snapshot,
+          totals_snapshot,
+          fiscal_response_snapshot,
+          fiscal_document_id,
+          cdc,
+          numero_fiscal,
+          email_estado,
+          created_at
+      `,
+      [input.facturadorId, input.documentoId, input.estado, JSON.stringify(input.fiscalStatus)]
     );
 
     const factura = result.rows[0];
@@ -201,6 +331,16 @@ export class PgFacturaRepository implements FacturaRepository {
       return mapFacturaRow(factura, input.preview.items);
     } catch (error) {
       await client.query("rollback");
+      if (isUniqueViolation(error) && input.idempotencyKey) {
+        const existing = await this.findByIdempotencyKey({
+          facturadorId: input.facturadorId,
+          idempotencyKey: input.idempotencyKey
+        });
+
+        if (existing) {
+          return existing;
+        }
+      }
       throw error;
     } finally {
       client.release();
@@ -241,9 +381,102 @@ export class PgFacturaRepository implements FacturaRepository {
       iva_monto: Number(row.iva_monto)
     }));
   }
+
+  private async findItemsByFacturaIds(facturaIds: string[]): Promise<Map<string, FacturaItemPreview[]>> {
+    const byFacturaId = new Map<string, FacturaItemPreview[]>();
+    if (facturaIds.length === 0) {
+      return byFacturaId;
+    }
+
+    const result = await pool.query<FacturaItemRow & { factura_operativa_id: string }>(
+      `
+        select
+          factura_operativa_id,
+          catalogo_item_id,
+          line_no,
+          codigo,
+          descripcion,
+          cantidad,
+          precio_unitario,
+          iva_tipo,
+          subtotal,
+          base_imponible,
+          iva_monto
+        from factura_items_snapshot
+        where factura_operativa_id = any($1::uuid[])
+        order by factura_operativa_id, line_no
+      `,
+      [facturaIds]
+    );
+
+    for (const row of result.rows) {
+      const items = byFacturaId.get(row.factura_operativa_id) ?? [];
+      items.push({
+        catalogo_item_id: row.catalogo_item_id,
+        line_no: Number(row.line_no),
+        codigo: row.codigo,
+        descripcion: row.descripcion,
+        cantidad: Number(row.cantidad),
+        precio_unitario: Number(row.precio_unitario),
+        iva_tipo: row.iva_tipo,
+        subtotal: Number(row.subtotal),
+        base_imponible: Number(row.base_imponible),
+        iva_monto: Number(row.iva_monto)
+      });
+      byFacturaId.set(row.factura_operativa_id, items);
+    }
+
+    return byFacturaId;
+  }
 }
 
 export const facturasRepository = new PgFacturaRepository();
+
+function isUniqueViolation(error: unknown): boolean {
+  return typeof error === "object" && error !== null && "code" in error && error.code === "23505";
+}
+
+function buildListWhere(facturadorId: string, filters: DocumentoListFilters): { where: string; params: unknown[] } {
+  const params: unknown[] = [facturadorId];
+  const clauses = ["facturador_id = $1", "deleted_at is null"];
+
+  if (filters.tipo) {
+    params.push(filters.tipo);
+    clauses.push(`tipo = $${params.length}`);
+  }
+
+  if (filters.estado) {
+    params.push(filters.estado);
+    clauses.push(`estado = $${params.length}`);
+  }
+
+  if (filters.desde) {
+    params.push(filters.desde);
+    clauses.push(`created_at >= $${params.length}::date`);
+  }
+
+  if (filters.hasta) {
+    params.push(filters.hasta);
+    clauses.push(`created_at < ($${params.length}::date + interval '1 day')`);
+  }
+
+  const q = filters.q?.trim();
+  if (q) {
+    params.push(`%${q}%`);
+    clauses.push(`(
+      numero_fiscal ilike $${params.length}
+      or cdc ilike $${params.length}
+      or external_ref ilike $${params.length}
+      or cliente_snapshot->>'documento' ilike $${params.length}
+      or cliente_snapshot->>'razon_social' ilike $${params.length}
+    )`);
+  }
+
+  return {
+    where: `where ${clauses.join(" and ")}`,
+    params
+  };
+}
 
 function mapFacturaRow(row: FacturaRow, items: FacturaItemPreview[]): DocumentoResponse {
   const emailStatus = row.email_estado ?? "NOT_APPLICABLE";

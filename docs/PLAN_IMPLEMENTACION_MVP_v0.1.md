@@ -666,6 +666,25 @@ Red:
 - red interna Docker para `api` y `postgres`;
 - solo reverse proxy expuesto.
 
+### 13.1 Scripts Operativos
+
+Comandos preparados:
+
+```bash
+bash scripts/deploy.sh
+bash scripts/backup.sh
+bash scripts/restore-backup.sh
+```
+
+Reglas:
+
+- `scripts/deploy.sh` construye y levanta el stack definido en `docker-compose.yml`.
+- El puerto HTTP del frontend puede cambiarse con `FRONTEND_HTTP_PORT`; si cambia, tambien deben ajustarse `APP_ORIGIN` y `BACKOFFICE_ORIGIN`.
+- `scripts/backup.sh` genera un backup PostgreSQL en `backups/postgres/` usando `pg_dump` desde el contenedor `postgres`.
+- `scripts/restore-backup.sh` restaura por defecto el backup mas reciente de `backups/postgres/`; tambien acepta una ruta explicita como primer argumento.
+- El restore es destructivo y requiere confirmacion explicita con `RESTORE_CONFIRM=YES` o `--yes`.
+- Los backups locales no se versionan.
+
 ## 14. Variables De Entorno
 
 Minimas:

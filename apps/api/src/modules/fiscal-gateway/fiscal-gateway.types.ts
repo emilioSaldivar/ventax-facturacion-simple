@@ -45,9 +45,19 @@ export interface FiscalEmitFacturaResponse {
   raw: Record<string, unknown>;
 }
 
+export interface FiscalRefreshStatusRequest {
+  cdc: string;
+}
+
+export interface FiscalRefreshStatusResponse {
+  estado: "EMITIDA" | "PENDIENTE_SIFEN" | "RECHAZADA" | "ANULADA";
+  raw: Record<string, unknown>;
+}
+
 export interface FiscalGateway {
   health(): Promise<FiscalGatewayHealth>;
   emitFactura(request: FiscalEmitFacturaRequest): Promise<FiscalEmitFacturaResponse>;
+  refreshFacturaStatus(request: FiscalRefreshStatusRequest): Promise<FiscalRefreshStatusResponse>;
 }
 
 export class FiscalGatewayError extends Error {

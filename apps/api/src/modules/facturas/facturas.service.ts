@@ -4,6 +4,8 @@ import { HttpError } from "../../shared/errors/http-error";
 import type { OperationalContextResponse } from "../context/context.types";
 import { FiscalGatewayError, type FiscalGateway, type FiscalEmitFacturaRequest, type FiscalEmitFacturaResponse } from "../fiscal-gateway/fiscal-gateway.types";
 import type {
+  DocumentoListFilters,
+  DocumentoListResponse,
   DocumentoEstado,
   DocumentoResponse,
   FacturaItemPreview,
@@ -59,6 +61,76 @@ function validateCliente(input: FacturaPreviewInput): void {
 
   if (!input.cliente.razon_social.trim()) {
     throw new HttpError(400, "VALIDATION_ERROR", "Razon social de cliente requerida.");
+  }
+}
+
+export async function listDocumentos(
+  context: OperationalContextResponse,
+  filters: DocumentoListFilters,
+  repository: FacturaRepository
+): Promise<DocumentoListResponse> {
+  return repository.list({
+    facturadorId: context.facturador.id,
+    filters
+  });
+}
+
+export async function getDocumentoById(
+  context: OperationalContextResponse,
+  documentoId: string,
+  repository: FacturaRepository
+): Promise<DocumentoResponse> {
+  const documento = await repository.findById({
+    facturadorId: context.facturador.id,
+    documentoId
+  });
+
+  if (!documento) {
+    throw new HttpError(404, "NOT_FOUND", "Documento no encontrado.");
+  }
+
+  return documento;
+}
+
+export async function refreshDocumentoStatus(
+  context: OperationalContextResponse,
+  documentoId: string,
+  repository: FacturaRepository,
+  gateway: FiscalGateway
+): Promise<DocumentoResponse> {
+  const documento = await getDocumentoById(context, documentoId, repository);
+
+  if (!documento.cdc) {
+    throw new HttpError(409, "CONFLICT", "Documento sin CDC fiscal para refrescar estado.");
+  }
+
+  try {
+    const refreshed = await gateway.refreshFacturaStatus({ cdc: documento.cdc });
+    const updated = await repository.updateFiscalStatus({
+      facturadorId: context.facturador.id,
+      documentoId,
+      estado: refreshed.estado,
+      fiscalStatus: refreshed.raw
+    });
+
+    if (!updated) {
+      throw new HttpError(404, "NOT_FOUND", "Documento no encontrado.");
+    }
+
+    return updated;
+  } catch (error) {
+    if (error instanceof FiscalGatewayError) {
+      throw new HttpError(
+        error.code === "TIMEOUT" ? 504 : 502,
+        "INTERNAL_ERROR",
+        error.code === "TIMEOUT" ? "Timeout al refrescar estado fiscal." : "No se pudo refrescar estado fiscal.",
+        {
+          gateway_code: error.code,
+          details: error.details ?? null
+        }
+      );
+    }
+    throw error;
   }
 }
 

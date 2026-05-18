@@ -57,3 +57,37 @@
 --   punto.id,
 --   perfil.id
 -- from actividad, punto, perfil;
+
+-- Cliente de referencia para validaciones manuales de compra de servicios:
+--
+-- with identidad_cliente as (
+--   insert into cliente_identidades (
+--     documento_tipo,
+--     documento,
+--     documento_normalizado,
+--     razon_social
+--   )
+--   values ('RUC', '492019-8', '4920198', 'Roberto Saldivar')
+--   on conflict (documento_tipo, documento_normalizado)
+--   where deleted_at is null
+--   do update set
+--     documento = excluded.documento,
+--     razon_social = excluded.razon_social
+--   returning id
+-- )
+-- insert into facturador_clientes (
+--   tenant_id,
+--   facturador_id,
+--   cliente_identidad_id,
+--   razon_social
+-- )
+-- select
+--   f.tenant_id,
+--   f.id,
+--   identidad_cliente.id,
+--   'Roberto Saldivar'
+-- from facturadores f, identidad_cliente
+-- where f.ruc = '80136968-1'
+-- on conflict (facturador_id, cliente_identidad_id)
+-- where deleted_at is null
+-- do update set razon_social = excluded.razon_social;

@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { FiscalGatewayError, type FiscalGateway, type FiscalGatewayHealth, type FiscalEmitFacturaRequest, type FiscalEmitFacturaResponse } from "../src/modules/fiscal-gateway/fiscal-gateway.types";
-import { emitFacturaAgainstFiscalGateway, previewFactura } from "../src/modules/facturas/facturas.service";
+import {
+  FiscalGatewayError,
+  type FiscalGateway,
+  type FiscalGatewayHealth,
+  type FiscalEmitFacturaRequest,
+  type FiscalEmitFacturaResponse,
+  type FiscalRefreshStatusRequest,
+  type FiscalRefreshStatusResponse
+} from "../src/modules/fiscal-gateway/fiscal-gateway.types";
+import { emitFacturaAgainstFiscalGateway, getDocumentoById, listDocumentos, previewFactura, refreshDocumentoStatus } from "../src/modules/facturas/facturas.service";
 import type { OperationalContextResponse } from "../src/modules/context/context.types";
 import type { FacturaPersistInput, FacturaRepository, DocumentoResponse } from "../src/modules/facturas/facturas.types";
 
@@ -34,9 +42,37 @@ const context: OperationalContextResponse = {
 class FakeFacturaRepository implements FacturaRepository {
   public lastInput: FacturaPersistInput | null = null;
   public existing: DocumentoResponse | null = null;
+  public listResponse = { items: [] as DocumentoResponse[], total: 0 };
+  public lastListInput: { facturadorId: string; filters: Parameters<FacturaRepository["list"]>[0]["filters"] } | null = null;
+  public findByIdResponse: DocumentoResponse | null = null;
+  public lastFindByIdInput: { facturadorId: string; documentoId: string } | null = null;
+  public lastUpdateFiscalStatusInput: Parameters<FacturaRepository["updateFiscalStatus"]>[0] | null = null;
 
   async findByIdempotencyKey(): Promise<DocumentoResponse | null> {
     return this.existing;
+  }
+
+  async findById(input: { facturadorId: string; documentoId: string }): Promise<DocumentoResponse | null> {
+    this.lastFindByIdInput = input;
+    return this.findByIdResponse;
+  }
+
+  async list(input: { facturadorId: string; filters: Parameters<FacturaRepository["list"]>[0]["filters"] }) {
+    this.lastListInput = input;
+    return this.listResponse;
+  }
+
+  async updateFiscalStatus(input: Parameters<FacturaRepository["updateFiscalStatus"]>[0]): Promise<DocumentoResponse | null> {
+    this.lastUpdateFiscalStatusInput = input;
+    if (!this.findByIdResponse) {
+      return null;
+    }
+
+    return {
+      ...this.findByIdResponse,
+      estado: input.estado,
+      fiscal_status: input.fiscalStatus
+    };
   }
 
   async createFromEmission(input: FacturaPersistInput): Promise<DocumentoResponse> {
@@ -70,8 +106,15 @@ class FakeFacturaRepository implements FacturaRepository {
 
 class FakeFiscalGateway implements FiscalGateway {
   public lastRequest: FiscalEmitFacturaRequest | null = null;
+  public lastRefreshRequest: FiscalRefreshStatusRequest | null = null;
 
-  constructor(private readonly response: FiscalEmitFacturaResponse | FiscalGatewayError) {}
+  constructor(
+    private readonly response: FiscalEmitFacturaResponse | FiscalGatewayError,
+    private readonly refreshResponse: FiscalRefreshStatusResponse | FiscalGatewayError = {
+      estado: "EMITIDA",
+      raw: { status: { status: "APPROVED" }, refreshed: true }
+    }
+  ) {}
 
   async health(): Promise<FiscalGatewayHealth> {
     return { ok: true, mode: "mock" };
@@ -83,6 +126,14 @@ class FakeFiscalGateway implements FiscalGateway {
       throw this.response;
     }
     return this.response;
+  }
+
+  async refreshFacturaStatus(request: FiscalRefreshStatusRequest): Promise<FiscalRefreshStatusResponse> {
+    this.lastRefreshRequest = request;
+    if (this.refreshResponse instanceof FiscalGatewayError) {
+      throw this.refreshResponse;
+    }
+    return this.refreshResponse;
   }
 }
 
@@ -103,6 +154,41 @@ const emitInput = {
     }
   ]
 };
+
+function buildDocumento(overrides: Partial<DocumentoResponse> = {}): DocumentoResponse {
+  return {
+    id: "66666666-6666-4666-8666-666666666666",
+    tipo: "FACTURA",
+    estado: "PENDIENTE_SIFEN",
+    condicion_venta: "CONTADO",
+    numero_fiscal: "001-001-0000001",
+    cdc: "A".repeat(44),
+    fiscal_document_id: "doc-1",
+    external_ref: "fac-1",
+    cliente: emitInput.cliente,
+    items: [],
+    totals: {
+      subtotal: 11000,
+      total_sin_iva: 10000,
+      iva_5: 0,
+      iva_10: 1000,
+      total_iva: 1000,
+      total: 11000
+    },
+    fiscal_status: null,
+    delivery: {
+      public_url: null,
+      whatsapp_url: null,
+      email_status: "DELEGATED",
+      artifacts: {
+        kude_pdf: { available: true, url: null },
+        xml: { available: true, url: null }
+      }
+    },
+    created_at: "2026-05-18T00:00:00.000Z",
+    ...overrides
+  };
+}
 
 describe("facturas service", () => {
   it("calculates preview totals without persistence", () => {
@@ -179,6 +265,145 @@ describe("facturas service", () => {
     });
   });
 
+  it("lists documents within the authenticated facturador scope", async () => {
+    const repo = new FakeFacturaRepository();
+    repo.listResponse = {
+      total: 1,
+      items: [
+        {
+          id: "66666666-6666-4666-8666-666666666666",
+          tipo: "FACTURA",
+          estado: "EMITIDA",
+          condicion_venta: "CONTADO",
+          numero_fiscal: "001-001-0000001",
+          cdc: "A".repeat(44),
+          fiscal_document_id: "doc-1",
+          external_ref: "fac-1",
+          cliente: emitInput.cliente,
+          items: [],
+          totals: {
+            subtotal: 11000,
+            total_sin_iva: 10000,
+            iva_5: 0,
+            iva_10: 1000,
+            total_iva: 1000,
+            total: 11000
+          },
+          fiscal_status: null,
+          delivery: {
+            public_url: null,
+            whatsapp_url: null,
+            email_status: "DELEGATED",
+            artifacts: {
+              kude_pdf: { available: true, url: null },
+              xml: { available: true, url: null }
+            }
+          },
+          created_at: "2026-05-18T00:00:00.000Z"
+        }
+      ]
+    };
+
+    const result = await listDocumentos(
+      context,
+      { estado: "EMITIDA", desde: "2026-05-01", hasta: "2026-05-18", q: "Cliente", limit: 20, offset: 0 },
+      repo
+    );
+
+    expect(result.total).toBe(1);
+    expect(repo.lastListInput).toEqual({
+      facturadorId: context.facturador.id,
+      filters: { estado: "EMITIDA", desde: "2026-05-01", hasta: "2026-05-18", q: "Cliente", limit: 20, offset: 0 }
+    });
+  });
+
+  it("gets document detail within the authenticated facturador scope", async () => {
+    const repo = new FakeFacturaRepository();
+    repo.findByIdResponse = {
+      id: "66666666-6666-4666-8666-666666666666",
+      tipo: "FACTURA",
+      estado: "EMITIDA",
+      condicion_venta: "CREDITO",
+      numero_fiscal: "001-001-0000001",
+      cdc: "A".repeat(44),
+      fiscal_document_id: "doc-1",
+      external_ref: "fac-1",
+      cliente: emitInput.cliente,
+      items: [],
+      totals: {
+        subtotal: 11000,
+        total_sin_iva: 10000,
+        iva_5: 0,
+        iva_10: 1000,
+        total_iva: 1000,
+        total: 11000
+      },
+      fiscal_status: null,
+      delivery: {
+        public_url: null,
+        whatsapp_url: null,
+        email_status: "DELEGATED",
+        artifacts: {
+          kude_pdf: { available: true, url: null },
+          xml: { available: true, url: null }
+        }
+      },
+      created_at: "2026-05-18T00:00:00.000Z"
+    };
+
+    const result = await getDocumentoById(context, "66666666-6666-4666-8666-666666666666", repo);
+
+    expect(result.condicion_venta).toBe("CREDITO");
+    expect(repo.lastFindByIdInput).toEqual({
+      facturadorId: context.facturador.id,
+      documentoId: "66666666-6666-4666-8666-666666666666"
+    });
+  });
+
+  it("returns not found when document detail is outside the facturador scope", async () => {
+    const repo = new FakeFacturaRepository();
+
+    await expect(getDocumentoById(context, "66666666-6666-4666-8666-666666666666", repo)).rejects.toMatchObject({
+      statusCode: 404,
+      code: "NOT_FOUND"
+    });
+  });
+
+  it("refreshes fiscal status by CDC and persists the mapped state", async () => {
+    const repo = new FakeFacturaRepository();
+    repo.findByIdResponse = buildDocumento();
+    const gateway = new FakeFiscalGateway(new FiscalGatewayError("UPSTREAM_ERROR", "Should not emit"), {
+      estado: "EMITIDA",
+      raw: { cdc: "A".repeat(44), status: { status: "APPROVED" }, refreshed: true }
+    });
+
+    const result = await refreshDocumentoStatus(context, "66666666-6666-4666-8666-666666666666", repo, gateway);
+
+    expect(result.estado).toBe("EMITIDA");
+    expect(gateway.lastRefreshRequest).toEqual({ cdc: "A".repeat(44) });
+    expect(repo.lastUpdateFiscalStatusInput).toEqual({
+      facturadorId: context.facturador.id,
+      documentoId: "66666666-6666-4666-8666-666666666666",
+      estado: "EMITIDA",
+      fiscalStatus: { cdc: "A".repeat(44), status: { status: "APPROVED" }, refreshed: true }
+    });
+  });
+
+  it("rejects fiscal status refresh when document has no CDC", async () => {
+    const repo = new FakeFacturaRepository();
+    repo.findByIdResponse = buildDocumento({
+      cdc: null,
+      estado: "ERROR_TEMPORAL"
+    });
+    const gateway = new FakeFiscalGateway(new FiscalGatewayError("UPSTREAM_ERROR", "Should not emit"));
+
+    await expect(refreshDocumentoStatus(context, "66666666-6666-4666-8666-666666666666", repo, gateway)).rejects.toMatchObject({
+      statusCode: 409,
+      code: "CONFLICT"
+    });
+    expect(gateway.lastRefreshRequest).toBeNull();
+  });
+
   it("rejects missing customer identity data", () => {
     expect(() =>
       previewFactura(context, {
@@ -225,10 +450,74 @@ describe("facturas service", () => {
     });
     expect(repo.lastInput?.preview.totals.total).toBe(11000);
     expect(gateway.lastRequest).toMatchObject({
+      external_ref: repo.lastInput?.externalRef,
       condicion_venta: "CONTADO",
       cliente: emitInput.cliente,
       totals: { total: 11000 }
     });
+    expect(repo.lastInput?.externalRef).toMatch(/^fac_[a-f0-9]{32}$/);
+  });
+
+  it("emits credit invoice without creating collection state", async () => {
+    const repo = new FakeFacturaRepository();
+    const gateway = new FakeFiscalGateway({
+      fiscal_document_id: "mock-credit",
+      cdc: "B".repeat(44),
+      numero_fiscal: "001-001-0000002",
+      estado: "EMITIDA",
+      email_status: "NOT_APPLICABLE",
+      raw: { mode: "mock" }
+    });
+
+    const result = await emitFacturaAgainstFiscalGateway(
+      context,
+      {
+        ...emitInput,
+        condicion_venta: "CREDITO",
+        cliente: {
+          documento_tipo: "CI",
+          documento: "1234567",
+          razon_social: "Cliente Credito"
+        }
+      },
+      repo,
+      gateway,
+      {
+        idempotencyKey: "idem-credit-1"
+      }
+    );
+
+    expect(result).toMatchObject({
+      estado: "EMITIDA",
+      condicion_venta: "CREDITO",
+      fiscal_document_id: "mock-credit"
+    });
+    expect(gateway.lastRequest).toMatchObject({
+      condicion_venta: "CREDITO"
+    });
+    expect(repo.lastInput?.input.condicion_venta).toBe("CREDITO");
+  });
+
+  it("generates stable external_ref for the same facturador and idempotency key", async () => {
+    const firstRepo = new FakeFacturaRepository();
+    const secondRepo = new FakeFacturaRepository();
+    const gateway = new FakeFiscalGateway({
+      fiscal_document_id: "mock-fac",
+      cdc: "A".repeat(44),
+      numero_fiscal: "001-001-0000001",
+      estado: "EMITIDA",
+      email_status: "DELEGATED",
+      raw: { mode: "mock" }
+    });
+
+    await emitFacturaAgainstFiscalGateway(context, emitInput, firstRepo, gateway, {
+      idempotencyKey: "idem-stable-1"
+    });
+    await emitFacturaAgainstFiscalGateway(context, emitInput, secondRepo, gateway, {
+      idempotencyKey: "idem-stable-1"
+    });
+
+    expect(firstRepo.lastInput?.externalRef).toBe(secondRepo.lastInput?.externalRef);
   });
 
   it("persists timeout emissions as PENDIENTE_SIFEN", async () => {

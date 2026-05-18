@@ -76,13 +76,13 @@ Este documento convierte `docs/PLAN_IMPLEMENTACION_MVP_v0.1.md` en tareas tecnic
 | INV-001 | Facturacion | Crear tablas de documentos, lineas, snapshots y eventos | DONE | CLI-001, CAT-001, CTX-001 | Cada emision conserva cliente, items, totales, usuario y respuesta fiscal resumida |
 | INV-002 | Facturacion | Implementar `POST /facturas/preview` | DONE | TAX-004 | Preview calcula totales sin persistir borrador |
 | INV-003 | Facturacion | Implementar `POST /facturas` contra mock fiscal | DONE | INV-001, FE-003 | Emision contado/credito persiste snapshot y estado mock |
-| INV-004 | Facturacion | Implementar idempotencia por `external_ref` | PENDING | INV-003 | Reintentos no duplican documento fiscal |
-| INV-005 | Facturacion | Implementar emision real contado | PENDING | INV-003, FE-001 | Factura contado obtiene `document_id`, CDC, numero fiscal y estado |
-| INV-006 | Facturacion | Implementar emision real credito sin cobranza | PENDING | INV-005 | Factura credito se emite sin modulo de recibos, cuotas ni cobros posteriores |
-| INV-007 | Facturacion | Implementar listado y detalle de documentos | PENDING | INV-003 | Operador ve documentos por fecha, estado y tipo |
-| INV-008 | Facturacion | Implementar refresco de estado | PENDING | INV-007, FE-004 | Documento pendiente puede consultar estado actualizado |
-| DEL-001 | Entrega | Crear tabla de links publicos | PENDING | INV-001 | Link guarda token opaco, documento, `revoked_at` y auditoria |
-| DEL-002 | Entrega | Implementar generacion de token publico | PENDING | DEL-001 | Token usa 32 bytes aleatorios `base64url` y no revela CDC ni ID interno |
+| INV-004 | Facturacion | Implementar idempotencia por `external_ref` | DONE | INV-003 | Reintentos no duplican documento fiscal |
+| INV-005 | Facturacion | Implementar emision real contado | DONE | INV-003, FE-001 | Factura contado obtiene `document_id`, CDC, numero fiscal y estado |
+| INV-006 | Facturacion | Implementar emision real credito sin cobranza | DONE | INV-005 | Factura credito se emite sin modulo de recibos, cuotas ni cobros posteriores |
+| INV-007 | Facturacion | Implementar listado y detalle de documentos | DONE | INV-003 | Operador ve documentos por fecha, estado y tipo |
+| INV-008 | Facturacion | Implementar refresco de estado | DONE | INV-007, FE-004 | Documento pendiente puede consultar estado actualizado |
+| DEL-001 | Entrega | Crear tabla de links publicos | DONE | INV-001 | Link guarda token opaco, documento, `revoked_at` y auditoria |
+| DEL-002 | Entrega | Implementar generacion de token publico | DONE | DEL-001 | Token usa 32 bytes aleatorios `base64url` y no revela CDC ni ID interno |
 | DEL-003 | Entrega | Implementar endpoint publico `/public/d/{token}` | PENDING | DEL-002 | Cliente final ve comprobante y acciones de descarga |
 | DEL-004 | Entrega | Implementar descarga KUDE/PDF y XML | PENDING | DEL-003, FE-001 | Endpoints proxyan artefactos desde Ventax FE por CDC |
 | DEL-005 | Entrega | Implementar accion WhatsApp/copiar link | PENDING | DEL-003 | Operador puede copiar link o abrir share por WhatsApp |
@@ -114,9 +114,12 @@ Este documento convierte `docs/PLAN_IMPLEMENTACION_MVP_v0.1.md` en tareas tecnic
 | OPS-001 | Infra | Crear Dockerfile API | PENDING | API-001 | API corre en contenedor con build reproducible |
 | OPS-002 | Infra | Crear build estatico de frontends | PENDING | UI-001, BO-001 | Frontends generan artefactos servibles por proxy |
 | OPS-003 | Infra | Crear Docker Compose VPS | PENDING | OPS-001, OPS-002 | Compose levanta API, Postgres y proxy |
+| OPS-003A | Infra | Crear comando de despliegue del stack | DONE | OPS-003 | Existe `bash scripts/deploy.sh` para construir y levantar `docker-compose.yml` |
 | OPS-004 | Infra | Configurar Nginx/Caddy | PENDING | OPS-003 | Rutea `/api/v1`, `/app`, `/backoffice` y `/public/d` |
 | OPS-005 | Infra | Implementar backups diarios PostgreSQL | PENDING | OPS-003 | Backup diario con retencion 7/30 dias |
+| OPS-005A | Infra | Crear comando manual de backup PostgreSQL | DONE | OPS-003 | Existe `bash scripts/backup.sh` para generar dumps en `backups/postgres/` sin versionarlos |
 | OPS-006 | Infra | Documentar prueba de restore | PENDING | OPS-005 | Existe procedimiento verificable de restauracion |
+| OPS-006A | Infra | Crear comando manual de restore PostgreSQL | DONE | OPS-005A | Existe `bash scripts/restore-backup.sh`, que por defecto restaura el backup mas reciente y requiere confirmacion explicita |
 | OPS-007 | Infra | Configurar healthchecks | PENDING | OPS-003 | API, Postgres y proxy exponen estado verificable |
 | OPS-008 | Infra | Configurar rotacion de logs | PENDING | OPS-003 | Logs no crecen sin limite en VPS |
 | OPS-009 | Infra | Crear smoke test de despliegue | PENDING | OPS-004 | Script valida health, login test y carga de frontend |
@@ -179,6 +182,14 @@ La integracion real Ventax FE debe entrar despues de que el flujo mock este esta
 - 2026-05-18: cerrados `FE-001` a `FE-004` con `FiscalGateway` configurable por `FE_GATEWAY_MODE`, healthcheck protegido `/fiscal-gateway/health`, mock fiscal deterministico, mapeo de timeout a `PENDIENTE_SIFEN` y tests `apps/api/tests/fiscal-gateway.test.ts`.
 - 2026-05-18: cerrado `INV-003` con `POST /facturas` contra gateway mock, persistencia de `facturas_operativas`, `factura_items_snapshot`, `audit_events`, snapshot fiscal resumido y tests de emision/timeout.
 - 2026-05-18: verificacion repetida con `npm run test`, `npm run typecheck`, `npm run lint` y `npm run build`.
+- 2026-05-18: cerrados `OPS-003A`, `OPS-005A` y `OPS-006A` con scripts `scripts/deploy.sh`, `scripts/backup.sh` y `scripts/restore-backup.sh`. Los backups quedan fuera de Git mediante `.gitignore`.
+- 2026-05-18: corregido deploy Docker con postbuild ESM para imports `.js`, dependencias runtime declaradas en `apps/api`, puerto frontend parametrizable y verificacion local en `FRONTEND_HTTP_PORT=8092`. Smoke: `curl /api/v1/health`, `/app/`, `/backoffice/` y Playwright desktop/mobile OK.
+- 2026-05-18: cerrado `INV-004` con `Idempotency-Key` obligatorio en `POST /facturas`, `external_ref` deterministico por facturador/clave, lookup de reintentos, defensa ante colision unica e OpenAPI actualizado con error `400`.
+- 2026-05-18: cerrado `INV-005` con payload real contado hacia `POST /factura`, `emission_profile_code`, numeracion delegada `SERVICE`, referencia externa idempotente, pago contado efectivo y mapeo de `document_id`, CDC, numero fiscal y estado aprobado.
+- 2026-05-18: cerrado `INV-006` con emision credito usando `condicionOperacion.tipo=CREDITO`, plazo configurable `FE_DEFAULT_CREDITO_PLAZO_DIAS`, sin pagos, cuotas, recibos ni estado de cobranza en el SaaS.
+- 2026-05-18: cerrado `INV-007` con `GET /facturas` filtrable por tipo, estado, rango de fecha y texto, `GET /facturas/{documentoId}` acotado al facturador autenticado, OpenAPI con `401`/`422` y tests de servicio.
+- 2026-05-18: cerrado `INV-008` con `POST /facturas/{documentoId}/refresh-status`, consulta real a `/consultar/comprobanteSifen/{cdc}?refresh=true`, mapeo simple de estado, persistencia del snapshot fiscal actualizado y errores `409`/`502`/`504` documentados en OpenAPI.
+- 2026-05-18: cerrados `DEL-001` y `DEL-002` con migracion `0008_public_delivery_links.sql`, token opaco de 32 bytes `base64url`, revocacion al regenerar y endpoint autenticado `POST /facturas/{documentoId}/delivery-link`.
 
 ## Tareas Fuera Del MVP
 

@@ -11,6 +11,7 @@ FROM deps AS build
 COPY tsconfig.base.json ./
 COPY apps apps
 COPY packages packages
+COPY scripts scripts
 COPY db db
 RUN npm run build -w @facturacion-simple/shared
 RUN npm run build -w @facturacion-simple/api

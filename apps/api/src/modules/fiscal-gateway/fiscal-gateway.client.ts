@@ -7,7 +7,9 @@ import {
   type FiscalEmitFacturaResponse,
   type FiscalGateway,
   type FiscalGatewayConfig,
-  type FiscalGatewayHealth
+  type FiscalGatewayHealth,
+  type FiscalRefreshStatusRequest,
+  type FiscalRefreshStatusResponse
 } from "./fiscal-gateway.types";
 
 export function createFiscalGateway(config: FiscalGatewayConfig): FiscalGateway {
@@ -41,6 +43,18 @@ export class MockFiscalGateway implements FiscalGateway {
         mode: "mock",
         external_ref: request.external_ref,
         total: request.totals.total
+      }
+    };
+  }
+
+  async refreshFacturaStatus(request: FiscalRefreshStatusRequest): Promise<FiscalRefreshStatusResponse> {
+    return {
+      estado: "EMITIDA",
+      raw: {
+        mode: "mock",
+        cdc: request.cdc,
+        refreshed: true,
+        status: "APPROVED"
       }
     };
   }
@@ -97,6 +111,29 @@ export class RealFiscalGateway implements FiscalGateway {
     return mapFiscalEmitResponse(body);
   }
 
+  async refreshFacturaStatus(request: FiscalRefreshStatusRequest): Promise<FiscalRefreshStatusResponse> {
+    const url = new URL(`${this.config.baseUrl}/consultar/comprobanteSifen/${encodeURIComponent(request.cdc)}`);
+    url.searchParams.set("env", this.config.environment);
+    url.searchParams.set("refresh", "true");
+
+    const response = await this.fetchWithTimeout(url.toString(), {
+      method: "GET",
+      headers: this.buildHeaders()
+    });
+
+    const body = await readJson(response);
+
+    if (!response.ok) {
+      throw new FiscalGatewayError(
+        response.status === 408 || response.status === 504 ? "TIMEOUT" : "UPSTREAM_ERROR",
+        "Backend fiscal rechazo la consulta de estado.",
+        { status: response.status, body }
+      );
+    }
+
+    return mapFiscalRefreshStatusResponse(body);
+  }
+
   private async fetchWithTimeout(url: string, init: RequestInit): Promise<Response> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.config.timeoutMs);
@@ -121,26 +158,31 @@ export class RealFiscalGateway implements FiscalGateway {
   }
 
   private buildEmitirFacturaPayload(request: FiscalEmitFacturaRequest): Record<string, unknown> {
+    const suggestedDocumentNumber = this.config.defaultDocumentoNro;
+
     return {
       emisor_id: request.facturador.emisor_id,
       actividadEconomicaCodigo: request.fiscal_context.actividad_economica_codigo,
+      emission_profile_code: request.fiscal_context.perfil_emision_codigo,
       timbrado: {
         timbrado: this.config.defaultTimbrado,
         establecimiento: request.fiscal_context.establecimiento || this.config.defaultEstablecimiento,
         puntoExpedicion: request.fiscal_context.punto_expedicion || this.config.defaultPuntoExpedicion,
-        documentoNro: this.config.defaultDocumentoNro,
+        documentoNro: suggestedDocumentNumber,
         fecIni: this.config.defaultTimbradoInicio
       },
       numbering: {
         mode: "ONLINE",
-        authority: "SERVICE"
+        authority: "SERVICE",
+        requested_document_number: suggestedDocumentNumber
       },
       client_reference: {
         source_system: "facturacion-simple-cliente",
         entity_type: "factura_operativa",
         entity_id: request.external_ref,
         request_id: request.external_ref,
-        idempotency_key: request.external_ref
+        idempotency_key: request.external_ref,
+        operational_series: request.fiscal_context.perfil_emision_codigo
       },
       receptor: {
         tipoDocumento: mapDocumentoTipo(request.cliente.documento_tipo),
@@ -228,13 +270,14 @@ function mapFiscalEmitResponse(body: unknown): FiscalEmitFacturaResponse {
 
   const data = body as Record<string, unknown>;
   const status = typeof data.status === "string" ? data.status : null;
+  const timbrado = data.timbrado && typeof data.timbrado === "object" ? (data.timbrado as Record<string, unknown>) : null;
 
   return {
     fiscal_document_id: stringOrNull(data.document_id),
     cdc: stringOrNull(data.cdc),
-    numero_fiscal: stringOrNull(data.nro_factura),
+    numero_fiscal: stringOrNull(data.nro_factura) ?? buildNumeroFiscalFromTimbrado(timbrado),
     estado: mapDocumentStatus(status),
-    email_status: "UNKNOWN",
+    email_status: mapEmailStatus(data.email_status),
     raw: data
   };
 }
@@ -244,13 +287,71 @@ function stringOrNull(value: unknown): string | null {
 }
 
 function mapDocumentStatus(status: string | null): FiscalEmitFacturaResponse["estado"] {
-  if (status === "APPROVED" || status === "APPROVED_WITH_OBS") {
+  if (status === "APPROVED" || status === "APPROVED_WITH_OBS" || status === "ACEPTADO" || status === "APROBADO") {
     return "EMITIDA";
   }
-  if (status === "REJECTED") {
+  if (status === "REJECTED" || status === "RECHAZADO") {
     return "RECHAZADA";
   }
   return "PENDIENTE_SIFEN";
+}
+
+function mapRefreshDocumentStatus(status: string | null): FiscalRefreshStatusResponse["estado"] {
+  if (status === "APPROVED" || status === "APPROVED_WITH_OBS" || status === "ACEPTADO" || status === "APROBADO") {
+    return "EMITIDA";
+  }
+  if (status === "REJECTED" || status === "RECHAZADO") {
+    return "RECHAZADA";
+  }
+  if (status === "CANCELLED" || status === "VOIDED" || status === "ANULADO" || status === "CANCELADO") {
+    return "ANULADA";
+  }
+  return "PENDIENTE_SIFEN";
+}
+
+function mapFiscalRefreshStatusResponse(body: unknown): FiscalRefreshStatusResponse {
+  if (!body || typeof body !== "object") {
+    throw new FiscalGatewayError("INVALID_RESPONSE", "Respuesta fiscal invalida.", body);
+  }
+
+  const data = body as Record<string, unknown>;
+  const statusPayload = data.status && typeof data.status === "object" ? (data.status as Record<string, unknown>) : data;
+  const status =
+    stringOrNull(statusPayload.status) ??
+    stringOrNull(statusPayload.estado) ??
+    stringOrNull(statusPayload.document_status) ??
+    stringOrNull(data.document_status);
+
+  return {
+    estado: mapRefreshDocumentStatus(status),
+    raw: data
+  };
+}
+
+function mapEmailStatus(value: unknown): FiscalEmitFacturaResponse["email_status"] {
+  return value === "NOT_APPLICABLE" ||
+    value === "DELEGATED" ||
+    value === "SENT" ||
+    value === "FAILED" ||
+    value === "UNKNOWN"
+    ? value
+    : "UNKNOWN";
+}
+
+function buildNumeroFiscalFromTimbrado(timbrado: Record<string, unknown> | null): string | null {
+  if (!timbrado) {
+    return null;
+  }
+
+  const establecimiento = stringOrNull(timbrado.establecimiento);
+  const puntoExpedicion = stringOrNull(timbrado.puntoExpedicion);
+  const documentoNro = stringOrNull(timbrado.documentoNro);
+
+  if (!establecimiento || !puntoExpedicion || !documentoNro) {
+    return null;
+  }
+
+  return `${establecimiento}-${puntoExpedicion}-${documentoNro}`;
 }
 
 function mapFetchError(error: unknown): FiscalGatewayError {
