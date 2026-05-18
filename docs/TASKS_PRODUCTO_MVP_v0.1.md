@@ -37,14 +37,14 @@ Estados:
 | MVP-013 | Catalogo | Implementar busqueda desde campo codigo | PARTIAL | Backend de busqueda por codigo, nombre o descripcion implementado; falta integrarlo en grilla UI |
 | MVP-014 | Catalogo | Implementar codigo autogenerado e item rapido IVA 10% | DONE | Si no se informa codigo, el sistema genera uno; items rapidos quedan con IVA 10% |
 | MVP-015 | Facturacion | Implementar editor mobile-first sin borradores | PENDING | Operador puede cargar y editar antes de emitir, sin persistir borrador |
-| MVP-016 | Facturacion | Implementar calculo backend de totales e IVA | PENDING | Tests cubren IVA 10%, IVA 5%, exenta, total sin IVA, total IVA y guaranies enteros |
-| MVP-017 | Integracion | Implementar `FiscalGateway` con mock | PENDING | Gateway normaliza requests, responses, errores, artefactos y timeouts sin backend real |
+| MVP-016 | Facturacion | Implementar calculo backend de totales e IVA | DONE | Tests cubren IVA 10%, IVA 5%, exenta, total sin IVA, total IVA y guaranies enteros |
+| MVP-017 | Integracion | Implementar `FiscalGateway` con mock | DONE | Gateway normaliza requests, responses, errores, artefactos y timeouts sin backend real |
 | MVP-017A | Integracion | Verificar brecha PDF/KUDE en API fiscal | DONE | OpenAPI fiscal actualizado expone `/files/xml/{cdc}` y `/files/kude/{cdc}.pdf` |
 | MVP-017B | Integracion | Verificar contrato NCE en API fiscal | DONE | OpenAPI fiscal actualizado expone `/nota-credito` |
 | MVP-018 | Integracion | Integrar emision contado | PENDING | Una factura contado obtiene `document_id`, `cdc`, numero fiscal y estado |
 | MVP-019 | Integracion | Integrar emision credito sin cobranza posterior | PENDING | Una factura credito se emite y queda sin modulo de cobros/recibos |
 | MVP-020 | Integracion | Integrar Nota de Credito Electronica | PENDING | Se puede emitir NCE desde factura elegible y guardar estado/snapshot |
-| MVP-021 | Facturacion | Persistir snapshots y auditoria de emision | PENDING | Cada documento conserva cliente, items, totales, usuario y respuesta fiscal resumida |
+| MVP-021 | Facturacion | Persistir snapshots y auditoria de emision | DONE | Cada documento conserva cliente, items, totales, usuario y respuesta fiscal resumida |
 | MVP-022 | Estados | Mapear estados fiscales a estados UI | PENDING | Operador ve estados simples y acciones permitidas por estado |
 | MVP-023 | Entrega | Implementar enlaces y artefactos PDF/KUDE/XML | PENDING | La factura muestra link cliente y descargas disponibles desde backend fiscal |
 | MVP-024 | Entrega | Implementar link publico, WhatsApp y estado de email | PENDING | El operador puede copiar link publico, compartir por WhatsApp y ver email delegado al backend fiscal cuando cliente tiene correo |
@@ -58,6 +58,7 @@ Estados:
 | MVP-032 | QA | Prueba visual del editor en celular, tablet y desktop | PENDING | Campos, tabla/tarjetas y totales se ven sin solapamientos |
 | MVP-033 | QA | Smoke test de flujo completo | PENDING | Login, cliente, item, contado, credito, NCE, entrega y listado funcionan en ambiente definido |
 | MVP-034 | Cierre | Actualizar SPEC/PLAN/TASKS con decisiones finales | PENDING | Documentacion refleja la implementacion real del MVP |
+| FUT-001 | Multi facturador | Mover valores `FE_DEFAULT_*` a configuracion por facturador y actividad economica | PENDING | Los datos fiscales usados hoy como fixture de `.env` se administran por facturador, establecimiento, punto de expedicion, timbrado, numerador, condicion de credito y actividad economica |
 
 ## Camino Critico
 
@@ -84,5 +85,9 @@ Estados:
 - `MVP-011` queda parcial: backend de carga rapida existe; falta implementacion visual del popup.
 - `MVP-012` y `MVP-014` quedan cerrados con modelo/endpoints de catalogo, codigo autogenerado e IVA 10 por defecto.
 - `MVP-013` queda parcial: busqueda backend implementada; falta integracion visual desde el campo codigo de la grilla.
-- Las siguientes tareas de implementacion quedan enfocadas en calculos fiscales.
+- `MVP-016` queda cerrado con utilidades compartidas de calculo fiscal, redondeo half-up por linea, liquidacion agrupada y tests automatizados.
+- `MVP-017` queda cerrado con gateway fiscal configurable, healthcheck, mock local deterministico y mapeo de timeout.
+- `MVP-021` queda cerrado con persistencia de factura operativa, lineas snapshot, respuesta fiscal resumida y evento de auditoria desde emision mock.
+- Las siguientes tareas de implementacion quedan enfocadas en idempotencia, emision real contado/credito y entrega.
+- `FUT-001` registra que los `FE_DEFAULT_*` actuales se aceptan solo para cerrar pruebas y validaciones; no representan la arquitectura final multi facturador.
 - Cualquier cambio nuevo debe agregar filas a esta matriz o actualizar su estado con evidencia.

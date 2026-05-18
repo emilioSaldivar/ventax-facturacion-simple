@@ -15,6 +15,13 @@ const envSchema = z.object({
   FE_API_KEY: z.string().optional(),
   FE_API_TIMEOUT_MS: z.coerce.number().int().positive().default(20000),
   FE_API_ENV: z.enum(["test", "prod"]).default("test"),
+  FE_GATEWAY_MODE: z.enum(["mock", "real"]).default("mock"),
+  FE_DEFAULT_TIMBRADO: z.string().default("80136968"),
+  FE_DEFAULT_TIMBRADO_INICIO: z.string().default("2025-12-30"),
+  FE_DEFAULT_ESTABLECIMIENTO: z.string().default("001"),
+  FE_DEFAULT_PUNTO_EXPEDICION: z.string().default("001"),
+  FE_DEFAULT_DOCUMENTO_NRO: z.string().default("0000000"),
+  FE_DEFAULT_CREDITO_PLAZO_DIAS: z.coerce.number().int().positive().default(30),
   PUBLIC_APP_BASE_URL: z.string().url().default("https://factura.ventax.app")
 });
 

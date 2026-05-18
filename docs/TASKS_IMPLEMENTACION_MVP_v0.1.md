@@ -57,10 +57,10 @@ Este documento convierte `docs/PLAN_IMPLEMENTACION_MVP_v0.1.md` en tareas tecnic
 | CTX-002 | Contexto operativo | Crear seeds iniciales operables por SQL/env | DONE | CTX-001 | Soporte interno puede crear primer usuario y configuracion sin UI backoffice |
 | CTX-003 | Contexto operativo | Implementar `GET /me/context` | DONE | AUTH-007, CTX-001 | Operador obtiene facturador, establecimiento, punto, actividad y permisos |
 | CTX-004 | Contexto operativo | Implementar `GET /me/readiness` | DONE | CTX-003 | API explica si el operador puede emitir y que falta si no puede |
-| FE-001 | FiscalGateway | Configurar cliente Ventax FE por entorno | PENDING | API-002 | Usa `FE_API_BASE_URL`, `FE_API_KEY`, timeout y modo sin exponer secretos |
-| FE-002 | FiscalGateway | Implementar healthcheck fiscal | PENDING | FE-001 | API puede verificar disponibilidad de `facturacion-electronica` |
-| FE-003 | FiscalGateway | Implementar mock fiscal local | PENDING | FE-001 | Tests y UI pueden emitir sin depender del servicio fiscal real |
-| FE-004 | FiscalGateway | Mapear errores y timeouts fiscales | PENDING | FE-001 | Timeout de emision deja documento en `PENDIENTE_SIFEN` |
+| FE-001 | FiscalGateway | Configurar cliente Ventax FE por entorno | DONE | API-002 | Usa `FE_API_BASE_URL`, `FE_API_KEY`, timeout y modo sin exponer secretos |
+| FE-002 | FiscalGateway | Implementar healthcheck fiscal | DONE | FE-001 | API puede verificar disponibilidad de `facturacion-electronica` |
+| FE-003 | FiscalGateway | Implementar mock fiscal local | DONE | FE-001 | Tests y UI pueden emitir sin depender del servicio fiscal real |
+| FE-004 | FiscalGateway | Mapear errores y timeouts fiscales | DONE | FE-001 | Timeout de emision deja documento en `PENDIENTE_SIFEN` |
 | CLI-001 | Clientes | Crear tablas de identidad compartida y agenda por facturador | DONE | DB-002 | Documento/RUC compartido se separa de agenda privada del facturador |
 | CLI-002 | Clientes | Implementar busqueda por RUC/CI | DONE | CLI-001, AUTH-007 | Busqueda sugiere identidad compartida y agenda propia sin filtrar otros facturadores |
 | CLI-003 | Clientes | Implementar alta rapida de cliente | DONE | CLI-001 | Documento y nombre/razon social obligatorios; direccion, telefono y email opcionales |
@@ -69,13 +69,13 @@ Este documento convierte `docs/PLAN_IMPLEMENTACION_MVP_v0.1.md` en tareas tecnic
 | CAT-002 | Catalogo | Implementar busqueda por codigo/nombre/descripcion | DONE | CAT-001 | Campo codigo de factura puede sugerir items existentes |
 | CAT-003 | Catalogo | Implementar alta rapida con IVA 10% | DONE | CAT-001 | Si operador escribe descripcion/precio sin codigo, el sistema genera codigo e IVA 10% |
 | CAT-004 | Catalogo | Implementar CRUD minimo de catalogo | DONE | CAT-001 | Items con IVA 5% o exenta solo se crean/editan desde pantalla/catalogo |
-| TAX-001 | Calculos | Implementar utilidades monetarias PYG | PENDING | IMPL-005 | Cantidades enteras, precios enteros y redondeo half up centralizados |
-| TAX-002 | Calculos | Implementar calculo IVA por linea | PENDING | TAX-001 | Base e IVA se redondean por linea para IVA 10%, IVA 5% y exenta |
-| TAX-003 | Calculos | Implementar liquidacion agrupada | PENDING | TAX-002 | Totales 5/10 y total IVA suman lineas ya redondeadas |
-| TAX-004 | Calculos | Crear pruebas fiscales de redondeo | PENDING | TAX-003 | Tests cubren casos normales, exenta y redondeos limite |
-| INV-001 | Facturacion | Crear tablas de documentos, lineas, snapshots y eventos | PENDING | CLI-001, CAT-001, CTX-001 | Cada emision conserva cliente, items, totales, usuario y respuesta fiscal resumida |
-| INV-002 | Facturacion | Implementar `POST /facturas/preview` | PENDING | TAX-004 | Preview calcula totales sin persistir borrador |
-| INV-003 | Facturacion | Implementar `POST /facturas` contra mock fiscal | PENDING | INV-001, FE-003 | Emision contado/credito persiste snapshot y estado mock |
+| TAX-001 | Calculos | Implementar utilidades monetarias PYG | DONE | IMPL-005 | Cantidades enteras, precios enteros y redondeo half up centralizados |
+| TAX-002 | Calculos | Implementar calculo IVA por linea | DONE | TAX-001 | Base e IVA se redondean por linea para IVA 10%, IVA 5% y exenta |
+| TAX-003 | Calculos | Implementar liquidacion agrupada | DONE | TAX-002 | Totales 5/10 y total IVA suman lineas ya redondeadas |
+| TAX-004 | Calculos | Crear pruebas fiscales de redondeo | DONE | TAX-003 | Tests cubren casos normales, exenta y redondeos limite |
+| INV-001 | Facturacion | Crear tablas de documentos, lineas, snapshots y eventos | DONE | CLI-001, CAT-001, CTX-001 | Cada emision conserva cliente, items, totales, usuario y respuesta fiscal resumida |
+| INV-002 | Facturacion | Implementar `POST /facturas/preview` | DONE | TAX-004 | Preview calcula totales sin persistir borrador |
+| INV-003 | Facturacion | Implementar `POST /facturas` contra mock fiscal | DONE | INV-001, FE-003 | Emision contado/credito persiste snapshot y estado mock |
 | INV-004 | Facturacion | Implementar idempotencia por `external_ref` | PENDING | INV-003 | Reintentos no duplican documento fiscal |
 | INV-005 | Facturacion | Implementar emision real contado | PENDING | INV-003, FE-001 | Factura contado obtiene `document_id`, CDC, numero fiscal y estado |
 | INV-006 | Facturacion | Implementar emision real credito sin cobranza | PENDING | INV-005 | Factura credito se emite sin modulo de recibos, cuotas ni cobros posteriores |
@@ -126,6 +126,7 @@ Este documento convierte `docs/PLAN_IMPLEMENTACION_MVP_v0.1.md` en tareas tecnic
 | QA-004 | QA | Crear smoke opcional contra FE test | PENDING | FE-001, INV-005 | Prueba real solo corre con env explicito y sin secretos versionados |
 | QA-005 | QA | Validar ausencia de secretos versionados | PENDING | IMPL-004 | Revision confirma que API key y credenciales no fueron commiteadas |
 | QA-006 | Cierre | Actualizar documentacion post-implementacion | PENDING | QA-001, QA-003 | SPEC, PLAN, TASKS y OpenAPI reflejan el MVP realmente implementado |
+| FUT-001 | Multi facturador | Migrar `FE_DEFAULT_*` desde `.env` a configuracion por facturador/actividad economica | PENDING | INV-005, BO-004 | Emision resuelve RUC emisor, timbrado, inicio de timbrado, establecimiento, punto de expedicion, numerador, plazo credito y actividad desde configuracion fiscal-operativa del facturador; `.env` queda solo como fixture local/test o fallback explicitamente no productivo |
 
 ## Camino Critico Tecnico
 
@@ -171,6 +172,13 @@ La integracion real Ventax FE debe entrar despues de que el flujo mock este esta
 - 2026-05-17: verificacion repetida con `npm run test`, `npm run build`, `npm run typecheck` y `npm run lint`. OpenAPI actualizado con respuestas `401` y `409` en clientes.
 - 2026-05-17: cerrados `CAT-001` a `CAT-004` con migracion `0006_catalogo.sql`, endpoints protegidos de busqueda/listado/alta/actualizacion, codigo autogenerado e IVA 10 por defecto.
 - 2026-05-17: verificacion repetida con `npm run test`, `npm run build`, `npm run typecheck` y `npm run lint`. OpenAPI actualizado con respuestas `401` y `409` en catalogo.
+- 2026-05-18: cerrados `TAX-001` a `TAX-004` con utilidades compartidas en `packages/shared/src/money/tax.ts`, calculo de IVA 10/5/exenta por linea, liquidacion agrupada desde lineas redondeadas y tests `packages/shared/tests/tax.test.ts`.
+- 2026-05-18: verificacion repetida con `npm run test`, `npm run typecheck`, `npm run lint` y `npm run build`.
+- 2026-05-18: cerrados `INV-001` e `INV-002` con migracion `0007_facturacion_operativa.sql`, tablas `facturas_operativas`, `factura_items_snapshot`, `audit_events`, endpoint protegido `POST /facturas/preview`, OpenAPI actualizado y tests `apps/api/tests/facturas.service.test.ts`.
+- 2026-05-18: verificacion repetida con `npm run test`, `npm run typecheck`, `npm run lint` y `npm run build`.
+- 2026-05-18: cerrados `FE-001` a `FE-004` con `FiscalGateway` configurable por `FE_GATEWAY_MODE`, healthcheck protegido `/fiscal-gateway/health`, mock fiscal deterministico, mapeo de timeout a `PENDIENTE_SIFEN` y tests `apps/api/tests/fiscal-gateway.test.ts`.
+- 2026-05-18: cerrado `INV-003` con `POST /facturas` contra gateway mock, persistencia de `facturas_operativas`, `factura_items_snapshot`, `audit_events`, snapshot fiscal resumido y tests de emision/timeout.
+- 2026-05-18: verificacion repetida con `npm run test`, `npm run typecheck`, `npm run lint` y `npm run build`.
 
 ## Tareas Fuera Del MVP
 
@@ -180,6 +188,7 @@ La integracion real Ventax FE debe entrar despues de que el flujo mock este esta
 - compras, proveedores y gastos;
 - multiples facturadores por operador;
 - selector de facturador en la pantalla principal;
+- migracion de `FE_DEFAULT_*` globales a configuracion editable por facturador, actividad economica, establecimiento, punto, timbrado y numerador;
 - reenvio de email propio;
 - expiracion automatica de links publicos;
 - UI backoffice completa si los endpoints y SQL cubren soporte inicial.

@@ -101,11 +101,14 @@ FE_API_BASE_URL=https://fe-api.ventax.app/fcws
 FE_API_KEY=<secret>
 FE_API_TIMEOUT_MS=20000
 FE_API_ENV=test
+FE_GATEWAY_MODE=mock
 FE_DEFAULT_EMISOR_RUC=80136968-1
 FE_DEFAULT_TIMBRADO=80136968
 FE_DEFAULT_TIMBRADO_INICIO=2025-12-30
 FE_DEFAULT_ESTABLECIMIENTO=001
 FE_DEFAULT_PUNTO_EXPEDICION=001
+FE_DEFAULT_DOCUMENTO_NRO=0000000
+FE_DEFAULT_CREDITO_PLAZO_DIAS=30
 PUBLIC_APP_BASE_URL=https://factura.ventax.app
 JWT_ACCESS_TTL_MINUTES=15
 JWT_REFRESH_TTL_DAYS=30
@@ -115,6 +118,8 @@ Notas:
 
 - `FE_API_KEY` debe guardarse solo en `.env`/secret manager del entorno.
 - El valor compartido durante definicion del proyecto debe considerarse sensible.
+- `FE_DEFAULT_EMISOR_RUC`, `FE_DEFAULT_TIMBRADO`, `FE_DEFAULT_TIMBRADO_INICIO`, `FE_DEFAULT_ESTABLECIMIENTO`, `FE_DEFAULT_PUNTO_EXPEDICION`, `FE_DEFAULT_DOCUMENTO_NRO` y `FE_DEFAULT_CREDITO_PLAZO_DIAS` son fixture temporal para cerrar pruebas y validaciones del MVP.
+- En la version multi facturador, esos valores deben resolverse desde la configuracion fiscal-operativa de cada facturador, establecimiento, punto de expedicion, timbrado, numerador, condicion de credito y actividad economica. No deben quedar como configuracion global de plataforma.
 - El healthcheck fiscal de referencia es `https://fe-api.ventax.app/fcws/health`.
 - El modo de envio default para emision sera `SYNC`.
 - Si una emision entra en timeout, el documento operativo queda en `PENDIENTE_SIFEN` y se permite refrescar estado desde el listado/detalle.
