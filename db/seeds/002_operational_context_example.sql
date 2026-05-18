@@ -1,0 +1,59 @@
+-- Seed de referencia para soporte interno.
+-- Reemplazar IDs y datos segun el tenant/usuario real antes de ejecutar.
+-- No contiene secretos fiscales ni API keys.
+
+-- with tenant_base as (
+--   insert into tenants (nombre, slug)
+--   values ('Tenant Demo', 'tenant-demo')
+--   on conflict (slug) do update set nombre = excluded.nombre
+--   returning id
+-- ),
+-- plan_base as (
+--   select id from planes where codigo = 'BASICO_MVP'
+-- ),
+-- suscripcion as (
+--   insert into tenant_suscripciones (tenant_id, plan_id)
+--   select tenant_base.id, plan_base.id from tenant_base, plan_base
+--   on conflict do nothing
+-- ),
+-- facturador as (
+--   insert into facturadores (tenant_id, emisor_id, razon_social, ruc)
+--   select id, '80136968-1', 'Facturador Demo', '80136968-1' from tenant_base
+--   returning id, tenant_id
+-- ),
+-- establecimiento as (
+--   insert into facturador_establecimientos (tenant_id, facturador_id, codigo, nombre)
+--   select tenant_id, id, '001', 'Casa matriz' from facturador
+--   returning id, tenant_id, facturador_id
+-- ),
+-- punto as (
+--   insert into facturador_puntos_expedicion (tenant_id, facturador_id, establecimiento_id, codigo, nombre)
+--   select tenant_id, facturador_id, id, '001', 'Punto 001' from establecimiento
+--   returning id, tenant_id, facturador_id, establecimiento_id
+-- ),
+-- actividad as (
+--   insert into facturador_actividades (tenant_id, facturador_id, codigo, descripcion)
+--   select tenant_id, facturador_id, '82110', 'Servicios administrativos' from facturador
+--   returning id, tenant_id, facturador_id
+-- ),
+-- perfil as (
+--   insert into facturador_perfiles_emision (tenant_id, facturador_id, codigo, descripcion)
+--   select tenant_id, facturador_id, 'SERV', 'Servicios' from facturador
+--   returning id, tenant_id, facturador_id
+-- )
+-- insert into actividad_punto_perfiles (
+--   tenant_id,
+--   facturador_id,
+--   actividad_id,
+--   establecimiento_id,
+--   punto_expedicion_id,
+--   perfil_emision_id
+-- )
+-- select
+--   actividad.tenant_id,
+--   actividad.facturador_id,
+--   actividad.id,
+--   punto.establecimiento_id,
+--   punto.id,
+--   perfil.id
+-- from actividad, punto, perfil;

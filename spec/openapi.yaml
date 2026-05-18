@@ -1,0 +1,1417 @@
+openapi: 3.0.3
+info:
+  title: Facturacion Simple Cliente SaaS API
+  version: 0.1.0
+  description: |
+    API propia del SaaS Facturacion Simple Cliente.
+
+    Este contrato cubre la aplicacion operativa mobile-first y el backoffice interno minimo.
+    La autoridad fiscal sigue siendo `facturacion-electronica` Ventax.
+
+    Reglas base:
+    - El operador emite para un unico facturador asociado.
+    - No se guardan borradores.
+    - Los precios unitarios son enteros en PYG e incluyen IVA.
+    - Base imponible e IVA se redondean por linea.
+    - La liquidacion por tasa suma lineas ya redondeadas.
+    - El link publico usa token opaco, no CDC puro ni ID secuencial.
+servers:
+  - url: /api/v1
+
+tags:
+  - name: System
+  - name: Auth
+  - name: Contexto
+  - name: Clientes
+  - name: Catalogo
+  - name: Facturas
+  - name: NotasCredito
+  - name: Entrega
+  - name: Backoffice
+  - name: Public
+
+security:
+  - BearerAuth: []
+
+paths:
+  /health:
+    get:
+      tags: [System]
+      summary: Healthcheck del SaaS
+      security: []
+      responses:
+        "200":
+          description: Servicio disponible
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Iniciar sesion
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Sesion iniciada
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
+              description: Refresh token httpOnly.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "423":
+          $ref: "#/components/responses/AccountLocked"
+
+  /auth/refresh:
+    post:
+      tags: [Auth]
+      summary: Renovar access token usando cookie httpOnly
+      security: []
+      responses:
+        "200":
+          description: Token renovado
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
+              description: Refresh token httpOnly rotado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /auth/logout:
+    post:
+      tags: [Auth]
+      summary: Cerrar sesion y revocar refresh token
+      responses:
+        "204":
+          description: Sesion cerrada
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
+              description: Cookie de refresh limpiada.
+
+  /me/context:
+    get:
+      tags: [Contexto]
+      summary: Obtener contexto operativo del usuario
+      description: |
+        Devuelve el unico facturador, establecimiento, punto, perfil de emision
+        y actividad economica efectiva asociados al operador.
+      responses:
+        "200":
+          description: Contexto operativo
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OperationalContextResponse"
+        "409":
+          description: Usuario sin configuracion operativa completa
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /me/readiness:
+    get:
+      tags: [Contexto]
+      summary: Readiness operativo para emitir
+      responses:
+        "200":
+          description: Estado de readiness
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReadinessResponse"
+
+  /clientes/search:
+    get:
+      tags: [Clientes]
+      summary: Buscar cliente por documento en agenda y base compartida
+      parameters:
+        - in: query
+          name: q
+          required: true
+          schema:
+            type: string
+            minLength: 2
+          description: RUC, CI, nombre o razon social.
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 10
+            minimum: 1
+            maximum: 30
+      responses:
+        "200":
+          description: Resultados de busqueda
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ClienteSearchResult"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          description: Usuario sin configuracion operativa completa
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /clientes:
+    get:
+      tags: [Clientes]
+      summary: Listar agenda de clientes del facturador del usuario
+      parameters:
+        - $ref: "#/components/parameters/Q"
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+      responses:
+        "200":
+          description: Lista de clientes
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClienteListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          description: Usuario sin configuracion operativa completa
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    post:
+      tags: [Clientes]
+      summary: Crear cliente en agenda del facturador
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClienteUpsertRequest"
+      responses:
+        "201":
+          description: Cliente creado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClienteResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          description: Usuario sin configuracion operativa completa
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /clientes/{clienteId}:
+    patch:
+      tags: [Clientes]
+      summary: Actualizar cliente de la agenda del facturador
+      parameters:
+        - $ref: "#/components/parameters/ClienteId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClienteUpsertRequest"
+      responses:
+        "200":
+          description: Cliente actualizado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClienteResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          description: Usuario sin configuracion operativa completa
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /catalogo/items/search:
+    get:
+      tags: [Catalogo]
+      summary: Buscar productos o servicios desde el campo codigo
+      parameters:
+        - in: query
+          name: q
+          required: true
+          schema:
+            type: string
+            minLength: 1
+          description: Codigo, nombre o descripcion.
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 10
+            minimum: 1
+            maximum: 30
+      responses:
+        "200":
+          description: Resultados de catalogo
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/CatalogoItem"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          description: Usuario sin configuracion operativa completa
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /catalogo/items:
+    get:
+      tags: [Catalogo]
+      summary: Listar catalogo del facturador
+      parameters:
+        - $ref: "#/components/parameters/Q"
+        - in: query
+          name: activo
+          schema:
+            type: boolean
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+      responses:
+        "200":
+          description: Lista de items
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CatalogoItemListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          description: Usuario sin configuracion operativa completa
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    post:
+      tags: [Catalogo]
+      summary: Crear producto o servicio
+      description: |
+        Si se crea desde el editor de factura sin IVA explicito, el backend usa IVA 10%.
+        Items con IVA 5% o EXENTA deben crearse desde pantalla de catalogo.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CatalogoItemUpsertRequest"
+      responses:
+        "201":
+          description: Item creado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CatalogoItem"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          description: Conflicto de codigo o usuario sin configuracion operativa completa
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /catalogo/items/{itemId}:
+    patch:
+      tags: [Catalogo]
+      summary: Actualizar producto o servicio
+      parameters:
+        - $ref: "#/components/parameters/ItemId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CatalogoItemUpsertRequest"
+      responses:
+        "200":
+          description: Item actualizado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CatalogoItem"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          description: Conflicto de codigo o usuario sin configuracion operativa completa
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /facturas/preview:
+    post:
+      tags: [Facturas]
+      summary: Validar y calcular totales antes de emitir
+      description: |
+        No persiste borrador. Solo devuelve validaciones, lineas normalizadas y totales.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FacturaPreviewRequest"
+      responses:
+        "200":
+          description: Preview calculado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FacturaPreviewResponse"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /facturas:
+    get:
+      tags: [Facturas]
+      summary: Listar facturas y notas emitidas del facturador del usuario
+      parameters:
+        - in: query
+          name: tipo
+          schema:
+            $ref: "#/components/schemas/DocumentoTipo"
+        - in: query
+          name: estado
+          schema:
+            $ref: "#/components/schemas/DocumentoEstado"
+        - in: query
+          name: desde
+          schema:
+            type: string
+            format: date
+        - in: query
+          name: hasta
+          schema:
+            type: string
+            format: date
+        - $ref: "#/components/parameters/Q"
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+      responses:
+        "200":
+          description: Lista de documentos
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DocumentoListResponse"
+    post:
+      tags: [Facturas]
+      summary: Emitir Factura Electronica contado o credito
+      description: |
+        Emite inmediatamente. No crea borrador.
+        El numero fiscal, CDC y estado vienen de `facturacion-electronica`.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FacturaEmitRequest"
+      responses:
+        "201":
+          description: Factura emitida o en proceso
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DocumentoResponse"
+        "409":
+          description: Idempotencia o conflicto de estado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /facturas/{documentoId}:
+    get:
+      tags: [Facturas]
+      summary: Obtener detalle de factura o nota
+      parameters:
+        - $ref: "#/components/parameters/DocumentoId"
+      responses:
+        "200":
+          description: Documento encontrado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DocumentoResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /facturas/{documentoId}/refresh-status:
+    post:
+      tags: [Facturas]
+      summary: Refrescar estado fiscal desde Ventax FE
+      parameters:
+        - $ref: "#/components/parameters/DocumentoId"
+      responses:
+        "200":
+          description: Estado actualizado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DocumentoResponse"
+
+  /facturas/{documentoId}/cancelar:
+    post:
+      tags: [Facturas]
+      summary: Cancelar o anular documento elegible
+      parameters:
+        - $ref: "#/components/parameters/DocumentoId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CancelacionRequest"
+      responses:
+        "200":
+          description: Cancelacion solicitada o procesada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DocumentoResponse"
+        "409":
+          description: Documento no elegible para cancelacion
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /facturas/{documentoId}/nota-credito:
+    post:
+      tags: [NotasCredito]
+      summary: Emitir Nota de Credito Electronica desde factura elegible
+      parameters:
+        - $ref: "#/components/parameters/DocumentoId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NotaCreditoEmitRequest"
+      responses:
+        "201":
+          description: NCE emitida o en proceso
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DocumentoResponse"
+        "409":
+          description: Factura no elegible o monto excedido
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /facturas/{documentoId}/delivery-link:
+    post:
+      tags: [Entrega]
+      summary: Crear, obtener o regenerar link publico de entrega
+      parameters:
+        - $ref: "#/components/parameters/DocumentoId"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                regenerate:
+                  type: boolean
+                  default: false
+      responses:
+        "200":
+          description: Link publico disponible
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeliveryLinkResponse"
+
+  /facturas/{documentoId}/artifacts:
+    get:
+      tags: [Entrega]
+      summary: Obtener artefactos disponibles para el operador
+      parameters:
+        - $ref: "#/components/parameters/DocumentoId"
+      responses:
+        "200":
+          description: Artefactos disponibles
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ArtifactsResponse"
+
+  /facturas/{documentoId}/email-status:
+    get:
+      tags: [Entrega]
+      summary: Consultar estado informativo del email delegado a Ventax FE
+      parameters:
+        - $ref: "#/components/parameters/DocumentoId"
+      responses:
+        "200":
+          description: Estado informativo de email
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmailStatusResponse"
+
+  /public/d/{token}:
+    get:
+      tags: [Public]
+      summary: Ver comprobante publico por token opaco
+      security: []
+      parameters:
+        - in: path
+          name: token
+          required: true
+          schema:
+            type: string
+            minLength: 32
+      responses:
+        "200":
+          description: Vista publica del documento
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PublicDocumentResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /public/d/{token}/kude.pdf:
+    get:
+      tags: [Public]
+      summary: Descargar KUDE/PDF publico
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/PublicToken"
+      responses:
+        "302":
+          description: Redireccion o proxy hacia KUDE/PDF fiscal
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /public/d/{token}/xml:
+    get:
+      tags: [Public]
+      summary: Descargar XML publico
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/PublicToken"
+      responses:
+        "302":
+          description: Redireccion o proxy hacia XML fiscal
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /backoffice/users:
+    post:
+      tags: [Backoffice]
+      summary: Crear usuario operativo o interno
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BackofficeUserCreateRequest"
+      responses:
+        "201":
+          description: Usuario creado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BackofficeUserResponse"
+
+  /backoffice/users/{userId}/operation-config:
+    put:
+      tags: [Backoffice]
+      summary: Asociar configuracion operativa unica al usuario
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserOperationConfigRequest"
+      responses:
+        "200":
+          description: Configuracion actualizada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserOperationConfig"
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    Q:
+      in: query
+      name: q
+      required: false
+      schema:
+        type: string
+    Limit:
+      in: query
+      name: limit
+      required: false
+      schema:
+        type: integer
+        default: 50
+        minimum: 1
+        maximum: 200
+    Offset:
+      in: query
+      name: offset
+      required: false
+      schema:
+        type: integer
+        default: 0
+        minimum: 0
+    ClienteId:
+      in: path
+      name: clienteId
+      required: true
+      schema:
+        type: string
+    ItemId:
+      in: path
+      name: itemId
+      required: true
+      schema:
+        type: string
+    DocumentoId:
+      in: path
+      name: documentoId
+      required: true
+      schema:
+        type: string
+    IdempotencyKey:
+      in: header
+      name: Idempotency-Key
+      required: true
+      schema:
+        type: string
+        minLength: 8
+        maxLength: 120
+    PublicToken:
+      in: path
+      name: token
+      required: true
+      schema:
+        type: string
+        minLength: 32
+
+  responses:
+    Unauthorized:
+      description: No autenticado
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    AccountLocked:
+      description: Usuario bloqueado por intentos fallidos
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    NotFound:
+      description: Recurso no encontrado
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    ValidationError:
+      description: Error de validacion
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
+  schemas:
+    HealthResponse:
+      type: object
+      required: [status, service]
+      properties:
+        status:
+          type: string
+          example: ok
+        service:
+          type: string
+          example: facturacion-simple-cliente
+
+    ErrorResponse:
+      type: object
+      required: [error, message]
+      properties:
+        error:
+          type: string
+          example: validation_error
+        message:
+          type: string
+          example: Datos invalidos
+        details:
+          type: object
+          nullable: true
+          additionalProperties: true
+
+    LoginRequest:
+      type: object
+      required: [username, password]
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+          format: password
+
+    AuthResponse:
+      type: object
+      required: [access_token, token_type, expires_in, user]
+      properties:
+        access_token:
+          type: string
+        token_type:
+          type: string
+          example: Bearer
+        expires_in:
+          type: integer
+          example: 900
+        user:
+          $ref: "#/components/schemas/UserSummary"
+
+    UserSummary:
+      type: object
+      required: [id, username, role]
+      properties:
+        id:
+          type: string
+        username:
+          type: string
+        display_name:
+          type: string
+          nullable: true
+        role:
+          type: string
+          enum: [OPERADOR_FACTURACION, SOPORTE_INTERNO, ADMIN_INTERNO]
+
+    OperationalContextResponse:
+      type: object
+      required: [user, tenant, facturador, fiscal_context]
+      properties:
+        user:
+          $ref: "#/components/schemas/UserSummary"
+        tenant:
+          $ref: "#/components/schemas/TenantSummary"
+        facturador:
+          $ref: "#/components/schemas/FacturadorSummary"
+        fiscal_context:
+          $ref: "#/components/schemas/FiscalContext"
+
+    TenantSummary:
+      type: object
+      required: [id, name, status]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        status:
+          type: string
+          enum: [ACTIVE, SUSPENDED, CANCELLED]
+
+    FacturadorSummary:
+      type: object
+      required: [id, emisor_id, razon_social, ruc]
+      properties:
+        id:
+          type: string
+        emisor_id:
+          type: string
+          description: ID del emisor en facturacion-electronica Ventax.
+        razon_social:
+          type: string
+        ruc:
+          type: string
+
+    FiscalContext:
+      type: object
+      required: [establecimiento, punto_expedicion, perfil_emision_codigo, actividad_economica_codigo]
+      properties:
+        establecimiento:
+          type: string
+          example: "001"
+        punto_expedicion:
+          type: string
+          example: "001"
+        perfil_emision_codigo:
+          type: string
+          example: SERV
+        actividad_economica_codigo:
+          type: string
+          example: "82110"
+        actividad_economica_descripcion:
+          type: string
+          nullable: true
+
+    ReadinessResponse:
+      type: object
+      required: [ready, checks]
+      properties:
+        ready:
+          type: boolean
+        checks:
+          type: array
+          items:
+            type: object
+            required: [code, ok, message]
+            properties:
+              code:
+                type: string
+                example: fiscal_backend_ready
+              ok:
+                type: boolean
+              message:
+                type: string
+
+    ClienteSearchResult:
+      type: object
+      required: [source, documento, razon_social]
+      properties:
+        source:
+          type: string
+          enum: [AGENDA_FACTURADOR, IDENTIDAD_COMPARTIDA]
+        cliente_id:
+          type: string
+          nullable: true
+        documento_tipo:
+          $ref: "#/components/schemas/DocumentoIdentidadTipo"
+        documento:
+          type: string
+        razon_social:
+          type: string
+        direccion:
+          type: string
+          nullable: true
+        telefono:
+          type: string
+          nullable: true
+        email:
+          type: string
+          nullable: true
+
+    ClienteUpsertRequest:
+      type: object
+      required: [documento_tipo, documento, razon_social]
+      properties:
+        documento_tipo:
+          $ref: "#/components/schemas/DocumentoIdentidadTipo"
+        documento:
+          type: string
+        razon_social:
+          type: string
+        direccion:
+          type: string
+          nullable: true
+        telefono:
+          type: string
+          nullable: true
+        email:
+          type: string
+          nullable: true
+
+    ClienteResponse:
+      allOf:
+        - $ref: "#/components/schemas/ClienteSearchResult"
+        - type: object
+          required: [cliente_id]
+          properties:
+            cliente_id:
+              type: string
+            activo:
+              type: boolean
+
+    ClienteListResponse:
+      type: object
+      required: [items, total]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ClienteResponse"
+        total:
+          type: integer
+
+    DocumentoIdentidadTipo:
+      type: string
+      enum: [RUC, CI, PASAPORTE, CEDULA_EXTRANJERA, NO_ESPECIFICADO]
+
+    CatalogoItem:
+      type: object
+      required: [id, codigo, descripcion, precio_unitario, iva_tipo, activo]
+      properties:
+        id:
+          type: string
+        codigo:
+          type: string
+        descripcion:
+          type: string
+        precio_unitario:
+          type: integer
+          minimum: 0
+          description: Precio con IVA incluido en PYG.
+        iva_tipo:
+          $ref: "#/components/schemas/IvaTipo"
+        activo:
+          type: boolean
+
+    CatalogoItemUpsertRequest:
+      type: object
+      required: [descripcion, precio_unitario]
+      properties:
+        codigo:
+          type: string
+          nullable: true
+          description: Si se omite, el sistema genera uno.
+        descripcion:
+          type: string
+        precio_unitario:
+          type: integer
+          minimum: 0
+        iva_tipo:
+          $ref: "#/components/schemas/IvaTipo"
+        activo:
+          type: boolean
+          default: true
+
+    CatalogoItemListResponse:
+      type: object
+      required: [items, total]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/CatalogoItem"
+        total:
+          type: integer
+
+    IvaTipo:
+      type: string
+      enum: [IVA_10, IVA_5, EXENTA]
+
+    CondicionVenta:
+      type: string
+      enum: [CONTADO, CREDITO]
+
+    DocumentoTipo:
+      type: string
+      enum: [FE, NCE]
+
+    DocumentoEstado:
+      type: string
+      enum: [EMITIENDO, EMITIDA, PENDIENTE_SIFEN, RECHAZADA, ERROR_OPERATIVO, ERROR_TEMPORAL, ANULADA]
+
+    FacturaPreviewRequest:
+      type: object
+      required: [condicion_venta, cliente, items]
+      properties:
+        condicion_venta:
+          $ref: "#/components/schemas/CondicionVenta"
+        cliente:
+          $ref: "#/components/schemas/FacturaClienteInput"
+        items:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/FacturaItemInput"
+
+    FacturaEmitRequest:
+      allOf:
+        - $ref: "#/components/schemas/FacturaPreviewRequest"
+        - type: object
+          properties:
+            requested_at:
+              type: string
+              format: date-time
+
+    FacturaClienteInput:
+      type: object
+      required: [documento_tipo, documento, razon_social]
+      properties:
+        cliente_id:
+          type: string
+          nullable: true
+        documento_tipo:
+          $ref: "#/components/schemas/DocumentoIdentidadTipo"
+        documento:
+          type: string
+        razon_social:
+          type: string
+        direccion:
+          type: string
+          nullable: true
+        telefono:
+          type: string
+          nullable: true
+        email:
+          type: string
+          nullable: true
+
+    FacturaItemInput:
+      type: object
+      required: [cantidad, descripcion, precio_unitario]
+      properties:
+        catalogo_item_id:
+          type: string
+          nullable: true
+        codigo:
+          type: string
+          nullable: true
+        descripcion:
+          type: string
+        cantidad:
+          type: integer
+          minimum: 1
+        precio_unitario:
+          type: integer
+          minimum: 0
+        iva_tipo:
+          $ref: "#/components/schemas/IvaTipo"
+
+    FacturaPreviewResponse:
+      type: object
+      required: [items, totals]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/DocumentoItemSnapshot"
+        totals:
+          $ref: "#/components/schemas/DocumentoTotals"
+
+    DocumentoItemSnapshot:
+      type: object
+      required: [line_no, codigo, descripcion, cantidad, precio_unitario, iva_tipo, subtotal, base_imponible, iva_monto]
+      properties:
+        line_no:
+          type: integer
+        codigo:
+          type: string
+        descripcion:
+          type: string
+        cantidad:
+          type: integer
+        precio_unitario:
+          type: integer
+        iva_tipo:
+          $ref: "#/components/schemas/IvaTipo"
+        subtotal:
+          type: integer
+        base_imponible:
+          type: integer
+          description: Redondeado por linea.
+        iva_monto:
+          type: integer
+          description: Redondeado por linea.
+
+    DocumentoTotals:
+      type: object
+      required: [subtotal, total_sin_iva, iva_5, iva_10, total_iva, total]
+      properties:
+        subtotal:
+          type: integer
+        total_sin_iva:
+          type: integer
+        iva_5:
+          type: integer
+        iva_10:
+          type: integer
+        total_iva:
+          type: integer
+        total:
+          type: integer
+
+    DocumentoResponse:
+      type: object
+      required: [id, tipo, estado, condicion_venta, cliente, items, totals, delivery]
+      properties:
+        id:
+          type: string
+        tipo:
+          $ref: "#/components/schemas/DocumentoTipo"
+        estado:
+          $ref: "#/components/schemas/DocumentoEstado"
+        condicion_venta:
+          $ref: "#/components/schemas/CondicionVenta"
+        numero_fiscal:
+          type: string
+          nullable: true
+          example: 001-001-0000123
+        cdc:
+          type: string
+          nullable: true
+        fiscal_document_id:
+          type: string
+          nullable: true
+        external_ref:
+          type: string
+          nullable: true
+        cliente:
+          $ref: "#/components/schemas/FacturaClienteInput"
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/DocumentoItemSnapshot"
+        totals:
+          $ref: "#/components/schemas/DocumentoTotals"
+        fiscal_status:
+          type: object
+          nullable: true
+          additionalProperties: true
+        delivery:
+          $ref: "#/components/schemas/DeliverySummary"
+        created_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    DocumentoListResponse:
+      type: object
+      required: [items, total]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/DocumentoResponse"
+        total:
+          type: integer
+
+    NotaCreditoEmitRequest:
+      type: object
+      required: [motivo, items]
+      properties:
+        motivo:
+          type: string
+          maxLength: 300
+        items:
+          type: array
+          minItems: 1
+          description: Lineas a acreditar. Pueden ser parciales respecto a la factura original.
+          items:
+            $ref: "#/components/schemas/FacturaItemInput"
+
+    CancelacionRequest:
+      type: object
+      required: [motivo]
+      properties:
+        motivo:
+          type: string
+          maxLength: 150
+
+    DeliverySummary:
+      type: object
+      properties:
+        public_url:
+          type: string
+          nullable: true
+        whatsapp_url:
+          type: string
+          nullable: true
+        email_status:
+          $ref: "#/components/schemas/EmailStatus"
+        artifacts:
+          $ref: "#/components/schemas/ArtifactsResponse"
+
+    DeliveryLinkResponse:
+      type: object
+      required: [public_url, token_status]
+      properties:
+        public_url:
+          type: string
+          format: uri
+        whatsapp_url:
+          type: string
+          format: uri
+        token_status:
+          type: string
+          enum: [ACTIVE, REVOKED]
+
+    ArtifactsResponse:
+      type: object
+      required: [kude_pdf, xml]
+      properties:
+        kude_pdf:
+          $ref: "#/components/schemas/ArtifactLink"
+        xml:
+          $ref: "#/components/schemas/ArtifactLink"
+
+    ArtifactLink:
+      type: object
+      required: [available]
+      properties:
+        available:
+          type: boolean
+        url:
+          type: string
+          format: uri
+          nullable: true
+
+    EmailStatus:
+      type: string
+      enum: [NOT_APPLICABLE, DELEGATED, SENT, FAILED, UNKNOWN]
+
+    EmailStatusResponse:
+      type: object
+      required: [status]
+      properties:
+        status:
+          $ref: "#/components/schemas/EmailStatus"
+        message:
+          type: string
+          nullable: true
+
+    PublicDocumentResponse:
+      type: object
+      required: [facturador, numero_fiscal, estado, cliente, totals, artifacts]
+      properties:
+        facturador:
+          $ref: "#/components/schemas/FacturadorSummary"
+        numero_fiscal:
+          type: string
+          nullable: true
+        cdc:
+          type: string
+          nullable: true
+        estado:
+          $ref: "#/components/schemas/DocumentoEstado"
+        cliente:
+          $ref: "#/components/schemas/FacturaClienteInput"
+        totals:
+          $ref: "#/components/schemas/DocumentoTotals"
+        artifacts:
+          $ref: "#/components/schemas/ArtifactsResponse"
+
+    BackofficeUserCreateRequest:
+      type: object
+      required: [username, display_name, role]
+      properties:
+        username:
+          type: string
+        display_name:
+          type: string
+        role:
+          type: string
+          enum: [OPERADOR_FACTURACION, SOPORTE_INTERNO, ADMIN_INTERNO]
+        temporary_password:
+          type: string
+          nullable: true
+
+    BackofficeUserResponse:
+      type: object
+      required: [id, username, role, active]
+      properties:
+        id:
+          type: string
+        username:
+          type: string
+        display_name:
+          type: string
+        role:
+          type: string
+        active:
+          type: boolean
+
+    UserOperationConfigRequest:
+      type: object
+      required: [tenant_id, facturador_id, emisor_id, establecimiento, punto_expedicion, perfil_emision_codigo, actividad_economica_codigo]
+      properties:
+        tenant_id:
+          type: string
+        facturador_id:
+          type: string
+        emisor_id:
+          type: string
+        establecimiento:
+          type: string
+        punto_expedicion:
+          type: string
+        perfil_emision_codigo:
+          type: string
+        actividad_economica_codigo:
+          type: string
+
+    UserOperationConfig:
+      allOf:
+        - $ref: "#/components/schemas/UserOperationConfigRequest"
+        - type: object
+          required: [user_id, active]
+          properties:
+            user_id:
+              type: string
+            active:
+              type: boolean

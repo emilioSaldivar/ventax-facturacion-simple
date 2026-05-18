@@ -1375,6 +1375,54 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /nota-credito:
+    post:
+      tags: [Emision]
+      summary: Emitir Nota de Crédito Electrónica
+      description: |
+        Crea/obtiene una NCE idempotente, genera XML v150 con `C002=5`, firma, inserta QR (AA002)
+        y transmite segun `envio.mode`.
+
+        Para referencia electronica, el CDC asociado debe existir localmente y corresponder a una FE.
+        Para referencia impresa, se informan los datos del documento impreso tipo factura.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EmitirNotaCreditoRequest"
+      responses:
+        "200":
+          description: NCE emitida o encolada correctamente
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmitirNotaCreditoResponse"
+        "202":
+          description: NCE aceptada localmente y encolada por fallback AUTO
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmitirNotaCreditoResponse"
+        "409":
+          description: Documento ya existe o monto acumulado de NCE excede la FE asociada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Validacion de datos o referencia documental invalida
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Error interno
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /dev/smoke/emit-fe:
     post:
       tags: [Emision]
@@ -1740,6 +1788,115 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /files/xml/{cdc}:
+    get:
+      tags: [Archivos]
+      summary: Descargar XML final por CDC
+      description: |
+        Descarga el XML local del Documento Electronico.
+        Usa `xml_qr` como fuente primaria y `xml_signed` como fallback.
+      parameters:
+        - in: path
+          name: cdc
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: env
+          required: false
+          schema:
+            type: string
+            enum: [test, prod]
+          description: Ambiente persistido del documento cuando la base aloja mas de un ambiente.
+      responses:
+        "200":
+          description: XML descargable
+          headers:
+            Content-Disposition:
+              schema:
+                type: string
+              description: Attachment con nombre `<cdc>.xml`.
+          content:
+            application/xml:
+              schema:
+                type: string
+        "404":
+          description: No existe XML local asociado al CDC
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                notFound:
+                  value:
+                    error: xml_not_found
+        "500":
+          description: Fallo al descargar XML
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                generationFailed:
+                  value:
+                    error: xml_download_failed
+
+  /files/kude/{cdc}.pdf:
+    get:
+      tags: [Archivos]
+      summary: Descargar PDF KUDE por CDC
+      description: |
+        Genera y descarga un PDF KUDE desde el XML local del Documento Electronico.
+        Usa `facturacionelectronicapy-kude` y requiere Java disponible en runtime.
+        En instancias multi-facturador, usa el logo configurado en el emisor propietario del documento
+        (`emisores.logo_path`) y solo usa el logo global de runtime como fallback.
+      parameters:
+        - in: path
+          name: cdc
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: env
+          required: false
+          schema:
+            type: string
+            enum: [test, prod]
+          description: Ambiente persistido del documento cuando la base aloja mas de un ambiente.
+      responses:
+        "200":
+          description: PDF KUDE descargable
+          headers:
+            Content-Disposition:
+              schema:
+                type: string
+              description: Attachment con nombre `<cdc>.pdf`.
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        "404":
+          description: No existe XML local asociado al CDC
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                notFound:
+                  value:
+                    error: kude_xml_not_found
+        "500":
+          description: Fallo al generar KUDE
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                generationFailed:
+                  value:
+                    error: kude_generation_failed
+
   /files/ticket/{cdc}/raw:
     get:
       tags: [Archivos]
@@ -2055,13 +2212,8 @@ components:
                   monto:
                     type: number
                     format: double
-            plazoDias:
-              type: integer
-              nullable: true
-            vencimiento:
-              type: string
-              format: date
-              nullable: true
+            credito:
+              $ref: "#/components/schemas/CreditoOperacion"
         items:
           type: array
           minItems: 1
@@ -2127,6 +2279,199 @@ components:
           type: object
           nullable: true
           description: Resumen de respuesta de SIFEN si mode=SYNC
+          additionalProperties: true
+
+    CreditoOperacion:
+      oneOf:
+        - type: object
+          required: [modalidad, plazoDias]
+          properties:
+            modalidad:
+              type: string
+              enum: [PLAZO]
+            plazoDias:
+              type: integer
+              minimum: 1
+              example: 30
+        - type: object
+          required: [modalidad, cantidadCuotas]
+          properties:
+            modalidad:
+              type: string
+              enum: [CUOTAS]
+            cantidadCuotas:
+              type: integer
+              minimum: 1
+              example: 2
+            cuotas:
+              type: array
+              description: Detalle opcional para trazabilidad local y soporte de xmlgen si aplica.
+              items:
+                type: object
+                required: [monto, vencimiento]
+                properties:
+                  monto:
+                    type: number
+                    format: double
+                  vencimiento:
+                    type: string
+                    format: date
+                  moneda:
+                    type: string
+                    default: PYG
+
+    NotaCreditoReferencia:
+      oneOf:
+        - type: object
+          required: [tipo, cdc]
+          properties:
+            tipo:
+              type: string
+              enum: [ELECTRONICO]
+            cdc:
+              type: string
+              description: CDC de la Factura Electronica referenciada.
+        - type: object
+          required: [tipo, timbrado, establecimiento, puntoExpedicion, numero]
+          properties:
+            tipo:
+              type: string
+              enum: [IMPRESO]
+            timbrado:
+              type: string
+            establecimiento:
+              type: string
+              example: "001"
+            puntoExpedicion:
+              type: string
+              example: "001"
+            numero:
+              type: string
+              example: "0000001"
+            fecha:
+              type: string
+              format: date
+              nullable: true
+
+    EmitirNotaCreditoRequest:
+      type: object
+      required:
+        - emisor_id
+        - timbrado
+        - receptor
+        - fecha
+        - motivo
+        - referencia
+        - items
+        - envio
+      properties:
+        emisor_id:
+          type: string
+        timbrado:
+          type: object
+          required: [timbrado, establecimiento, puntoExpedicion, documentoNro, fecIni]
+          properties:
+            timbrado:
+              type: string
+            establecimiento:
+              type: string
+              example: "001"
+            puntoExpedicion:
+              type: string
+              example: "001"
+            documentoNro:
+              type: string
+              example: "0000001"
+            fecIni:
+              type: string
+              format: date
+        receptor:
+          type: object
+          required: [docNro, razonSocial]
+          properties:
+            tipoDocumento:
+              type: string
+              enum: [CI, RUC, PASAPORTE, CEDULA_EXTRANJERA, CARNET_RESIDENCIA, INNOMINADO, TARJETA_DIPLOMATICA, NO_ESPECIFICADO]
+              default: CI
+            docNro:
+              type: string
+            dv:
+              type: string
+              nullable: true
+            razonSocial:
+              type: string
+            direccion:
+              type: string
+              nullable: true
+            telefono:
+              type: string
+              nullable: true
+        fecha:
+          type: string
+          format: date-time
+        motivo:
+          type: object
+          required: [codigo]
+          properties:
+            codigo:
+              type: integer
+              minimum: 1
+              description: Codigo de motivo de emision de la NCE segun catalogo SIFEN.
+        referencia:
+          $ref: "#/components/schemas/NotaCreditoReferencia"
+        items:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [codigo, descripcion, cantidad, precioUnitario, ivaTipo]
+            properties:
+              codigo:
+                type: string
+              descripcion:
+                type: string
+              cantidad:
+                type: number
+                format: double
+              precioUnitario:
+                type: number
+                format: double
+              ivaTipo:
+                type: string
+                description: "Ej: IVA10, IVA5, EXENTO"
+        envio:
+          type: object
+          required: [mode]
+          properties:
+            mode:
+              $ref: "#/components/schemas/EmitMode"
+            sendNow:
+              type: boolean
+              default: true
+
+    EmitirNotaCreditoResponse:
+      type: object
+      required: [document_id, status, idempotent]
+      properties:
+        document_id:
+          type: string
+        cdc:
+          type: string
+          nullable: true
+        nro_documento:
+          type: string
+          nullable: true
+        status:
+          $ref: "#/components/schemas/DocumentStatus"
+        idempotent:
+          type: boolean
+        delivery_mode:
+          type: string
+          nullable: true
+          enum: [SYNC, BATCH, AUTO_FALLBACK_BATCH]
+        sifen:
+          type: object
+          nullable: true
           additionalProperties: true
 
     CancelarRequest:

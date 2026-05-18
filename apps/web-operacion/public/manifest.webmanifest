@@ -1,0 +1,11 @@
+{
+  "name": "Ventax Factura",
+  "short_name": "Factura",
+  "start_url": "/app/",
+  "scope": "/app/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#00A7C8",
+  "icons": []
+}
+

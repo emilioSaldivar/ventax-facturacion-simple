@@ -1,0 +1,36 @@
+{
+  "name": "facturacion-simple-cliente",
+  "version": "0.1.0",
+  "private": true,
+  "description": "SaaS mobile-first para facturacion electronica simple en Paraguay.",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "dev:api": "npm run dev -w @facturacion-simple/api",
+    "dev:web": "npm run dev -w @facturacion-simple/web-operacion",
+    "dev:backoffice": "npm run dev -w @facturacion-simple/backoffice",
+    "lint": "npm run lint --workspaces --if-present",
+    "migrate": "npm run migrate -w @facturacion-simple/api",
+    "test": "npm run test --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present"
+  },
+  "engines": {
+    "node": ">=18.19.0",
+    "npm": ">=9.2.0"
+  },
+  "devDependencies": {
+    "@types/cookie-parser": "^1.4.10",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/pg": "^8.20.0",
+    "typescript": "^5.6.3"
+  },
+  "dependencies": {
+    "argon2": "^0.44.0",
+    "cookie-parser": "^1.4.7",
+    "jsonwebtoken": "^9.0.3",
+    "pg": "^8.20.0"
+  }
+}
