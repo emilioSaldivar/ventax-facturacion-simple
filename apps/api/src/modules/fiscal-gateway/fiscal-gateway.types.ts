@@ -11,12 +11,6 @@ export interface FiscalGatewayConfig {
   apiKey?: string;
   timeoutMs: number;
   environment: "test" | "prod";
-  defaultTimbrado: string;
-  defaultTimbradoInicio: string;
-  defaultEstablecimiento: string;
-  defaultPuntoExpedicion: string;
-  defaultDocumentoNro: string;
-  defaultCreditoPlazoDias: number;
 }
 
 export interface FiscalGatewayHealth {
@@ -54,10 +48,18 @@ export interface FiscalRefreshStatusResponse {
   raw: Record<string, unknown>;
 }
 
+export interface FiscalArtifactResponse {
+  body: Buffer;
+  content_type: string;
+  filename: string;
+}
+
 export interface FiscalGateway {
   health(): Promise<FiscalGatewayHealth>;
   emitFactura(request: FiscalEmitFacturaRequest): Promise<FiscalEmitFacturaResponse>;
   refreshFacturaStatus(request: FiscalRefreshStatusRequest): Promise<FiscalRefreshStatusResponse>;
+  getXml(cdc: string): Promise<FiscalArtifactResponse>;
+  getKudePdf(cdc: string): Promise<FiscalArtifactResponse>;
 }
 
 export class FiscalGatewayError extends Error {

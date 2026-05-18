@@ -52,7 +52,8 @@ Motivo:
 - Dos apps separadas:
   - `apps/web-operacion`: app critica para operadores;
   - `apps/backoffice`: app interna de baja frecuencia.
-- Tailwind CSS propio con identidad Ventax.
+- CSS propio y tokens de diseno Ventax mantenidos en la app, evitando dependencia de Tailwind salvo que aporte valor claro.
+- Los logos e iconos PWA deben derivarse de `ventax_logos/`.
 - La app operativa prioriza celular y tablet; desktop debe ser usable, no necesariamente optimizado primero.
 
 ### 2.3 Backend
@@ -102,13 +103,8 @@ FE_API_KEY=<secret>
 FE_API_TIMEOUT_MS=20000
 FE_API_ENV=test
 FE_GATEWAY_MODE=mock
-FE_DEFAULT_EMISOR_RUC=80136968-1
-FE_DEFAULT_TIMBRADO=80136968
-FE_DEFAULT_TIMBRADO_INICIO=2025-12-30
-FE_DEFAULT_ESTABLECIMIENTO=001
-FE_DEFAULT_PUNTO_EXPEDICION=001
-FE_DEFAULT_DOCUMENTO_NRO=0000000
-FE_DEFAULT_CREDITO_PLAZO_DIAS=30
+FE_OUTBOX_WORKER_ENABLED=true
+FE_OUTBOX_WORKER_INTERVAL_MS=5000
 PUBLIC_APP_BASE_URL=https://factura.ventax.app
 JWT_ACCESS_TTL_MINUTES=15
 JWT_REFRESH_TTL_DAYS=30
@@ -118,11 +114,11 @@ Notas:
 
 - `FE_API_KEY` debe guardarse solo en `.env`/secret manager del entorno.
 - El valor compartido durante definicion del proyecto debe considerarse sensible.
-- `FE_DEFAULT_EMISOR_RUC`, `FE_DEFAULT_TIMBRADO`, `FE_DEFAULT_TIMBRADO_INICIO`, `FE_DEFAULT_ESTABLECIMIENTO`, `FE_DEFAULT_PUNTO_EXPEDICION`, `FE_DEFAULT_DOCUMENTO_NRO` y `FE_DEFAULT_CREDITO_PLAZO_DIAS` son fixture temporal para cerrar pruebas y validaciones del MVP.
-- En la version multi facturador, esos valores deben resolverse desde la configuracion fiscal-operativa de cada facturador, establecimiento, punto de expedicion, timbrado, numerador, condicion de credito y actividad economica. No deben quedar como configuracion global de plataforma.
+- Los datos de facturador, emisor, establecimiento, punto, timbrado, numerador y plazo de credito no viven en `.env`; se resuelven desde la configuracion fiscal-operativa en base de datos.
 - El healthcheck fiscal de referencia es `https://fe-api.ventax.app/fcws/health`.
-- El modo de envio default para emision sera `SYNC`.
-- Si una emision entra en timeout, el documento operativo queda en `PENDIENTE_SIFEN` y se permite refrescar estado desde el listado/detalle.
+- El modo recomendado para evolucionar a produccion es asincrono/recuperable desde el SaaS, con `external_ref` idempotente y consulta posterior por estado. El modo `SYNC` puede seguir como fixture/mock o primer puente tecnico mientras se implementa outbox/worker.
+- Si una emision entra en timeout o queda sin confirmacion final, el documento operativo queda en `PENDIENTE_SIFEN` y se permite refrescar estado desde el listado/detalle.
+- Los errores recuperables deben exponer acciones de gestion al cliente final: reintentar envio seguro, refrescar estado, corregir datos antes de una nueva emision cuando no exista documento fiscal confirmado, y ver feedback claro de causa probable sin exponer trazas fiscales internas.
 
 ### 2.7 Reglas Fiscales Del MVP
 
@@ -300,11 +296,13 @@ Responsabilidades:
 - cargar tenant;
 - cargar facturador unico;
 - cargar establecimiento, punto, perfil y actividad;
-- exponer readiness operativo.
+- exponer readiness operativo;
+- agregar readiness fiscal desde backend SaaS, no desde la UI, usando `FiscalGateway`, timeout corto, cache/circuit-breaker simple y degradacion clara.
 
 Regla:
 
 - si el usuario no tiene configuracion operativa completa, no puede emitir.
+- si el backend fiscal no esta disponible, se bloquea la emision inmediata o se informa modo pendiente segun la estrategia asincrona vigente; la decision queda centralizada en backend para resiliencia y auditoria.
 
 ### 5.3 Clientes
 
@@ -399,7 +397,8 @@ Timeout:
 
 Default:
 
-- `envio.mode=SYNC`.
+- `envio.mode=SYNC` solo como puente inicial.
+- La ruta resiliente objetivo es outbox/worker asincrono: el API persiste intento, devuelve estado operativo, un worker envia a FE con `external_ref` idempotente, y la UI permite seguimiento/reintento controlado.
 
 ### 5.9 Audit
 
@@ -530,6 +529,24 @@ Si la llamada fiscal de emision excede `FE_API_TIMEOUT_MS`:
 - permitir `refresh-status` desde listado/detalle;
 - no duplicar emision si se reintenta con la misma idempotencia.
 
+### 8.4 Emision Resiliente Y Asincrona
+
+Objetivo:
+
+- reducir intervencion de soporte interno;
+- evitar duplicados fiscales;
+- permitir recuperacion operativa desde UI;
+- mantener feedback claro para el cliente final.
+
+Diseno objetivo:
+
+- `POST /facturas` valida datos, calcula preview backend y persiste documento operativo `EMITIENDO` con `external_ref` idempotente;
+- la llamada a `facturacion-electronica` se ejecuta por outbox/worker parametrizable por `FE_OUTBOX_WORKER_ENABLED` y `FE_OUTBOX_WORKER_INTERVAL_MS`;
+- cada intento fiscal registra evento auditable, estado normalizado y causa operativa resumida;
+- reintentos usan el mismo `external_ref` cuando se intenta recuperar un documento pendiente, nunca crean numeracion nueva sin decision explicita;
+- si el error es de datos operativos antes de confirmar documento fiscal, la UI debe permitir corregir y emitir nuevamente con feedback claro;
+- si existe CDC/documento fiscal confirmado, las acciones permitidas son refrescar estado, entregar artefactos, cancelacion/anulacion elegible o NCE, no editar la factura original.
+
 ## 9. Frontend Operacion
 
 ### 9.1 Pantallas
@@ -568,11 +585,21 @@ Reglas:
 Requisitos:
 
 - manifest;
-- iconos;
+- iconos generados desde `ventax_logos/`;
 - theme color Ventax;
 - cache de assets estaticos;
 - no prometer emision offline;
 - si no hay conexion, bloquear emision con mensaje claro.
+
+### 9.4 Wireframe Del Editor
+
+Antes de implementar `UI-005`, se debe cerrar un micro-wireframe tecnico en documentacion:
+
+- orden mobile de bandas: encabezado fiscal, comprobante/condicion, cliente, lineas, totales, acciones;
+- comportamiento de lineas como tarjetas compactas o filas expandibles en celular;
+- ubicacion del boton `Emitir` siempre cerca de totales;
+- estados de error y feedback de correccion antes de emision;
+- puntos donde entran busqueda de cliente, popup de alta rapida y busqueda de catalogo.
 
 ## 10. Backoffice
 
@@ -707,20 +734,18 @@ FE_API_BASE_URL=https://fe-api.ventax.app/fcws
 FE_API_KEY=<secret>
 FE_API_TIMEOUT_MS=20000
 FE_API_ENV=test
+FE_GATEWAY_MODE=mock
+FE_OUTBOX_WORKER_ENABLED=true
+FE_OUTBOX_WORKER_INTERVAL_MS=5000
 
 LOG_LEVEL=info
 ```
 
-Defaults fiscales de seed/test:
+Configuracion fiscal-operativa de seed/test:
 
-```env
-FE_DEFAULT_EMISOR_RUC=80136968-1
-FE_DEFAULT_TIMBRADO=80136968
-FE_DEFAULT_TIMBRADO_INICIO=2025-12-30
-FE_DEFAULT_ESTABLECIMIENTO=001
-FE_DEFAULT_PUNTO_EXPEDICION=001
-FE_DEFAULT_SERIE_FISCAL=
-```
+Los datos de emisor, timbrado, inicio de timbrado, establecimiento, punto, numerador y plazo de credito se cargan por migraciones/seeds/backoffice en las tablas operativas, no como variables globales.
+
+El seed de referencia `db/seeds/002_operational_context_example.sql` muestra una carga local de ejemplo sin secretos.
 
 ## 15. Orden De Implementacion
 
@@ -772,6 +797,9 @@ FE_DEFAULT_SERIE_FISCAL=
 - timeout a `PENDIENTE_SIFEN`;
 - refresh estado;
 - KUDE/XML.
+- readiness fiscal centralizado en `/me/readiness`;
+- outbox/worker de emision asincrona;
+- reintentos controlados y feedback recuperable.
 
 ### Fase 6 - Entrega Y Publico
 
@@ -791,6 +819,8 @@ FE_DEFAULT_SERIE_FISCAL=
 ### Fase 8 - Frontend Operacion
 
 - login;
+- readiness operativo/fiscal visible;
+- micro-wireframe del editor antes de implementarlo;
 - editor mobile-first;
 - clientes;
 - catalogo;
@@ -848,9 +878,15 @@ FE_DEFAULT_SERIE_FISCAL=
 ### UI
 
 - Playwright mobile;
+- Playwright desktop/tablet cuando el cambio sea visible al operador;
 - editor sin solapamientos;
 - flujo login -> cliente -> item -> emitir mock -> resultado;
 - listado y link publico.
+
+### Flujo Completo
+
+- Para funcionalidades que crucen frontend y backend, la validacion preferida es Playwright usando la UI contra API local/mock.
+- Los tests backend siguen cubriendo reglas de dominio; el flujo UI valida que el circuito real de operador no se rompa.
 
 ## 17. Criterio De MVP Implementado
 

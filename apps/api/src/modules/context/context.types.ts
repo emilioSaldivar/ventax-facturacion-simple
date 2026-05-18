@@ -19,6 +19,10 @@ export interface FiscalContext {
   perfil_emision_codigo: string;
   actividad_economica_codigo: string;
   actividad_economica_descripcion: string | null;
+  timbrado: string;
+  timbrado_inicio: string;
+  documento_nro: string;
+  credito_plazo_dias: number;
 }
 
 export interface OperationalContextResponse {
@@ -43,4 +47,3 @@ export interface OperationalContextRepository {
   getOperationalContext(userId: string): Promise<OperationalContextResponse | null>;
   getReadinessChecks(userId: string): Promise<ReadinessCheck[]>;
 }
-

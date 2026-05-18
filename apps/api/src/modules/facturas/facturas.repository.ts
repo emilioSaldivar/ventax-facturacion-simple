@@ -2,8 +2,10 @@ import { pool } from "../../db/pool";
 import type {
   DocumentoListFilters,
   DocumentoListResponse,
+  FacturaQueuedPersistInput,
   FacturaItemPreview,
   FacturaPersistInput,
+  PendingFiscalEmission,
   FacturaRepository,
   DocumentoResponse
 } from "./facturas.types";
@@ -35,6 +37,13 @@ interface FacturaItemRow {
   subtotal: number;
   base_imponible: number;
   iva_monto: number;
+}
+
+interface PendingFiscalEmissionRow {
+  outbox_id: string;
+  documento_id: string;
+  facturador_id: string;
+  fiscal_request_snapshot: unknown;
 }
 
 export class PgFacturaRepository implements FacturaRepository {
@@ -341,6 +350,336 @@ export class PgFacturaRepository implements FacturaRepository {
           return existing;
         }
       }
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async createQueuedEmission(input: FacturaQueuedPersistInput): Promise<DocumentoResponse> {
+    const client = await pool.connect();
+
+    try {
+      await client.query("begin");
+
+      const inserted = await client.query<FacturaRow>(
+        `
+          insert into facturas_operativas (
+            tenant_id,
+            facturador_id,
+            usuario_id,
+            tipo,
+            condicion_venta,
+            estado,
+            external_ref,
+            idempotency_key,
+            cliente_snapshot,
+            totals_snapshot,
+            fiscal_request_snapshot,
+            fiscal_response_snapshot
+          )
+          values (
+            $1, $2, $3, 'FACTURA', $4, 'EMITIENDO', $5, $6, $7::jsonb, $8::jsonb, $9::jsonb, '{}'::jsonb
+          )
+          returning
+            id,
+            tipo,
+            estado,
+            condicion_venta,
+            external_ref,
+            cliente_snapshot,
+            totals_snapshot,
+            fiscal_response_snapshot,
+            fiscal_document_id,
+            cdc,
+            numero_fiscal,
+            email_estado,
+            created_at
+        `,
+        [
+          input.tenantId,
+          input.facturadorId,
+          input.userId,
+          input.input.condicion_venta,
+          input.externalRef,
+          input.idempotencyKey ?? null,
+          JSON.stringify(input.input.cliente),
+          JSON.stringify(input.preview.totals),
+          JSON.stringify(input.fiscalRequest)
+        ]
+      );
+
+      const factura = inserted.rows[0]!;
+
+      for (const item of input.preview.items) {
+        await client.query(
+          `
+            insert into factura_items_snapshot (
+              tenant_id,
+              facturador_id,
+              factura_operativa_id,
+              catalogo_item_id,
+              line_no,
+              codigo,
+              descripcion,
+              cantidad,
+              precio_unitario,
+              iva_tipo,
+              subtotal,
+              base_imponible,
+              iva_monto
+            )
+            values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+          `,
+          [
+            input.tenantId,
+            input.facturadorId,
+            factura.id,
+            item.catalogo_item_id,
+            item.line_no,
+            item.codigo,
+            item.descripcion,
+            item.cantidad,
+            item.precio_unitario,
+            item.iva_tipo,
+            item.subtotal,
+            item.base_imponible,
+            item.iva_monto
+          ]
+        );
+      }
+
+      await client.query(
+        `
+          insert into factura_emision_outbox (
+            tenant_id,
+            facturador_id,
+            factura_operativa_id,
+            estado
+          )
+          values ($1, $2, $3, 'PENDING')
+        `,
+        [input.tenantId, input.facturadorId, factura.id]
+      );
+
+      await client.query(
+        `
+          insert into audit_events (
+            tenant_id,
+            facturador_id,
+            usuario_id,
+            entity_type,
+            entity_id,
+            event_type,
+            metadata
+          )
+          values ($1, $2, $3, 'factura_operativa', $4, 'FACTURA_EMISION_ENCOLADA', $5::jsonb)
+        `,
+        [
+          input.tenantId,
+          input.facturadorId,
+          input.userId,
+          factura.id,
+          JSON.stringify({
+            estado: "EMITIENDO",
+            external_ref: input.externalRef
+          })
+        ]
+      );
+
+      await client.query("commit");
+
+      return mapFacturaRow(factura, input.preview.items);
+    } catch (error) {
+      await client.query("rollback");
+      if (isUniqueViolation(error) && input.idempotencyKey) {
+        const existing = await this.findByIdempotencyKey({
+          facturadorId: input.facturadorId,
+          idempotencyKey: input.idempotencyKey
+        });
+
+        if (existing) {
+          return existing;
+        }
+      }
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async claimNextPendingEmission(): Promise<PendingFiscalEmission | null> {
+    const result = await pool.query<PendingFiscalEmissionRow>(
+      `
+        with next_job as (
+          select o.id
+          from factura_emision_outbox o
+          join facturas_operativas f on f.id = o.factura_operativa_id
+          where o.estado in ('PENDING', 'FAILED_TEMP')
+            and o.next_attempt_at <= now()
+            and f.deleted_at is null
+          order by o.next_attempt_at asc, o.created_at asc
+          limit 1
+          for update skip locked
+        )
+        update factura_emision_outbox o
+        set
+          estado = 'PROCESSING',
+          attempts = attempts + 1,
+          locked_at = now(),
+          updated_at = now()
+        from next_job, facturas_operativas f
+        where o.id = next_job.id
+          and f.id = o.factura_operativa_id
+        returning
+          o.id as outbox_id,
+          f.id as documento_id,
+          f.facturador_id,
+          f.fiscal_request_snapshot
+      `
+    );
+
+    const row = result.rows[0];
+    if (!row) {
+      return null;
+    }
+
+    return {
+      outboxId: row.outbox_id,
+      documentoId: row.documento_id,
+      facturadorId: row.facturador_id,
+      fiscalRequest: row.fiscal_request_snapshot as PendingFiscalEmission["fiscalRequest"]
+    };
+  }
+
+  async completePendingEmission(input: {
+    outboxId: string;
+    documentoId: string;
+    response: Parameters<FacturaRepository["completePendingEmission"]>[0]["response"];
+  }): Promise<DocumentoResponse | null> {
+    const client = await pool.connect();
+
+    try {
+      await client.query("begin");
+      await client.query(
+        `
+          update factura_emision_outbox
+          set estado = 'DONE', locked_at = null, last_error = null, updated_at = now()
+          where id = $1
+        `,
+        [input.outboxId]
+      );
+
+      const result = await client.query<FacturaRow>(
+        `
+          update facturas_operativas
+          set
+            estado = $2,
+            fiscal_response_snapshot = $3::jsonb,
+            fiscal_document_id = $4,
+            cdc = $5,
+            numero_fiscal = $6,
+            email_estado = $7,
+            emitted_at = now(),
+            updated_at = now()
+          where id = $1
+            and deleted_at is null
+          returning
+            id,
+            tipo,
+            estado,
+            condicion_venta,
+            external_ref,
+            cliente_snapshot,
+            totals_snapshot,
+            fiscal_response_snapshot,
+            fiscal_document_id,
+            cdc,
+            numero_fiscal,
+            email_estado,
+            created_at
+        `,
+        [
+          input.documentoId,
+          input.response.estado,
+          JSON.stringify(input.response.raw),
+          input.response.fiscal_document_id,
+          input.response.cdc,
+          input.response.numero_fiscal,
+          input.response.email_status === "NOT_APPLICABLE" ? null : input.response.email_status
+        ]
+      );
+
+      await client.query("commit");
+
+      const factura = result.rows[0];
+      return factura ? mapFacturaRow(factura, await this.findItems(factura.id)) : null;
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async failPendingEmission(input: {
+    outboxId: string;
+    documentoId: string;
+    estado: DocumentoResponse["estado"];
+    error: Record<string, unknown>;
+    retryAfterSeconds: number;
+  }): Promise<DocumentoResponse | null> {
+    const client = await pool.connect();
+
+    try {
+      await client.query("begin");
+      await client.query(
+        `
+          update factura_emision_outbox
+          set
+            estado = 'FAILED_TEMP',
+            locked_at = null,
+            next_attempt_at = now() + ($2::text || ' seconds')::interval,
+            last_error = $3::jsonb,
+            updated_at = now()
+          where id = $1
+        `,
+        [input.outboxId, input.retryAfterSeconds, JSON.stringify(input.error)]
+      );
+
+      const result = await client.query<FacturaRow>(
+        `
+          update facturas_operativas
+          set
+            estado = $2,
+            fiscal_response_snapshot = $3::jsonb,
+            updated_at = now()
+          where id = $1
+            and deleted_at is null
+          returning
+            id,
+            tipo,
+            estado,
+            condicion_venta,
+            external_ref,
+            cliente_snapshot,
+            totals_snapshot,
+            fiscal_response_snapshot,
+            fiscal_document_id,
+            cdc,
+            numero_fiscal,
+            email_estado,
+            created_at
+        `,
+        [input.documentoId, input.estado, JSON.stringify(input.error)]
+      );
+
+      await client.query("commit");
+
+      const factura = result.rows[0];
+      return factura ? mapFacturaRow(factura, await this.findItems(factura.id)) : null;
+    } catch (error) {
+      await client.query("rollback");
       throw error;
     } finally {
       client.release();

@@ -5,6 +5,7 @@ import {
   FiscalGatewayError,
   type FiscalEmitFacturaRequest,
   type FiscalEmitFacturaResponse,
+  type FiscalArtifactResponse,
   type FiscalGateway,
   type FiscalGatewayConfig,
   type FiscalGatewayHealth,
@@ -56,6 +57,22 @@ export class MockFiscalGateway implements FiscalGateway {
         refreshed: true,
         status: "APPROVED"
       }
+    };
+  }
+
+  async getXml(cdc: string): Promise<FiscalArtifactResponse> {
+    return {
+      body: Buffer.from(`<?xml version="1.0" encoding="UTF-8"?><mockFiscalDocument cdc="${escapeXml(cdc)}"/>`, "utf8"),
+      content_type: "application/xml; charset=utf-8",
+      filename: `${cdc}.xml`
+    };
+  }
+
+  async getKudePdf(cdc: string): Promise<FiscalArtifactResponse> {
+    return {
+      body: Buffer.from(`Mock KUDE/PDF ${cdc}`, "utf8"),
+      content_type: "application/pdf",
+      filename: `${cdc}.pdf`
     };
   }
 }
@@ -134,6 +151,18 @@ export class RealFiscalGateway implements FiscalGateway {
     return mapFiscalRefreshStatusResponse(body);
   }
 
+  async getXml(cdc: string): Promise<FiscalArtifactResponse> {
+    return this.fetchArtifact(`${this.config.baseUrl}/files/xml/${encodeURIComponent(cdc)}`, "application/xml", `${cdc}.xml`);
+  }
+
+  async getKudePdf(cdc: string): Promise<FiscalArtifactResponse> {
+    return this.fetchArtifact(
+      `${this.config.baseUrl}/files/kude/${encodeURIComponent(cdc)}.pdf`,
+      "application/pdf",
+      `${cdc}.pdf`
+    );
+  }
+
   private async fetchWithTimeout(url: string, init: RequestInit): Promise<Response> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.config.timeoutMs);
@@ -157,19 +186,46 @@ export class RealFiscalGateway implements FiscalGateway {
     };
   }
 
+  private async fetchArtifact(url: string, accept: string, filename: string): Promise<FiscalArtifactResponse> {
+    const response = await this.fetchWithTimeout(url, {
+      method: "GET",
+      headers: {
+        ...this.buildHeaders(),
+        accept
+      }
+    });
+
+    if (!response.ok) {
+      throw new FiscalGatewayError(
+        response.status === 408 || response.status === 504 ? "TIMEOUT" : "UPSTREAM_ERROR",
+        "Backend fiscal no entrego el artefacto.",
+        { status: response.status }
+      );
+    }
+
+    const body = Buffer.from(await response.arrayBuffer());
+    const contentType = response.headers.get("content-type") ?? accept;
+
+    return {
+      body,
+      content_type: contentType,
+      filename
+    };
+  }
+
   private buildEmitirFacturaPayload(request: FiscalEmitFacturaRequest): Record<string, unknown> {
-    const suggestedDocumentNumber = this.config.defaultDocumentoNro;
+    const suggestedDocumentNumber = request.fiscal_context.documento_nro;
 
     return {
       emisor_id: request.facturador.emisor_id,
       actividadEconomicaCodigo: request.fiscal_context.actividad_economica_codigo,
       emission_profile_code: request.fiscal_context.perfil_emision_codigo,
       timbrado: {
-        timbrado: this.config.defaultTimbrado,
-        establecimiento: request.fiscal_context.establecimiento || this.config.defaultEstablecimiento,
-        puntoExpedicion: request.fiscal_context.punto_expedicion || this.config.defaultPuntoExpedicion,
+        timbrado: request.fiscal_context.timbrado,
+        establecimiento: request.fiscal_context.establecimiento,
+        puntoExpedicion: request.fiscal_context.punto_expedicion,
         documentoNro: suggestedDocumentNumber,
-        fecIni: this.config.defaultTimbradoInicio
+        fecIni: request.fiscal_context.timbrado_inicio
       },
       numbering: {
         mode: "ONLINE",
@@ -192,7 +248,7 @@ export class RealFiscalGateway implements FiscalGateway {
         telefono: request.cliente.telefono ?? null
       },
       fecha: new Date().toISOString(),
-      condicionOperacion: buildCondicionOperacion(request, this.config.defaultCreditoPlazoDias),
+      condicionOperacion: buildCondicionOperacion(request),
       items: request.items.map((item) => ({
         codigo: item.codigo ?? `L${String(item.line_no).padStart(3, "0")}`,
         descripcion: item.descripcion,
@@ -208,13 +264,17 @@ export class RealFiscalGateway implements FiscalGateway {
   }
 }
 
-function buildCondicionOperacion(request: FiscalEmitFacturaRequest, defaultCreditoPlazoDias: number) {
+function escapeXml(value: string): string {
+  return value.replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+}
+
+function buildCondicionOperacion(request: FiscalEmitFacturaRequest) {
   if (request.condicion_venta === "CREDITO") {
     return {
       tipo: "CREDITO",
       credito: {
         modalidad: "PLAZO",
-        plazoDias: defaultCreditoPlazoDias
+        plazoDias: request.fiscal_context.credito_plazo_dias
       }
     };
   }

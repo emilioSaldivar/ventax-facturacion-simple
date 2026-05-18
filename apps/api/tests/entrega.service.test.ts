@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { OperationalContextResponse } from "../src/modules/context/context.types";
-import { createOrGetDeliveryLink, generatePublicDeliveryToken } from "../src/modules/entrega/entrega.service";
-import type { DeliveryLinkRecord, DeliveryLinkRepository } from "../src/modules/entrega/entrega.types";
+import { createOrGetDeliveryLink, generatePublicDeliveryToken, getEmailStatus, getPublicArtifact, getPublicDocument } from "../src/modules/entrega/entrega.service";
+import type { DeliveryLinkRecord, DeliveryLinkRepository, PublicDocumentRecord } from "../src/modules/entrega/entrega.types";
 import type { DocumentoResponse, FacturaPersistInput, FacturaRepository } from "../src/modules/facturas/facturas.types";
+import type { FiscalGateway } from "../src/modules/fiscal-gateway/fiscal-gateway.types";
 
 const context: OperationalContextResponse = {
   user: {
@@ -27,7 +28,11 @@ const context: OperationalContextResponse = {
     punto_expedicion: "001",
     perfil_emision_codigo: "SERV",
     actividad_economica_codigo: "82110",
-    actividad_economica_descripcion: "Servicios administrativos"
+    actividad_economica_descripcion: "Servicios administrativos",
+    timbrado: "80136968",
+    timbrado_inicio: "2025-12-30",
+    documento_nro: "0000000",
+    credito_plazo_dias: 30
   }
 };
 
@@ -57,10 +62,15 @@ class FakeFacturaRepository implements FacturaRepository {
 
 class FakeDeliveryLinkRepository implements DeliveryLinkRepository {
   public active: DeliveryLinkRecord | null = null;
+  public publicDocument: PublicDocumentRecord | null = buildPublicDocument();
   public lastCreateInput: Parameters<DeliveryLinkRepository["create"]>[0] | null = null;
 
   async findActiveByDocumento(): Promise<DeliveryLinkRecord | null> {
     return this.active;
+  }
+
+  async findPublicByToken(): Promise<PublicDocumentRecord | null> {
+    return this.publicDocument;
   }
 
   async create(input: Parameters<DeliveryLinkRepository["create"]>[0]): Promise<DeliveryLinkRecord> {
@@ -69,6 +79,41 @@ class FakeDeliveryLinkRepository implements DeliveryLinkRepository {
       id: "77777777-7777-4777-8777-777777777777",
       token: input.token,
       revoked_at: null
+    };
+  }
+}
+
+class FakeFiscalGateway implements FiscalGateway {
+  public lastXmlCdc: string | null = null;
+  public lastPdfCdc: string | null = null;
+
+  async health() {
+    return { ok: true, mode: "mock" as const };
+  }
+
+  async emitFactura() {
+    throw new Error("not needed");
+  }
+
+  async refreshFacturaStatus() {
+    throw new Error("not needed");
+  }
+
+  async getXml(cdc: string) {
+    this.lastXmlCdc = cdc;
+    return {
+      body: Buffer.from("<xml/>"),
+      content_type: "application/xml",
+      filename: `${cdc}.xml`
+    };
+  }
+
+  async getKudePdf(cdc: string) {
+    this.lastPdfCdc = cdc;
+    return {
+      body: Buffer.from("pdf"),
+      content_type: "application/pdf",
+      filename: `${cdc}.pdf`
     };
   }
 }
@@ -121,6 +166,52 @@ describe("entrega service", () => {
     });
     expect(deliveryLinks.lastCreateInput?.token).toHaveLength(43);
   });
+
+  it("returns public document data without internal ids", async () => {
+    const deliveryLinks = new FakeDeliveryLinkRepository();
+
+    const result = await getPublicDocument("A".repeat(43), deliveryLinks);
+
+    expect(result).toMatchObject({
+      facturador: context.facturador,
+      numero_fiscal: "001-001-0000001",
+      cdc: "A".repeat(44),
+      estado: "EMITIDA",
+      email_status: "DELEGATED",
+      artifacts: {
+        kude_pdf: {
+          available: true,
+          url: `https://factura.ventax.app/public/d/${"A".repeat(43)}/kude.pdf`
+        },
+        xml: {
+          available: true,
+          url: `https://factura.ventax.app/public/d/${"A".repeat(43)}/xml`
+        }
+      }
+    });
+    expect("id" in result).toBe(false);
+  });
+
+  it("fetches public artifacts by CDC through fiscal gateway", async () => {
+    const deliveryLinks = new FakeDeliveryLinkRepository();
+    const gateway = new FakeFiscalGateway();
+
+    const result = await getPublicArtifact("A".repeat(43), "xml", deliveryLinks, gateway);
+
+    expect(gateway.lastXmlCdc).toBe("A".repeat(44));
+    expect(result.content_type).toBe("application/xml");
+  });
+
+  it("returns delegated email status message from document detail", async () => {
+    const facturas = new FakeFacturaRepository();
+
+    const result = await getEmailStatus(context, "66666666-6666-4666-8666-666666666666", facturas);
+
+    expect(result).toEqual({
+      status: "DELEGATED",
+      message: "Envio de email delegado a Ventax FE."
+    });
+  });
 });
 
 function buildDocumento(): DocumentoResponse {
@@ -136,7 +227,8 @@ function buildDocumento(): DocumentoResponse {
     cliente: {
       documento_tipo: "RUC",
       documento: "80136968-1",
-      razon_social: "Cliente Demo"
+      razon_social: "Cliente Demo",
+      email: "cliente@example.com"
     },
     items: [],
     totals: {
@@ -158,5 +250,23 @@ function buildDocumento(): DocumentoResponse {
       }
     },
     created_at: "2026-05-18T00:00:00.000Z"
+  };
+}
+
+function buildPublicDocument(): PublicDocumentRecord {
+  const documento = buildDocumento();
+
+  return {
+    token: "A".repeat(43),
+    facturador: context.facturador,
+    documento: {
+      id: documento.id,
+      estado: documento.estado,
+      numero_fiscal: documento.numero_fiscal,
+      cdc: documento.cdc,
+      cliente: documento.cliente,
+      totals: documento.totals,
+      email_status: documento.delivery.email_status
+    }
   };
 }

@@ -10,6 +10,7 @@ Este documento convierte `docs/PLAN_IMPLEMENTACION_MVP_v0.1.md` en tareas tecnic
 - `docs/PLAN_PRODUCTO_MVP_v0.1.md`
 - `docs/PLAN_IMPLEMENTACION_MVP_v0.1.md`
 - `docs/TASKS_PRODUCTO_MVP_v0.1.md`
+- `docs/WIREFRAME_EDITOR_FACTURA_MVP_v0.1.md`
 - `spec/openapi.yaml`
 
 ## Estados
@@ -27,6 +28,9 @@ Este documento convierte `docs/PLAN_IMPLEMENTACION_MVP_v0.1.md` en tareas tecnic
 - Toda tarea que cambie modelo de datos debe agregar migracion SQL versionada.
 - Toda tarea que toque calculos fiscales debe incluir pruebas automatizadas.
 - Toda tarea visible al operador debe verificarse en mobile primero.
+- Toda tarea visible al operador debe incluir validacion Playwright en mobile y, cuando aplique, desktop/tablet.
+- Toda tarea que conecte frontend y backend debe preferir validacion de flujo completo usando la UI contra API local/mock.
+- La evidencia de validacion ejecutada debe agregarse a la seccion "Evidencia De Implementacion" al cerrar tareas.
 - Los estados de esta matriz deben actualizarse con evidencia al cerrar una tarea.
 
 ## Matriz Tecnica
@@ -57,6 +61,7 @@ Este documento convierte `docs/PLAN_IMPLEMENTACION_MVP_v0.1.md` en tareas tecnic
 | CTX-002 | Contexto operativo | Crear seeds iniciales operables por SQL/env | DONE | CTX-001 | Soporte interno puede crear primer usuario y configuracion sin UI backoffice |
 | CTX-003 | Contexto operativo | Implementar `GET /me/context` | DONE | AUTH-007, CTX-001 | Operador obtiene facturador, establecimiento, punto, actividad y permisos |
 | CTX-004 | Contexto operativo | Implementar `GET /me/readiness` | DONE | CTX-003 | API explica si el operador puede emitir y que falta si no puede |
+| CTX-005 | Contexto operativo | Agregar readiness fiscal centralizado en backend | DONE | CTX-004, FE-002 | `/me/readiness` agrega `fiscal_backend_ready` desde `FiscalGateway`, cachea health 10s y degrada a bloqueo operativo si el backend fiscal falla |
 | FE-001 | FiscalGateway | Configurar cliente Ventax FE por entorno | DONE | API-002 | Usa `FE_API_BASE_URL`, `FE_API_KEY`, timeout y modo sin exponer secretos |
 | FE-002 | FiscalGateway | Implementar healthcheck fiscal | DONE | FE-001 | API puede verificar disponibilidad de `facturacion-electronica` |
 | FE-003 | FiscalGateway | Implementar mock fiscal local | DONE | FE-001 | Tests y UI pueden emitir sin depender del servicio fiscal real |
@@ -81,26 +86,31 @@ Este documento convierte `docs/PLAN_IMPLEMENTACION_MVP_v0.1.md` en tareas tecnic
 | INV-006 | Facturacion | Implementar emision real credito sin cobranza | DONE | INV-005 | Factura credito se emite sin modulo de recibos, cuotas ni cobros posteriores |
 | INV-007 | Facturacion | Implementar listado y detalle de documentos | DONE | INV-003 | Operador ve documentos por fecha, estado y tipo |
 | INV-008 | Facturacion | Implementar refresco de estado | DONE | INV-007, FE-004 | Documento pendiente puede consultar estado actualizado |
+| INV-009 | Facturacion resiliente | Implementar outbox/worker de emision fiscal asincrona | DONE | INV-008, FE-004 | `POST /facturas` persiste documento `EMITIENDO` y outbox `PENDING`; worker envia a FE con `external_ref` idempotente sin bloquear la UI |
+| INV-010 | Facturacion resiliente | Implementar reintento controlado y feedback recuperable | PENDING | INV-009 | Documento pendiente/error temporal permite refrescar/reintentar sin duplicar y muestra causa operativa clara |
 | DEL-001 | Entrega | Crear tabla de links publicos | DONE | INV-001 | Link guarda token opaco, documento, `revoked_at` y auditoria |
 | DEL-002 | Entrega | Implementar generacion de token publico | DONE | DEL-001 | Token usa 32 bytes aleatorios `base64url` y no revela CDC ni ID interno |
-| DEL-003 | Entrega | Implementar endpoint publico `/public/d/{token}` | PENDING | DEL-002 | Cliente final ve comprobante y acciones de descarga |
-| DEL-004 | Entrega | Implementar descarga KUDE/PDF y XML | PENDING | DEL-003, FE-001 | Endpoints proxyan artefactos desde Ventax FE por CDC |
-| DEL-005 | Entrega | Implementar accion WhatsApp/copiar link | PENDING | DEL-003 | Operador puede copiar link o abrir share por WhatsApp |
-| DEL-006 | Entrega | Mostrar email delegado | PENDING | DEL-003 | Si cliente tiene email, UI indica que el envio lo gestiona Ventax FE |
+| DEL-003 | Entrega | Implementar endpoint publico `/public/d/{token}` | DONE | DEL-002 | Cliente final ve comprobante y acciones de descarga |
+| DEL-004 | Entrega | Implementar descarga KUDE/PDF y XML | DONE | DEL-003, FE-001 | Endpoints proxyan artefactos desde Ventax FE por CDC |
+| DEL-005 | Entrega | Implementar accion WhatsApp/copiar link | DONE | DEL-003 | Operador puede copiar link o abrir share por WhatsApp |
+| DEL-006 | Entrega | Mostrar email delegado | DONE | DEL-003 | Si cliente tiene email, UI indica que el envio lo gestiona Ventax FE |
 | CAN-001 | Cancelacion | Implementar elegibilidad de anulacion/cancelacion | PENDING | INV-007 | Solo documentos aprobados/elegibles muestran accion |
 | CAN-002 | Cancelacion | Integrar cancelacion con FiscalGateway | PENDING | CAN-001, FE-001 | Documento cancelado/anulado guarda respuesta y evento |
 | NCE-001 | Nota credito | Crear modelo de NCE total | PENDING | INV-001 | NCE referencia factura original y monto total |
 | NCE-002 | Nota credito | Implementar elegibilidad de NCE | PENDING | NCE-001 | Solo facturas emitidas/elegibles permiten NCE |
 | NCE-003 | Nota credito | Integrar `POST /facturas/{id}/nota-credito` | PENDING | NCE-002, FE-001 | NCE obtiene CDC/estado y queda visible en listado |
-| UI-001 | UI operacion | Crear app React/Vite/PWA operativa | DONE | IMPL-002 | App `web-operacion` compila, tiene rutas base y manifest PWA |
-| UI-002 | UI operacion | Configurar Tailwind con identidad Ventax | PENDING | UI-001 | Tokens visuales iniciales usan logos/colores Ventax sin romper legibilidad |
-| UI-003 | UI operacion | Implementar login mobile-first | PENDING | AUTH-003, UI-001 | Usuario inicia sesion y queda autenticado por refresh cookie |
-| UI-004 | UI operacion | Implementar pantalla de readiness/contexto | PENDING | CTX-004, UI-003 | Si falta configuracion, operador ve bloqueo claro |
-| UI-005 | UI operacion | Implementar editor factura estilo talonario | PENDING | UI-004, INV-002 | Cliente, grilla, IVA y totales siguen disposicion de factura manual en mobile |
+| UI-001 | UI operacion | Crear app React/Vite/PWA operativa | PARTIAL | IMPL-002 | App `web-operacion` compila y tiene rutas base; falta completar iconos/cache PWA |
+| UI-001A | UI operacion | Completar PWA con iconos Ventax y cache de assets | PENDING | UI-001 | Manifest usa iconos derivados de `ventax_logos/`, theme color Ventax y cache estatico sin prometer emision offline |
+| UI-002 | UI operacion | Configurar identidad visual Ventax con CSS propio | DONE | UI-001 | Tokens visuales iniciales usan logos/colores Ventax sin romper legibilidad y sin dependencia Tailwind |
+| UI-003 | UI operacion | Implementar login mobile-first | DONE | AUTH-003, UI-001 | Usuario inicia sesion y queda autenticado por refresh cookie |
+| UI-004 | UI operacion | Implementar pantalla de readiness/contexto | DONE | CTX-004, UI-003 | Si falta configuracion, operador ve bloqueo claro |
+| UI-004A | UI operacion | Mostrar readiness fiscal agregado | PARTIAL | CTX-005, UI-004 | Inicio muestra el check fiscal agregado porque renderiza todos los checks de `/me/readiness`; falta aplicarlo en editor al implementar `UI-005`/`UI-009` |
+| UI-005A | UI operacion | Documentar micro-wireframe tecnico del editor | DONE | MVP-028, UI-004 | Documento define bandas, comportamiento mobile de lineas, totales, errores y puntos de busqueda antes de implementar |
+| UI-005 | UI operacion | Implementar editor factura estilo talonario | PENDING | UI-005A, UI-004A, INV-002 | Cliente, grilla, IVA y totales siguen disposicion de factura manual en mobile |
 | UI-006 | UI operacion | Implementar busqueda/carga rapida de cliente | PENDING | CLI-002, UI-005 | Popup permite crear cliente obligatorio sin salir del editor |
 | UI-007 | UI operacion | Implementar busqueda/agregado de catalogo | PENDING | CAT-002, UI-005 | Touch/click en codigo busca por codigo, nombre o descripcion |
 | UI-008 | UI operacion | Implementar preview de totales | PENDING | INV-002, UI-005 | Totales visibles coinciden con calculo backend |
-| UI-009 | UI operacion | Implementar emision contado/credito | PENDING | INV-005, INV-006, UI-008 | Operador elige condicion y emite sin escribir numeracion fiscal |
+| UI-009 | UI operacion | Implementar emision contado/credito resiliente | PENDING | INV-010, UI-008 | Operador elige condicion, emite sin escribir numeracion fiscal y puede seguir/reintentar pendientes |
 | UI-010 | UI operacion | Implementar pantalla de comprobante emitido | PENDING | DEL-003, UI-009 | Muestra estado, CDC/numero si aplica, KUDE/XML/link/WhatsApp/email |
 | UI-011 | UI operacion | Implementar listado y detalle | PENDING | INV-007, UI-003 | Documentos emitidos muestran estado y acciones permitidas |
 | UI-012 | UI operacion | Implementar anulacion y NCE desde detalle | PENDING | CAN-002, NCE-003, UI-011 | Acciones aparecen solo cuando son elegibles |
@@ -124,12 +134,12 @@ Este documento convierte `docs/PLAN_IMPLEMENTACION_MVP_v0.1.md` en tareas tecnic
 | OPS-008 | Infra | Configurar rotacion de logs | PENDING | OPS-003 | Logs no crecen sin limite en VPS |
 | OPS-009 | Infra | Crear smoke test de despliegue | PENDING | OPS-004 | Script valida health, login test y carga de frontend |
 | QA-001 | QA | Crear tests de aislamiento por facturador | PENDING | AUTH-007, CTX-001 | Usuario no lee ni emite fuera de su facturador |
-| QA-002 | QA | Crear tests de idempotencia | PENDING | INV-004 | Reintentos con `external_ref` no duplican documentos |
+| QA-002 | QA | Crear tests de resiliencia e idempotencia fiscal | PENDING | INV-010 | Reintentos, refresh y errores temporales no duplican documentos y exponen feedback recuperable |
 | QA-003 | QA | Crear tests de flujo completo mock | PENDING | UI-010, FE-003 | Login, cliente, item, emision, entrega y listado funcionan con mock |
 | QA-004 | QA | Crear smoke opcional contra FE test | PENDING | FE-001, INV-005 | Prueba real solo corre con env explicito y sin secretos versionados |
 | QA-005 | QA | Validar ausencia de secretos versionados | PENDING | IMPL-004 | Revision confirma que API key y credenciales no fueron commiteadas |
 | QA-006 | Cierre | Actualizar documentacion post-implementacion | PENDING | QA-001, QA-003 | SPEC, PLAN, TASKS y OpenAPI reflejan el MVP realmente implementado |
-| FUT-001 | Multi facturador | Migrar `FE_DEFAULT_*` desde `.env` a configuracion por facturador/actividad economica | PENDING | INV-005, BO-004 | Emision resuelve RUC emisor, timbrado, inicio de timbrado, establecimiento, punto de expedicion, numerador, plazo credito y actividad desde configuracion fiscal-operativa del facturador; `.env` queda solo como fixture local/test o fallback explicitamente no productivo |
+| FUT-001 | Multi facturador | Migrar `FE_DEFAULT_*` desde `.env` a configuracion por facturador/actividad economica | DONE | INV-005, BO-004 | Emision resuelve RUC emisor, timbrado, inicio de timbrado, establecimiento, punto de expedicion, numerador, plazo credito y actividad desde configuracion fiscal-operativa del facturador; `.env` queda sin datos de facturador |
 
 ## Camino Critico Tecnico
 
@@ -186,10 +196,17 @@ La integracion real Ventax FE debe entrar despues de que el flujo mock este esta
 - 2026-05-18: corregido deploy Docker con postbuild ESM para imports `.js`, dependencias runtime declaradas en `apps/api`, puerto frontend parametrizable y verificacion local en `FRONTEND_HTTP_PORT=8092`. Smoke: `curl /api/v1/health`, `/app/`, `/backoffice/` y Playwright desktop/mobile OK.
 - 2026-05-18: cerrado `INV-004` con `Idempotency-Key` obligatorio en `POST /facturas`, `external_ref` deterministico por facturador/clave, lookup de reintentos, defensa ante colision unica e OpenAPI actualizado con error `400`.
 - 2026-05-18: cerrado `INV-005` con payload real contado hacia `POST /factura`, `emission_profile_code`, numeracion delegada `SERVICE`, referencia externa idempotente, pago contado efectivo y mapeo de `document_id`, CDC, numero fiscal y estado aprobado.
-- 2026-05-18: cerrado `INV-006` con emision credito usando `condicionOperacion.tipo=CREDITO`, plazo configurable `FE_DEFAULT_CREDITO_PLAZO_DIAS`, sin pagos, cuotas, recibos ni estado de cobranza en el SaaS.
+- 2026-05-18: cerrado `INV-006` con emision credito usando `condicionOperacion.tipo=CREDITO`, plazo configurable desde contexto fiscal-operativo del facturador, sin pagos, cuotas, recibos ni estado de cobranza en el SaaS.
 - 2026-05-18: cerrado `INV-007` con `GET /facturas` filtrable por tipo, estado, rango de fecha y texto, `GET /facturas/{documentoId}` acotado al facturador autenticado, OpenAPI con `401`/`422` y tests de servicio.
 - 2026-05-18: cerrado `INV-008` con `POST /facturas/{documentoId}/refresh-status`, consulta real a `/consultar/comprobanteSifen/{cdc}?refresh=true`, mapeo simple de estado, persistencia del snapshot fiscal actualizado y errores `409`/`502`/`504` documentados en OpenAPI.
 - 2026-05-18: cerrados `DEL-001` y `DEL-002` con migracion `0008_public_delivery_links.sql`, token opaco de 32 bytes `base64url`, revocacion al regenerar y endpoint autenticado `POST /facturas/{documentoId}/delivery-link`.
+- 2026-05-18: cerrados `DEL-003` a `DEL-006` con endpoint publico `/public/d/{token}`, proxy KUDE/PDF y XML desde FiscalGateway, URLs publicas de artefactos, `GET /facturas/{documentoId}/email-status`, estado `email_status` en la vista publica y tests `apps/api/tests/entrega.service.test.ts`. OpenAPI actualizado para proxy `200` de artefactos y errores `502`/`504`.
+- 2026-05-18: `UI-001` queda `PARTIAL` porque falta completar iconos/cache PWA; `UI-002` queda `DONE` con tokens CSS de identidad Ventax, color de marca, botones tactiles y layout responsive sin Tailwind por decision de menor complejidad. Cerrados `UI-003` y `UI-004` con login mobile-first, cliente API con refresh cookie, bootstrap de sesion, logout, pantalla de contexto operativo/readiness y bloqueo visual si no puede emitir. Verificacion visual Playwright en 390x844 y 1280x800 sobre `vite preview`.
+- 2026-05-18: agregadas tareas `UI-001A`, `CTX-005`, `UI-004A`, `UI-005A`, `INV-009`, `INV-010` y se renombra `QA-002` para cubrir PWA real, readiness fiscal centralizado, micro-wireframe previo al editor, emision asincrona/resiliente y pruebas de reintento/idempotencia fiscal.
+- 2026-05-18: cerrado `UI-005A` con `docs/WIREFRAME_EDITOR_FACTURA_MVP_v0.1.md`, que define orden mobile, bandas del editor, comportamiento de lineas, totales, errores recuperables y validaciones Playwright para `UI-005`.
+- 2026-05-18: cerrado `FUT-001` con migracion `0009_fiscal_context_effective_config.sql`, remocion de `FE_DEFAULT_*` de `.env.example`/config runtime, FiscalGateway consumiendo timbrado/numerador/plazo desde `fiscal_context` y seed operativo actualizado.
+- 2026-05-18: cerrado `CTX-005` con readiness fiscal centralizado en `/me/readiness`, check `fiscal_backend_ready`, cache de health por 10 segundos, degradacion a bloqueo operativo ante excepciones del gateway y tests `apps/api/tests/context.service.test.ts`. `UI-004A` queda `PARTIAL` porque el inicio ya muestra el check agregado, pero el editor aun no existe.
+- 2026-05-18: cerrado `INV-009` con migracion `0010_factura_emision_outbox.sql`, `enqueueFacturaEmission`, worker configurable `FE_OUTBOX_WORKER_ENABLED`/`FE_OUTBOX_WORKER_INTERVAL_MS`, `POST /facturas` asincrono inicial `EMITIENDO` y tests de cola/proceso/timeout en `apps/api/tests/facturas.service.test.ts`.
 
 ## Tareas Fuera Del MVP
 
@@ -199,7 +216,6 @@ La integracion real Ventax FE debe entrar despues de que el flujo mock este esta
 - compras, proveedores y gastos;
 - multiples facturadores por operador;
 - selector de facturador en la pantalla principal;
-- migracion de `FE_DEFAULT_*` globales a configuracion editable por facturador, actividad economica, establecimiento, punto, timbrado y numerador;
 - reenvio de email propio;
 - expiracion automatica de links publicos;
 - UI backoffice completa si los endpoints y SQL cubren soporte inicial.

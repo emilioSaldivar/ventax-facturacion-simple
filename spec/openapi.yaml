@@ -473,10 +473,12 @@ paths:
           $ref: "#/components/responses/ValidationError"
     post:
       tags: [Facturas]
-      summary: Emitir Factura Electronica contado o credito
+      summary: Encolar emision de Factura Electronica contado o credito
       description: |
-        Emite inmediatamente. No crea borrador.
-        El numero fiscal, CDC y estado vienen de `facturacion-electronica`.
+        Valida y persiste la factura operativa sin crear borrador.
+        La llamada a `facturacion-electronica` se procesa por outbox/worker usando
+        `external_ref` idempotente. La respuesta inicial puede quedar `EMITIENDO`;
+        el numero fiscal, CDC y estado final vienen del backend fiscal.
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
@@ -706,10 +708,27 @@ paths:
       parameters:
         - $ref: "#/components/parameters/PublicToken"
       responses:
-        "302":
-          description: Redireccion o proxy hacia KUDE/PDF fiscal
+        "200":
+          description: KUDE/PDF fiscal proxied desde Ventax FE
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
         "404":
           $ref: "#/components/responses/NotFound"
+        "502":
+          description: Backend fiscal no disponible o rechazo la descarga
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "504":
+          description: Timeout al descargar desde backend fiscal
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /public/d/{token}/xml:
     get:
@@ -719,10 +738,26 @@ paths:
       parameters:
         - $ref: "#/components/parameters/PublicToken"
       responses:
-        "302":
-          description: Redireccion o proxy hacia XML fiscal
+        "200":
+          description: XML fiscal proxied desde Ventax FE
+          content:
+            application/xml:
+              schema:
+                type: string
         "404":
           $ref: "#/components/responses/NotFound"
+        "502":
+          description: Backend fiscal no disponible o rechazo la descarga
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "504":
+          description: Timeout al descargar desde backend fiscal
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /backoffice/users:
     post:
@@ -981,7 +1016,7 @@ components:
 
     FiscalContext:
       type: object
-      required: [establecimiento, punto_expedicion, perfil_emision_codigo, actividad_economica_codigo]
+      required: [establecimiento, punto_expedicion, perfil_emision_codigo, actividad_economica_codigo, timbrado, timbrado_inicio, documento_nro, credito_plazo_dias]
       properties:
         establecimiento:
           type: string
@@ -998,6 +1033,21 @@ components:
         actividad_economica_descripcion:
           type: string
           nullable: true
+        timbrado:
+          type: string
+          example: "80136968"
+        timbrado_inicio:
+          type: string
+          format: date
+          example: "2025-12-30"
+        documento_nro:
+          type: string
+          description: Numero sugerido/fixture operativo enviado al backend fiscal; la numeracion final la asigna Ventax FE.
+          example: "0000000"
+        credito_plazo_dias:
+          type: integer
+          minimum: 1
+          example: 30
 
     ReadinessResponse:
       type: object
@@ -1421,7 +1471,7 @@ components:
 
     PublicDocumentResponse:
       type: object
-      required: [facturador, numero_fiscal, estado, cliente, totals, artifacts]
+      required: [facturador, numero_fiscal, estado, cliente, totals, email_status, artifacts]
       properties:
         facturador:
           $ref: "#/components/schemas/FacturadorSummary"
@@ -1437,6 +1487,8 @@ components:
           $ref: "#/components/schemas/FacturaClienteInput"
         totals:
           $ref: "#/components/schemas/DocumentoTotals"
+        email_status:
+          $ref: "#/components/schemas/EmailStatus"
         artifacts:
           $ref: "#/components/schemas/ArtifactsResponse"
 

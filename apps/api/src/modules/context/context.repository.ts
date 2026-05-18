@@ -18,6 +18,10 @@ interface ContextRow {
   perfil_emision_codigo: string;
   actividad_economica_codigo: string;
   actividad_economica_descripcion: string | null;
+  timbrado: string;
+  timbrado_inicio: Date;
+  documento_nro: string;
+  credito_plazo_dias: number;
 }
 
 interface ReadinessRow {
@@ -53,7 +57,11 @@ export class PgOperationalContextRepository implements OperationalContextReposit
           p.codigo as punto_expedicion,
           pe.codigo as perfil_emision_codigo,
           a.codigo as actividad_economica_codigo,
-          a.descripcion as actividad_economica_descripcion
+          a.descripcion as actividad_economica_descripcion,
+          app.timbrado,
+          app.timbrado_inicio,
+          app.documento_nro,
+          app.credito_plazo_dias
         from usuarios u
         join tenants t on t.id = u.tenant_id
         left join usuario_roles ur on ur.usuario_id = u.id
@@ -83,6 +91,10 @@ export class PgOperationalContextRepository implements OperationalContextReposit
           and u.activo = true
           and u.deleted_at is null
           and u.bloqueado_at is null
+          and app.timbrado is not null
+          and app.timbrado_inicio is not null
+          and app.documento_nro is not null
+          and app.credito_plazo_dias > 0
           and t.activo = true
           and t.deleted_at is null
           and t.estado = 'ACTIVO'
@@ -135,7 +147,11 @@ export class PgOperationalContextRepository implements OperationalContextReposit
         punto_expedicion: row.punto_expedicion,
         perfil_emision_codigo: row.perfil_emision_codigo,
         actividad_economica_codigo: row.actividad_economica_codigo,
-        actividad_economica_descripcion: row.actividad_economica_descripcion
+        actividad_economica_descripcion: row.actividad_economica_descripcion,
+        timbrado: row.timbrado,
+        timbrado_inicio: row.timbrado_inicio.toISOString().slice(0, 10),
+        documento_nro: row.documento_nro,
+        credito_plazo_dias: row.credito_plazo_dias
       }
     };
   }
@@ -166,7 +182,11 @@ export class PgOperationalContextRepository implements OperationalContextReposit
             and coalesce(p.activo, false)
             and p.deleted_at is null
             and coalesce(pe.activo, false)
-            and pe.deleted_at is null as fiscal_context_activo
+            and pe.deleted_at is null
+            and app.timbrado is not null
+            and app.timbrado_inicio is not null
+            and app.documento_nro is not null
+            and app.credito_plazo_dias > 0 as fiscal_context_activo
         from usuarios u
         left join tenants t on t.id = u.tenant_id and t.deleted_at is null
         left join usuario_operacion_config uoc on uoc.usuario_id = u.id and uoc.deleted_at is null
@@ -219,12 +239,11 @@ export class PgOperationalContextRepository implements OperationalContextReposit
         code: "fiscal_context_local",
         ok: row.fiscal_context_activo,
         message: row.fiscal_context_activo
-          ? "Establecimiento, punto, perfil y actividad configurados."
-          : "Falta asociacion activa de establecimiento, punto, perfil y actividad."
+          ? "Contexto fiscal local completo."
+          : "Falta asociacion activa o configuracion de timbrado/numeracion/plazo credito."
       }
     ];
   }
 }
 
 export const operationalContextRepository = new PgOperationalContextRepository();
-

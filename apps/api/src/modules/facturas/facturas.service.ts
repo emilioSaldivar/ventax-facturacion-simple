@@ -153,9 +153,7 @@ export async function emitFacturaAgainstFiscalGateway(
   }
 
   const preview = previewFactura(context, input);
-  const externalRef = options.idempotencyKey
-    ? `fac_${crypto.createHash("sha256").update(`${context.facturador.id}:${options.idempotencyKey}`).digest("hex").slice(0, 32)}`
-    : `fac_${crypto.randomUUID()}`;
+  const externalRef = buildExternalRef(context, options.idempotencyKey);
   const fiscalRequest = buildFiscalEmitRequest(context, input, preview, externalRef);
 
   let fiscalResponse: FiscalEmitFacturaResponse | null = null;
@@ -193,6 +191,73 @@ export async function emitFacturaAgainstFiscalGateway(
   });
 }
 
+export async function enqueueFacturaEmission(
+  context: OperationalContextResponse,
+  input: FacturaPreviewInput,
+  repository: FacturaRepository,
+  options: { idempotencyKey?: string } = {}
+): Promise<DocumentoResponse> {
+  if (options.idempotencyKey) {
+    const existing = await repository.findByIdempotencyKey({
+      facturadorId: context.facturador.id,
+      idempotencyKey: options.idempotencyKey
+    });
+
+    if (existing) {
+      return existing;
+    }
+  }
+
+  const preview = previewFactura(context, input);
+  const externalRef = buildExternalRef(context, options.idempotencyKey);
+  const fiscalRequest = buildFiscalEmitRequest(context, input, preview, externalRef);
+
+  return repository.createQueuedEmission({
+    tenantId: context.tenant.id,
+    facturadorId: context.facturador.id,
+    userId: context.user.id,
+    externalRef,
+    idempotencyKey: options.idempotencyKey,
+    input,
+    preview,
+    fiscalRequest
+  });
+}
+
+export async function processNextQueuedFiscalEmission(
+  repository: FacturaRepository,
+  gateway: FiscalGateway
+): Promise<DocumentoResponse | null> {
+  const pending = await repository.claimNextPendingEmission();
+  if (!pending) {
+    return null;
+  }
+
+  try {
+    const response = await gateway.emitFactura(pending.fiscalRequest);
+    return repository.completePendingEmission({
+      outboxId: pending.outboxId,
+      documentoId: pending.documentoId,
+      response
+    });
+  } catch (error) {
+    if (error instanceof FiscalGatewayError) {
+      return repository.failPendingEmission({
+        outboxId: pending.outboxId,
+        documentoId: pending.documentoId,
+        estado: error.code === "TIMEOUT" ? "PENDIENTE_SIFEN" : "ERROR_TEMPORAL",
+        error: {
+          code: error.code,
+          message: error.message,
+          details: error.details ?? null
+        },
+        retryAfterSeconds: 60
+      });
+    }
+    throw error;
+  }
+}
+
 function buildFiscalEmitRequest(
   context: OperationalContextResponse,
   input: FacturaPreviewInput,
@@ -208,4 +273,10 @@ function buildFiscalEmitRequest(
     items: preview.items,
     totals: preview.totals
   };
+}
+
+function buildExternalRef(context: OperationalContextResponse, idempotencyKey?: string): string {
+  return idempotencyKey
+    ? `fac_${crypto.createHash("sha256").update(`${context.facturador.id}:${idempotencyKey}`).digest("hex").slice(0, 32)}`
+    : `fac_${crypto.randomUUID()}`;
 }

@@ -7,7 +7,7 @@ import { getOperationalContext } from "../context/context.service";
 import { validateRequest } from "../../shared/validation/validate-request";
 import { fiscalGateway } from "../fiscal-gateway/fiscal-gateway.client";
 import { facturasRepository } from "./facturas.repository";
-import { emitFacturaAgainstFiscalGateway, getDocumentoById, listDocumentos, previewFactura, refreshDocumentoStatus } from "./facturas.service";
+import { enqueueFacturaEmission, getDocumentoById, listDocumentos, previewFactura, refreshDocumentoStatus } from "./facturas.service";
 import { condicionesVenta, type DocumentoListFilters } from "./facturas.types";
 import { HttpError } from "../../shared/errors/http-error";
 
@@ -110,7 +110,7 @@ facturasRouter.post("/facturas", requireAuth, validateRequest("body", facturaPre
   try {
     const context = await getOperationalContext(req.user!.id, operationalContextRepository);
     const idempotencyKey = parseIdempotencyKey(req.get("idempotency-key"));
-    const result = await emitFacturaAgainstFiscalGateway(context, req.body, facturasRepository, fiscalGateway, {
+    const result = await enqueueFacturaEmission(context, req.body, facturasRepository, {
       idempotencyKey
     });
     res.status(201).json(result);

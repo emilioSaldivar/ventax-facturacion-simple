@@ -47,7 +47,11 @@
 --   actividad_id,
 --   establecimiento_id,
 --   punto_expedicion_id,
---   perfil_emision_id
+--   perfil_emision_id,
+--   timbrado,
+--   timbrado_inicio,
+--   documento_nro,
+--   credito_plazo_dias
 -- )
 -- select
 --   actividad.tenant_id,
@@ -55,7 +59,11 @@
 --   actividad.id,
 --   punto.establecimiento_id,
 --   punto.id,
---   perfil.id
+--   perfil.id,
+--   '80136968',
+--   date '2025-12-30',
+--   '0000000',
+--   30
 -- from actividad, punto, perfil;
 
 -- Cliente de referencia para validaciones manuales de compra de servicios:

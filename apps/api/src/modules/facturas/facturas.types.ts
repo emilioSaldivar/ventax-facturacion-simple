@@ -1,6 +1,6 @@
 import type { TaxCalculatedLine, TaxTotals, TipoIva } from "@facturacion-simple/shared";
 import type { DocumentoIdentidadTipo } from "../clientes/clientes.types";
-import type { FiscalEmitFacturaResponse } from "../fiscal-gateway/fiscal-gateway.types";
+import type { FiscalEmitFacturaRequest, FiscalEmitFacturaResponse } from "../fiscal-gateway/fiscal-gateway.types";
 
 export const condicionesVenta = ["CONTADO", "CREDITO"] as const;
 export type CondicionVenta = (typeof condicionesVenta)[number];
@@ -113,6 +113,24 @@ export interface FacturaPersistInput {
   estado: DocumentoEstado;
 }
 
+export interface FacturaQueuedPersistInput {
+  tenantId: string;
+  facturadorId: string;
+  userId: string;
+  externalRef: string;
+  idempotencyKey?: string;
+  input: FacturaPreviewInput;
+  preview: FacturaPreviewResponse;
+  fiscalRequest: FiscalEmitFacturaRequest;
+}
+
+export interface PendingFiscalEmission {
+  outboxId: string;
+  documentoId: string;
+  facturadorId: string;
+  fiscalRequest: FiscalEmitFacturaRequest;
+}
+
 export interface FacturaRepository {
   findByIdempotencyKey(input: { facturadorId: string; idempotencyKey: string }): Promise<DocumentoResponse | null>;
   findById(input: { facturadorId: string; documentoId: string }): Promise<DocumentoResponse | null>;
@@ -124,4 +142,18 @@ export interface FacturaRepository {
     fiscalStatus: Record<string, unknown>;
   }): Promise<DocumentoResponse | null>;
   createFromEmission(input: FacturaPersistInput): Promise<DocumentoResponse>;
+  createQueuedEmission(input: FacturaQueuedPersistInput): Promise<DocumentoResponse>;
+  claimNextPendingEmission(): Promise<PendingFiscalEmission | null>;
+  completePendingEmission(input: {
+    outboxId: string;
+    documentoId: string;
+    response: FiscalEmitFacturaResponse;
+  }): Promise<DocumentoResponse | null>;
+  failPendingEmission(input: {
+    outboxId: string;
+    documentoId: string;
+    estado: DocumentoEstado;
+    error: Record<string, unknown>;
+    retryAfterSeconds: number;
+  }): Promise<DocumentoResponse | null>;
 }

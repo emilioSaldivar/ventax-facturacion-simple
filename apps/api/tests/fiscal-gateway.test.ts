@@ -17,7 +17,11 @@ const request: FiscalEmitFacturaRequest = {
     punto_expedicion: "002",
     perfil_emision_codigo: "SERV",
     actividad_economica_codigo: "82110",
-    actividad_economica_descripcion: "Servicios administrativos"
+    actividad_economica_descripcion: "Servicios administrativos",
+    timbrado: "80136968",
+    timbrado_inicio: "2025-12-30",
+    documento_nro: "0000000",
+    credito_plazo_dias: 30
   },
   cliente: {
     documento_tipo: "RUC",
@@ -61,12 +65,6 @@ describe("fiscal gateway", () => {
       FE_API_KEY: undefined,
       FE_API_TIMEOUT_MS: 20000,
       FE_API_ENV: "test",
-      FE_DEFAULT_TIMBRADO: "80136968",
-      FE_DEFAULT_TIMBRADO_INICIO: "2025-12-30",
-      FE_DEFAULT_ESTABLECIMIENTO: "001",
-      FE_DEFAULT_PUNTO_EXPEDICION: "001",
-      FE_DEFAULT_DOCUMENTO_NRO: "0000000",
-      FE_DEFAULT_CREDITO_PLAZO_DIAS: 30
     });
 
     expect(config).toEqual({
@@ -75,12 +73,6 @@ describe("fiscal gateway", () => {
       apiKey: undefined,
       timeoutMs: 20000,
       environment: "test",
-      defaultTimbrado: "80136968",
-      defaultTimbradoInicio: "2025-12-30",
-      defaultEstablecimiento: "001",
-      defaultPuntoExpedicion: "001",
-      defaultDocumentoNro: "0000000",
-      defaultCreditoPlazoDias: 30
     });
   });
 
@@ -90,12 +82,6 @@ describe("fiscal gateway", () => {
       baseUrl: "https://fe-api.ventax.app/fcws",
       timeoutMs: 20000,
       environment: "test",
-      defaultTimbrado: "80136968",
-      defaultTimbradoInicio: "2025-12-30",
-      defaultEstablecimiento: "001",
-      defaultPuntoExpedicion: "001",
-      defaultDocumentoNro: "0000000",
-      defaultCreditoPlazoDias: 30
     });
 
     const first = await gateway.emitFactura(request);
@@ -116,12 +102,6 @@ describe("fiscal gateway", () => {
       apiKey: "secret",
       timeoutMs: 20000,
       environment: "test",
-      defaultTimbrado: "80136968",
-      defaultTimbradoInicio: "2025-12-30",
-      defaultEstablecimiento: "001",
-      defaultPuntoExpedicion: "001",
-      defaultDocumentoNro: "0000000",
-      defaultCreditoPlazoDias: 30
     });
 
     vi.stubGlobal(
@@ -218,12 +198,6 @@ describe("fiscal gateway", () => {
       apiKey: "secret",
       timeoutMs: 20000,
       environment: "test",
-      defaultTimbrado: "80136968",
-      defaultTimbradoInicio: "2025-12-30",
-      defaultEstablecimiento: "001",
-      defaultPuntoExpedicion: "001",
-      defaultDocumentoNro: "0000000",
-      defaultCreditoPlazoDias: 45
     });
 
     vi.stubGlobal(
@@ -245,7 +219,11 @@ describe("fiscal gateway", () => {
 
     const result = await gateway.emitFactura({
       ...request,
-      condicion_venta: "CREDITO"
+      condicion_venta: "CREDITO",
+      fiscal_context: {
+        ...request.fiscal_context,
+        credito_plazo_dias: 45
+      }
     });
 
     expect(result).toMatchObject({
@@ -273,12 +251,6 @@ describe("fiscal gateway", () => {
       baseUrl: "https://fe-api.ventax.app/fcws",
       timeoutMs: 20000,
       environment: "test",
-      defaultTimbrado: "80136968",
-      defaultTimbradoInicio: "2025-12-30",
-      defaultEstablecimiento: "001",
-      defaultPuntoExpedicion: "001",
-      defaultDocumentoNro: "0000000",
-      defaultCreditoPlazoDias: 30
     });
 
     vi.stubGlobal(
@@ -314,12 +286,6 @@ describe("fiscal gateway", () => {
       apiKey: "secret",
       timeoutMs: 20000,
       environment: "test",
-      defaultTimbrado: "80136968",
-      defaultTimbradoInicio: "2025-12-30",
-      defaultEstablecimiento: "001",
-      defaultPuntoExpedicion: "001",
-      defaultDocumentoNro: "0000000",
-      defaultCreditoPlazoDias: 30
     });
 
     vi.stubGlobal(

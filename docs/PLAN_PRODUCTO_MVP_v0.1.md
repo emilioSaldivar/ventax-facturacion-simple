@@ -30,7 +30,7 @@ El frontend operativo atiende al usuario sin experiencia digital. El backoffice 
 - Base de datos: PostgreSQL.
 - Migraciones y queries: SQL directo versionado en el repo.
 - Auth recomendado: access token JWT corto + refresh token en cookie httpOnly, con almacenamiento server-side de sesiones/refresh para revocacion.
-- Estilo UI: identidad Ventax basada en `ventax_logos/`, tipografia y sistema visual propio derivado de la marca.
+- Estilo UI: identidad Ventax basada en `ventax_logos/`, tipografia y sistema visual propio con CSS mantenible. Se evita sumar Tailwind si CSS propio resuelve el MVP con menor complejidad.
 - OpenAPI propia del SaaS: `spec/openapi.yaml`.
 
 Justificacion:
@@ -100,6 +100,7 @@ Contratos iniciales a documentar antes de implementar:
 - login, refresh y logout;
 - contexto operativo del usuario;
 - readiness operativo;
+- readiness fiscal agregado desde backend SaaS, no desde la UI;
 - busqueda predictiva de clientes por documento;
 - alta rapida de cliente desde factura;
 - CRUD de agenda de clientes;
@@ -121,9 +122,11 @@ Crear una capa `FiscalGateway` con responsabilidades acotadas:
 
 - construir request fiscal desde la factura operativa;
 - enviar `external_ref` idempotente;
+- permitir evolucion a emision asincrona/resiliente con outbox o worker;
 - enviar condicion `CONTADO` o `CREDITO`;
 - emitir NCE vinculada a una factura;
 - manejar timeouts y errores normalizados;
+- exponer feedback operativo claro y acciones recuperables sin requerir soporte cuando el fallo sea gestionable por el cliente;
 - consultar estado por `document_id`, `cdc` o `external_ref`;
 - resolver metadata y descarga de PDF/KUDE/XML;
 - usar `/nota-credito` para NCE;
@@ -261,6 +264,7 @@ El onboarding fiscal lo realiza soporte interno.
 - base imponible e IVA redondeados por linea;
 - liquidaciones agrupadas por tasa como suma de lineas ya redondeadas;
 - idempotencia por `external_ref`;
+- reintentos controlados para documentos pendientes sin duplicar documento fiscal;
 - NCE solo desde factura elegible.
 
 ## 10. Riesgos
@@ -268,6 +272,7 @@ El onboarding fiscal lo realiza soporte interno.
 - NCE, XML y KUDE/PDF ya figuran en el OpenAPI de `facturacion-electronica` actualizado;
 - WhatsApp directo depende del link publico propio generado por el SaaS;
 - email queda delegado a `facturacion-electronica`, sin proveedor transaccional propio en este sistema.
+- La emision fiscal sincrona puede ser un paso tecnico inicial, pero el diseno debe converger a envio asincrono/recuperable para reducir intervencion de soporte.
 
 ## 11. Orden Recomendado
 
@@ -295,3 +300,4 @@ El onboarding fiscal lo realiza soporte interno.
 - smoke test contra ambiente local/staging del backend fiscal;
 - pruebas visuales del editor en celular, tablet y desktop;
 - prueba visual especifica para verificar que cliente, lineas y totales no se solapen.
+- pruebas de flujo completo con Playwright usando la UI contra backend local/mock para login, cliente, item, preview, emision, entrega y listado.

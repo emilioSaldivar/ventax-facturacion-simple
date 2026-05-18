@@ -9,8 +9,15 @@ import {
   type FiscalRefreshStatusResponse
 } from "../src/modules/fiscal-gateway/fiscal-gateway.types";
 import { emitFacturaAgainstFiscalGateway, getDocumentoById, listDocumentos, previewFactura, refreshDocumentoStatus } from "../src/modules/facturas/facturas.service";
+import { enqueueFacturaEmission, processNextQueuedFiscalEmission } from "../src/modules/facturas/facturas.service";
 import type { OperationalContextResponse } from "../src/modules/context/context.types";
-import type { FacturaPersistInput, FacturaRepository, DocumentoResponse } from "../src/modules/facturas/facturas.types";
+import type {
+  FacturaPersistInput,
+  FacturaQueuedPersistInput,
+  FacturaRepository,
+  DocumentoResponse,
+  PendingFiscalEmission
+} from "../src/modules/facturas/facturas.types";
 
 const context: OperationalContextResponse = {
   user: {
@@ -35,7 +42,11 @@ const context: OperationalContextResponse = {
     punto_expedicion: "001",
     perfil_emision_codigo: "SERV",
     actividad_economica_codigo: "82110",
-    actividad_economica_descripcion: "Servicios administrativos"
+    actividad_economica_descripcion: "Servicios administrativos",
+    timbrado: "80136968",
+    timbrado_inicio: "2025-12-30",
+    documento_nro: "0000000",
+    credito_plazo_dias: 30
   }
 };
 
@@ -47,6 +58,10 @@ class FakeFacturaRepository implements FacturaRepository {
   public findByIdResponse: DocumentoResponse | null = null;
   public lastFindByIdInput: { facturadorId: string; documentoId: string } | null = null;
   public lastUpdateFiscalStatusInput: Parameters<FacturaRepository["updateFiscalStatus"]>[0] | null = null;
+  public lastQueuedInput: FacturaQueuedPersistInput | null = null;
+  public pendingEmission: PendingFiscalEmission | null = null;
+  public lastCompletedInput: Parameters<FacturaRepository["completePendingEmission"]>[0] | null = null;
+  public lastFailedInput: Parameters<FacturaRepository["failPendingEmission"]>[0] | null = null;
 
   async findByIdempotencyKey(): Promise<DocumentoResponse | null> {
     return this.existing;
@@ -102,6 +117,59 @@ class FakeFacturaRepository implements FacturaRepository {
       created_at: "2026-05-18T00:00:00.000Z"
     };
   }
+
+  async createQueuedEmission(input: FacturaQueuedPersistInput): Promise<DocumentoResponse> {
+    this.lastQueuedInput = input;
+    return {
+      id: "77777777-7777-4777-8777-777777777777",
+      tipo: "FACTURA",
+      estado: "EMITIENDO",
+      condicion_venta: input.input.condicion_venta,
+      numero_fiscal: null,
+      cdc: null,
+      fiscal_document_id: null,
+      external_ref: input.externalRef,
+      cliente: input.input.cliente,
+      items: input.preview.items,
+      totals: input.preview.totals,
+      fiscal_status: {},
+      delivery: {
+        public_url: null,
+        whatsapp_url: null,
+        email_status: "NOT_APPLICABLE",
+        artifacts: {
+          kude_pdf: { available: false, url: null },
+          xml: { available: false, url: null }
+        }
+      },
+      created_at: "2026-05-18T00:00:00.000Z"
+    };
+  }
+
+  async claimNextPendingEmission(): Promise<PendingFiscalEmission | null> {
+    return this.pendingEmission;
+  }
+
+  async completePendingEmission(input: Parameters<FacturaRepository["completePendingEmission"]>[0]): Promise<DocumentoResponse | null> {
+    this.lastCompletedInput = input;
+    return buildDocumento({
+      id: input.documentoId,
+      estado: input.response.estado,
+      numero_fiscal: input.response.numero_fiscal,
+      cdc: input.response.cdc,
+      fiscal_document_id: input.response.fiscal_document_id,
+      fiscal_status: input.response.raw
+    });
+  }
+
+  async failPendingEmission(input: Parameters<FacturaRepository["failPendingEmission"]>[0]): Promise<DocumentoResponse | null> {
+    this.lastFailedInput = input;
+    return buildDocumento({
+      id: input.documentoId,
+      estado: input.estado,
+      fiscal_status: input.error
+    });
+  }
 }
 
 class FakeFiscalGateway implements FiscalGateway {
@@ -134,6 +202,22 @@ class FakeFiscalGateway implements FiscalGateway {
       throw this.refreshResponse;
     }
     return this.refreshResponse;
+  }
+
+  async getXml() {
+    return {
+      body: Buffer.from("<xml/>"),
+      content_type: "application/xml",
+      filename: "mock.xml"
+    };
+  }
+
+  async getKudePdf() {
+    return {
+      body: Buffer.from("pdf"),
+      content_type: "application/pdf",
+      filename: "mock.pdf"
+    };
   }
 }
 
@@ -456,6 +540,95 @@ describe("facturas service", () => {
       totals: { total: 11000 }
     });
     expect(repo.lastInput?.externalRef).toMatch(/^fac_[a-f0-9]{32}$/);
+  });
+
+  it("queues fiscal emission without calling fiscal gateway", async () => {
+    const repo = new FakeFacturaRepository();
+
+    const result = await enqueueFacturaEmission(context, emitInput, repo, {
+      idempotencyKey: "idem-async-1"
+    });
+
+    expect(result.estado).toBe("EMITIENDO");
+    expect(repo.lastQueuedInput).toMatchObject({
+      tenantId: context.tenant.id,
+      facturadorId: context.facturador.id,
+      userId: context.user.id,
+      idempotencyKey: "idem-async-1"
+    });
+    expect(repo.lastQueuedInput?.fiscalRequest).toMatchObject({
+      external_ref: repo.lastQueuedInput?.externalRef,
+      condicion_venta: "CONTADO",
+      cliente: emitInput.cliente,
+      totals: { total: 11000 }
+    });
+  });
+
+  it("processes queued fiscal emission and completes document", async () => {
+    const repo = new FakeFacturaRepository();
+    const fiscalRequest = {
+      external_ref: "fac-queued",
+      condicion_venta: "CONTADO" as const,
+      facturador: context.facturador,
+      fiscal_context: context.fiscal_context,
+      cliente: emitInput.cliente,
+      items: previewFactura(context, emitInput).items,
+      totals: previewFactura(context, emitInput).totals
+    };
+    repo.pendingEmission = {
+      outboxId: "88888888-8888-4888-8888-888888888888",
+      documentoId: "77777777-7777-4777-8777-777777777777",
+      facturadorId: context.facturador.id,
+      fiscalRequest
+    };
+    const gateway = new FakeFiscalGateway({
+      fiscal_document_id: "mock-async",
+      cdc: "C".repeat(44),
+      numero_fiscal: "001-001-0000003",
+      estado: "EMITIDA",
+      email_status: "DELEGATED",
+      raw: { mode: "mock", async: true }
+    });
+
+    const result = await processNextQueuedFiscalEmission(repo, gateway);
+
+    expect(result?.estado).toBe("EMITIDA");
+    expect(gateway.lastRequest).toEqual(fiscalRequest);
+    expect(repo.lastCompletedInput).toMatchObject({
+      outboxId: "88888888-8888-4888-8888-888888888888",
+      documentoId: "77777777-7777-4777-8777-777777777777"
+    });
+  });
+
+  it("keeps queued emission recoverable when fiscal gateway times out", async () => {
+    const repo = new FakeFacturaRepository();
+    repo.pendingEmission = {
+      outboxId: "88888888-8888-4888-8888-888888888888",
+      documentoId: "77777777-7777-4777-8777-777777777777",
+      facturadorId: context.facturador.id,
+      fiscalRequest: {
+        external_ref: "fac-queued",
+        condicion_venta: "CONTADO",
+        facturador: context.facturador,
+        fiscal_context: context.fiscal_context,
+        cliente: emitInput.cliente,
+        items: previewFactura(context, emitInput).items,
+        totals: previewFactura(context, emitInput).totals
+      }
+    };
+    const gateway = new FakeFiscalGateway(new FiscalGatewayError("TIMEOUT", "Timeout fiscal"));
+
+    const result = await processNextQueuedFiscalEmission(repo, gateway);
+
+    expect(result?.estado).toBe("PENDIENTE_SIFEN");
+    expect(repo.lastFailedInput).toMatchObject({
+      estado: "PENDIENTE_SIFEN",
+      retryAfterSeconds: 60,
+      error: {
+        code: "TIMEOUT",
+        message: "Timeout fiscal"
+      }
+    });
   });
 
   it("emits credit invoice without creating collection state", async () => {

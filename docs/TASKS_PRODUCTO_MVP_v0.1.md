@@ -6,6 +6,7 @@ Alineado a:
 - `docs/PLAN_PRODUCTO_MVP_v0.1.md`
 - `docs/PLAN_IMPLEMENTACION_MVP_v0.1.md`
 - `docs/TASKS_IMPLEMENTACION_MVP_v0.1.md`
+- `docs/WIREFRAME_EDITOR_FACTURA_MVP_v0.1.md`
 
 Estados:
 
@@ -41,24 +42,27 @@ Estados:
 | MVP-017 | Integracion | Implementar `FiscalGateway` con mock | DONE | Gateway normaliza requests, responses, errores, artefactos y timeouts sin backend real |
 | MVP-017A | Integracion | Verificar brecha PDF/KUDE en API fiscal | DONE | OpenAPI fiscal actualizado expone `/files/xml/{cdc}` y `/files/kude/{cdc}.pdf` |
 | MVP-017B | Integracion | Verificar contrato NCE en API fiscal | DONE | OpenAPI fiscal actualizado expone `/nota-credito` |
+| MVP-017C | Integracion | Agregar readiness fiscal centralizado | DONE | Backend agrega disponibilidad fiscal en `/me/readiness` con cache corto, degradacion operativa y check `fiscal_backend_ready` |
 | MVP-018 | Integracion | Integrar emision contado | DONE | Una factura contado obtiene `document_id`, `cdc`, numero fiscal y estado |
+| MVP-018A | Integracion | Implementar emision fiscal asincrona/resiliente | PARTIAL | Outbox/worker asincrono implementado; falta UI de reintentos/feedback gestionable de `MVP-031A` |
 | MVP-019 | Integracion | Integrar emision credito sin cobranza posterior | DONE | Una factura credito se emite y queda sin modulo de cobros/recibos |
 | MVP-020 | Integracion | Integrar Nota de Credito Electronica | PENDING | Se puede emitir NCE desde factura elegible y guardar estado/snapshot |
 | MVP-021 | Facturacion | Persistir snapshots y auditoria de emision | DONE | Cada documento conserva cliente, items, totales, usuario y respuesta fiscal resumida |
 | MVP-022 | Estados | Mapear estados fiscales a estados UI | PENDING | Operador ve estados simples y acciones permitidas por estado |
-| MVP-023 | Entrega | Implementar enlaces y artefactos PDF/KUDE/XML | PENDING | La factura muestra link cliente y descargas disponibles desde backend fiscal |
-| MVP-024 | Entrega | Implementar link publico, WhatsApp y estado de email | PARTIAL | Backend genera link publico opaco y URL WhatsApp; falta pagina publica, UI operativa y estado email completo |
+| MVP-023 | Entrega | Implementar enlaces y artefactos PDF/KUDE/XML | PARTIAL | Backend expone link cliente, vista publica JSON y descargas PDF/KUDE/XML desde backend fiscal; falta UI operativa/publica |
+| MVP-024 | Entrega | Implementar link publico, WhatsApp y estado de email | PARTIAL | Backend genera link publico opaco, URL WhatsApp, endpoint publico y estado email; falta UI operativa/publica para copiar/compartir/ver email |
 | MVP-025 | Documentos | Implementar listado y detalle de facturas/notas | PARTIAL | API de lista filtrable por estado/fecha y detalle implementada; faltan acciones completas y UI |
 | MVP-026 | Documentos | Implementar cancelacion/anulacion elegible | PENDING | Desde listado/detalle se puede cancelar/anular si el backend fiscal lo permite |
 | MVP-027 | Soporte | Mapear rechazo SIFEN a contacto con soporte | PENDING | Estado rechazado muestra detalle y accion de contacto, sin automatizar soporte |
-| MVP-028 | UI | Disenar wireframe del editor estilo factura manual | PENDING | Wireframe ubica encabezado fiscal, cliente, grilla, IVA y totales en mobile-first |
-| MVP-029 | UI | Aplicar identidad visual Ventax | PENDING | UI usa logos, tipografia y criterios visuales derivados de `ventax_logos/` |
+| MVP-028 | UI | Disenar wireframe del editor estilo factura manual | DONE | Micro-wireframe tecnico ubica encabezado fiscal, cliente, grilla/tarjetas, IVA, totales, errores y acciones en mobile-first |
+| MVP-029 | UI | Aplicar identidad visual Ventax | PARTIAL | Login e inicio operativo usan color de marca, tipografia y criterios visuales Ventax con CSS propio; falta extender identidad al editor/listado/detalle |
 | MVP-030 | QA | Tests de aislamiento por facturador | PENDING | Un usuario no puede leer ni emitir fuera de su facturador |
 | MVP-031 | QA | Tests de idempotencia por `external_ref` | DONE | Reintentos no duplican documentos fiscales |
+| MVP-031A | QA | Tests de resiliencia de reintentos fiscales | PENDING | Refresh/reintento de pendientes y errores temporales no duplican documentos y muestran feedback gestionable |
 | MVP-032 | QA | Prueba visual del editor en celular, tablet y desktop | PENDING | Campos, tabla/tarjetas y totales se ven sin solapamientos |
 | MVP-033 | QA | Smoke test de flujo completo | PENDING | Login, cliente, item, contado, credito, NCE, entrega y listado funcionan en ambiente definido |
 | MVP-034 | Cierre | Actualizar SPEC/PLAN/TASKS con decisiones finales | PENDING | Documentacion refleja la implementacion real del MVP |
-| FUT-001 | Multi facturador | Mover valores `FE_DEFAULT_*` a configuracion por facturador y actividad economica | PENDING | Los datos fiscales usados hoy como fixture de `.env` se administran por facturador, establecimiento, punto de expedicion, timbrado, numerador, condicion de credito y actividad economica |
+| FUT-001 | Multi facturador | Mover valores `FE_DEFAULT_*` a configuracion por facturador y actividad economica | DONE | Los datos fiscales ya no viven en `.env`; se administran por facturador, establecimiento, punto de expedicion, timbrado, numerador, condicion de credito y actividad economica |
 
 ## Camino Critico
 
@@ -89,10 +93,15 @@ Estados:
 - `MVP-017` queda cerrado con gateway fiscal configurable, healthcheck, mock local deterministico y mapeo de timeout.
 - `MVP-021` queda cerrado con persistencia de factura operativa, lineas snapshot, respuesta fiscal resumida y evento de auditoria desde emision mock.
 - Las siguientes tareas de implementacion quedan enfocadas en idempotencia, emision real contado/credito y entrega.
-- `FUT-001` registra que los `FE_DEFAULT_*` actuales se aceptan solo para cerrar pruebas y validaciones; no representan la arquitectura final multi facturador.
+- `FUT-001` queda cerrado: los `FE_DEFAULT_*` salen de `.env` y la emision toma configuracion fiscal-operativa desde base de datos.
 - `MVP-031` queda cerrado con `Idempotency-Key` requerido en emision, `external_ref` estable y pruebas de replay sin segunda llamada fiscal.
 - `MVP-018` queda cerrado con mapeo real de emision contado contra `facturacion-electronica`, sin generar XML ni numeracion fiscal en este SaaS.
 - `MVP-019` queda cerrado con emision credito hacia `facturacion-electronica` mediante condicion a plazo configurable, sin modulo de recibos, cuotas, cobros ni cuenta corriente en el SaaS.
 - `MVP-025` queda parcial: backend expone listado filtrable y detalle por facturador autenticado; falta UI operativa y acciones de entrega/cancelacion/NCE.
-- `MVP-024` queda parcial: backend crea o regenera token publico opaco y devuelve URL publica/WhatsApp; falta endpoint publico `/public/d/{token}`, descargas y UI para copiar/compartir/ver email.
+- `MVP-023` queda parcial: backend ya resuelve link publico, metadata publica y proxy de KUDE/PDF y XML via FiscalGateway; falta UI operativa/publica.
+- `MVP-024` queda parcial: backend crea o regenera token publico opaco, devuelve URL publica/WhatsApp, expone `/public/d/{token}` y `email-status`; falta UI para copiar/compartir/ver email.
+- `MVP-029` queda parcial: identidad Ventax aplicada en login e inicio operativo mediante tokens CSS propios; falta aplicar al editor, listado y detalle.
+- `MVP-017C` queda cerrado con readiness fiscal centralizado.
+- `MVP-018A` queda parcial: `POST /facturas` encola emision y el worker procesa FE con `external_ref`; falta completar reintento/feedback gestionable en `MVP-031A`.
+- `MVP-028` queda cerrado con `docs/WIREFRAME_EDITOR_FACTURA_MVP_v0.1.md` antes de implementar `UI-005`.
 - Cualquier cambio nuevo debe agregar filas a esta matriz o actualizar su estado con evidencia.

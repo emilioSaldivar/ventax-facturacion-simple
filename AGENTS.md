@@ -18,6 +18,7 @@ La fuente de verdad de este proyecto es:
 - `docs/PLAN_IMPLEMENTACION_MVP_v0.1.md`
 - `docs/TASKS_PRODUCTO_MVP_v0.1.md`
 - `docs/TASKS_IMPLEMENTACION_MVP_v0.1.md`
+- `docs/WIREFRAME_EDITOR_FACTURA_MVP_v0.1.md`
 - `spec/openapi.yaml`
 
 Los documentos bajo `contexto_facturacion_electronica/` y `contexto_pos_graciela/` son antecedentes. No son la especificacion final del nuevo producto.
@@ -34,6 +35,20 @@ Todo cambio funcional, tecnico, visual, operativo o estructural debe seguir esta
 4. `IMPLEMENT`
 
 No se implementa primero y no se documenta despues.
+
+## Regla De Validacion Por Tarea
+
+Cada tarea de la matriz tecnica debe declarar o dejar evidencia de validacion al cerrarse.
+
+Validaciones minimas esperadas:
+
+- backend: `npm run test`, `npm run typecheck`, `npm run lint` y pruebas unitarias/integracion del modulo tocado;
+- frontend: `npm run typecheck`, `npm run build` y verificacion visual con Playwright en mobile primero y al menos un viewport desktop/tablet cuando sea visible al operador;
+- flujos completos: usar la UI operativa con Playwright contra el backend local/mock para probar el circuito real de usuario cuando la tarea conecte frontend y backend;
+- contratos HTTP: actualizar `spec/openapi.yaml` y validar que cliente/frontend consuman el contrato documentado;
+- integracion fiscal: cubrir mock local y, cuando aplique, smoke test opt-in contra FE test sin versionar secretos.
+
+La evidencia debe quedar en `docs/TASKS_IMPLEMENTACION_MVP_v0.1.md` al cerrar la tarea.
 
 ## Regla Para Agentes
 
@@ -79,6 +94,8 @@ Este proyecto es responsable de:
 - El backend SaaS valida tenant, suscripcion, permisos y facturador antes de llamar al backend fiscal.
 - El backend fiscal devuelve `document_id`, `cdc`, numero fiscal y estados; el SaaS los persiste como referencia.
 - Cada factura operativa debe guardar snapshot de cliente, items, totales, usuario emisor y respuesta fiscal resumida.
+- La emision fiscal debe ser resiliente: idempotente, recuperable por estado, con reintentos controlados y feedback claro al operador/cliente cuando falle.
+- El operador debe poder corregir errores operativos antes de emitir o reintentar; el sistema debe evitar dependencias de soporte interno para fallos recuperables.
 - La primera version excluye caja, inventario, compras, proveedores, balanza, cuentas corrientes y POS local complejo.
 
 ## Convencion De Documentos

@@ -1,10 +1,25 @@
 import { pool } from "../../db/pool";
-import type { DeliveryLinkRecord, DeliveryLinkRepository } from "./entrega.types";
+import type { DeliveryLinkRecord, DeliveryLinkRepository, PublicDocumentRecord } from "./entrega.types";
 
 interface DeliveryLinkRow {
   id: string;
   token: string;
   revoked_at: Date | null;
+}
+
+interface PublicDocumentRow {
+  token: string;
+  facturador_id: string;
+  emisor_id: string;
+  razon_social: string;
+  ruc: string;
+  documento_id: string;
+  estado: PublicDocumentRecord["documento"]["estado"];
+  numero_fiscal: string | null;
+  cdc: string | null;
+  cliente_snapshot: unknown;
+  totals_snapshot: unknown;
+  email_estado: PublicDocumentRecord["documento"]["email_status"] | null;
 }
 
 export class PgDeliveryLinkRepository implements DeliveryLinkRepository {
@@ -22,6 +37,37 @@ export class PgDeliveryLinkRepository implements DeliveryLinkRepository {
     );
 
     return mapRow(result.rows[0]);
+  }
+
+  async findPublicByToken(token: string): Promise<PublicDocumentRecord | null> {
+    const result = await pool.query<PublicDocumentRow>(
+      `
+        select
+          dlp.token,
+          f.id as facturador_id,
+          f.emisor_id,
+          f.razon_social,
+          f.ruc,
+          fo.id as documento_id,
+          fo.estado,
+          fo.numero_fiscal,
+          fo.cdc,
+          fo.cliente_snapshot,
+          fo.totals_snapshot,
+          fo.email_estado
+        from documento_links_publicos dlp
+        join facturas_operativas fo on fo.id = dlp.factura_operativa_id
+        join facturadores f on f.id = dlp.facturador_id
+        where dlp.token = $1
+          and dlp.revoked_at is null
+          and fo.deleted_at is null
+          and f.deleted_at is null
+        limit 1
+      `,
+      [token]
+    );
+
+    return mapPublicRow(result.rows[0]);
   }
 
   async create(input: {
@@ -87,5 +133,30 @@ function mapRow(row: DeliveryLinkRow | undefined): DeliveryLinkRecord | null {
     id: row.id,
     token: row.token,
     revoked_at: row.revoked_at?.toISOString() ?? null
+  };
+}
+
+function mapPublicRow(row: PublicDocumentRow | undefined): PublicDocumentRecord | null {
+  if (!row) {
+    return null;
+  }
+
+  return {
+    token: row.token,
+    facturador: {
+      id: row.facturador_id,
+      emisor_id: row.emisor_id,
+      razon_social: row.razon_social,
+      ruc: row.ruc
+    },
+    documento: {
+      id: row.documento_id,
+      estado: row.estado,
+      numero_fiscal: row.numero_fiscal,
+      cdc: row.cdc,
+      cliente: row.cliente_snapshot as PublicDocumentRecord["documento"]["cliente"],
+      totals: row.totals_snapshot as PublicDocumentRecord["documento"]["totals"],
+      email_status: row.email_estado ?? "NOT_APPLICABLE"
+    }
   };
 }

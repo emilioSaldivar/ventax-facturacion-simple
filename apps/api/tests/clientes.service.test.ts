@@ -38,7 +38,11 @@ const context: OperationalContextResponse = {
     punto_expedicion: "001",
     perfil_emision_codigo: "SERV",
     actividad_economica_codigo: "82110",
-    actividad_economica_descripcion: "Servicios administrativos"
+    actividad_economica_descripcion: "Servicios administrativos",
+    timbrado: "80136968",
+    timbrado_inicio: "2025-12-30",
+    documento_nro: "0000000",
+    credito_plazo_dias: 30
   }
 };
 

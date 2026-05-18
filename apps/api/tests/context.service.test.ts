@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { getOperationalContext, getReadiness } from "../src/modules/context/context.service";
+import { clearFiscalReadinessCacheForTests, getOperationalContext, getReadiness } from "../src/modules/context/context.service";
 import type { OperationalContextRepository, OperationalContextResponse, ReadinessCheck } from "../src/modules/context/context.types";
+import type { FiscalGateway } from "../src/modules/fiscal-gateway/fiscal-gateway.types";
 
 const contextFixture: OperationalContextResponse = {
   user: {
@@ -25,7 +26,11 @@ const contextFixture: OperationalContextResponse = {
     punto_expedicion: "001",
     perfil_emision_codigo: "SERV",
     actividad_economica_codigo: "82110",
-    actividad_economica_descripcion: "Servicios administrativos"
+    actividad_economica_descripcion: "Servicios administrativos",
+    timbrado: "80136968",
+    timbrado_inicio: "2025-12-30",
+    documento_nro: "0000000",
+    credito_plazo_dias: 30
   }
 };
 
@@ -41,6 +46,44 @@ class FakeContextRepository implements OperationalContextRepository {
 
   async getReadinessChecks(): Promise<ReadinessCheck[]> {
     return this.checks;
+  }
+}
+
+class FakeFiscalGateway implements FiscalGateway {
+  public healthCalls = 0;
+
+  constructor(
+    private readonly ok: boolean,
+    private readonly throws = false
+  ) {}
+
+  async health() {
+    this.healthCalls += 1;
+    if (this.throws) {
+      throw new Error("timeout fiscal");
+    }
+
+    return {
+      ok: this.ok,
+      mode: "mock" as const,
+      message: this.ok ? "Fiscal OK" : "Fiscal caido"
+    };
+  }
+
+  async emitFactura() {
+    throw new Error("not needed");
+  }
+
+  async refreshFacturaStatus() {
+    throw new Error("not needed");
+  }
+
+  async getXml() {
+    throw new Error("not needed");
+  }
+
+  async getKudePdf() {
+    throw new Error("not needed");
   }
 }
 
@@ -84,5 +127,60 @@ describe("context service", () => {
     const readiness = await getReadiness(contextFixture.user.id, repo);
 
     expect(readiness.ready).toBe(false);
+  });
+
+  it("adds cached fiscal backend readiness when gateway is provided", async () => {
+    clearFiscalReadinessCacheForTests();
+    const repo = new FakeContextRepository(contextFixture, [
+      { code: "tenant_activo", ok: true, message: "Tenant activo." },
+      { code: "suscripcion_activa", ok: true, message: "Suscripcion activa." }
+    ]);
+    const gateway = new FakeFiscalGateway(true);
+
+    const first = await getReadiness(contextFixture.user.id, repo, gateway);
+    const second = await getReadiness(contextFixture.user.id, repo, gateway);
+
+    expect(first.ready).toBe(true);
+    expect(first.checks).toContainEqual({
+      code: "fiscal_backend_ready",
+      ok: true,
+      message: "Backend fiscal disponible (mock)."
+    });
+    expect(second.ready).toBe(true);
+    expect(gateway.healthCalls).toBe(1);
+  });
+
+  it("marks readiness false when fiscal backend is unavailable", async () => {
+    clearFiscalReadinessCacheForTests();
+    const repo = new FakeContextRepository(contextFixture, [
+      { code: "tenant_activo", ok: true, message: "Tenant activo." }
+    ]);
+    const gateway = new FakeFiscalGateway(false);
+
+    const readiness = await getReadiness(contextFixture.user.id, repo, gateway);
+
+    expect(readiness.ready).toBe(false);
+    expect(readiness.checks).toContainEqual({
+      code: "fiscal_backend_ready",
+      ok: false,
+      message: "Fiscal caido"
+    });
+  });
+
+  it("keeps readiness response operational when fiscal health throws", async () => {
+    clearFiscalReadinessCacheForTests();
+    const repo = new FakeContextRepository(contextFixture, [
+      { code: "tenant_activo", ok: true, message: "Tenant activo." }
+    ]);
+    const gateway = new FakeFiscalGateway(false, true);
+
+    const readiness = await getReadiness(contextFixture.user.id, repo, gateway);
+
+    expect(readiness.ready).toBe(false);
+    expect(readiness.checks).toContainEqual({
+      code: "fiscal_backend_ready",
+      ok: false,
+      message: "timeout fiscal"
+    });
   });
 });
