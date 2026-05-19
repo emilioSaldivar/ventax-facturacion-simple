@@ -14,6 +14,13 @@
     "dev:backoffice": "npm run dev -w @facturacion-simple/backoffice",
     "lint": "npm run lint --workspaces --if-present",
     "migrate": "npm run migrate -w @facturacion-simple/api",
+    "ops:backup": "bash scripts/backup.sh",
+    "ops:backup:install-cron": "bash scripts/install-backup-cron.sh",
+    "ops:fiscal-smoke": "node scripts/fiscal-smoke.cjs",
+    "ops:onboarding-smoke": "node scripts/onboarding-smoke.cjs",
+    "ops:restore:verify": "bash scripts/verify-restore.sh",
+    "ops:smoke": "node scripts/smoke-deploy.cjs",
+    "qa:no-secrets": "node scripts/check-no-secrets.cjs",
     "test": "npm run test --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present"
   },

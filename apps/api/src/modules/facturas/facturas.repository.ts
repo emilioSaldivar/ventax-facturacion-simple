@@ -5,6 +5,7 @@ import type {
   FacturaQueuedPersistInput,
   FacturaItemPreview,
   FacturaPersistInput,
+  NotaCreditoPersistInput,
   PendingFiscalEmission,
   FacturaRepository,
   DocumentoResponse
@@ -23,6 +24,8 @@ interface FacturaRow {
   cdc: string | null;
   numero_fiscal: string | null;
   email_estado: DocumentoResponse["delivery"]["email_status"] | null;
+  documento_relacionado_id: string | null;
+  nce_motivo: string | null;
   created_at: Date;
 }
 
@@ -63,6 +66,8 @@ export class PgFacturaRepository implements FacturaRepository {
           cdc,
           numero_fiscal,
           email_estado,
+          documento_relacionado_id,
+          nce_motivo,
           created_at
         from facturas_operativas
         where facturador_id = $1
@@ -97,6 +102,8 @@ export class PgFacturaRepository implements FacturaRepository {
           cdc,
           numero_fiscal,
           email_estado,
+          documento_relacionado_id,
+          nce_motivo,
           created_at
         from facturas_operativas
         where facturador_id = $1
@@ -113,6 +120,43 @@ export class PgFacturaRepository implements FacturaRepository {
     }
 
     return mapFacturaRow(factura, await this.findItems(factura.id));
+  }
+
+  async findNotaCreditoByOriginal(input: { facturadorId: string; documentoId: string }): Promise<DocumentoResponse | null> {
+    const result = await pool.query<FacturaRow>(
+      `
+        select
+          id,
+          tipo,
+          estado,
+          condicion_venta,
+          external_ref,
+          cliente_snapshot,
+          totals_snapshot,
+          fiscal_response_snapshot,
+          fiscal_document_id,
+          cdc,
+          numero_fiscal,
+          email_estado,
+          documento_relacionado_id,
+          nce_motivo,
+          created_at
+        from facturas_operativas
+        where facturador_id = $1
+          and documento_relacionado_id = $2
+          and tipo = 'NOTA_CREDITO'
+          and deleted_at is null
+        limit 1
+      `,
+      [input.facturadorId, input.documentoId]
+    );
+
+    const notaCredito = result.rows[0];
+    if (!notaCredito) {
+      return null;
+    }
+
+    return mapFacturaRow(notaCredito, await this.findItems(notaCredito.id));
   }
 
   async list(input: { facturadorId: string; filters: DocumentoListFilters }): Promise<DocumentoListResponse> {
@@ -135,6 +179,8 @@ export class PgFacturaRepository implements FacturaRepository {
           cdc,
           numero_fiscal,
           email_estado,
+          documento_relacionado_id,
+          nce_motivo,
           created_at
         from facturas_operativas
         ${where}
@@ -191,6 +237,8 @@ export class PgFacturaRepository implements FacturaRepository {
           cdc,
           numero_fiscal,
           email_estado,
+          documento_relacionado_id,
+          nce_motivo,
           created_at
       `,
       [input.facturadorId, input.documentoId, input.estado, JSON.stringify(input.fiscalStatus)]
@@ -248,6 +296,8 @@ export class PgFacturaRepository implements FacturaRepository {
             cdc,
             numero_fiscal,
             email_estado,
+            documento_relacionado_id,
+            nce_motivo,
             created_at
         `,
         [
@@ -394,6 +444,8 @@ export class PgFacturaRepository implements FacturaRepository {
             cdc,
             numero_fiscal,
             email_estado,
+            documento_relacionado_id,
+            nce_motivo,
             created_at
         `,
         [
@@ -508,6 +560,176 @@ export class PgFacturaRepository implements FacturaRepository {
     }
   }
 
+  async createNotaCreditoFromFactura(input: NotaCreditoPersistInput): Promise<DocumentoResponse> {
+    const client = await pool.connect();
+
+    try {
+      await client.query("begin");
+
+      const inserted = await client.query<FacturaRow>(
+        `
+          insert into facturas_operativas (
+            tenant_id,
+            facturador_id,
+            usuario_id,
+            tipo,
+            condicion_venta,
+            estado,
+            external_ref,
+            idempotency_key,
+            documento_relacionado_id,
+            nce_motivo,
+            cliente_snapshot,
+            totals_snapshot,
+            fiscal_request_snapshot,
+            fiscal_response_snapshot,
+            fiscal_document_id,
+            cdc,
+            numero_fiscal,
+            email_estado,
+            emitted_at
+          )
+          values (
+            $1, $2, $3, 'NOTA_CREDITO', $4, $5, $6, $7, $8, $9, $10::jsonb, $11::jsonb, $12::jsonb,
+            $13::jsonb, $14, $15, $16, $17, now()
+          )
+          returning
+            id,
+            tipo,
+            estado,
+            condicion_venta,
+            external_ref,
+            cliente_snapshot,
+            totals_snapshot,
+            fiscal_response_snapshot,
+            fiscal_document_id,
+            cdc,
+            numero_fiscal,
+            email_estado,
+            documento_relacionado_id,
+            nce_motivo,
+            created_at
+        `,
+        [
+          input.tenantId,
+          input.facturadorId,
+          input.userId,
+          input.original.condicion_venta,
+          input.estado,
+          input.externalRef,
+          input.idempotencyKey ?? null,
+          input.original.id,
+          input.motivo,
+          JSON.stringify(input.original.cliente),
+          JSON.stringify(input.original.totals),
+          JSON.stringify(input.fiscalRequest),
+          JSON.stringify(input.fiscalResponse?.raw ?? input.fiscalError ?? {}),
+          input.fiscalResponse?.fiscal_document_id ?? null,
+          input.fiscalResponse?.cdc ?? null,
+          input.fiscalResponse?.numero_fiscal ?? null,
+          input.fiscalResponse?.email_status === "NOT_APPLICABLE" ? null : input.fiscalResponse?.email_status ?? null
+        ]
+      );
+
+      const notaCredito = inserted.rows[0]!;
+
+      for (const item of input.original.items) {
+        await client.query(
+          `
+            insert into factura_items_snapshot (
+              tenant_id,
+              facturador_id,
+              factura_operativa_id,
+              catalogo_item_id,
+              line_no,
+              codigo,
+              descripcion,
+              cantidad,
+              precio_unitario,
+              iva_tipo,
+              subtotal,
+              base_imponible,
+              iva_monto
+            )
+            values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+          `,
+          [
+            input.tenantId,
+            input.facturadorId,
+            notaCredito.id,
+            item.catalogo_item_id,
+            item.line_no,
+            item.codigo,
+            item.descripcion,
+            item.cantidad,
+            item.precio_unitario,
+            item.iva_tipo,
+            item.subtotal,
+            item.base_imponible,
+            item.iva_monto
+          ]
+        );
+      }
+
+      await client.query(
+        `
+          insert into audit_events (
+            tenant_id,
+            facturador_id,
+            usuario_id,
+            entity_type,
+            entity_id,
+            event_type,
+            metadata
+          )
+          values ($1, $2, $3, 'factura_operativa', $4, 'NOTA_CREDITO_EMITIDA', $5::jsonb)
+        `,
+        [
+          input.tenantId,
+          input.facturadorId,
+          input.userId,
+          notaCredito.id,
+          JSON.stringify({
+            estado: input.estado,
+            external_ref: input.externalRef,
+            factura_relacionada_id: input.original.id,
+            fiscal_document_id: input.fiscalResponse?.fiscal_document_id ?? null
+          })
+        ]
+      );
+
+      await client.query("commit");
+
+      return mapFacturaRow(notaCredito, input.original.items);
+    } catch (error) {
+      await client.query("rollback");
+      if (isUniqueViolation(error)) {
+        const existingByIdempotency = input.idempotencyKey
+          ? await this.findByIdempotencyKey({
+              facturadorId: input.facturadorId,
+              idempotencyKey: input.idempotencyKey
+            })
+          : null;
+
+        if (existingByIdempotency) {
+          return existingByIdempotency;
+        }
+
+        const existingByOriginal = await this.findNotaCreditoByOriginal({
+          facturadorId: input.facturadorId,
+          documentoId: input.original.id
+        });
+
+        if (existingByOriginal) {
+          return existingByOriginal;
+        }
+      }
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
   async claimNextPendingEmission(): Promise<PendingFiscalEmission | null> {
     const result = await pool.query<PendingFiscalEmissionRow>(
       `
@@ -597,6 +819,8 @@ export class PgFacturaRepository implements FacturaRepository {
             cdc,
             numero_fiscal,
             email_estado,
+            documento_relacionado_id,
+            nce_motivo,
             created_at
         `,
         [
@@ -669,6 +893,8 @@ export class PgFacturaRepository implements FacturaRepository {
             cdc,
             numero_fiscal,
             email_estado,
+            documento_relacionado_id,
+            nce_motivo,
             created_at
         `,
         [input.documentoId, input.estado, JSON.stringify(input.error)]
@@ -751,6 +977,8 @@ export class PgFacturaRepository implements FacturaRepository {
             cdc,
             numero_fiscal,
             email_estado,
+            documento_relacionado_id,
+            nce_motivo,
             created_at
         `,
         [input.facturadorId, input.documentoId, JSON.stringify(retryStatus)]
@@ -786,6 +1014,93 @@ export class PgFacturaRepository implements FacturaRepository {
 
       const factura = result.rows[0];
       return factura ? mapFacturaRow(factura, await this.findItems(factura.id)) : null;
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async cancelDocumento(input: {
+    facturadorId: string;
+    documentoId: string;
+    requestedBy: string;
+    estado: "ANULADA" | "PENDIENTE_SIFEN";
+    fiscalStatus: Record<string, unknown>;
+  }): Promise<DocumentoResponse | null> {
+    const client = await pool.connect();
+
+    try {
+      await client.query("begin");
+
+      const result = await client.query<FacturaRow>(
+        `
+          update facturas_operativas
+          set
+            estado = $3,
+            fiscal_response_snapshot = $4::jsonb,
+            updated_at = now()
+          where facturador_id = $1
+            and id = $2
+            and estado = 'EMITIDA'
+            and cdc is not null
+            and deleted_at is null
+          returning
+            id,
+            tipo,
+            estado,
+            condicion_venta,
+            external_ref,
+            cliente_snapshot,
+            totals_snapshot,
+            fiscal_response_snapshot,
+            fiscal_document_id,
+            cdc,
+            numero_fiscal,
+            email_estado,
+            documento_relacionado_id,
+            nce_motivo,
+            created_at
+        `,
+        [input.facturadorId, input.documentoId, input.estado, JSON.stringify(input.fiscalStatus)]
+      );
+
+      const factura = result.rows[0];
+      if (!factura) {
+        await client.query("rollback");
+        return null;
+      }
+
+      await client.query(
+        `
+          insert into audit_events (
+            tenant_id,
+            facturador_id,
+            usuario_id,
+            entity_type,
+            entity_id,
+            event_type,
+            metadata
+          )
+          select
+            tenant_id,
+            facturador_id,
+            $3,
+            'factura_operativa',
+            id,
+            'FACTURA_CANCELADA',
+            $4::jsonb
+          from facturas_operativas
+          where facturador_id = $1
+            and id = $2
+        `,
+        [input.facturadorId, input.documentoId, input.requestedBy, JSON.stringify(input.fiscalStatus)]
+      );
+
+      await client.query("commit");
+
+      return mapFacturaRow(factura, await this.findItems(factura.id));
     } catch (error) {
       await client.query("rollback");
       throw error;
@@ -942,6 +1257,8 @@ function mapFacturaRow(row: FacturaRow, items: FacturaItemPreview[]): DocumentoR
     items,
     totals: row.totals_snapshot as DocumentoResponse["totals"],
     fiscal_status: row.fiscal_response_snapshot as Record<string, unknown>,
+    documento_relacionado_id: row.documento_relacionado_id,
+    nce_motivo: row.nce_motivo,
     delivery: {
       public_url: null,
       whatsapp_url: null,

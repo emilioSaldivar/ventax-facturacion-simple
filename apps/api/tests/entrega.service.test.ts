@@ -128,7 +128,15 @@ class FakeFiscalGateway implements FiscalGateway {
     throw new Error("not needed");
   }
 
+  async emitNotaCredito() {
+    throw new Error("not needed");
+  }
+
   async refreshFacturaStatus() {
+    throw new Error("not needed");
+  }
+
+  async cancelFactura() {
     throw new Error("not needed");
   }
 
@@ -299,6 +307,8 @@ function buildDocumento(): DocumentoResponse {
       total: 11000
     },
     fiscal_status: null,
+    documento_relacionado_id: null,
+    nce_motivo: null,
     delivery: {
       public_url: null,
       whatsapp_url: null,

@@ -4,6 +4,10 @@ const { chromium } = require("playwright");
 
 const baseUrl = process.env.SMOKE_BASE_URL ?? "http://127.0.0.1:8092/app/";
 const publicUrl = process.env.SMOKE_PUBLIC_URL ?? "https://factura.ventax.app/public/d/mock-flow-token";
+const viewport = {
+  width: Number(process.env.SMOKE_VIEWPORT_WIDTH ?? 390),
+  height: Number(process.env.SMOKE_VIEWPORT_HEIGHT ?? 844)
+};
 
 const user = {
   id: "11111111-1111-4111-8111-111111111111",
@@ -103,6 +107,8 @@ const documento = {
   items: previewResponse.items,
   totals,
   fiscal_status: { status: "APPROVED", mode: "mock" },
+  documento_relacionado_id: null,
+  nce_motivo: null,
   delivery: {
     public_url: null,
     whatsapp_url: null,
@@ -113,6 +119,25 @@ const documento = {
     }
   },
   created_at: "2026-05-18T00:00:00.000Z"
+};
+
+const notaCredito = {
+  ...documento,
+  id: "77777777-7777-4777-8777-777777777777",
+  tipo: "NOTA_CREDITO",
+  numero_fiscal: "001-001-0000002",
+  cdc: "N".repeat(44),
+  fiscal_document_id: "nce-mock-flow",
+  external_ref: "nce-mock-flow",
+  fiscal_status: { status: "APPROVED", mode: "mock", document_type: "NCE" },
+  documento_relacionado_id: documento.id,
+  nce_motivo: "Devolucion total"
+};
+
+const documentoAnulado = {
+  ...documento,
+  estado: "ANULADA",
+  fiscal_status: { status: "SENT", mode: "mock", event_id: "evt-cancel-flow" }
 };
 
 async function installApiMocks(page, calls) {
@@ -143,6 +168,15 @@ async function installApiMocks(page, calls) {
   await page.route("**/api/v1/facturas/preview", (route) => route.fulfill({ json: previewResponse }));
   await page.route("**/api/v1/facturas?**", (route) => route.fulfill({ json: { items: [documento], total: 1 } }));
   await page.route("**/api/v1/facturas/66666666-6666-4666-8666-666666666666", (route) => route.fulfill({ json: documento }));
+  await page.route("**/api/v1/facturas/66666666-6666-4666-8666-666666666666/cancelar", (route) => {
+    calls.cancelaciones += 1;
+    return route.fulfill({ json: documentoAnulado });
+  });
+  await page.route("**/api/v1/facturas/66666666-6666-4666-8666-666666666666/nota-credito", (route) => {
+    calls.notasCredito += 1;
+    calls.nceIdempotencyKey = route.request().headers()["idempotency-key"] ?? null;
+    return route.fulfill({ status: 201, json: notaCredito });
+  });
   await page.route("**/api/v1/facturas/**/delivery-link", (route) =>
     route.fulfill({
       json: {
@@ -164,16 +198,22 @@ async function installApiMocks(page, calls) {
 
 async function main() {
   const browser = await chromium.launch({ headless: true });
-  const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  const page = await browser.newPage({ viewport });
   const calls = {
     login: 0,
     clientes: 0,
     catalogo: 0,
     facturas: 0,
-    idempotencyKey: null
+    cancelaciones: 0,
+    notasCredito: 0,
+    idempotencyKey: null,
+    nceIdempotencyKey: null
   };
 
   await installApiMocks(page, calls);
+  page.on("dialog", async (dialog) => {
+    await dialog.accept(dialog.message().includes("nota") ? "Devolucion total" : "Error de carga");
+  });
   await page.goto(baseUrl, { waitUntil: "networkidle" });
 
   await page.getByLabel("Usuario").fill("operador");
@@ -213,6 +253,16 @@ async function main() {
   await page.getByRole("button", { name: new RegExp(cliente.razon_social) }).click();
   await page.getByText("Detalle").waitFor();
   await page.getByRole("link", { name: "KUDE/PDF" }).waitFor();
+  await page.getByRole("button", { name: "Nota credito" }).click();
+  await page.getByText("Nota de credito emitida.").waitFor();
+
+  await page.getByRole("button", { name: "Volver" }).click();
+  await page.getByRole("button", { name: "Ver documentos" }).click();
+  await page.getByText(cliente.razon_social).waitFor();
+  await page.getByRole("button", { name: new RegExp(cliente.razon_social) }).click();
+  await page.getByRole("button", { name: "Anular" }).click();
+  await page.getByText("Documento anulado.").waitFor();
+  await page.getByRole("heading", { name: "Anulada" }).waitFor();
 
   await browser.close();
 
@@ -221,14 +271,17 @@ async function main() {
   if (calls.clientes !== 1) failures.push("alta rapida de cliente no fue ejecutada");
   if (calls.catalogo !== 1) failures.push("alta rapida de catalogo no fue ejecutada");
   if (calls.facturas !== 1) failures.push("emision de factura no fue ejecutada");
+  if (calls.cancelaciones !== 1) failures.push("cancelacion no fue ejecutada");
+  if (calls.notasCredito !== 1) failures.push("nota de credito no fue ejecutada");
   if (!calls.idempotencyKey) failures.push("Idempotency-Key ausente en emision");
+  if (!calls.nceIdempotencyKey) failures.push("Idempotency-Key ausente en NCE");
 
   if (failures.length > 0) {
     console.error(failures.join("\n"));
     process.exit(1);
   }
 
-  console.log(JSON.stringify({ ok: true, baseUrl, calls }, null, 2));
+  console.log(JSON.stringify({ ok: true, baseUrl, viewport, calls }, null, 2));
 }
 
 main().catch(async (error) => {

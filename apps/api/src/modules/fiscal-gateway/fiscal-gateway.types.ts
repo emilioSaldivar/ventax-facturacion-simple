@@ -11,6 +11,8 @@ export interface FiscalGatewayConfig {
   apiKey?: string;
   timeoutMs: number;
   environment: "test" | "prod";
+  sendEmissionProfileCode?: boolean;
+  serviceNumbering?: boolean;
 }
 
 export interface FiscalGatewayHealth {
@@ -30,6 +32,21 @@ export interface FiscalEmitFacturaRequest {
   totals: TaxTotals;
 }
 
+export interface FiscalEmitNotaCreditoRequest {
+  external_ref: string;
+  facturador: FacturadorSummary;
+  fiscal_context: FiscalContext;
+  cliente: FacturaClienteInput;
+  items: FacturaItemPreview[];
+  totals: TaxTotals;
+  motivo: string;
+  factura_referencia: {
+    documento_id: string;
+    cdc: string;
+    numero_fiscal: string | null;
+  };
+}
+
 export interface FiscalEmitFacturaResponse {
   fiscal_document_id: string | null;
   cdc: string | null;
@@ -39,12 +56,26 @@ export interface FiscalEmitFacturaResponse {
   raw: Record<string, unknown>;
 }
 
+export type FiscalEmitNotaCreditoResponse = FiscalEmitFacturaResponse;
+
 export interface FiscalRefreshStatusRequest {
   cdc: string;
 }
 
 export interface FiscalRefreshStatusResponse {
   estado: "EMITIDA" | "PENDIENTE_SIFEN" | "RECHAZADA" | "ANULADA";
+  raw: Record<string, unknown>;
+}
+
+export interface FiscalCancelFacturaRequest {
+  emisor_id: string;
+  cdc: string;
+  motivo: string;
+}
+
+export interface FiscalCancelFacturaResponse {
+  event_id: string | null;
+  estado: "ANULADA" | "PENDIENTE_SIFEN";
   raw: Record<string, unknown>;
 }
 
@@ -57,7 +88,9 @@ export interface FiscalArtifactResponse {
 export interface FiscalGateway {
   health(): Promise<FiscalGatewayHealth>;
   emitFactura(request: FiscalEmitFacturaRequest): Promise<FiscalEmitFacturaResponse>;
+  emitNotaCredito(request: FiscalEmitNotaCreditoRequest): Promise<FiscalEmitNotaCreditoResponse>;
   refreshFacturaStatus(request: FiscalRefreshStatusRequest): Promise<FiscalRefreshStatusResponse>;
+  cancelFactura(request: FiscalCancelFacturaRequest): Promise<FiscalCancelFacturaResponse>;
   getXml(cdc: string): Promise<FiscalArtifactResponse>;
   getKudePdf(cdc: string): Promise<FiscalArtifactResponse>;
 }

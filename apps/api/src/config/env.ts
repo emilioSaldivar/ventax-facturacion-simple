@@ -16,6 +16,8 @@ const envSchema = z.object({
   FE_API_TIMEOUT_MS: z.coerce.number().int().positive().default(20000),
   FE_API_ENV: z.enum(["test", "prod"]).default("test"),
   FE_GATEWAY_MODE: z.enum(["mock", "real"]).default("mock"),
+  FE_SEND_EMISSION_PROFILE_CODE: z.enum(["true", "false"]).default("true").transform((value) => value === "true"),
+  FE_SERVICE_NUMBERING: z.enum(["true", "false"]).default("false").transform((value) => value === "true"),
   FE_OUTBOX_WORKER_ENABLED: z.enum(["true", "false"]).default("true").transform((value) => value === "true"),
   FE_OUTBOX_WORKER_INTERVAL_MS: z.coerce.number().int().positive().default(5000),
   PUBLIC_APP_BASE_URL: z.string().url().default("https://factura.ventax.app")

@@ -46,6 +46,16 @@ const context: OperationalContextResponse = {
   }
 };
 
+const otherFacturadorContext: OperationalContextResponse = {
+  ...context,
+  facturador: {
+    id: "99999999-9999-4999-8999-999999999999",
+    emisor_id: "80000000-0",
+    razon_social: "Otro Facturador",
+    ruc: "80000000-0"
+  }
+};
+
 const clienteResponse: ClienteResponse = {
   source: "AGENDA_FACTURADOR",
   cliente_id: "44444444-4444-4444-8444-444444444444",
@@ -173,6 +183,52 @@ describe("clientes service", () => {
       )
     ).rejects.toMatchObject({
       statusCode: 404
+    });
+  });
+
+  it("keeps search, list, create and update scoped to the current facturador", async () => {
+    const repo = new FakeClienteRepository();
+
+    await searchClientes(otherFacturadorContext, { q: "800", limit: 5 }, repo);
+    expect(repo.lastSearchInput).toMatchObject({
+      tenantId: otherFacturadorContext.tenant.id,
+      facturadorId: otherFacturadorContext.facturador.id
+    });
+
+    await listClientes(otherFacturadorContext, { q: "Cliente", limit: 10, offset: 0 }, repo);
+    expect(repo.lastListInput).toMatchObject({
+      facturadorId: otherFacturadorContext.facturador.id
+    });
+
+    await createCliente(
+      otherFacturadorContext,
+      {
+        documento_tipo: "RUC",
+        documento: "80000000-0",
+        razon_social: "Cliente Otro"
+      },
+      repo
+    );
+    expect(repo.lastUpsertInput).toMatchObject({
+      tenantId: otherFacturadorContext.tenant.id,
+      facturadorId: otherFacturadorContext.facturador.id,
+      userId: otherFacturadorContext.user.id
+    });
+
+    await updateCliente(
+      otherFacturadorContext,
+      clienteResponse.cliente_id,
+      {
+        documento_tipo: "RUC",
+        documento: "80000000-0",
+        razon_social: "Cliente Otro"
+      },
+      repo
+    );
+    expect(repo.lastUpdateInput).toMatchObject({
+      clienteId: clienteResponse.cliente_id,
+      facturadorId: otherFacturadorContext.facturador.id,
+      userId: otherFacturadorContext.user.id
     });
   });
 

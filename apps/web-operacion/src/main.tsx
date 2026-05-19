@@ -69,6 +69,16 @@ interface ApiErrorResponse {
   message?: string;
 }
 
+class ApiClientError extends Error {
+  readonly status: number;
+
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = "ApiClientError";
+    this.status = status;
+  }
+}
+
 interface FacturaClienteInput {
   cliente_id?: string | null;
   documento_tipo: DocumentoIdentidadTipo;
@@ -124,6 +134,8 @@ interface DocumentoResponse {
   cliente: FacturaClienteInput;
   totals: FacturaPreviewResponse["totals"];
   fiscal_status: Record<string, unknown> | null;
+  documento_relacionado_id: string | null;
+  nce_motivo: string | null;
   delivery: {
     public_url: string | null;
     whatsapp_url: string | null;
@@ -218,7 +230,7 @@ function App() {
           }
           setAccessToken(refreshed.access_token);
           setUser(refreshed.user);
-          await loadOperationalState(refreshed.access_token);
+          await loadOperationalState(refreshed.access_token, refreshed.user);
           return;
         }
 
@@ -232,10 +244,10 @@ function App() {
       }
     }
 
-    async function loadOperationalState(token: string) {
+    async function loadOperationalState(token: string, sessionUser?: UserSummary) {
       setView("loading-context");
       const client = createApiClient(token, setAccessToken);
-      const [contextResponse, readinessResponse] = await Promise.all([
+      const [contextResult, readinessResult] = await Promise.allSettled([
         client.get<OperationalContextResponse>("/me/context"),
         client.get<ReadinessResponse>("/me/readiness")
       ]);
@@ -244,9 +256,27 @@ function App() {
         return;
       }
 
+      if (readinessResult.status === "rejected") {
+        throw readinessResult.reason;
+      }
+
+      if (contextResult.status === "rejected") {
+        if (contextResult.reason instanceof ApiClientError && contextResult.reason.status === 409) {
+          setUser((current) => sessionUser ?? current);
+          setContext(null);
+          setReadiness(readinessResult.value);
+          setErrorMessage(null);
+          setView("operacion");
+          return;
+        }
+
+        throw contextResult.reason;
+      }
+
+      const contextResponse = contextResult.value;
       setUser(contextResponse.user);
       setContext(contextResponse);
-      setReadiness(readinessResponse);
+      setReadiness(readinessResult.value);
       setErrorMessage(null);
       setView("operacion");
     }
@@ -585,6 +615,66 @@ function DocumentsView({
     }
   }
 
+  async function cancelSelectedDocumento() {
+    if (!selected) {
+      return;
+    }
+
+    const motivo = window.prompt("Motivo de anulacion", "");
+    if (!motivo?.trim()) {
+      return;
+    }
+
+    setActionLoading(true);
+    setMessage(null);
+
+    try {
+      const updated = await api.post<DocumentoResponse>(`/facturas/${selected.id}/cancelar`, { motivo: motivo.trim() });
+      setSelected(updated);
+      setDocuments((current) => current.map((item) => (item.id === updated.id ? updated : item)));
+      setMessage("Documento anulado.");
+      await loadDeliveryFor(updated);
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "No se pudo anular el documento.");
+    } finally {
+      setActionLoading(false);
+    }
+  }
+
+  async function emitSelectedNotaCredito() {
+    if (!selected) {
+      return;
+    }
+
+    const motivo = window.prompt("Motivo de nota de credito", "");
+    if (!motivo?.trim()) {
+      return;
+    }
+
+    setActionLoading(true);
+    setMessage(null);
+
+    try {
+      const notaCredito = await api.request<DocumentoResponse>(`/facturas/${selected.id}/nota-credito`, {
+        method: "POST",
+        headers: {
+          "Idempotency-Key": createIdempotencyKey()
+        },
+        body: JSON.stringify({ motivo: motivo.trim() })
+      });
+      setSelected(notaCredito);
+      setDocuments((current) => [notaCredito, ...current.filter((item) => item.id !== notaCredito.id)]);
+      setDeliveryLink(null);
+      setEmailStatus(null);
+      setMessage("Nota de credito emitida.");
+      await loadDeliveryFor(notaCredito);
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "No se pudo emitir la nota de credito.");
+    } finally {
+      setActionLoading(false);
+    }
+  }
+
   async function copyDetailLink() {
     if (!deliveryLink?.public_url) {
       return;
@@ -603,7 +693,7 @@ function DocumentsView({
       <div className="editor-heading">
         <div>
           <p className="eyebrow">Documentos</p>
-          <h2 id="documents-title">Facturas emitidas</h2>
+          <h2 id="documents-title">Facturas y notas</h2>
         </div>
         <button className="ghost-action" onClick={onBack} type="button">
           Volver
@@ -656,7 +746,7 @@ function DocumentsView({
             >
               <span>
                 <strong>{documento.numero_fiscal ?? "Numero pendiente"}</strong>
-                <small>{documento.cliente.razon_social}</small>
+                <small>{formatDocumentoTipo(documento.tipo)} · {documento.cliente.razon_social}</small>
               </span>
               <span>
                 <strong>{formatGuaranies(documento.totals.total)}</strong>
@@ -674,7 +764,7 @@ function DocumentsView({
                   <p className="eyebrow">Detalle</p>
                   <h3>{formatDocumentoEstado(selected.estado)}</h3>
                   <p className="muted">
-                    Numero {selected.numero_fiscal ?? "pendiente"} · CDC {selected.cdc ?? "pendiente"}
+                    {formatDocumentoTipo(selected.tipo)} · Numero {selected.numero_fiscal ?? "pendiente"} · CDC {selected.cdc ?? "pendiente"}
                   </p>
                 </div>
                 <span className={selected.estado === "EMITIDA" ? "status-pill ready" : "status-pill blocked"}>
@@ -726,6 +816,12 @@ function DocumentsView({
                 </button>
                 <button className="secondary-action" disabled={actionLoading || !["PENDIENTE_SIFEN", "ERROR_TEMPORAL"].includes(selected.estado)} onClick={() => void retrySelectedEmission()} type="button">
                   Reintentar
+                </button>
+                <button className="secondary-action" disabled={actionLoading || !canCancelDocumento(selected)} onClick={() => void cancelSelectedDocumento()} type="button">
+                  Anular
+                </button>
+                <button className="secondary-action" disabled={actionLoading || !canEmitNotaCredito(selected, documents)} onClick={() => void emitSelectedNotaCredito()} type="button">
+                  Nota credito
                 </button>
                 <button className="secondary-action" disabled={actionLoading} onClick={() => void loadDeliveryFor(selected, true)} type="button">
                   Regenerar link
@@ -1592,6 +1688,22 @@ function formatDocumentoEstado(value: DocumentoEstado): string {
   return labels[value];
 }
 
+function formatDocumentoTipo(value: DocumentoResponse["tipo"]): string {
+  return value === "NOTA_CREDITO" ? "Nota credito" : "Factura";
+}
+
+function canCancelDocumento(documento: DocumentoResponse): boolean {
+  return documento.tipo === "FACTURA" && documento.estado === "EMITIDA" && Boolean(documento.cdc);
+}
+
+function canEmitNotaCredito(documento: DocumentoResponse, documents: DocumentoResponse[]): boolean {
+  if (documento.tipo !== "FACTURA" || documento.estado !== "EMITIDA" || !documento.cdc) {
+    return false;
+  }
+
+  return !documents.some((item) => item.tipo === "NOTA_CREDITO" && item.documento_relacionado_id === documento.id);
+}
+
 function formatEmailStatus(value: string): string {
   if (value === "DELEGATED") {
     return "Delegado";
@@ -1640,7 +1752,7 @@ function createApiClient(accessToken: string | null, setAccessToken: (token: str
     }
 
     if (!response.ok) {
-      throw new Error(await readApiError(response));
+      throw new ApiClientError(response.status, await readApiError(response));
     }
 
     if (response.status === 204) {
@@ -1700,3 +1812,9 @@ createRoot(document.getElementById("root") as HTMLElement).render(
     <App />
   </React.StrictMode>
 );
+
+if ("serviceWorker" in navigator && import.meta.env.PROD) {
+  window.addEventListener("load", () => {
+    void navigator.serviceWorker.register("/app/sw.js", { scope: "/app/" });
+  });
+}

@@ -597,6 +597,10 @@ paths:
     post:
       tags: [Facturas]
       summary: Cancelar o anular documento elegible
+      description: |
+        Solo permite solicitar cancelacion de facturas `EMITIDA` con CDC fiscal.
+        El SaaS delega la validacion fiscal final al backend `facturacion-electronica`
+        mediante `/evento/cancelar` y guarda la respuesta como snapshot/auditoria.
       parameters:
         - $ref: "#/components/parameters/DocumentoId"
       requestBody:
@@ -607,13 +611,31 @@ paths:
               $ref: "#/components/schemas/CancelacionRequest"
       responses:
         "200":
-          description: Cancelacion solicitada o procesada
+          description: Cancelacion procesada y documento marcado como ANULADA
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/DocumentoResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
         "409":
           description: Documento no elegible para cancelacion
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "502":
+          description: Backend fiscal rechazo la cancelacion
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "504":
+          description: Timeout al cancelar en backend fiscal
           content:
             application/json:
               schema:
@@ -623,6 +645,9 @@ paths:
     post:
       tags: [NotasCredito]
       summary: Emitir Nota de Credito Electronica desde factura elegible
+      description: |
+        Emite una NCE total en el MVP. Solo acepta facturas `EMITIDA` con CDC
+        y bloquea una segunda NCE total sobre la misma factura.
       parameters:
         - $ref: "#/components/parameters/DocumentoId"
         - $ref: "#/components/parameters/IdempotencyKey"
@@ -639,14 +664,30 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/DocumentoResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
         "409":
-          description: Factura no elegible o monto excedido
+          description: Factura no elegible o ya tiene NCE total
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "422":
           $ref: "#/components/responses/ValidationError"
+        "502":
+          description: Backend fiscal rechazo la NCE
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "504":
+          description: Timeout al emitir NCE contra backend fiscal
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /facturas/{documentoId}/delivery-link:
     post:
@@ -795,6 +836,8 @@ paths:
     post:
       tags: [Backoffice]
       summary: Crear usuario operativo o interno
+      security:
+        - BearerAuth: []
       requestBody:
         required: true
         content:
@@ -808,17 +851,71 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/BackofficeUserResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Permiso de backoffice requerido
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Username ya existe
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
-  /backoffice/users/{userId}/operation-config:
-    put:
+  /backoffice/users/{userId}/reset-password:
+    post:
       tags: [Backoffice]
-      summary: Asociar configuracion operativa unica al usuario
+      summary: Desbloquear usuario y definir o regenerar password temporal
+      security:
+        - BearerAuth: []
       parameters:
         - in: path
           name: userId
           required: true
           schema:
             type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BackofficePasswordResetRequest"
+      responses:
+        "200":
+          description: Password temporal generado o actualizado; sesiones activas revocadas
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BackofficeUserResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Permiso de backoffice requerido
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /backoffice/users/{userId}/operation-config:
+    put:
+      tags: [Backoffice]
+      summary: Asociar configuracion operativa unica al usuario
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: string
+            format: uuid
       requestBody:
         required: true
         content:
@@ -832,6 +929,20 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/UserOperationConfig"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Permiso de backoffice requerido
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Usuario o configuracion operativa no encontrada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
 components:
   securitySchemes:
@@ -1399,6 +1510,13 @@ components:
           type: object
           nullable: true
           additionalProperties: true
+        documento_relacionado_id:
+          type: string
+          nullable: true
+          description: ID de la factura original cuando el documento es una Nota de Credito.
+        nce_motivo:
+          type: string
+          nullable: true
         delivery:
           $ref: "#/components/schemas/DeliverySummary"
         created_at:
@@ -1419,17 +1537,12 @@ components:
 
     NotaCreditoEmitRequest:
       type: object
-      required: [motivo, items]
+      required: [motivo]
       properties:
         motivo:
           type: string
           maxLength: 300
-        items:
-          type: array
-          minItems: 1
-          description: Lineas a acreditar. Pueden ser parciales respecto a la factura original.
-          items:
-            $ref: "#/components/schemas/FacturaItemInput"
+          description: Motivo operativo de la NCE total. Las lineas se copian de la factura original en el MVP.
 
     CancelacionRequest:
       type: object
@@ -1537,6 +1650,15 @@ components:
           enum: [OPERADOR_FACTURACION, SOPORTE_INTERNO, ADMIN_INTERNO]
         temporary_password:
           type: string
+          format: password
+          nullable: true
+
+    BackofficePasswordResetRequest:
+      type: object
+      properties:
+        temporary_password:
+          type: string
+          format: password
           nullable: true
 
     BackofficeUserResponse:
@@ -1553,6 +1675,11 @@ components:
           type: string
         active:
           type: boolean
+        temporary_password:
+          type: string
+          format: password
+          nullable: true
+          description: Solo se devuelve en creacion o reset; no se persiste en claro.
 
     UserOperationConfigRequest:
       type: object
@@ -1560,8 +1687,10 @@ components:
       properties:
         tenant_id:
           type: string
+          format: uuid
         facturador_id:
           type: string
+          format: uuid
         emisor_id:
           type: string
         establecimiento:

@@ -74,7 +74,15 @@ class FakeFiscalGateway implements FiscalGateway {
     throw new Error("not needed");
   }
 
+  async emitNotaCredito() {
+    throw new Error("not needed");
+  }
+
   async refreshFacturaStatus() {
+    throw new Error("not needed");
+  }
+
+  async cancelFactura() {
     throw new Error("not needed");
   }
 

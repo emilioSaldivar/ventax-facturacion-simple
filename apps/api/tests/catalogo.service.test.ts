@@ -46,6 +46,16 @@ const context: OperationalContextResponse = {
   }
 };
 
+const otherFacturadorContext: OperationalContextResponse = {
+  ...context,
+  facturador: {
+    id: "99999999-9999-4999-8999-999999999999",
+    emisor_id: "80000000-0",
+    razon_social: "Otro Facturador",
+    ruc: "80000000-0"
+  }
+};
+
 const item: CatalogoItem = {
   id: "44444444-4444-4444-8444-444444444444",
   codigo: "SERV-001",
@@ -198,6 +208,57 @@ describe("catalogo service", () => {
       )
     ).rejects.toMatchObject({
       statusCode: 404
+    });
+  });
+
+  it("keeps search, list, create and update scoped to the current facturador", async () => {
+    const repo = new FakeCatalogoRepository();
+
+    await searchCatalogoItems(otherFacturadorContext, { q: "serv", limit: 5 }, repo);
+    expect(repo.lastSearchInput).toEqual({
+      facturadorId: otherFacturadorContext.facturador.id,
+      q: "serv",
+      limit: 5
+    });
+
+    await listCatalogoItems(otherFacturadorContext, { q: "serv", activo: true, limit: 10, offset: 0 }, repo);
+    expect(repo.lastListInput).toEqual({
+      facturadorId: otherFacturadorContext.facturador.id,
+      q: "serv",
+      activo: true,
+      limit: 10,
+      offset: 0
+    });
+
+    await createCatalogoItem(
+      otherFacturadorContext,
+      {
+        codigo: "OTRO-001",
+        descripcion: "Servicio otro",
+        precio_unitario: 1000
+      },
+      repo
+    );
+    expect(repo.lastCreateInput).toMatchObject({
+      tenantId: otherFacturadorContext.tenant.id,
+      facturadorId: otherFacturadorContext.facturador.id,
+      userId: otherFacturadorContext.user.id
+    });
+
+    await updateCatalogoItem(
+      otherFacturadorContext,
+      item.id,
+      {
+        codigo: "OTRO-002",
+        descripcion: "Servicio otro",
+        precio_unitario: 2000
+      },
+      repo
+    );
+    expect(repo.lastUpdateInput).toMatchObject({
+      itemId: item.id,
+      facturadorId: otherFacturadorContext.facturador.id,
+      userId: otherFacturadorContext.user.id
     });
   });
 

@@ -9,6 +9,8 @@ export function buildFiscalGatewayConfig(
     | "FE_API_TIMEOUT_MS"
     | "FE_API_ENV"
     | "FE_GATEWAY_MODE"
+    | "FE_SEND_EMISSION_PROFILE_CODE"
+    | "FE_SERVICE_NUMBERING"
   >
 ): FiscalGatewayConfig {
   return {
@@ -16,6 +18,8 @@ export function buildFiscalGatewayConfig(
     baseUrl: env.FE_API_BASE_URL.replace(/\/+$/, ""),
     apiKey: env.FE_API_KEY,
     timeoutMs: env.FE_API_TIMEOUT_MS,
-    environment: env.FE_API_ENV
+    environment: env.FE_API_ENV,
+    sendEmissionProfileCode: env.FE_SEND_EMISSION_PROFILE_CODE,
+    serviceNumbering: env.FE_SERVICE_NUMBERING
   };
 }

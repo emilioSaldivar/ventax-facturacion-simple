@@ -6,6 +6,7 @@ import helmet from "helmet";
 import pinoHttp from "pino-http";
 import { env } from "./config/env";
 import { authRouter } from "./modules/auth/auth.routes";
+import { backofficeRouter } from "./modules/backoffice/backoffice.routes";
 import { catalogoRouter } from "./modules/catalogo/catalogo.routes";
 import { clientesRouter } from "./modules/clientes/clientes.routes";
 import { contextRouter } from "./modules/context/context.routes";
@@ -54,6 +55,7 @@ export function createApp() {
   });
 
   app.use(env.API_BASE_PATH, authRouter);
+  app.use(env.API_BASE_PATH, backofficeRouter);
   app.use(env.API_BASE_PATH, contextRouter);
   app.use(env.API_BASE_PATH, clientesRouter);
   app.use(env.API_BASE_PATH, catalogoRouter);

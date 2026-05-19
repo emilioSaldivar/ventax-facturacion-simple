@@ -701,6 +701,8 @@ Comandos preparados:
 bash scripts/deploy.sh
 bash scripts/backup.sh
 bash scripts/restore-backup.sh
+bash scripts/verify-restore.sh
+node scripts/fiscal-smoke.cjs
 ```
 
 Reglas:
@@ -708,9 +710,14 @@ Reglas:
 - `scripts/deploy.sh` construye y levanta el stack definido en `docker-compose.yml`.
 - El puerto HTTP del frontend puede cambiarse con `FRONTEND_HTTP_PORT`; si cambia, tambien deben ajustarse `APP_ORIGIN` y `BACKOFFICE_ORIGIN`.
 - `scripts/backup.sh` genera un backup PostgreSQL en `backups/postgres/` usando `pg_dump` desde el contenedor `postgres`.
+- `scripts/backup.sh` aplica retencion configurable: backups recientes completos por 7 dias y retencion extendida de 30 dias, conservando como minimo el ultimo backup por dia fuera de la ventana reciente.
+- `scripts/install-backup-cron.sh` instala una entrada cron diaria en el host, configurable por `BACKUP_CRON_HOUR`, `BACKUP_CRON_MINUTE` y `BACKUP_CRON_LOG`.
 - `scripts/restore-backup.sh` restaura por defecto el backup mas reciente de `backups/postgres/`; tambien acepta una ruta explicita como primer argumento.
 - El restore es destructivo y requiere confirmacion explicita con `RESTORE_CONFIRM=YES` o `--yes`.
+- `scripts/verify-restore.sh` prueba un dump en una base temporal no destructiva y valida que `schema_migrations` pueda leerse.
+- `scripts/fiscal-smoke.cjs` ejecuta health y, opcionalmente, emision contra FE test usando `FE_SMOKE_RUN=YES`, `FE_API_KEY` y un fixture local no versionado.
 - Los backups locales no se versionan.
+- `docker-compose.yml` limita logs con `DOCKER_LOG_MAX_SIZE` y `DOCKER_LOG_MAX_FILE` para evitar crecimiento sin control en VPS.
 
 ## 14. Variables De Entorno
 
@@ -739,6 +746,13 @@ FE_OUTBOX_WORKER_ENABLED=true
 FE_OUTBOX_WORKER_INTERVAL_MS=5000
 
 LOG_LEVEL=info
+
+DOCKER_LOG_MAX_SIZE=10m
+DOCKER_LOG_MAX_FILE=5
+BACKUP_CRON_HOUR=2
+BACKUP_CRON_MINUTE=15
+BACKUP_KEEP_RECENT_DAYS=7
+BACKUP_KEEP_EXTENDED_DAYS=30
 ```
 
 Configuracion fiscal-operativa de seed/test:

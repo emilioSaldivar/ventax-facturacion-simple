@@ -3,13 +3,19 @@ import {
   FiscalGatewayError,
   type FiscalGateway,
   type FiscalGatewayHealth,
+  type FiscalCancelFacturaRequest,
+  type FiscalCancelFacturaResponse,
   type FiscalEmitFacturaRequest,
   type FiscalEmitFacturaResponse,
+  type FiscalEmitNotaCreditoRequest,
+  type FiscalEmitNotaCreditoResponse,
   type FiscalRefreshStatusRequest,
   type FiscalRefreshStatusResponse
 } from "../src/modules/fiscal-gateway/fiscal-gateway.types";
 import {
   emitFacturaAgainstFiscalGateway,
+  cancelDocumento,
+  emitNotaCreditoTotal,
   getDocumentoById,
   listDocumentos,
   previewFactura,
@@ -22,6 +28,7 @@ import type {
   FacturaQueuedPersistInput,
   FacturaRepository,
   DocumentoResponse,
+  NotaCreditoPersistInput,
   PendingFiscalEmission
 } from "../src/modules/facturas/facturas.types";
 
@@ -56,9 +63,22 @@ const context: OperationalContextResponse = {
   }
 };
 
+const otherFacturadorContext: OperationalContextResponse = {
+  ...context,
+  facturador: {
+    id: "99999999-9999-4999-8999-999999999999",
+    emisor_id: "80000000-0",
+    razon_social: "Otro Facturador",
+    ruc: "80000000-0"
+  }
+};
+
 class FakeFacturaRepository implements FacturaRepository {
   public lastInput: FacturaPersistInput | null = null;
   public existing: DocumentoResponse | null = null;
+  public existingNceByOriginal: DocumentoResponse | null = null;
+  public lastFindByIdempotencyInput: { facturadorId: string; idempotencyKey: string } | null = null;
+  public lastFindNceByOriginalInput: { facturadorId: string; documentoId: string } | null = null;
   public listResponse = { items: [] as DocumentoResponse[], total: 0 };
   public lastListInput: { facturadorId: string; filters: Parameters<FacturaRepository["list"]>[0]["filters"] } | null = null;
   public findByIdResponse: DocumentoResponse | null = null;
@@ -70,14 +90,22 @@ class FakeFacturaRepository implements FacturaRepository {
   public lastFailedInput: Parameters<FacturaRepository["failPendingEmission"]>[0] | null = null;
   public retryResponse: DocumentoResponse | null = null;
   public lastRetryInput: Parameters<FacturaRepository["retryPendingEmission"]>[0] | null = null;
+  public lastCancelInput: Parameters<FacturaRepository["cancelDocumento"]>[0] | null = null;
+  public lastNotaCreditoInput: NotaCreditoPersistInput | null = null;
 
-  async findByIdempotencyKey(): Promise<DocumentoResponse | null> {
+  async findByIdempotencyKey(input: { facturadorId: string; idempotencyKey: string }): Promise<DocumentoResponse | null> {
+    this.lastFindByIdempotencyInput = input;
     return this.existing;
   }
 
   async findById(input: { facturadorId: string; documentoId: string }): Promise<DocumentoResponse | null> {
     this.lastFindByIdInput = input;
     return this.findByIdResponse;
+  }
+
+  async findNotaCreditoByOriginal(input: { facturadorId: string; documentoId: string }): Promise<DocumentoResponse | null> {
+    this.lastFindNceByOriginalInput = input;
+    return this.existingNceByOriginal;
   }
 
   async list(input: { facturadorId: string; filters: Parameters<FacturaRepository["list"]>[0]["filters"] }) {
@@ -154,6 +182,31 @@ class FakeFacturaRepository implements FacturaRepository {
     };
   }
 
+  async createNotaCreditoFromFactura(input: NotaCreditoPersistInput): Promise<DocumentoResponse> {
+    this.lastNotaCreditoInput = input;
+    return {
+      ...input.original,
+      id: "88888888-8888-4888-8888-888888888888",
+      tipo: "NOTA_CREDITO",
+      estado: input.estado,
+      numero_fiscal: input.fiscalResponse?.numero_fiscal ?? null,
+      cdc: input.fiscalResponse?.cdc ?? null,
+      fiscal_document_id: input.fiscalResponse?.fiscal_document_id ?? null,
+      external_ref: input.externalRef,
+      fiscal_status: input.fiscalResponse?.raw ?? input.fiscalError,
+      documento_relacionado_id: input.original.id,
+      nce_motivo: input.motivo,
+      delivery: {
+        ...input.original.delivery,
+        email_status: input.fiscalResponse?.email_status ?? "UNKNOWN",
+        artifacts: {
+          kude_pdf: { available: Boolean(input.fiscalResponse?.cdc), url: null },
+          xml: { available: Boolean(input.fiscalResponse?.cdc), url: null }
+        }
+      }
+    };
+  }
+
   async claimNextPendingEmission(): Promise<PendingFiscalEmission | null> {
     return this.pendingEmission;
   }
@@ -183,17 +236,45 @@ class FakeFacturaRepository implements FacturaRepository {
     this.lastRetryInput = input;
     return this.retryResponse;
   }
+
+  async cancelDocumento(input: Parameters<FacturaRepository["cancelDocumento"]>[0]): Promise<DocumentoResponse | null> {
+    this.lastCancelInput = input;
+    if (!this.findByIdResponse) {
+      return null;
+    }
+
+    return {
+      ...this.findByIdResponse,
+      estado: input.estado,
+      fiscal_status: input.fiscalStatus
+    };
+  }
 }
 
 class FakeFiscalGateway implements FiscalGateway {
   public lastRequest: FiscalEmitFacturaRequest | null = null;
+  public lastNotaCreditoRequest: FiscalEmitNotaCreditoRequest | null = null;
   public lastRefreshRequest: FiscalRefreshStatusRequest | null = null;
+  public lastCancelRequest: FiscalCancelFacturaRequest | null = null;
 
   constructor(
     private readonly response: FiscalEmitFacturaResponse | FiscalGatewayError,
     private readonly refreshResponse: FiscalRefreshStatusResponse | FiscalGatewayError = {
       estado: "EMITIDA",
       raw: { status: { status: "APPROVED" }, refreshed: true }
+    },
+    private readonly cancelResponse: FiscalCancelFacturaResponse | FiscalGatewayError = {
+      event_id: "evt-1",
+      estado: "ANULADA",
+      raw: { event_id: "evt-1", status: "SENT" }
+    },
+    private readonly notaCreditoResponse: FiscalEmitNotaCreditoResponse | FiscalGatewayError = {
+      fiscal_document_id: "nce-doc-1",
+      cdc: "N".repeat(44),
+      numero_fiscal: "001-001-0000002",
+      estado: "EMITIDA",
+      email_status: "DELEGATED",
+      raw: { document_id: "nce-doc-1", status: "APPROVED" }
     }
   ) {}
 
@@ -209,12 +290,28 @@ class FakeFiscalGateway implements FiscalGateway {
     return this.response;
   }
 
+  async emitNotaCredito(request: FiscalEmitNotaCreditoRequest): Promise<FiscalEmitNotaCreditoResponse> {
+    this.lastNotaCreditoRequest = request;
+    if (this.notaCreditoResponse instanceof FiscalGatewayError) {
+      throw this.notaCreditoResponse;
+    }
+    return this.notaCreditoResponse;
+  }
+
   async refreshFacturaStatus(request: FiscalRefreshStatusRequest): Promise<FiscalRefreshStatusResponse> {
     this.lastRefreshRequest = request;
     if (this.refreshResponse instanceof FiscalGatewayError) {
       throw this.refreshResponse;
     }
     return this.refreshResponse;
+  }
+
+  async cancelFactura(request: FiscalCancelFacturaRequest): Promise<FiscalCancelFacturaResponse> {
+    this.lastCancelRequest = request;
+    if (this.cancelResponse instanceof FiscalGatewayError) {
+      throw this.cancelResponse;
+    }
+    return this.cancelResponse;
   }
 
   async getXml() {
@@ -273,6 +370,8 @@ function buildDocumento(overrides: Partial<DocumentoResponse> = {}): DocumentoRe
       total: 11000
     },
     fiscal_status: null,
+    documento_relacionado_id: null,
+    nce_motivo: null,
     delivery: {
       public_url: null,
       whatsapp_url: null,
@@ -387,6 +486,8 @@ describe("facturas service", () => {
             total: 11000
           },
           fiscal_status: null,
+          documento_relacionado_id: null,
+          nce_motivo: null,
           delivery: {
             public_url: null,
             whatsapp_url: null,
@@ -414,6 +515,67 @@ describe("facturas service", () => {
     });
   });
 
+  it("keeps list, detail, refresh, retry and cancel scoped to the current facturador", async () => {
+    const repo = new FakeFacturaRepository();
+    repo.findByIdResponse = buildDocumento({
+      estado: "EMITIDA"
+    });
+    repo.retryResponse = buildDocumento({
+      estado: "EMITIENDO",
+      cdc: null,
+      fiscal_document_id: null,
+      numero_fiscal: null
+    });
+    const gateway = new FakeFiscalGateway(new FiscalGatewayError("UPSTREAM_ERROR", "Should not emit"), {
+      estado: "EMITIDA",
+      raw: { refreshed: true }
+    });
+
+    await listDocumentos(otherFacturadorContext, { limit: 10, offset: 0 }, repo);
+    expect(repo.lastListInput).toEqual({
+      facturadorId: otherFacturadorContext.facturador.id,
+      filters: { limit: 10, offset: 0 }
+    });
+
+    await getDocumentoById(otherFacturadorContext, "66666666-6666-4666-8666-666666666666", repo);
+    expect(repo.lastFindByIdInput).toEqual({
+      facturadorId: otherFacturadorContext.facturador.id,
+      documentoId: "66666666-6666-4666-8666-666666666666"
+    });
+
+    await refreshDocumentoStatus(otherFacturadorContext, "66666666-6666-4666-8666-666666666666", repo, gateway);
+    expect(repo.lastUpdateFiscalStatusInput).toMatchObject({
+      facturadorId: otherFacturadorContext.facturador.id,
+      documentoId: "66666666-6666-4666-8666-666666666666"
+    });
+
+    repo.findByIdResponse = buildDocumento({
+      estado: "PENDIENTE_SIFEN"
+    });
+    await retryDocumentoEmission(otherFacturadorContext, "66666666-6666-4666-8666-666666666666", repo);
+    expect(repo.lastRetryInput).toEqual({
+      facturadorId: otherFacturadorContext.facturador.id,
+      documentoId: "66666666-6666-4666-8666-666666666666",
+      requestedBy: otherFacturadorContext.user.id
+    });
+
+    repo.findByIdResponse = buildDocumento({
+      estado: "EMITIDA"
+    });
+    await cancelDocumento(
+      otherFacturadorContext,
+      "66666666-6666-4666-8666-666666666666",
+      { motivo: "Solicitud del cliente" },
+      repo,
+      gateway
+    );
+    expect(repo.lastCancelInput).toMatchObject({
+      facturadorId: otherFacturadorContext.facturador.id,
+      documentoId: "66666666-6666-4666-8666-666666666666",
+      requestedBy: otherFacturadorContext.user.id
+    });
+  });
+
   it("gets document detail within the authenticated facturador scope", async () => {
     const repo = new FakeFacturaRepository();
     repo.findByIdResponse = {
@@ -436,6 +598,8 @@ describe("facturas service", () => {
         total: 11000
       },
       fiscal_status: null,
+      documento_relacionado_id: null,
+      nce_motivo: null,
       delivery: {
         public_url: null,
         whatsapp_url: null,
@@ -499,6 +663,234 @@ describe("facturas service", () => {
       code: "CONFLICT"
     });
     expect(gateway.lastRefreshRequest).toBeNull();
+  });
+
+  it("cancels an emitted invoice through the fiscal gateway", async () => {
+    const repo = new FakeFacturaRepository();
+    repo.findByIdResponse = buildDocumento({
+      estado: "EMITIDA",
+      cdc: "A".repeat(44)
+    });
+    const gateway = new FakeFiscalGateway(new FiscalGatewayError("UPSTREAM_ERROR", "Should not emit"));
+
+    const result = await cancelDocumento(
+      context,
+      "66666666-6666-4666-8666-666666666666",
+      { motivo: "Error en datos del receptor" },
+      repo,
+      gateway
+    );
+
+    expect(result.estado).toBe("ANULADA");
+    expect(gateway.lastCancelRequest).toEqual({
+      emisor_id: context.facturador.emisor_id,
+      cdc: "A".repeat(44),
+      motivo: "Error en datos del receptor"
+    });
+    expect(repo.lastCancelInput).toEqual({
+      facturadorId: context.facturador.id,
+      documentoId: "66666666-6666-4666-8666-666666666666",
+      requestedBy: context.user.id,
+      estado: "ANULADA",
+      fiscalStatus: {
+        event_id: "evt-1",
+        status: "SENT",
+        cancelacion_motivo: "Error en datos del receptor"
+      }
+    });
+  });
+
+  it("rejects cancellation for non-emitted or CDC-less documents", async () => {
+    const repo = new FakeFacturaRepository();
+    repo.findByIdResponse = buildDocumento({
+      estado: "PENDIENTE_SIFEN",
+      cdc: null
+    });
+    const gateway = new FakeFiscalGateway(new FiscalGatewayError("UPSTREAM_ERROR", "Should not emit"));
+
+    await expect(
+      cancelDocumento(context, "66666666-6666-4666-8666-666666666666", { motivo: "Error" }, repo, gateway)
+    ).rejects.toMatchObject({
+      statusCode: 409,
+      code: "CONFLICT"
+    });
+    expect(gateway.lastCancelRequest).toBeNull();
+  });
+
+  it("maps fiscal cancellation gateway failures to upstream errors", async () => {
+    const repo = new FakeFacturaRepository();
+    repo.findByIdResponse = buildDocumento({
+      estado: "EMITIDA",
+      cdc: "A".repeat(44)
+    });
+    const gateway = new FakeFiscalGateway(
+      new FiscalGatewayError("UPSTREAM_ERROR", "Should not emit"),
+      {
+        estado: "EMITIDA",
+        raw: {}
+      },
+      new FiscalGatewayError("TIMEOUT", "Timeout fiscal")
+    );
+
+    await expect(
+      cancelDocumento(context, "66666666-6666-4666-8666-666666666666", { motivo: "Error" }, repo, gateway)
+    ).rejects.toMatchObject({
+      statusCode: 504,
+      code: "INTERNAL_ERROR"
+    });
+  });
+
+  it("emits a total credit note from an eligible invoice", async () => {
+    const repo = new FakeFacturaRepository();
+    repo.findByIdResponse = buildDocumento({
+      estado: "EMITIDA",
+      cdc: "A".repeat(44),
+      numero_fiscal: "001-001-0000001",
+      items: [
+        {
+          catalogo_item_id: null,
+          line_no: 1,
+          codigo: "SERV",
+          descripcion: "Servicio",
+          cantidad: 1,
+          precio_unitario: 11000,
+          iva_tipo: "IVA_10",
+          subtotal: 11000,
+          base_imponible: 10000,
+          iva_monto: 1000
+        }
+      ]
+    });
+    const gateway = new FakeFiscalGateway(new FiscalGatewayError("UPSTREAM_ERROR", "Should not emit"));
+
+    const result = await emitNotaCreditoTotal(
+      context,
+      "66666666-6666-4666-8666-666666666666",
+      { motivo: "Devolucion total" },
+      repo,
+      gateway,
+      { idempotencyKey: "nce-idem-1" }
+    );
+
+    expect(result.tipo).toBe("NOTA_CREDITO");
+    expect(result.estado).toBe("EMITIDA");
+    expect(result.documento_relacionado_id).toBe("66666666-6666-4666-8666-666666666666");
+    expect(gateway.lastNotaCreditoRequest).toMatchObject({
+      external_ref: expect.stringMatching(/^nce_/),
+      motivo: "Devolucion total",
+      factura_referencia: {
+        documento_id: "66666666-6666-4666-8666-666666666666",
+        cdc: "A".repeat(44),
+        numero_fiscal: "001-001-0000001"
+      },
+      totals: {
+        total: 11000
+      }
+    });
+    expect(repo.lastNotaCreditoInput).toMatchObject({
+      facturadorId: context.facturador.id,
+      userId: context.user.id,
+      motivo: "Devolucion total",
+      idempotencyKey: "nce-idem-1",
+      estado: "EMITIDA"
+    });
+  });
+
+  it("rejects credit note when invoice is not eligible or already credited", async () => {
+    const repo = new FakeFacturaRepository();
+    repo.findByIdResponse = buildDocumento({
+      estado: "ANULADA"
+    });
+    const gateway = new FakeFiscalGateway(new FiscalGatewayError("UPSTREAM_ERROR", "Should not emit"));
+
+    await expect(
+      emitNotaCreditoTotal(context, "66666666-6666-4666-8666-666666666666", { motivo: "Error" }, repo, gateway, {
+        idempotencyKey: "nce-idem-2"
+      })
+    ).rejects.toMatchObject({
+      statusCode: 409,
+      code: "CONFLICT"
+    });
+    expect(gateway.lastNotaCreditoRequest).toBeNull();
+
+    repo.findByIdResponse = buildDocumento({
+      estado: "EMITIDA",
+      cdc: "A".repeat(44)
+    });
+    repo.existingNceByOriginal = buildDocumento({
+      id: "88888888-8888-4888-8888-888888888888",
+      tipo: "NOTA_CREDITO",
+      documento_relacionado_id: "66666666-6666-4666-8666-666666666666"
+    });
+
+    await expect(
+      emitNotaCreditoTotal(context, "66666666-6666-4666-8666-666666666666", { motivo: "Error" }, repo, gateway, {
+        idempotencyKey: "nce-idem-3"
+      })
+    ).rejects.toMatchObject({
+      statusCode: 409,
+      code: "CONFLICT"
+    });
+  });
+
+  it("returns existing credit note by idempotency key before creating another NCE", async () => {
+    const repo = new FakeFacturaRepository();
+    repo.existing = buildDocumento({
+      id: "88888888-8888-4888-8888-888888888888",
+      tipo: "NOTA_CREDITO",
+      documento_relacionado_id: "66666666-6666-4666-8666-666666666666"
+    });
+    const gateway = new FakeFiscalGateway(new FiscalGatewayError("UPSTREAM_ERROR", "Should not emit"));
+
+    const result = await emitNotaCreditoTotal(
+      context,
+      "66666666-6666-4666-8666-666666666666",
+      { motivo: "Devolucion total" },
+      repo,
+      gateway,
+      { idempotencyKey: "nce-idem-1" }
+    );
+
+    expect(result.id).toBe("88888888-8888-4888-8888-888888888888");
+    expect(repo.lastFindByIdInput).toBeNull();
+    expect(gateway.lastNotaCreditoRequest).toBeNull();
+  });
+
+  it("stores recoverable fiscal errors when credit note emission times out", async () => {
+    const repo = new FakeFacturaRepository();
+    repo.findByIdResponse = buildDocumento({
+      estado: "EMITIDA",
+      cdc: "A".repeat(44)
+    });
+    const gateway = new FakeFiscalGateway(
+      new FiscalGatewayError("UPSTREAM_ERROR", "Should not emit"),
+      {
+        estado: "EMITIDA",
+        raw: {}
+      },
+      {
+        event_id: "evt-1",
+        estado: "ANULADA",
+        raw: {}
+      },
+      new FiscalGatewayError("TIMEOUT", "Timeout fiscal")
+    );
+
+    const result = await emitNotaCreditoTotal(
+      context,
+      "66666666-6666-4666-8666-666666666666",
+      { motivo: "Devolucion total" },
+      repo,
+      gateway,
+      { idempotencyKey: "nce-idem-4" }
+    );
+
+    expect(result.estado).toBe("PENDIENTE_SIFEN");
+    expect(repo.lastNotaCreditoInput?.fiscalError).toMatchObject({
+      code: "TIMEOUT",
+      recoverable: true,
+      suggested_action: "REFRESH_OR_CONTACT_SUPPORT"
+    });
   });
 
   it("retries recoverable queued fiscal emissions", async () => {
@@ -702,6 +1094,39 @@ describe("facturas service", () => {
     });
   });
 
+  it("keeps queued emission recoverable when fiscal gateway returns a temporary upstream error", async () => {
+    const repo = new FakeFacturaRepository();
+    repo.pendingEmission = {
+      outboxId: "88888888-8888-4888-8888-888888888888",
+      documentoId: "77777777-7777-4777-8777-777777777777",
+      facturadorId: context.facturador.id,
+      fiscalRequest: {
+        external_ref: "fac-queued",
+        condicion_venta: "CONTADO",
+        facturador: context.facturador,
+        fiscal_context: context.fiscal_context,
+        cliente: emitInput.cliente,
+        items: previewFactura(context, emitInput).items,
+        totals: previewFactura(context, emitInput).totals
+      }
+    };
+    const gateway = new FakeFiscalGateway(new FiscalGatewayError("UPSTREAM_ERROR", "SIFEN no disponible"));
+
+    const result = await processNextQueuedFiscalEmission(repo, gateway);
+
+    expect(result?.estado).toBe("ERROR_TEMPORAL");
+    expect(repo.lastFailedInput).toMatchObject({
+      estado: "ERROR_TEMPORAL",
+      error: {
+        code: "UPSTREAM_ERROR",
+        message: "SIFEN no disponible",
+        recoverable: true,
+        retry_after_seconds: 60,
+        suggested_action: "RETRY_EMISSION"
+      }
+    });
+  });
+
   it("emits credit invoice without creating collection state", async () => {
     const repo = new FakeFacturaRepository();
     const gateway = new FakeFiscalGateway({
@@ -764,6 +1189,32 @@ describe("facturas service", () => {
     expect(firstRepo.lastInput?.externalRef).toBe(secondRepo.lastInput?.externalRef);
   });
 
+  it("generates different external_ref for the same idempotency key across facturadores", async () => {
+    const firstRepo = new FakeFacturaRepository();
+    const secondRepo = new FakeFacturaRepository();
+    const gateway = new FakeFiscalGateway({
+      fiscal_document_id: "mock-fac",
+      cdc: "A".repeat(44),
+      numero_fiscal: "001-001-0000001",
+      estado: "EMITIDA",
+      email_status: "DELEGATED",
+      raw: { mode: "mock" }
+    });
+
+    await emitFacturaAgainstFiscalGateway(context, emitInput, firstRepo, gateway, {
+      idempotencyKey: "idem-cross-facturador"
+    });
+    await emitFacturaAgainstFiscalGateway(otherFacturadorContext, emitInput, secondRepo, gateway, {
+      idempotencyKey: "idem-cross-facturador"
+    });
+
+    expect(firstRepo.lastInput?.externalRef).not.toBe(secondRepo.lastInput?.externalRef);
+    expect(secondRepo.lastFindByIdempotencyInput).toEqual({
+      facturadorId: otherFacturadorContext.facturador.id,
+      idempotencyKey: "idem-cross-facturador"
+    });
+  });
+
   it("persists timeout emissions as PENDIENTE_SIFEN", async () => {
     const repo = new FakeFacturaRepository();
     const gateway = new FakeFiscalGateway(new FiscalGatewayError("TIMEOUT", "Timeout fiscal"));
@@ -799,6 +1250,8 @@ describe("facturas service", () => {
         total: 0
       },
       fiscal_status: null,
+      documento_relacionado_id: null,
+      nce_motivo: null,
       delivery: {
         public_url: null,
         whatsapp_url: null,
@@ -819,5 +1272,32 @@ describe("facturas service", () => {
     expect(result.id).toBe("66666666-6666-4666-8666-666666666666");
     expect(repo.lastInput).toBeNull();
     expect(gateway.lastRequest).toBeNull();
+  });
+
+  it("returns existing queued document for repeated idempotency key without enqueueing again", async () => {
+    const repo = new FakeFacturaRepository();
+    repo.existing = buildDocumento({
+      id: "77777777-7777-4777-8777-777777777777",
+      estado: "EMITIENDO",
+      numero_fiscal: null,
+      cdc: null,
+      fiscal_document_id: null,
+      external_ref: "fac-existing-queued"
+    });
+
+    const result = await enqueueFacturaEmission(context, emitInput, repo, {
+      idempotencyKey: "idem-async-existing"
+    });
+
+    expect(result).toMatchObject({
+      id: "77777777-7777-4777-8777-777777777777",
+      estado: "EMITIENDO",
+      external_ref: "fac-existing-queued"
+    });
+    expect(repo.lastQueuedInput).toBeNull();
+    expect(repo.lastFindByIdempotencyInput).toEqual({
+      facturadorId: context.facturador.id,
+      idempotencyKey: "idem-async-existing"
+    });
   });
 });

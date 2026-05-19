@@ -6,6 +6,20 @@
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#00A7C8",
-  "icons": []
+  "icons": [
+    {
+      "src": "/app/icons/ventax-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/app/icons/ventax-maskable.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ],
+  "categories": ["business", "productivity"],
+  "description": "Operacion mobile-first para emitir y entregar comprobantes Ventax."
 }
-

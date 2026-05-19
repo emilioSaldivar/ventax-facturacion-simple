@@ -1,6 +1,11 @@
 import type { TaxCalculatedLine, TaxTotals, TipoIva } from "@facturacion-simple/shared";
 import type { DocumentoIdentidadTipo } from "../clientes/clientes.types";
-import type { FiscalEmitFacturaRequest, FiscalEmitFacturaResponse } from "../fiscal-gateway/fiscal-gateway.types";
+import type {
+  FiscalEmitFacturaRequest,
+  FiscalEmitFacturaResponse,
+  FiscalEmitNotaCreditoRequest,
+  FiscalEmitNotaCreditoResponse
+} from "../fiscal-gateway/fiscal-gateway.types";
 
 export const condicionesVenta = ["CONTADO", "CREDITO"] as const;
 export type CondicionVenta = (typeof condicionesVenta)[number];
@@ -80,6 +85,8 @@ export interface DocumentoResponse {
   items: FacturaItemPreview[];
   totals: TaxTotals;
   fiscal_status: Record<string, unknown> | null;
+  documento_relacionado_id: string | null;
+  nce_motivo: string | null;
   delivery: DeliverySummary;
   created_at: string | null;
 }
@@ -124,6 +131,20 @@ export interface FacturaQueuedPersistInput {
   fiscalRequest: FiscalEmitFacturaRequest;
 }
 
+export interface NotaCreditoPersistInput {
+  tenantId: string;
+  facturadorId: string;
+  userId: string;
+  original: DocumentoResponse;
+  motivo: string;
+  externalRef: string;
+  idempotencyKey?: string;
+  fiscalRequest: FiscalEmitNotaCreditoRequest;
+  fiscalResponse: FiscalEmitNotaCreditoResponse | null;
+  fiscalError: Record<string, unknown> | null;
+  estado: DocumentoEstado;
+}
+
 export interface PendingFiscalEmission {
   outboxId: string;
   documentoId: string;
@@ -134,6 +155,7 @@ export interface PendingFiscalEmission {
 export interface FacturaRepository {
   findByIdempotencyKey(input: { facturadorId: string; idempotencyKey: string }): Promise<DocumentoResponse | null>;
   findById(input: { facturadorId: string; documentoId: string }): Promise<DocumentoResponse | null>;
+  findNotaCreditoByOriginal(input: { facturadorId: string; documentoId: string }): Promise<DocumentoResponse | null>;
   list(input: { facturadorId: string; filters: DocumentoListFilters }): Promise<DocumentoListResponse>;
   updateFiscalStatus(input: {
     facturadorId: string;
@@ -143,6 +165,7 @@ export interface FacturaRepository {
   }): Promise<DocumentoResponse | null>;
   createFromEmission(input: FacturaPersistInput): Promise<DocumentoResponse>;
   createQueuedEmission(input: FacturaQueuedPersistInput): Promise<DocumentoResponse>;
+  createNotaCreditoFromFactura(input: NotaCreditoPersistInput): Promise<DocumentoResponse>;
   claimNextPendingEmission(): Promise<PendingFiscalEmission | null>;
   completePendingEmission(input: {
     outboxId: string;
@@ -160,5 +183,12 @@ export interface FacturaRepository {
     facturadorId: string;
     documentoId: string;
     requestedBy: string;
+  }): Promise<DocumentoResponse | null>;
+  cancelDocumento(input: {
+    facturadorId: string;
+    documentoId: string;
+    requestedBy: string;
+    estado: "ANULADA" | "PENDIENTE_SIFEN";
+    fiscalStatus: Record<string, unknown>;
   }): Promise<DocumentoResponse | null>;
 }

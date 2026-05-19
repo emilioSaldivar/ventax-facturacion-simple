@@ -8,7 +8,9 @@ import { validateRequest } from "../../shared/validation/validate-request";
 import { fiscalGateway } from "../fiscal-gateway/fiscal-gateway.client";
 import { facturasRepository } from "./facturas.repository";
 import {
+  cancelDocumento,
   enqueueFacturaEmission,
+  emitNotaCreditoTotal,
   getDocumentoById,
   listDocumentos,
   previewFactura,
@@ -66,6 +68,14 @@ const documentoParamsSchema = z.object({
   documentoId: z.string().uuid()
 });
 
+const cancelacionSchema = z.object({
+  motivo: z.string().trim().min(1).max(150)
+});
+
+const notaCreditoSchema = z.object({
+  motivo: z.string().trim().min(1).max(300)
+});
+
 export const facturasRouter = Router();
 
 facturasRouter.get("/facturas", requireAuth, validateRequest("query", documentoListQuerySchema), async (req, res, next) => {
@@ -112,6 +122,41 @@ facturasRouter.post(
       const context = await getOperationalContext(req.user!.id, operationalContextRepository);
       const result = await retryDocumentoEmission(context, String(req.params.documentoId), facturasRepository);
       res.json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+facturasRouter.post(
+  "/facturas/:documentoId/cancelar",
+  requireAuth,
+  validateRequest("params", documentoParamsSchema),
+  validateRequest("body", cancelacionSchema),
+  async (req, res, next) => {
+    try {
+      const context = await getOperationalContext(req.user!.id, operationalContextRepository);
+      const result = await cancelDocumento(context, String(req.params.documentoId), req.body, facturasRepository, fiscalGateway);
+      res.json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+facturasRouter.post(
+  "/facturas/:documentoId/nota-credito",
+  requireAuth,
+  validateRequest("params", documentoParamsSchema),
+  validateRequest("body", notaCreditoSchema),
+  async (req, res, next) => {
+    try {
+      const context = await getOperationalContext(req.user!.id, operationalContextRepository);
+      const idempotencyKey = parseIdempotencyKey(req.get("idempotency-key"));
+      const result = await emitNotaCreditoTotal(context, String(req.params.documentoId), req.body, facturasRepository, fiscalGateway, {
+        idempotencyKey
+      });
+      res.status(201).json(result);
     } catch (error) {
       next(error);
     }

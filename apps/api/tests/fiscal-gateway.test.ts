@@ -94,6 +94,30 @@ describe("fiscal gateway", () => {
     expect(first.email_status).toBe("DELEGATED");
   });
 
+  it("returns deterministic mock cancellation data", async () => {
+    const gateway = new MockFiscalGateway({
+      mode: "mock",
+      baseUrl: "https://fe-api.ventax.app/fcws",
+      timeoutMs: 20000,
+      environment: "test",
+    });
+
+    const first = await gateway.cancelFactura({
+      emisor_id: request.facturador.emisor_id,
+      cdc: "C".repeat(44),
+      motivo: "Error en datos del receptor"
+    });
+    const second = await gateway.cancelFactura({
+      emisor_id: request.facturador.emisor_id,
+      cdc: "C".repeat(44),
+      motivo: "Error en datos del receptor"
+    });
+
+    expect(first).toEqual(second);
+    expect(first.estado).toBe("ANULADA");
+    expect(first.event_id).toMatch(/^mock-cancel-/);
+  });
+
   it("emits CONTADO payload to real fiscal backend and maps approved response", async () => {
     const calls: Array<{ url: string; init: RequestInit; payload: Record<string, unknown> }> = [];
     const gateway = new RealFiscalGateway({
@@ -166,7 +190,8 @@ describe("fiscal gateway", () => {
       },
       receptor: {
         tipoDocumento: "RUC",
-        docNro: "1234567-8",
+        docNro: "1234567",
+        dv: "8",
         razonSocial: "Cliente"
       },
       condicionOperacion: {
@@ -188,6 +213,49 @@ describe("fiscal gateway", () => {
       }
     });
     expect(calls[0]?.payload).not.toHaveProperty("condicionOperacion.credito");
+  });
+
+  it("can omit FE emission profile and let FE service assign numbering", async () => {
+    const calls: Array<{ payload: Record<string, unknown> }> = [];
+    const gateway = new RealFiscalGateway({
+      mode: "real",
+      baseUrl: "https://fe-api.ventax.app/fcws",
+      apiKey: "secret",
+      timeoutMs: 20000,
+      environment: "test",
+      sendEmissionProfileCode: false,
+      serviceNumbering: true
+    });
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init: RequestInit) => {
+        calls.push({ payload: JSON.parse(String(init.body)) as Record<string, unknown> });
+        return new Response(
+          JSON.stringify({
+            document_id: "doc-service-numbering",
+            cdc: "S".repeat(44),
+            nro_factura: "001-001-0002104",
+            status: "APPROVED"
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        );
+      })
+    );
+
+    await gateway.emitFactura(request);
+
+    expect(calls[0]?.payload).not.toHaveProperty("emission_profile_code");
+    expect(calls[0]?.payload).toMatchObject({
+      timbrado: {
+        documentoNro: null
+      },
+      numbering: {
+        mode: "ONLINE",
+        authority: "SERVICE",
+        requested_document_number: null
+      }
+    });
   });
 
   it("emits CREDITO payload without payments or collection schedule", async () => {
@@ -243,6 +311,88 @@ describe("fiscal gateway", () => {
     expect(calls[0]?.payload).not.toHaveProperty("condicionOperacion.pagos");
     expect(calls[0]?.payload).not.toHaveProperty("cobros");
     expect(calls[0]?.payload).not.toHaveProperty("cuotas");
+  });
+
+  it("emits NCE payload referencing the original electronic invoice", async () => {
+    const calls: Array<{ url: string; payload: Record<string, unknown> }> = [];
+    const gateway = new RealFiscalGateway({
+      mode: "real",
+      baseUrl: "https://fe-api.ventax.app/fcws",
+      apiKey: "secret",
+      timeoutMs: 20000,
+      environment: "test",
+    });
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init: RequestInit) => {
+        calls.push({ url, payload: JSON.parse(String(init.body)) as Record<string, unknown> });
+
+        return new Response(
+          JSON.stringify({
+            document_id: "nce-doc-1",
+            cdc: "N".repeat(44),
+            nro_documento: "001-002-0000010",
+            status: "APPROVED"
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        );
+      })
+    );
+
+    const result = await gateway.emitNotaCredito({
+      external_ref: "nce_123",
+      facturador: request.facturador,
+      fiscal_context: request.fiscal_context,
+      cliente: request.cliente,
+      items: request.items,
+      totals: request.totals,
+      motivo: "Devolucion total",
+      factura_referencia: {
+        documento_id: "66666666-6666-4666-8666-666666666666",
+        cdc: "F".repeat(44),
+        numero_fiscal: "001-002-0000007"
+      }
+    });
+
+    expect(result).toMatchObject({
+      fiscal_document_id: "nce-doc-1",
+      cdc: "N".repeat(44),
+      numero_fiscal: "001-002-0000010",
+      estado: "EMITIDA"
+    });
+    expect(calls[0]?.url).toBe("https://fe-api.ventax.app/fcws/nota-credito");
+    expect(calls[0]?.payload).toMatchObject({
+      emisor_id: request.facturador.emisor_id,
+      actividadEconomicaCodigo: "82110",
+      emission_profile_code: "SERV",
+      client_reference: {
+        entity_type: "nota_credito_operativa",
+        entity_id: "nce_123",
+        idempotency_key: "nce_123"
+      },
+      motivo: {
+        codigo: 1,
+        descripcion: "Devolucion total"
+      },
+      referencia: {
+        tipo: "ELECTRONICO",
+        cdc: "F".repeat(44)
+      },
+      items: [
+        {
+          codigo: "L001",
+          descripcion: "Servicio",
+          cantidad: 1,
+          precioUnitario: 11000,
+          ivaTipo: "IVA10"
+        }
+      ],
+      envio: {
+        mode: "SYNC",
+        sendNow: true
+      }
+    });
   });
 
   it("derives fiscal number from resolved timbrado when nro_factura is omitted", async () => {
@@ -315,5 +465,56 @@ describe("fiscal gateway", () => {
       refreshed: true
     });
     expect(calls[0]).toBe(`https://fe-api.ventax.app/fcws/consultar/comprobanteSifen/${"F".repeat(44)}?env=test&refresh=true`);
+  });
+
+  it("sends cancellation event to real fiscal backend", async () => {
+    const calls: Array<{ url: string; init: RequestInit; payload: Record<string, unknown> }> = [];
+    const gateway = new RealFiscalGateway({
+      mode: "real",
+      baseUrl: "https://fe-api.ventax.app/fcws",
+      apiKey: "secret",
+      timeoutMs: 20000,
+      environment: "test",
+    });
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init: RequestInit) => {
+        const payload = JSON.parse(String(init.body)) as Record<string, unknown>;
+        calls.push({ url, init, payload });
+
+        return new Response(
+          JSON.stringify({
+            event_id: "evt-real-1",
+            status: "SENT",
+            sifen: { code: "0300" }
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        );
+      })
+    );
+
+    const result = await gateway.cancelFactura({
+      emisor_id: request.facturador.emisor_id,
+      cdc: "C".repeat(44),
+      motivo: "Error en datos del receptor"
+    });
+
+    expect(result).toMatchObject({
+      event_id: "evt-real-1",
+      estado: "ANULADA"
+    });
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.url).toBe("https://fe-api.ventax.app/fcws/evento/cancelar");
+    expect(calls[0]?.init.headers).toMatchObject({
+      accept: "application/json",
+      "content-type": "application/json",
+      "x-api-key": "secret"
+    });
+    expect(calls[0]?.payload).toEqual({
+      emisor_id: request.facturador.emisor_id,
+      cdc: "C".repeat(44),
+      motivo: "Error en datos del receptor"
+    });
   });
 });

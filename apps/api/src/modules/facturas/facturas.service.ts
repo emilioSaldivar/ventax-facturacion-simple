@@ -2,7 +2,14 @@ import crypto from "node:crypto";
 import { calculateDocumentTotals, type TaxInputLine } from "@facturacion-simple/shared";
 import { HttpError } from "../../shared/errors/http-error";
 import type { OperationalContextResponse } from "../context/context.types";
-import { FiscalGatewayError, type FiscalGateway, type FiscalEmitFacturaRequest, type FiscalEmitFacturaResponse } from "../fiscal-gateway/fiscal-gateway.types";
+import {
+  FiscalGatewayError,
+  type FiscalGateway,
+  type FiscalEmitFacturaRequest,
+  type FiscalEmitFacturaResponse,
+  type FiscalEmitNotaCreditoRequest,
+  type FiscalEmitNotaCreditoResponse
+} from "../fiscal-gateway/fiscal-gateway.types";
 import type {
   DocumentoListFilters,
   DocumentoListResponse,
@@ -158,6 +165,140 @@ export async function retryDocumentoEmission(
   return retried;
 }
 
+export async function cancelDocumento(
+  context: OperationalContextResponse,
+  documentoId: string,
+  input: { motivo: string },
+  repository: FacturaRepository,
+  gateway: FiscalGateway
+): Promise<DocumentoResponse> {
+  const motivo = input.motivo.trim();
+  if (!motivo) {
+    throw new HttpError(400, "VALIDATION_ERROR", "Motivo de cancelacion requerido.");
+  }
+
+  const documento = await getDocumentoById(context, documentoId, repository);
+
+  if (documento.tipo !== "FACTURA" || documento.estado !== "EMITIDA" || !documento.cdc) {
+    throw new HttpError(409, "CONFLICT", "Documento no elegible para cancelacion.");
+  }
+
+  try {
+    const cancelled = await gateway.cancelFactura({
+      emisor_id: context.facturador.emisor_id,
+      cdc: documento.cdc,
+      motivo
+    });
+
+    const updated = await repository.cancelDocumento({
+      facturadorId: context.facturador.id,
+      documentoId,
+      requestedBy: context.user.id,
+      estado: cancelled.estado,
+      fiscalStatus: {
+        ...cancelled.raw,
+        event_id: cancelled.event_id,
+        cancelacion_motivo: motivo
+      }
+    });
+
+    if (!updated) {
+      throw new HttpError(404, "NOT_FOUND", "Documento no encontrado.");
+    }
+
+    return updated;
+  } catch (error) {
+    if (error instanceof FiscalGatewayError) {
+      throw new HttpError(
+        error.code === "TIMEOUT" ? 504 : 502,
+        "INTERNAL_ERROR",
+        error.code === "TIMEOUT" ? "Timeout al cancelar documento fiscal." : "No se pudo cancelar documento fiscal.",
+        {
+          gateway_code: error.code,
+          details: error.details ?? null
+        }
+      );
+    }
+    throw error;
+  }
+}
+
+export async function emitNotaCreditoTotal(
+  context: OperationalContextResponse,
+  facturaId: string,
+  input: { motivo: string },
+  repository: FacturaRepository,
+  gateway: FiscalGateway,
+  options: { idempotencyKey?: string } = {}
+): Promise<DocumentoResponse> {
+  const motivo = input.motivo.trim();
+  if (!motivo) {
+    throw new HttpError(400, "VALIDATION_ERROR", "Motivo de nota de credito requerido.");
+  }
+
+  if (options.idempotencyKey) {
+    const existing = await repository.findByIdempotencyKey({
+      facturadorId: context.facturador.id,
+      idempotencyKey: options.idempotencyKey
+    });
+
+    if (existing) {
+      return existing;
+    }
+  }
+
+  const original = await getDocumentoById(context, facturaId, repository);
+  if (original.tipo !== "FACTURA" || original.estado !== "EMITIDA" || !original.cdc) {
+    throw new HttpError(409, "CONFLICT", "Factura no elegible para nota de credito.");
+  }
+
+  const existingByOriginal = await repository.findNotaCreditoByOriginal({
+    facturadorId: context.facturador.id,
+    documentoId: facturaId
+  });
+  if (existingByOriginal) {
+    throw new HttpError(409, "CONFLICT", "La factura ya tiene una nota de credito total.");
+  }
+
+  const externalRef = buildNotaCreditoExternalRef(context, facturaId, options.idempotencyKey);
+  const fiscalRequest = buildFiscalNotaCreditoRequest(context, original, motivo, externalRef);
+  let fiscalResponse: FiscalEmitNotaCreditoResponse | null = null;
+  let fiscalError: Record<string, unknown> | null = null;
+  let estado: DocumentoEstado = "EMITIENDO";
+
+  try {
+    fiscalResponse = await gateway.emitNotaCredito(fiscalRequest);
+    estado = fiscalResponse.estado;
+  } catch (error) {
+    if (error instanceof FiscalGatewayError) {
+      estado = error.code === "TIMEOUT" ? "PENDIENTE_SIFEN" : "ERROR_TEMPORAL";
+      fiscalError = {
+        code: error.code,
+        message: error.message,
+        details: error.details ?? null,
+        recoverable: true,
+        suggested_action: error.code === "TIMEOUT" ? "REFRESH_OR_CONTACT_SUPPORT" : "RETRY_NCE"
+      };
+    } else {
+      throw error;
+    }
+  }
+
+  return repository.createNotaCreditoFromFactura({
+    tenantId: context.tenant.id,
+    facturadorId: context.facturador.id,
+    userId: context.user.id,
+    original,
+    motivo,
+    externalRef,
+    idempotencyKey: options.idempotencyKey,
+    fiscalRequest,
+    fiscalResponse,
+    fiscalError,
+    estado
+  });
+}
+
 export async function emitFacturaAgainstFiscalGateway(
   context: OperationalContextResponse,
   input: FacturaPreviewInput,
@@ -303,8 +444,40 @@ function buildFiscalEmitRequest(
   };
 }
 
+function buildFiscalNotaCreditoRequest(
+  context: OperationalContextResponse,
+  original: DocumentoResponse,
+  motivo: string,
+  externalRef: string
+): FiscalEmitNotaCreditoRequest {
+  if (!original.cdc) {
+    throw new HttpError(409, "CONFLICT", "Factura sin CDC fiscal para nota de credito.");
+  }
+
+  return {
+    external_ref: externalRef,
+    facturador: context.facturador,
+    fiscal_context: context.fiscal_context,
+    cliente: original.cliente,
+    items: original.items,
+    totals: original.totals,
+    motivo,
+    factura_referencia: {
+      documento_id: original.id,
+      cdc: original.cdc,
+      numero_fiscal: original.numero_fiscal
+    }
+  };
+}
+
 function buildExternalRef(context: OperationalContextResponse, idempotencyKey?: string): string {
   return idempotencyKey
     ? `fac_${crypto.createHash("sha256").update(`${context.facturador.id}:${idempotencyKey}`).digest("hex").slice(0, 32)}`
     : `fac_${crypto.randomUUID()}`;
+}
+
+function buildNotaCreditoExternalRef(context: OperationalContextResponse, facturaId: string, idempotencyKey?: string): string {
+  return idempotencyKey
+    ? `nce_${crypto.createHash("sha256").update(`${context.facturador.id}:${idempotencyKey}`).digest("hex").slice(0, 32)}`
+    : `nce_${crypto.createHash("sha256").update(`${context.facturador.id}:${facturaId}:${crypto.randomUUID()}`).digest("hex").slice(0, 32)}`;
 }
