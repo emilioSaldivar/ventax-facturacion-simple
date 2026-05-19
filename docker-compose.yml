@@ -25,6 +25,8 @@ services:
       context: .
       dockerfile: infra/docker/api.Dockerfile
     logging: *default-logging
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     env_file:
       - .env
     environment:
@@ -49,6 +51,8 @@ services:
       context: .
       dockerfile: infra/docker/api.Dockerfile
     logging: *default-logging
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     env_file:
       - .env
     environment:

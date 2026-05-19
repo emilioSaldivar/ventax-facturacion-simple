@@ -115,6 +115,16 @@ La plantilla usa el certificado Cloudflare existente del VPS:
 
 Si el dominio operativo no es `factura.ventax.app`, reemplazar `server_name` y las variables publicas del `.env` por el subdominio real.
 
+## Backend Fiscal Local
+
+Cuando `facturacion-electronica` corre en el mismo VPS, configurar el SaaS para consumirlo por el host Docker en vez del dominio publico:
+
+```bash
+FE_API_BASE_URL=http://host.docker.internal:9988/fcws
+```
+
+`docker-compose.yml` registra `host.docker.internal:host-gateway` para `api` y `migrate`. Esto evita que las llamadas internas pasen por Cloudflare o por reglas de geolocalizacion.
+
 ## Smoke Fiscal FE Test
 
 El smoke fiscal real es opt-in y nunca debe versionar `FE_API_KEY` ni fixtures con datos sensibles.

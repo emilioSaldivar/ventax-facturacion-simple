@@ -141,6 +141,7 @@ Notas:
 
 - `FE_GATEWAY_MODE=real` es obligatorio para conectar con `facturacion-electronica`.
 - `FE_API_KEY` debe guardarse solo en `.env` o secret manager.
+- Si `facturacion-electronica` corre en el mismo VPS y publica API en `172.17.0.1:9988->8080`, usar `FE_API_BASE_URL=http://host.docker.internal:9988/fcws` para evitar salir por Internet. `docker-compose.yml` agrega `host.docker.internal:host-gateway` al contenedor API.
 - `PUBLIC_APP_BASE_URL` debe ser el dominio publico real. Se usa para links compartidos por WhatsApp.
 - En produccion debe usarse HTTPS, porque las cookies de refresh son `secure`.
 
