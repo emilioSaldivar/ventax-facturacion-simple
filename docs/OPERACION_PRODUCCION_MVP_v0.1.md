@@ -151,6 +151,8 @@ Flujo validado:
 7. Emision real contra `facturacion-electronica`.
 8. Polling de estado hasta `EMITIDA`.
 9. Generacion de link publico.
+10. Validacion obligatoria de KUDE/PDF y XML publicos.
+11. Opcionalmente, emision de NCE total sobre la factura aprobada.
 
 Variables minimas:
 
@@ -170,6 +172,7 @@ ONBOARDING_SMOKE_ITEM_DESCRIPCION=Servicio de prueba onboarding
 ONBOARDING_SMOKE_ITEM_PRECIO_UNITARIO=100000
 ONBOARDING_SMOKE_ITEM_IVA_TIPO=IVA_10
 ONBOARDING_SMOKE_CONDICION_VENTA=CONTADO
+ONBOARDING_SMOKE_NCE=YES # solo cuando se quiera validar NCE total
 ```
 
 Ejecutar:
@@ -184,3 +187,5 @@ Notas:
 - Si FE no tiene perfiles de emision configurados, mantener `FE_SEND_EMISSION_PROFILE_CODE=false`.
 - Para numeracion automatica del backend fiscal, mantener `FE_SERVICE_NUMBERING=true`.
 - El RUC generico `80000000-1` puede ser rechazado por SIFEN test si no existe en Marangatu; para smoke aprobado se recomienda usar un CI/RUC test validado.
+- El catalogo local de receptores validados esta en `docs/RECEPTORES_SIFEN_TEST_v0.1.md`.
+- El checklist manual de alta de facturador esta en `docs/CHECKLIST_ALTA_FACTURADOR_MVP_v0.1.md`.

@@ -12,6 +12,7 @@ import {
   enqueueFacturaEmission,
   emitNotaCreditoTotal,
   getDocumentoById,
+  listNotaCreditoCandidates,
   listDocumentos,
   previewFactura,
   refreshDocumentoStatus,
@@ -22,10 +23,12 @@ import { HttpError } from "../../shared/errors/http-error";
 
 const ivaTipos = ["IVA_10", "IVA_5", "EXENTA"] as const;
 const documentoTipos = ["FACTURA", "NOTA_CREDITO"] as const;
+const documentoTiposOperativos = ["CONTADO", "CREDITO", "NOTA_CREDITO"] as const;
 const documentoEstados = ["EMITIENDO", "EMITIDA", "PENDIENTE_SIFEN", "RECHAZADA", "ERROR_OPERATIVO", "ERROR_TEMPORAL", "ANULADA"] as const;
 
 const facturaPreviewSchema = z.object({
   condicion_venta: z.enum(condicionesVenta),
+  credito_plazo_dias: z.coerce.number().int().min(1).max(365).nullable().optional(),
   cliente: z.object({
     cliente_id: z.string().uuid().nullable().optional(),
     documento_tipo: z.enum(documentoIdentidadTipos),
@@ -52,6 +55,7 @@ const facturaPreviewSchema = z.object({
 const documentoListQuerySchema = z
   .object({
     tipo: z.enum(documentoTipos).optional(),
+    tipo_operativo: z.enum(documentoTiposOperativos).optional(),
     estado: z.enum(documentoEstados).optional(),
     desde: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
     hasta: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
@@ -63,6 +67,12 @@ const documentoListQuerySchema = z
     message: "`desde` no puede ser posterior a `hasta`.",
     path: ["desde"]
   });
+
+const notaCreditoCandidatesQuerySchema = z.object({
+  q: z.string().trim().min(1).max(120).optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(30),
+  offset: z.coerce.number().int().min(0).default(0)
+});
 
 const documentoParamsSchema = z.object({
   documentoId: z.string().uuid()
@@ -87,6 +97,21 @@ facturasRouter.get("/facturas", requireAuth, validateRequest("query", documentoL
     next(error);
   }
 });
+
+facturasRouter.get(
+  "/facturas/nce-candidatas",
+  requireAuth,
+  validateRequest("query", notaCreditoCandidatesQuerySchema),
+  async (req, res, next) => {
+    try {
+      const context = await getOperationalContext(req.user!.id, operationalContextRepository);
+      const result = await listNotaCreditoCandidates(context, req.query as unknown as { q?: string; limit: number; offset: number }, facturasRepository);
+      res.json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
 
 facturasRouter.get("/facturas/:documentoId", requireAuth, validateRequest("params", documentoParamsSchema), async (req, res, next) => {
   try {

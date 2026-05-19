@@ -223,8 +223,8 @@ describe("fiscal gateway", () => {
       apiKey: "secret",
       timeoutMs: 20000,
       environment: "test",
-      sendEmissionProfileCode: false,
-      serviceNumbering: true
+      serviceNumbering: true,
+      sendEmissionProfileCode: false
     });
 
     vi.stubGlobal(
@@ -366,6 +366,14 @@ describe("fiscal gateway", () => {
       emisor_id: request.facturador.emisor_id,
       actividadEconomicaCodigo: "82110",
       emission_profile_code: "SERV",
+      timbrado: {
+        documentoNro: "0000000"
+      },
+      numbering: {
+        mode: "ONLINE",
+        authority: "SERVICE",
+        requested_document_number: "0000000"
+      },
       client_reference: {
         entity_type: "nota_credito_operativa",
         entity_id: "nce_123",

@@ -18,7 +18,8 @@ import type {
   FacturaItemPreview,
   FacturaPreviewInput,
   FacturaPreviewResponse,
-  FacturaRepository
+  FacturaRepository,
+  NotaCreditoCandidateListResponse
 } from "./facturas.types";
 
 export function previewFactura(
@@ -80,6 +81,62 @@ export async function listDocumentos(
     facturadorId: context.facturador.id,
     filters
   });
+}
+
+export async function listNotaCreditoCandidates(
+  context: OperationalContextResponse,
+  filters: Pick<DocumentoListFilters, "q" | "limit" | "offset">,
+  repository: FacturaRepository
+): Promise<NotaCreditoCandidateListResponse> {
+  const result = await repository.list({
+    facturadorId: context.facturador.id,
+    filters: {
+      q: filters.q,
+      limit: filters.limit,
+      offset: filters.offset,
+      tipo: "FACTURA"
+    }
+  });
+
+  const relatedResult = await repository.list({
+    facturadorId: context.facturador.id,
+    filters: {
+      limit: 100,
+      offset: 0,
+      tipo: "NOTA_CREDITO"
+    }
+  });
+  const creditedFacturaIds = new Set(
+    relatedResult.items.map((item) => item.documento_relacionado_id).filter((id): id is string => Boolean(id))
+  );
+
+  return {
+    total: result.total,
+    items: result.items.map((documento) => {
+      const motivo = getNotaCreditoIneligibility(documento, creditedFacturaIds);
+      return {
+        documento,
+        elegible: motivo === null,
+        motivo_no_elegible: motivo
+      };
+    })
+  };
+}
+
+function getNotaCreditoIneligibility(documento: DocumentoResponse, creditedFacturaIds: Set<string>): string | null {
+  if (documento.tipo !== "FACTURA") {
+    return "Solo una factura puede originar nota de credito.";
+  }
+  if (documento.estado !== "EMITIDA") {
+    return "La factura debe estar emitida.";
+  }
+  if (!documento.cdc) {
+    return "La factura no tiene CDC confirmado.";
+  }
+  if (creditedFacturaIds.has(documento.id)) {
+    return "La factura ya tiene una nota de credito total.";
+  }
+  return null;
 }
 
 export async function getDocumentoById(
@@ -437,7 +494,10 @@ function buildFiscalEmitRequest(
     external_ref: externalRef,
     condicion_venta: input.condicion_venta,
     facturador: context.facturador,
-    fiscal_context: context.fiscal_context,
+    fiscal_context: {
+      ...context.fiscal_context,
+      credito_plazo_dias: input.credito_plazo_dias ?? context.fiscal_context.credito_plazo_dias
+    },
     cliente: input.cliente,
     items: preview.items,
     totals: preview.totals

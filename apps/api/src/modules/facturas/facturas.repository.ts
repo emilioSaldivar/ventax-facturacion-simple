@@ -1207,6 +1207,16 @@ function buildListWhere(facturadorId: string, filters: DocumentoListFilters): { 
     clauses.push(`tipo = $${params.length}`);
   }
 
+  if (filters.tipo_operativo) {
+    if (filters.tipo_operativo === "NOTA_CREDITO") {
+      clauses.push("tipo = 'NOTA_CREDITO'");
+    } else {
+      clauses.push("tipo = 'FACTURA'");
+      params.push(filters.tipo_operativo);
+      clauses.push(`condicion_venta = $${params.length}`);
+    }
+  }
+
   if (filters.estado) {
     params.push(filters.estado);
     clauses.push(`estado = $${params.length}`);

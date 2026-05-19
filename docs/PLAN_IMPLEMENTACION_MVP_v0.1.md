@@ -53,7 +53,9 @@ Motivo:
   - `apps/web-operacion`: app critica para operadores;
   - `apps/backoffice`: app interna de baja frecuencia.
 - CSS propio y tokens de diseno Ventax mantenidos en la app, evitando dependencia de Tailwind salvo que aporte valor claro.
-- Los logos e iconos PWA deben derivarse de `ventax_logos/`.
+- Los logos visibles e iconos PWA deben derivarse de los assets oficiales en `ventax_logos/`.
+- No se debe mantener un logo generado/recreado manualmente si existe variante oficial suficiente en `ventax_logos/`.
+- Usar logo completo para login/encabezados cuando haya espacio y usar `VENTAX-ISO-*` solo para favicon, PWA, avatar compacto o espacios reducidos.
 - La app operativa prioriza celular y tablet; desktop debe ser usable, no necesariamente optimizado primero.
 
 ### 2.3 Backend
@@ -360,11 +362,12 @@ Estados UI:
 
 Responsabilidades:
 
-- iniciar NCE desde factura elegible;
+- iniciar NCE desde factura elegible desde una pantalla operativa propia;
 - NCE total en MVP;
 - emitir via FiscalGateway;
 - persistir snapshot;
-- exponer en listado/detalle.
+- exponer en listado/detalle;
+- exponer datos suficientes para que la UI filtre y seleccione facturas elegibles.
 
 ### 5.7 Entrega
 
@@ -552,7 +555,9 @@ Diseno objetivo:
 ### 9.1 Pantallas
 
 - Login.
-- Inicio operativo.
+- Nueva factura.
+- Nueva nota de credito.
+- Informacion y estado.
 - Editor de factura.
 - Resultado de emision.
 - Listado de documentos.
@@ -577,26 +582,55 @@ Reglas:
 - no campos fiscales editables;
 - botones tactiles grandes;
 - no depender de tablas anchas en celular;
-- usar tarjetas o filas expandibles para lineas;
+- usar filas compactas para lineas agregadas y formulario compacto solo para alta/edicion;
 - mostrar totales siempre cerca del boton emitir.
 
-### 9.3 PWA
+### 9.3 Nueva Nota De Credito
+
+Prioridad:
+
+1. buscar factura origen;
+2. confirmar elegibilidad;
+3. cargar motivo;
+4. emitir NCE total;
+5. entregar comprobante.
+
+Reglas:
+
+- pantalla separada de `Nueva factura`;
+- no reutilizar el editor completo de factura;
+- listar o buscar solo facturas candidatas del facturador autenticado;
+- bloquear origenes no elegibles con mensaje claro;
+- usar el mismo resultado/entrega que factura emitida.
+
+### 9.4 Documentos
+
+El listado debe soportar filtros combinables:
+
+- todos;
+- facturas contado;
+- facturas credito;
+- notas de credito.
+
+Si el backend actual no expone filtro por condicion de venta, se debe extender `GET /facturas` o el contrato equivalente antes de cerrar la UI.
+
+### 9.5 PWA
 
 Requisitos:
 
 - manifest;
-- iconos generados desde `ventax_logos/`;
+- iconos derivados desde los SVG oficiales de `ventax_logos/`;
 - theme color Ventax;
 - cache de assets estaticos;
 - no prometer emision offline;
 - si no hay conexion, bloquear emision con mensaje claro.
 
-### 9.4 Wireframe Del Editor
+### 9.6 Wireframe Del Editor
 
 Antes de implementar `UI-005`, se debe cerrar un micro-wireframe tecnico en documentacion:
 
 - orden mobile de bandas: encabezado fiscal, comprobante/condicion, cliente, lineas, totales, acciones;
-- comportamiento de lineas como tarjetas compactas o filas expandibles en celular;
+- comportamiento de lineas como filas compactas en celular, con formulario de detalle solo para alta/edicion;
 - ubicacion del boton `Emitir` siempre cerca de totales;
 - estados de error y feedback de correccion antes de emision;
 - puntos donde entran busqueda de cliente, popup de alta rapida y busqueda de catalogo.
@@ -826,20 +860,24 @@ El seed de referencia `db/seeds/002_operational_context_example.sql` muestra una
 ### Fase 7 - Documentos Avanzados
 
 - listado y detalle;
+- filtros por contado, credito y nota de credito;
 - cancelacion/anulacion elegible;
 - NCE total;
+- pantalla `Nueva nota de credito`;
 - soporte ante rechazo.
 
 ### Fase 8 - Frontend Operacion
 
 - login;
-- readiness operativo/fiscal visible;
+- pantallas separadas para nueva factura, nueva nota de credito, informacion/estado, catalogo y documentos;
+- readiness operativo/fiscal visible en informacion/estado;
 - micro-wireframe del editor antes de implementarlo;
 - editor mobile-first;
 - clientes;
 - catalogo;
 - resultado;
-- listado/detalle;
+- listado/detalle con filtros;
+- nueva nota de credito;
 - pruebas visuales.
 
 ### Fase 9 - Backoffice Minimo
@@ -895,7 +933,7 @@ El seed de referencia `db/seeds/002_operational_context_example.sql` muestra una
 - Playwright desktop/tablet cuando el cambio sea visible al operador;
 - editor sin solapamientos;
 - flujo login -> cliente -> item -> emitir mock -> resultado;
-- listado y link publico.
+- listado filtrado, nueva nota de credito y link publico.
 
 ### Flujo Completo
 
@@ -916,6 +954,7 @@ El MVP se considera implementado cuando:
 - puede abrir KUDE/PDF y XML;
 - puede compartir link publico y WhatsApp;
 - puede listar documentos;
+- puede filtrar documentos por contado, credito y nota de credito;
 - puede emitir NCE total desde factura elegible;
 - puede solicitar cancelacion/anulacion elegible;
 - el sistema tiene backups, logs, healthchecks y migraciones;

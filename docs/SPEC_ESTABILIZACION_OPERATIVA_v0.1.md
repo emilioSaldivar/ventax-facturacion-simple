@@ -34,6 +34,9 @@ Incluye:
 - checklist operativa para alta de facturador;
 - smoke operativo reutilizable por facturador ya configurado;
 - catalogo local de receptores de prueba validados;
+- pantalla operativa de catalogo de productos y servicios del facturador;
+- pantalla operativa de facturas emitidas, estados fiscales y acciones de recuperacion;
+- navegacion operativa estilo mobile con menu hamburguesa simple;
 - registro de resultados de prueba por facturador;
 - mejora del diagnostico de rechazo fiscal para soporte;
 - validacion de link publico, KUDE/PDF y XML despues de emision aprobada;
@@ -55,6 +58,11 @@ Incluye:
 - El smoke debe fallar con mensaje claro cuando readiness no este completo.
 - Para pruebas aprobadas se deben usar receptores validados contra SIFEN test.
 - Los rechazos SIFEN se consideran resultados validos de integracion, pero no cierran una prueba de alta operativa exitosa.
+- El operador debe poder listar, crear, editar y activar/desactivar productos o servicios sin entrar al editor de factura.
+- El operador debe poder listar facturas y notas, ver su estado fiscal resumido, y consultar nuevamente el estado por medio del backend fiscal.
+- La UI debe mostrar codigo y mensaje SIFEN cuando existan en la respuesta fiscal, sin exponer secretos ni payloads fiscales completos.
+- La navegacion principal debe estar disponible desde un menu hamburguesa, con rutas operativas claras y sin depender de conocimiento tecnico.
+- Para validacion local, el usuario `admin` puede tener contexto operativo del facturador de prueba, siempre sin cambiar secretos ni credenciales versionadas.
 
 ## 6. Criterio De Aceptacion
 

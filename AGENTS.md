@@ -48,6 +48,8 @@ Validaciones minimas esperadas:
 
 - backend: `npm run test`, `npm run typecheck`, `npm run lint` y pruebas unitarias/integracion del modulo tocado;
 - frontend: `npm run typecheck`, `npm run build` y verificacion visual con Playwright en mobile primero y al menos un viewport desktop/tablet cuando sea visible al operador;
+- cambios que afecten la aplicacion desplegada: ejecutar `bash scripts/deploy.sh` para reconstruir y redeployar los contenedores antes de validar el flujo operativo;
+- validaciones end-to-end, smoke, UI visible, healthchecks y pruebas contra servicios HTTP deben ejecutarse contra los contenedores levantados por `bash scripts/deploy.sh`, no solo contra procesos locales de desarrollo;
 - flujos completos: usar la UI operativa con Playwright contra el backend local/mock para probar el circuito real de usuario cuando la tarea conecte frontend y backend;
 - contratos HTTP: actualizar `spec/openapi.yaml` y validar que cliente/frontend consuman el contrato documentado;
 - integracion fiscal: cubrir mock local y, cuando aplique, smoke test opt-in contra FE test sin versionar secretos.

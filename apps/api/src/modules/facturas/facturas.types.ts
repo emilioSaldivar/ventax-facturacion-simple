@@ -31,6 +31,7 @@ export interface FacturaItemInput {
 
 export interface FacturaPreviewInput {
   condicion_venta: CondicionVenta;
+  credito_plazo_dias?: number | null;
   cliente: FacturaClienteInput;
   items: FacturaItemInput[];
 }
@@ -54,6 +55,7 @@ export type DocumentoEstado =
   | "ANULADA";
 
 export type DocumentoTipo = "FACTURA" | "NOTA_CREDITO";
+export type DocumentoTipoOperativo = CondicionVenta | "NOTA_CREDITO";
 export type EmailStatus = "NOT_APPLICABLE" | "DELEGATED" | "SENT" | "FAILED" | "UNKNOWN";
 
 export interface DeliverySummary {
@@ -93,6 +95,7 @@ export interface DocumentoResponse {
 
 export interface DocumentoListFilters {
   tipo?: DocumentoTipo;
+  tipo_operativo?: DocumentoTipoOperativo;
   estado?: DocumentoEstado;
   desde?: string;
   hasta?: string;
@@ -103,6 +106,17 @@ export interface DocumentoListFilters {
 
 export interface DocumentoListResponse {
   items: DocumentoResponse[];
+  total: number;
+}
+
+export interface NotaCreditoCandidate {
+  documento: DocumentoResponse;
+  elegible: boolean;
+  motivo_no_elegible: string | null;
+}
+
+export interface NotaCreditoCandidateListResponse {
+  items: NotaCreditoCandidate[];
   total: number;
 }
 

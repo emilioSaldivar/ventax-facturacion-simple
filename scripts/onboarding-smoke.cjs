@@ -5,11 +5,14 @@ const fs = require("node:fs");
 loadDotEnvIfPresent();
 
 const apiBaseUrl = (process.env.SMOKE_API_BASE_URL ?? "http://127.0.0.1:8092/api/v1").replace(/\/$/, "");
+const publicBaseUrl = (process.env.SMOKE_PUBLIC_BASE_URL ?? apiBaseUrl.replace(/\/api\/v1$/, "")).replace(/\/$/, "");
 const username = process.env.SMOKE_USERNAME;
 const password = process.env.SMOKE_PASSWORD;
 const smokeId = process.env.ONBOARDING_SMOKE_ID ?? `onboarding-${new Date().toISOString().replace(/[-:.TZ]/g, "")}`;
 const timeoutMs = Number(process.env.ONBOARDING_SMOKE_TIMEOUT_MS ?? 60000);
 const pollIntervalMs = Number(process.env.ONBOARDING_SMOKE_POLL_INTERVAL_MS ?? 3000);
+const runNotaCreditoSmoke = process.env.ONBOARDING_SMOKE_NCE === "YES";
+const validateArtifacts = process.env.ONBOARDING_SMOKE_VALIDATE_ARTIFACTS !== "NO";
 
 const clienteInput = {
   documento_tipo: process.env.ONBOARDING_SMOKE_CLIENTE_TIPO ?? "RUC",
@@ -54,12 +57,69 @@ function requireValue(name, value) {
   }
 }
 
+function localizePublicUrl(url) {
+  const parsed = new URL(url);
+  return `${publicBaseUrl}${parsed.pathname}${parsed.search}`;
+}
+
 async function request(label, path, init = {}) {
   const response = await fetch(`${apiBaseUrl}${path}`, {
     ...init,
     headers: {
       accept: "application/json",
       ...(init.body ? { "content-type": "application/json" } : {}),
+      ...(init.headers ?? {})
+    }
+  });
+  const text = await response.text();
+  const body = text ? JSON.parse(text) : null;
+
+  if (!response.ok) {
+    throw new Error(`${label} fallo con HTTP ${response.status}: ${JSON.stringify(body).slice(0, 700)}`);
+  }
+
+  return body;
+}
+
+async function requestRaw(label, url, init = {}) {
+  const response = await fetch(url, init);
+  const body = Buffer.from(await response.arrayBuffer());
+
+  if (!response.ok) {
+    throw new Error(`${label} fallo con HTTP ${response.status}: ${body.toString("utf8", 0, Math.min(body.length, 700))}`);
+  }
+
+  if (body.length === 0) {
+    throw new Error(`${label} no devolvio contenido.`);
+  }
+
+  return {
+    contentType: response.headers.get("content-type") ?? "",
+    bytes: body.length
+  };
+}
+
+async function waitForRaw(label, url) {
+  const startedAt = Date.now();
+  let lastError = null;
+
+  while (Date.now() - startedAt <= timeoutMs) {
+    try {
+      return await requestRaw(label, url);
+    } catch (error) {
+      lastError = error;
+      await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+    }
+  }
+
+  throw lastError ?? new Error(`${label} no estuvo disponible dentro del timeout.`);
+}
+
+async function requestJsonUrl(label, url, init = {}) {
+  const response = await fetch(url, {
+    ...init,
+    headers: {
+      accept: "application/json",
       ...(init.headers ?? {})
     }
   });
@@ -87,10 +147,16 @@ async function waitForFiscalResult(token, documentoId) {
     }
 
     if (current.estado === "ERROR_TEMPORAL") {
-      await request("reintento factura", `/facturas/${documentoId}/retry-emission`, {
-        method: "POST",
-        headers: { authorization: `Bearer ${token}` }
-      });
+      try {
+        await request("reintento factura", `/facturas/${documentoId}/retry-emission`, {
+          method: "POST",
+          headers: { authorization: `Bearer ${token}` }
+        });
+      } catch (error) {
+        throw new Error(
+          `Documento en ERROR_TEMPORAL y reintento no disponible. Estado fiscal: ${JSON.stringify(current.fiscal_status ?? current).slice(0, 700)}`
+        );
+      }
     }
 
     await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
@@ -186,6 +252,46 @@ async function main() {
     headers: authHeaders
   });
 
+  const localPublicUrl = localizePublicUrl(delivery.public_url);
+  const publicDocument = await requestJsonUrl("documento publico", localPublicUrl);
+
+  let kudePdf = null;
+  let xml = null;
+
+  if (validateArtifacts) {
+    requireValue("publicDocument.artifacts.kude_pdf.url", publicDocument.artifacts?.kude_pdf?.url);
+    requireValue("publicDocument.artifacts.xml.url", publicDocument.artifacts?.xml?.url);
+
+    kudePdf = await waitForRaw("KUDE/PDF publico", localizePublicUrl(publicDocument.artifacts.kude_pdf.url));
+    xml = await waitForRaw("XML publico", localizePublicUrl(publicDocument.artifacts.xml.url));
+  }
+
+  let notaCredito = null;
+  if (runNotaCreditoSmoke) {
+    const createdNce = await request("emision NCE total", `/facturas/${emitted.id}/nota-credito`, {
+      method: "POST",
+      headers: {
+        ...authHeaders,
+        "idempotency-key": `${smokeId}-nce`
+      },
+      body: JSON.stringify({ motivo: process.env.ONBOARDING_SMOKE_NCE_MOTIVO ?? "Smoke operativo de nota de credito total" })
+    });
+
+    const emittedNce = await waitForFiscalResult(token, createdNce.id);
+    if (emittedNce.estado !== "EMITIDA" || !emittedNce.cdc) {
+      throw new Error(
+        `NCE no quedo emitida: ${JSON.stringify({ estado: emittedNce.estado, fiscal_status: emittedNce.fiscal_status }).slice(0, 700)}`
+      );
+    }
+
+    notaCredito = {
+      documento_id: emittedNce.id,
+      estado: emittedNce.estado,
+      numero_fiscal: emittedNce.numero_fiscal,
+      cdc: emittedNce.cdc
+    };
+  }
+
   console.log(
     JSON.stringify(
       {
@@ -203,8 +309,24 @@ async function main() {
         numero_fiscal: emitted.numero_fiscal,
         cdc: emitted.cdc,
         delivery_url: delivery.public_url,
+        artifacts: {
+          kude_pdf: kudePdf,
+          xml
+        },
+        nota_credito: notaCredito,
         email_status: emailStatus.status,
-        checks: ["health", "login", "readiness", "cliente", "catalogo", "preview", "emision FE", "delivery"]
+        checks: [
+          "health",
+          "login",
+          "readiness",
+          "cliente",
+          "catalogo",
+          "preview",
+          "emision FE",
+          "delivery",
+          ...(validateArtifacts ? ["KUDE/PDF", "XML"] : []),
+          ...(runNotaCreditoSmoke ? ["NCE total FE"] : [])
+        ]
       },
       null,
       2

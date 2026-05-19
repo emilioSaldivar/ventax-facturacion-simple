@@ -54,6 +54,39 @@ El producto tendra dos superficies claramente separadas:
 
 La implementacion debe priorizar `Operacion`. El backoffice se documenta y modela, pero puede implementarse despues de cerrar el flujo principal.
 
+Dentro de `Operacion`, la UI no debe concentrar todo en una sola pantalla. El menu hamburguesa debe separar vistas operativas y mantener la pantalla principal dedicada a facturar:
+
+- `Nueva factura`: pantalla principal de trabajo para emitir directamente.
+- `Nueva nota de credito`: pantalla para seleccionar una factura elegible y emitir NCE total.
+- `Informacion y estado`: vista de facturador, sesion, contexto operativo y readiness.
+- `Catalogo`: administracion/busqueda de productos y servicios.
+- `Documentos`: listado, detalle y acciones de comprobantes emitidos.
+
+La vista `Informacion y estado` debe conservar la informacion hoy visible en el inicio: facturador, sesion, configuracion operativa, readiness y accesos rapidos a `Nueva factura`, `Nueva nota de credito`, `Catalogo` y `Ver documentos`. Esos botones deben navegar a sus pantallas correspondientes, no desplegar todo el flujo en la misma vista.
+
+## 5.1 Identidad Visual Ventax
+
+La UI debe usar los logos oficiales disponibles en `ventax_logos/`. No se debe usar un logo generado o recreado cuando exista un asset oficial suficiente.
+
+Assets disponibles para branding de Ventax Facturacion Simple:
+
+- `ventax_logos/VENTAX-PRINCIPAL.svg`;
+- `ventax_logos/VENTAX-CELESTE.svg`;
+- `ventax_logos/VENTAX-BLANCO.svg`;
+- `ventax_logos/VENTAX-NEGRO.svg`;
+- `ventax_logos/VENTAX-NEGATIVO.svg`;
+- `ventax_logos/VENTAX-ISO-CELESTE.svg`;
+- `ventax_logos/VENTAX-ISO-BLANCO.svg`;
+- `ventax_logos/VENTAX-ISO-NEGRO.svg`.
+
+Reglas:
+
+- usar `VENTAX-PRINCIPAL.svg` o `VENTAX-CELESTE.svg` para encabezados claros;
+- usar variantes blancas/negativas sobre fondos oscuros o de marca;
+- usar isotipos solo donde el espacio sea reducido, como icono compacto, favicon, PWA o avatar de marca;
+- si se necesitan tamanos PWA, derivar los rasterizados desde los SVG oficiales, no desde un logo dibujado manualmente;
+- mantener proporciones originales y no deformar los logos.
+
 ## 6. Reglas De Negocio
 
 - Todo dato operativo debe pertenecer a un `tenant_id`.
@@ -68,6 +101,7 @@ La implementacion debe priorizar `Operacion`. El backoffice se documenta y model
 - La emision se bloquea si el usuario no tiene configuracion operativa completa.
 - La emision se bloquea si el backend fiscal informa readiness insuficiente.
 - No se guardan borradores.
+- La UI debe preservar el progreso local del formulario ante refresh de token, renovacion de sesion o revalidacion de contexto. El refresh no debe recargar la pagina ni limpiar cliente, lineas, condicion de venta ni totales en curso. Si se implementa persistencia local temporal, debe quedar acotada al dispositivo/sesion y limpiarse al emitir, limpiar o cerrar sesion.
 - Se permite editar la factura antes de emitir.
 - Cada emision debe guardar snapshot de cliente, items, totales, usuario y respuesta fiscal resumida.
 - Los secretos fiscales no se exponen a operadores.
@@ -165,6 +199,8 @@ Para precios con IVA incluido, en cada linea:
 13. Si la confirmacion queda pendiente, la UI muestra estado recuperable y acciones de refrescar/reintentar sin duplicar documento fiscal.
 14. La UI muestra comprobante emitido y opciones de ver, descargar, copiar enlace, enviar por WhatsApp o enviar por email cuando existan artefactos.
 
+Para `CREDITO`, la pantalla debe permitir seleccionar plazo cuando el backend fiscal lo soporte. Los plazos iniciales esperados son `30`, `60` y `90` dias, tomando como autoridad la configuracion disponible en `facturacion-electronica`. Si el plazo configurable aun no esta definido para el facturador, se mantiene el comportamiento actual documentado: emision credito simple sin gestion de cuotas, recibos ni cobranza.
+
 ## 11. Editor De Factura Inspirado En Talonario Manual
 
 ### 11.1 Objetivo UX
@@ -193,6 +229,8 @@ El editor debe mostrar:
 - fecha de emision;
 - condicion de venta: `CONTADO` o `CREDITO`.
 
+El encabezado del editor debe ser compacto. Solo debe mostrar lo necesario para emitir: nombre del facturador, establecimiento, punto de expedicion, fecha, RUC, timbrado y siguiente numero fiscal estimado. Ese siguiente numero se informa a modo operativo en base al ultimo numero conocido para el mismo establecimiento y punto de expedicion. La numeracion final sigue siendo autoridad de `facturacion-electronica`; si otro usuario comparte establecimiento/punto, el numero mostrado puede no ser definitivo y la UI no debe permitir editarlo.
+
 ### 11.3 Datos Del Cliente
 
 El bloque de cliente debe incluir:
@@ -202,6 +240,8 @@ El bloque de cliente debe incluir:
 - direccion opcional;
 - telefono opcional;
 - correo opcional.
+
+Si el operador selecciona un cliente existente y luego modifica sus datos, la accion primaria del bloque debe rotularse `Actualizar` y ejecutar la actualizacion de agenda correspondiente. La UI debe evitar mostrar `Guardar` como si fuera un alta nueva cuando el registro ya esta en edicion.
 
 ### 11.4 Grilla De Productos O Servicios
 
@@ -214,7 +254,15 @@ Columnas equivalentes a la factura manual:
 - IVA;
 - subtotal.
 
-En mobile, la grilla puede adaptarse a filas expandibles o tarjetas compactas, siempre que preserve el orden de carga y no oculte totales criticos.
+En mobile, los productos/servicios agregados no deben mostrarse como tarjetas repetidas por defecto. Deben mostrarse como registros o filas compactas bajo una cabecera:
+
+`CANT | COD | DESCRIPCION | SUBTOTAL`
+
+Cada registro debe mostrar cantidad, codigo, descripcion resumida y subtotal. Si la descripcion es larga, se muestra una primera parte y una accion `Ver mas` o `Ver +` para expandirla. Cada registro debe permitir editar con boton de lapiz y eliminar con boton de basurero. Tambien puede abrir edicion al tocar/clickear la fila completa.
+
+Debajo de las filas agregadas debe existir una fila vacia de carga. Al tocar/clickear codigo o descripcion, el operador puede escribir y buscar por codigo, nombre o descripcion. Si selecciona un producto/servicio existente, se carga a la linea. Si no hay resultado suficiente, debe aparecer el formulario compacto de alta rapida de producto/servicio, reutilizando el comportamiento actual.
+
+El formulario detallado de linea solo debe aparecer para crear, editar o completar una linea seleccionada. No debe ocupar la pantalla con multiples tarjetas simultaneas.
 
 ### 11.5 Totales
 
@@ -233,7 +281,24 @@ El pie del editor debe mostrar:
 - los campos aparecen en el mismo orden logico que el documento manual;
 - el sistema reduce escritura manual mediante busqueda de clientes e items;
 - la pantalla deja claro que numero fiscal, timbrado, CDC y estado SIFEN son generados o confirmados por el sistema;
+- la pantalla principal no muestra readiness, listado de documentos ni catalogo salvo como navegacion o acciones puntuales;
+- el refresh de token no borra el formulario en curso;
 - en celular no hay solapamiento entre cliente, lineas y totales.
+
+### 11.7 Pantalla Posterior A Emision
+
+Una vez emitida o en seguimiento recuperable, la UI debe mostrar solo el resumen necesario y acciones rapidas. No debe explicar toda la operativa ni repetir textos largos de onboarding.
+
+Acciones visibles:
+
+- abrir/ver comprobante;
+- descargar KUDE/PDF;
+- descargar XML cuando corresponda;
+- copiar enlace publico;
+- compartir por WhatsApp;
+- editar el numero de WhatsApp destino antes de compartir/enviar enlace.
+
+Por defecto, WhatsApp debe usar el telefono agendado del cliente cuando exista. En la misma pantalla, el operador debe poder reemplazarlo por otro numero sin modificar obligatoriamente la agenda del cliente.
 
 ## 12. Listado De Facturas Emitidas
 
@@ -241,6 +306,7 @@ El sistema debe incluir una seccion de facturas/notas emitidas.
 
 Debe permitir:
 
+- filtrar por condicion/tipo operativo: `CONTADO`, `CREDITO` y `NOTA_CREDITO`;
 - ver detalle;
 - ver estado simple;
 - descargar o abrir el mismo link visible para cliente final;
@@ -289,7 +355,17 @@ Alcance minimo:
 - guardar snapshot y estado;
 - mostrar, descargar y compartir artefactos igual que una factura.
 
-La UI de NCE puede vivir dentro del listado/detalle de facturas emitidas, no en la pantalla principal de carga de factura.
+La UI de NCE debe vivir en una pantalla propia `Nueva nota de credito`, separada de `Nueva factura`. El listado/detalle de documentos puede conservar acciones rapidas para iniciar NCE desde una factura elegible, pero debe navegar a esa pantalla o reutilizar su flujo.
+
+Refinamiento UI/UX:
+
+- debe existir una pantalla `Nueva nota de credito` separada de `Nueva factura`;
+- la pantalla debe guiar al operador a buscar/seleccionar una factura emitida elegible;
+- debe mostrar cliente, numero fiscal, fecha, total y estado de la factura seleccionada antes de emitir la NCE;
+- debe solicitar motivo de nota de credito;
+- debe bloquear facturas no elegibles con causa clara;
+- la NCE inicial sigue siendo total, no parcial;
+- al emitir, debe reutilizar la pantalla posterior a emision/entrega con acciones rapidas de KUDE/PDF, XML, link y WhatsApp.
 
 ## 15. Integracion Con Backend Fiscal
 

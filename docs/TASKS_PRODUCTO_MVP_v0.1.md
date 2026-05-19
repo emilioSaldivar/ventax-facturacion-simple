@@ -63,6 +63,17 @@ Estados:
 | MVP-033 | QA | Smoke test de flujo completo | DONE | Smoke Playwright mock cubre login, cliente, item, emision, entrega, listado, NCE y anulacion |
 | MVP-034 | Cierre | Actualizar SPEC/PLAN/TASKS con decisiones finales | DONE | Documentacion y matrices reflejan la implementacion real del MVP |
 | FUT-001 | Multi facturador | Mover valores `FE_DEFAULT_*` a configuracion por facturador y actividad economica | DONE | Los datos fiscales ya no viven en `.env`; se administran por facturador, establecimiento, punto de expedicion, timbrado, numerador, condicion de credito y actividad economica |
+| MVP-035 | UI/UX | Modularizar navegacion operativa por pantallas | DONE | Menu hamburguesa navega entre `Nueva factura`, `Nueva nota de credito`, `Informacion y estado`, `Catalogo` y `Documentos`; la pantalla principal queda dedicada a facturar |
+| MVP-036 | UI/UX | Mover facturador, sesion y readiness a `Informacion y estado` | DONE | La vista de estado conserva facturador/sesion/readiness y botones de acceso, pero no satura `Nueva factura` |
+| MVP-037 | Facturacion | Compactar encabezado de `Nueva factura` | DONE | El editor muestra solo nombre, establecimiento, punto, fecha, RUC, timbrado y siguiente numero fiscal estimado |
+| MVP-038 | Facturacion | Agregar plazo credito seleccionable | DONE | Al elegir `CREDITO`, la UI permite seleccionar `30`, `60` o `90` dias cuando FE/contexto lo soporte; si no existe configuracion, mantiene credito simple |
+| MVP-039 | Clientes | Rotular actualizacion de cliente existente | DONE | Si se edita un cliente seleccionado, la accion primaria dice `Actualizar` y actualiza agenda en lugar de presentarse como alta nueva |
+| MVP-040 | Facturacion | Preservar formulario ante refresh de token | DONE | Renovar token o revalidar sesion no recarga la pagina ni borra cliente, lineas, condicion, plazo o totales en curso |
+| MVP-041 | Lineas | Reemplazar tarjetas multiples por grilla mobile compacta | DONE | Lineas agregadas se ven como filas `CANT/COD/DESCRIPCION/SUBTOTAL`, con truncado `Ver mas`, editar con lapiz, eliminar con basurero y fila vacia de busqueda/carga |
+| MVP-042 | Entrega | Simplificar pantalla posterior a emision | DONE | Resultado de emision muestra solo resumen y acciones rapidas para ver, descargar PDF/XML, copiar link y WhatsApp con numero editable |
+| MVP-043 | Nota credito | Crear pantalla `Nueva nota de credito` | DONE | Verificado en contenedores con Playwright mobile: existe una pantalla separada para buscar/seleccionar factura elegible, cargar motivo, emitir NCE total y mostrar resultado/entrega |
+| MVP-044 | Documentos | Filtrar documentos por contado, credito y nota de credito | DONE | Verificado en contenedores con Playwright mobile: el listado permite filtrar `Todos`, `Contado`, `Credito` y `Nota credito`, combinando con busqueda sin overflow |
+| MVP-045 | Branding | Usar logos oficiales de `ventax_logos/` | DONE | Login, header, menu, PWA y pantallas operativas usan assets oficiales de `ventax_logos/` y no un logo generado/recreado |
 
 ## Camino Critico
 
@@ -106,4 +117,5 @@ Estados:
 - `MVP-017C` queda cerrado con readiness fiscal centralizado.
 - `MVP-018A` queda cerrado: `POST /facturas` encola emision, el worker procesa FE con `external_ref`, y la UI permite refrescar/reintentar con feedback gestionable.
 - `MVP-028` queda cerrado con `docs/WIREFRAME_EDITOR_FACTURA_MVP_v0.1.md` antes de implementar `UI-005`.
+- `MVP-035` a `MVP-045` refinan la UI/UX post-MVP para reducir saturacion operativa, modularizar pantallas, mejorar carga de lineas, evitar perdida de progreso por refresh de token, separar NCE, mejorar filtros de documentos y usar branding oficial Ventax.
 - Cualquier cambio nuevo debe agregar filas a esta matriz o actualizar su estado con evidencia.

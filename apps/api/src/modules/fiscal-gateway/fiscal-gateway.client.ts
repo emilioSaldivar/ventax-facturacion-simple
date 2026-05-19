@@ -347,7 +347,7 @@ export class RealFiscalGateway implements FiscalGateway {
   }
 
   private buildEmitirNotaCreditoPayload(request: FiscalEmitNotaCreditoRequest): Record<string, unknown> {
-    const suggestedDocumentNumber = this.config.serviceNumbering === true ? null : request.fiscal_context.documento_nro;
+    const suggestedDocumentNumber = request.fiscal_context.documento_nro;
     const payload: Record<string, unknown> = {
       emisor_id: request.facturador.emisor_id,
       actividadEconomicaCodigo: request.fiscal_context.actividad_economica_codigo,

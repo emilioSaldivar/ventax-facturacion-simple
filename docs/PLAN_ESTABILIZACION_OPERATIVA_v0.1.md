@@ -76,17 +76,62 @@ Despues de una factura aprobada, validar:
 
 Probar NCE total contra la factura aprobada mas reciente del smoke, con idempotencia propia y evidencia separada.
 
+### 5.4 Catalogo Operativo
+
+Agregar una vista de catalogo para que el operador pueda:
+
+- buscar productos o servicios del facturador;
+- filtrar activos e inactivos;
+- crear un item nuevo;
+- editar codigo, descripcion, precio, IVA y estado activo.
+
+La vista reutiliza los endpoints SaaS existentes `/catalogo/items` y no llama directamente a FE.
+
+### 5.5 Documentos Y Consulta SIFEN
+
+La vista de documentos debe permitir:
+
+- listar facturas y notas por estado o busqueda;
+- abrir detalle con cliente, total, numero fiscal, CDC y estado operativo;
+- mostrar codigo/mensaje SIFEN cuando existan en `fiscal_status`;
+- ejecutar `POST /facturas/{id}/refresh-status` como consulta de estado contra FE/SIFEN;
+- conservar acciones de entrega, anulacion, reintento y NCE.
+
+### 5.6 Navegacion Mobile
+
+La UI operativa debe comportarse como una app simple:
+
+- topbar fija con marca, titulo de pantalla y menu hamburguesa;
+- menu lateral con Inicio, Nueva factura, Catalogo, Documentos y Salir;
+- contenido centrado con ancho mobile en desktop para facilitar pruebas de operador final;
+- accesos rapidos en Inicio como respaldo, sin reemplazar el menu principal.
+
+### 5.7 Usuario Admin Local
+
+Para completar validaciones manuales locales, `admin/admin` debe tener una configuracion operativa activa contra el facturador test ya configurado.
+
+La configuracion debe apuntar a:
+
+- emisor `80136968-1`;
+- establecimiento `001`;
+- punto `001`;
+- actividad `82110`;
+- perfil local `SERV`.
+
+Esta asignacion es solo de entorno local/test y no versiona secretos.
+
 ## 6. Verificacion Recomendada
 
 Por iteracion:
 
 ```bash
-npm run ops:onboarding-smoke
-npm run test --workspace @facturacion-simple/api
+npm run test
 npm run typecheck
 npm run lint
 npm run build
 npm run qa:no-secrets
+bash scripts/deploy.sh
+npm run ops:onboarding-smoke
 ```
 
 Cuando se toque UI:
@@ -95,4 +140,6 @@ Cuando se toque UI:
 npm run build --workspace @facturacion-simple/web-operacion
 ```
 
-mas validacion Playwright mobile/desktop.
+mas validacion Playwright mobile/desktop contra la aplicacion servida por los contenedores redeployados.
+
+Regla operativa: toda validacion HTTP, smoke o visual que represente uso real debe correr despues de `bash scripts/deploy.sh`, usando los puertos y rutas del stack Docker Compose activo.

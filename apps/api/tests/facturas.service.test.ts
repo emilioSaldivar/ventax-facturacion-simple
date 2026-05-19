@@ -17,6 +17,7 @@ import {
   cancelDocumento,
   emitNotaCreditoTotal,
   getDocumentoById,
+  listNotaCreditoCandidates,
   listDocumentos,
   previewFactura,
   refreshDocumentoStatus
@@ -512,6 +513,59 @@ describe("facturas service", () => {
     expect(repo.lastListInput).toEqual({
       facturadorId: context.facturador.id,
       filters: { estado: "EMITIDA", desde: "2026-05-01", hasta: "2026-05-18", q: "Cliente", limit: 20, offset: 0 }
+    });
+  });
+
+  it("passes operational document filters and exposes NCE candidates with ineligibility cause", async () => {
+    const repo = new FakeFacturaRepository();
+    const facturaEmitida = buildDocumento({
+      id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      estado: "EMITIDA",
+      condicion_venta: "CREDITO"
+    });
+    const facturaPendiente = buildDocumento({
+      id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+      estado: "PENDIENTE_SIFEN",
+      cdc: null
+    });
+    const nce = buildDocumento({
+      id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+      tipo: "NOTA_CREDITO",
+      documento_relacionado_id: facturaEmitida.id
+    });
+
+    repo.listResponse = {
+      total: 1,
+      items: [facturaEmitida]
+    };
+
+    await listDocumentos(context, { tipo_operativo: "CREDITO", limit: 20, offset: 0 }, repo);
+    expect(repo.lastListInput).toEqual({
+      facturadorId: context.facturador.id,
+      filters: { tipo_operativo: "CREDITO", limit: 20, offset: 0 }
+    });
+
+    let call = 0;
+    repo.list = async (input) => {
+      repo.lastListInput = input;
+      call += 1;
+      if (call === 1) {
+        return { total: 2, items: [facturaEmitida, facturaPendiente] };
+      }
+      return { total: 1, items: [nce] };
+    };
+
+    const candidates = await listNotaCreditoCandidates(context, { q: "Cliente", limit: 30, offset: 0 }, repo);
+    expect(candidates.items).toHaveLength(2);
+    expect(candidates.items[0]).toMatchObject({
+      documento: { id: facturaEmitida.id },
+      elegible: false,
+      motivo_no_elegible: "La factura ya tiene una nota de credito total."
+    });
+    expect(candidates.items[1]).toMatchObject({
+      documento: { id: facturaPendiente.id },
+      elegible: false,
+      motivo_no_elegible: "La factura debe estar emitida."
     });
   });
 

@@ -30,7 +30,8 @@ El frontend operativo atiende al usuario sin experiencia digital. El backoffice 
 - Base de datos: PostgreSQL.
 - Migraciones y queries: SQL directo versionado en el repo.
 - Auth recomendado: access token JWT corto + refresh token en cookie httpOnly, con almacenamiento server-side de sesiones/refresh para revocacion.
-- Estilo UI: identidad Ventax basada en `ventax_logos/`, tipografia y sistema visual propio con CSS mantenible. Se evita sumar Tailwind si CSS propio resuelve el MVP con menor complejidad.
+- Estilo UI: identidad Ventax basada en los SVG oficiales de `ventax_logos/`, tipografia y sistema visual propio con CSS mantenible. Se evita sumar Tailwind si CSS propio resuelve el MVP con menor complejidad.
+- Branding: usar `VENTAX-PRINCIPAL.svg`, `VENTAX-CELESTE.svg`, `VENTAX-BLANCO.svg`, `VENTAX-NEGRO.svg`, `VENTAX-NEGATIVO.svg` e isotipos `VENTAX-ISO-*` segun contraste y espacio disponible; no usar logos generados cuando exista asset oficial.
 - OpenAPI propia del SaaS: `spec/openapi.yaml`.
 
 Justificacion:
@@ -42,6 +43,7 @@ Justificacion:
 ## 3. Modulos
 
 - `OperationApp`: pantalla mobile-first de emision, listado y entrega.
+- `OperationApp` debe separar la operacion en pantallas: nueva factura, nueva nota de credito, informacion/estado, catalogo y documentos.
 - `BackofficeApp`: configuracion interna de usuarios y asignaciones.
 - `Platform`: tenants, planes y suscripciones.
 - `Identity`: usuarios, sesiones, roles, permisos y asignacion operativa.
@@ -147,6 +149,7 @@ Vistas iniciales:
 - editor de factura simple;
 - resultado de emision;
 - listado de facturas/notas emitidas;
+- nueva nota de credito;
 - detalle de documento;
 - productos/servicios;
 - clientes.
@@ -228,12 +231,34 @@ Decision:
 
 El listado debe permitir:
 
+- filtrar por `Todos`, `Contado`, `Credito` y `Nota de credito`;
 - filtrar por estado y fecha;
 - ver detalle;
 - descargar/ver link cliente;
 - cancelar/anular si es elegible;
 - iniciar nota de credito si es elegible;
 - ver rechazo y accion `Contactar soporte`.
+
+### 7.4 Nueva Nota De Credito
+
+La NCE debe tener pantalla propia dentro de la app operativa.
+
+La pantalla debe permitir:
+
+- buscar facturas emitidas elegibles;
+- filtrar/ubicar por cliente, documento, numero, fecha o total cuando el backend lo permita;
+- seleccionar una factura origen;
+- ver resumen de cliente, condicion, fecha, numero fiscal, estado y total;
+- cargar motivo obligatorio;
+- emitir NCE total;
+- mostrar resultado y entrega con las mismas acciones rapidas de comprobante.
+
+Reglas:
+
+- no se reutiliza el editor de `Nueva factura`;
+- solo facturas `EMITIDA` con CDC y sin NCE total previa son elegibles;
+- documentos `NOTA_CREDITO`, `ANULADA`, `RECHAZADA` o pendientes no pueden ser origen;
+- la NCE parcial queda fuera del MVP.
 
 ## 8. Backoffice Interno
 
@@ -266,6 +291,7 @@ El onboarding fiscal lo realiza soporte interno.
 - idempotencia por `external_ref`;
 - reintentos controlados para documentos pendientes sin duplicar documento fiscal;
 - NCE solo desde factura elegible.
+- filtros de documentos por contado, credito y nota de credito.
 
 ## 10. Riesgos
 
@@ -284,9 +310,11 @@ El onboarding fiscal lo realiza soporte interno.
 6. FiscalGateway con mocks.
 7. Emision contado y credito.
 8. Resultado, entrega y artefactos.
-9. Listado, cancelacion/anulacion y NCE.
-10. UI mobile-first completa.
+9. Listado, filtros, cancelacion/anulacion y NCE.
+10. UI mobile-first completa con pantallas separadas.
 11. Testing end-to-end.
+
+La iteracion de UI debe incluir una verificacion visual de marca para confirmar que encabezado, login, PWA, menu y pantallas operativas usan assets oficiales desde `ventax_logos/`.
 
 ## 12. Estrategia De Testing
 
@@ -300,4 +328,4 @@ El onboarding fiscal lo realiza soporte interno.
 - smoke test contra ambiente local/staging del backend fiscal;
 - pruebas visuales del editor en celular, tablet y desktop;
 - prueba visual especifica para verificar que cliente, lineas y totales no se solapen.
-- pruebas de flujo completo con Playwright usando la UI contra backend local/mock para login, cliente, item, preview, emision, entrega y listado.
+- pruebas de flujo completo con Playwright usando la UI contra backend local/mock para login, cliente, item, preview, emision, entrega, listado filtrado y nueva nota de credito.

@@ -6,7 +6,7 @@ const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?
 const ACCESS_TOKEN_STORAGE_KEY = "ventax_factura_access_token";
 
 type ViewState = "checking-session" | "login" | "loading-context" | "operacion";
-type OperationView = "home" | "invoice" | "documents";
+type OperationView = "status" | "invoice" | "credit-note" | "documents" | "catalog";
 type CondicionVenta = "CONTADO" | "CREDITO";
 type DocumentoIdentidadTipo = "RUC" | "CI" | "PASAPORTE" | "CEDULA_EXTRANJERA" | "NO_ESPECIFICADO";
 type TipoIva = "IVA_10" | "IVA_5" | "EXENTA";
@@ -100,6 +100,7 @@ interface FacturaItemInput {
 
 interface FacturaPreviewRequest {
   condicion_venta: CondicionVenta;
+  credito_plazo_dias?: number | null;
   cliente: FacturaClienteInput;
   items: FacturaItemInput[];
 }
@@ -153,6 +154,17 @@ interface DocumentoListResponse {
   total: number;
 }
 
+interface NotaCreditoCandidate {
+  documento: DocumentoResponse;
+  elegible: boolean;
+  motivo_no_elegible: string | null;
+}
+
+interface NotaCreditoCandidateListResponse {
+  items: NotaCreditoCandidate[];
+  total: number;
+}
+
 interface DeliveryLinkResponse {
   public_url: string;
   whatsapp_url: string;
@@ -200,6 +212,19 @@ interface CatalogoItem {
   activo: boolean;
 }
 
+interface CatalogoItemListResponse {
+  items: CatalogoItem[];
+  total: number;
+}
+
+interface CatalogoDraft {
+  codigo: string;
+  descripcion: string;
+  precio_unitario: string;
+  iva_tipo: TipoIva;
+  activo: boolean;
+}
+
 function App() {
   const [view, setView] = useState<ViewState>("checking-session");
   const [accessToken, setAccessToken] = useState<string | null>(() => localStorage.getItem(ACCESS_TOKEN_STORAGE_KEY));
@@ -222,6 +247,10 @@ function App() {
     let active = true;
 
     async function bootstrap() {
+      if (accessToken && view === "operacion") {
+        return;
+      }
+
       try {
         if (!accessToken) {
           const refreshed = await refreshSession();
@@ -414,17 +443,127 @@ function OperationHome({
   onLogout: () => Promise<void>;
 }) {
   const canEmit = Boolean(readiness?.ready);
-  const [operationView, setOperationView] = useState<OperationView>("home");
+  const [operationView, setOperationView] = useState<OperationView>(() => (canEmit ? "invoice" : "status"));
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  useEffect(() => {
+    if (!canEmit) {
+      setOperationView("status");
+    }
+  }, [canEmit]);
+
+  function goTo(view: OperationView) {
+    setOperationView(view);
+    setMenuOpen(false);
+  }
+
+  const menuItems: Array<{ label: string; view: OperationView; disabled?: boolean }> = [
+    { label: "Informacion y estado", view: "status" },
+    { label: "Nueva factura", view: "invoice", disabled: !canEmit },
+    { label: "Nueva nota de credito", view: "credit-note", disabled: !canEmit },
+    { label: "Catalogo", view: "catalog" },
+    { label: "Documentos", view: "documents" }
+  ];
 
   return (
     <main className="operation-shell">
       <header className="topbar">
-        <BrandMark compact />
-        <button className="ghost-action" onClick={() => void onLogout()} type="button">
+        <button
+          aria-expanded={menuOpen}
+          aria-label="Abrir menu"
+          className="hamburger-action"
+          onClick={() => setMenuOpen((current) => !current)}
+          type="button"
+        >
+          <span />
+          <span />
+          <span />
+        </button>
+        <div className="topbar-title">
+          <BrandMark compact />
+          <strong>{formatOperationViewTitle(operationView)}</strong>
+        </div>
+        <button className="ghost-action compact" onClick={() => void onLogout()} type="button">
           Salir
         </button>
       </header>
 
+      {menuOpen ? (
+        <div className="menu-scrim" onClick={() => setMenuOpen(false)} role="presentation">
+          <nav className="mobile-menu" aria-label="Navegacion principal" onClick={(event) => event.stopPropagation()}>
+            <div>
+              <p className="eyebrow">Menu</p>
+              <h2>Operacion</h2>
+              <p className="muted">{context?.facturador.razon_social ?? "Sin facturador"}</p>
+            </div>
+            <div className="menu-list">
+              {menuItems.map((item) => (
+                <button
+                  className={operationView === item.view ? "menu-item active" : "menu-item"}
+                  disabled={item.disabled}
+                  key={item.view}
+                  onClick={() => goTo(item.view)}
+                  type="button"
+                >
+                  <span>{item.label}</span>
+                  <small>{getOperationViewHint(item.view)}</small>
+                </button>
+              ))}
+            </div>
+            <button className="secondary-action wide" onClick={() => void onLogout()} type="button">
+              Salir
+            </button>
+          </nav>
+        </div>
+      ) : null}
+
+      {operationView === "invoice" ? (
+        <InvoiceEditor
+          accessToken={accessToken}
+          canEmit={canEmit}
+          context={context}
+          readiness={readiness}
+          setAccessToken={setAccessToken}
+          onBack={() => goTo("status")}
+        />
+      ) : operationView === "credit-note" ? (
+        <CreditNoteView
+          accessToken={accessToken}
+          setAccessToken={setAccessToken}
+          onBack={() => goTo("status")}
+        />
+      ) : operationView === "documents" ? (
+        <DocumentsView accessToken={accessToken} setAccessToken={setAccessToken} onBack={() => goTo("status")} />
+      ) : operationView === "catalog" ? (
+        <CatalogView accessToken={accessToken} setAccessToken={setAccessToken} onBack={() => goTo("status")} />
+      ) : (
+        <StatusView
+          canEmit={canEmit}
+          context={context}
+          readiness={readiness}
+          user={user}
+          onGoTo={goTo}
+        />
+      )}
+    </main>
+  );
+}
+
+function StatusView({
+  canEmit,
+  context,
+  readiness,
+  user,
+  onGoTo
+}: {
+  canEmit: boolean;
+  context: OperationalContextResponse | null;
+  readiness: ReadinessResponse | null;
+  user: UserSummary | null;
+  onGoTo: (view: OperationView) => void;
+}) {
+  return (
+    <>
       <section className="facturador-band" aria-label="Contexto operativo">
         <div>
           <p className="eyebrow">Facturador</p>
@@ -472,28 +611,21 @@ function OperationHome({
         </article>
       </section>
 
-      {operationView === "invoice" ? (
-        <InvoiceEditor
-          accessToken={accessToken}
-          canEmit={canEmit}
-          context={context}
-          readiness={readiness}
-          setAccessToken={setAccessToken}
-          onBack={() => setOperationView("home")}
-        />
-      ) : operationView === "documents" ? (
-        <DocumentsView accessToken={accessToken} setAccessToken={setAccessToken} onBack={() => setOperationView("home")} />
-      ) : (
-        <section className="next-panel">
-          <button className="primary-action wide" disabled={!canEmit} onClick={() => setOperationView("invoice")} type="button">
-            Nueva factura
-          </button>
-          <button className="secondary-action wide" onClick={() => setOperationView("documents")} type="button">
-            Ver documentos
-          </button>
-        </section>
-      )}
-    </main>
+      <section className="next-panel">
+        <button className="primary-action wide" disabled={!canEmit} onClick={() => onGoTo("invoice")} type="button">
+          Nueva factura
+        </button>
+        <button className="secondary-action wide" disabled={!canEmit} onClick={() => onGoTo("credit-note")} type="button">
+          Nueva nota de credito
+        </button>
+        <button className="secondary-action wide" onClick={() => onGoTo("catalog")} type="button">
+          Catalogo
+        </button>
+        <button className="secondary-action wide" onClick={() => onGoTo("documents")} type="button">
+          Ver documentos
+        </button>
+      </section>
+    </>
   );
 }
 
@@ -510,17 +642,19 @@ function DocumentsView({
   const [documents, setDocuments] = useState<DocumentoResponse[]>([]);
   const [selected, setSelected] = useState<DocumentoResponse | null>(null);
   const [estadoFilter, setEstadoFilter] = useState<DocumentoEstado | "">("");
+  const [tipoOperativoFilter, setTipoOperativoFilter] = useState<"TODOS" | "CONTADO" | "CREDITO" | "NOTA_CREDITO">("TODOS");
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [deliveryLink, setDeliveryLink] = useState<DeliveryLinkResponse | null>(null);
   const [emailStatus, setEmailStatus] = useState<EmailStatusResponse | null>(null);
+  const [whatsappPhone, setWhatsappPhone] = useState("");
   const [message, setMessage] = useState<string | null>(null);
 
   useEffect(() => {
     void loadDocuments();
-  }, [estadoFilter]);
+  }, [estadoFilter, tipoOperativoFilter]);
 
   async function loadDocuments(nextQuery = query) {
     setLoading(true);
@@ -529,6 +663,9 @@ function DocumentsView({
     const params = new URLSearchParams({ limit: "30", offset: "0" });
     if (estadoFilter) {
       params.set("estado", estadoFilter);
+    }
+    if (tipoOperativoFilter !== "TODOS") {
+      params.set("tipo_operativo", tipoOperativoFilter);
     }
     if (nextQuery.trim()) {
       params.set("q", nextQuery.trim());
@@ -688,6 +825,8 @@ function DocumentsView({
     }
   }
 
+  const selectedSifenSummary = selected ? getSifenSummary(selected) : null;
+
   return (
     <section className="documents-view" aria-labelledby="documents-title">
       <div className="editor-heading">
@@ -701,6 +840,18 @@ function DocumentsView({
       </div>
 
       <section className="documents-filters">
+        <div className="filter-tabs" role="group" aria-label="Tipo de documento">
+          {(["TODOS", "CONTADO", "CREDITO", "NOTA_CREDITO"] as const).map((value) => (
+            <button
+              className={tipoOperativoFilter === value ? "active" : ""}
+              key={value}
+              onClick={() => setTipoOperativoFilter(value)}
+              type="button"
+            >
+              {value === "TODOS" ? "Todos" : value === "NOTA_CREDITO" ? "Nota credito" : value === "CONTADO" ? "Contado" : "Credito"}
+            </button>
+          ))}
+        </div>
         <label>
           Buscar
           <input
@@ -789,10 +940,16 @@ function DocumentsView({
                   <dt>Email</dt>
                   <dd>{formatEmailStatus(emailStatus?.status ?? selected.delivery.email_status)}</dd>
                 </div>
+                <div>
+                  <dt>SIFEN</dt>
+                  <dd>{formatSifenSummary(selectedSifenSummary)}</dd>
+                </div>
               </div>
 
               {getRecoverableMessage(selected) ? <p className="editor-alert blocked">{getRecoverableMessage(selected)}</p> : null}
-              {selected.estado === "RECHAZADA" ? <p className="editor-alert blocked">Documento rechazado por SIFEN. Revise la causa resumida y contacte soporte si no es gestionable.</p> : null}
+              {selected.estado === "RECHAZADA" ? (
+                <p className="editor-alert blocked">{getRejectedSifenMessage(selectedSifenSummary)}</p>
+              ) : null}
               {emailStatus?.message ? <p className="editor-alert ready">{emailStatus.message}</p> : null}
 
               <div className="delivery-actions">
@@ -812,7 +969,7 @@ function DocumentsView({
 
               <div className="result-actions">
                 <button className="secondary-action" disabled={actionLoading || !selected.cdc} onClick={() => void refreshSelectedStatus()} type="button">
-                  Refrescar estado
+                  Consultar SIFEN
                 </button>
                 <button className="secondary-action" disabled={actionLoading || !["PENDIENTE_SIFEN", "ERROR_TEMPORAL"].includes(selected.estado)} onClick={() => void retrySelectedEmission()} type="button">
                   Reintentar
@@ -838,6 +995,452 @@ function DocumentsView({
   );
 }
 
+function CreditNoteView({
+  accessToken,
+  setAccessToken,
+  onBack
+}: {
+  accessToken: string | null;
+  setAccessToken: (token: string | null) => void;
+  onBack: () => void;
+}) {
+  const api = useMemo(() => createApiClient(accessToken, setAccessToken), [accessToken, setAccessToken]);
+  const [candidates, setCandidates] = useState<NotaCreditoCandidate[]>([]);
+  const [selected, setSelected] = useState<NotaCreditoCandidate | null>(null);
+  const [query, setQuery] = useState("");
+  const [motivo, setMotivo] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [emitting, setEmitting] = useState(false);
+  const [result, setResult] = useState<DocumentoResponse | null>(null);
+  const [deliveryLink, setDeliveryLink] = useState<DeliveryLinkResponse | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    void loadCandidates();
+  }, []);
+
+  async function loadCandidates(nextQuery = query) {
+    setLoading(true);
+    setMessage(null);
+    const params = new URLSearchParams({ limit: "30", offset: "0" });
+    if (nextQuery.trim()) {
+      params.set("q", nextQuery.trim());
+    }
+
+    try {
+      const response = await api.get<NotaCreditoCandidateListResponse>(`/facturas/nce-candidatas?${params.toString()}`);
+      setCandidates(response.items);
+      setSelected((current) => (current ? response.items.find((item) => item.documento.id === current.documento.id) ?? current : current));
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "No se pudieron cargar facturas candidatas.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function emitNotaCredito() {
+    if (!selected?.elegible) {
+      setMessage(selected?.motivo_no_elegible ?? "Seleccione una factura elegible.");
+      return;
+    }
+    if (!motivo.trim()) {
+      setMessage("Motivo requerido.");
+      return;
+    }
+
+    setEmitting(true);
+    setMessage(null);
+    setDeliveryLink(null);
+
+    try {
+      const notaCredito = await api.request<DocumentoResponse>(`/facturas/${selected.documento.id}/nota-credito`, {
+        method: "POST",
+        headers: {
+          "Idempotency-Key": createIdempotencyKey()
+        },
+        body: JSON.stringify({ motivo: motivo.trim() })
+      });
+      setResult(notaCredito);
+      const link = await api.post<DeliveryLinkResponse>(`/facturas/${notaCredito.id}/delivery-link`, { regenerate: false });
+      setDeliveryLink(link);
+      setMessage("Nota de credito emitida.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "No se pudo emitir la nota de credito.");
+    } finally {
+      setEmitting(false);
+    }
+  }
+
+  return (
+    <section className="documents-view" aria-labelledby="credit-note-title">
+      <div className="editor-heading">
+        <div>
+          <p className="eyebrow">Nueva nota de credito</p>
+          <h2 id="credit-note-title">Seleccionar factura</h2>
+        </div>
+        <button className="ghost-action" onClick={onBack} type="button">
+          Volver
+        </button>
+      </div>
+      <section className="documents-filters">
+        <label>
+          Buscar factura
+          <input
+            onChange={(event) => setQuery(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                void loadCandidates();
+              }
+            }}
+            placeholder="Cliente, documento, numero o total"
+            value={query}
+          />
+        </label>
+        <button className="secondary-action" disabled={loading} onClick={() => void loadCandidates()} type="button">
+          {loading ? "Cargando..." : "Buscar"}
+        </button>
+      </section>
+
+      {message ? <p className={message.includes("emitida") ? "editor-alert ready" : "form-error"}>{message}</p> : null}
+
+      <section className="documents-layout">
+        <div className="documents-list">
+          {candidates.length === 0 && !loading ? <p className="muted empty-state">Sin facturas para los filtros actuales.</p> : null}
+          {candidates.map((candidate) => (
+            <button
+              className={selected?.documento.id === candidate.documento.id ? "document-row active" : "document-row"}
+              key={candidate.documento.id}
+              onClick={() => {
+                setSelected(candidate);
+                setResult(null);
+                setDeliveryLink(null);
+              }}
+              type="button"
+            >
+              <span>
+                <strong>{candidate.documento.numero_fiscal ?? "Numero pendiente"}</strong>
+                <small>{candidate.documento.cliente.razon_social}</small>
+              </span>
+              <span>
+                <strong>{formatGuaranies(candidate.documento.totals.total)}</strong>
+                <small>{candidate.elegible ? "Elegible" : candidate.motivo_no_elegible}</small>
+              </span>
+            </button>
+          ))}
+        </div>
+
+        <aside className="document-detail">
+          {selected ? (
+            <>
+              <div className="receipt-heading">
+                <div>
+                  <p className="eyebrow">Factura origen</p>
+                  <h3>{selected.documento.cliente.razon_social}</h3>
+                  <p className="muted">
+                    {selected.documento.numero_fiscal ?? "Numero pendiente"} · {selected.documento.condicion_venta} · {formatDocumentoEstado(selected.documento.estado)}
+                  </p>
+                </div>
+                <span className={selected.elegible ? "status-pill ready" : "status-pill blocked"}>
+                  {selected.elegible ? "Elegible" : "Bloqueada"}
+                </span>
+              </div>
+              <div className="receipt-summary">
+                <div>
+                  <dt>Documento</dt>
+                  <dd>{selected.documento.cliente.documento}</dd>
+                </div>
+                <div>
+                  <dt>Total</dt>
+                  <dd>{formatGuaranies(selected.documento.totals.total)}</dd>
+                </div>
+              </div>
+              {!selected.elegible ? <p className="editor-alert blocked">{selected.motivo_no_elegible}</p> : null}
+              <label className="credit-note-motivo">
+                Motivo
+                <textarea onChange={(event) => setMotivo(event.target.value)} rows={4} value={motivo} />
+              </label>
+              <button className="primary-action wide" disabled={emitting || !selected.elegible} onClick={() => void emitNotaCredito()} type="button">
+                {emitting ? "Emitiendo..." : "Emitir nota de credito"}
+              </button>
+
+              {result ? (
+                <div className="public-link-box">
+                  <dt>Nota de credito</dt>
+                  <dd>
+                    {formatDocumentoEstado(result.estado)} · Numero {result.numero_fiscal ?? "pendiente"} · {deliveryLink?.public_url ?? "Link en proceso"}
+                  </dd>
+                </div>
+              ) : null}
+            </>
+          ) : (
+            <p className="muted empty-state">Seleccione una factura emitida elegible para emitir una nota de credito total.</p>
+          )}
+        </aside>
+      </section>
+    </section>
+  );
+}
+
+function CatalogView({
+  accessToken,
+  setAccessToken,
+  onBack
+}: {
+  accessToken: string | null;
+  setAccessToken: (token: string | null) => void;
+  onBack: () => void;
+}) {
+  const api = useMemo(() => createApiClient(accessToken, setAccessToken), [accessToken, setAccessToken]);
+  const [items, setItems] = useState<CatalogoItem[]>([]);
+  const [selected, setSelected] = useState<CatalogoItem | null>(null);
+  const [query, setQuery] = useState("");
+  const [activoFilter, setActivoFilter] = useState<"true" | "false" | "">("true");
+  const [draft, setDraft] = useState<CatalogoDraft>(() => createCatalogoDraft());
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    void loadItems();
+  }, [activoFilter]);
+
+  async function loadItems(nextQuery = query) {
+    setLoading(true);
+    setError(null);
+
+    const params = new URLSearchParams({ limit: "50", offset: "0" });
+    if (nextQuery.trim()) {
+      params.set("q", nextQuery.trim());
+    }
+    if (activoFilter) {
+      params.set("activo", activoFilter);
+    }
+
+    try {
+      const result = await api.get<CatalogoItemListResponse>(`/catalogo/items?${params.toString()}`);
+      setItems(result.items);
+      setSelected((current) => (current ? result.items.find((item) => item.id === current.id) ?? current : current));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo cargar el catalogo.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function startCreate() {
+    setSelected(null);
+    setDraft(createCatalogoDraft());
+    setMessage(null);
+    setError(null);
+  }
+
+  function startEdit(item: CatalogoItem) {
+    setSelected(item);
+    setDraft({
+      codigo: item.codigo,
+      descripcion: item.descripcion,
+      precio_unitario: String(item.precio_unitario),
+      iva_tipo: item.iva_tipo,
+      activo: item.activo
+    });
+    setMessage(null);
+    setError(null);
+  }
+
+  async function saveItem(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSaving(true);
+    setMessage(null);
+    setError(null);
+
+    const payload = {
+      codigo: draft.codigo.trim() || null,
+      descripcion: draft.descripcion.trim(),
+      precio_unitario: Number(draft.precio_unitario),
+      iva_tipo: draft.iva_tipo,
+      activo: draft.activo
+    };
+
+    if (!payload.descripcion || !Number.isInteger(payload.precio_unitario) || payload.precio_unitario < 0) {
+      setSaving(false);
+      setError("Complete descripcion y precio entero valido.");
+      return;
+    }
+
+    try {
+      const saved = selected
+        ? await api.request<CatalogoItem>(`/catalogo/items/${selected.id}`, {
+            method: "PATCH",
+            body: JSON.stringify(payload)
+          })
+        : await api.post<CatalogoItem>("/catalogo/items", payload);
+
+      setSelected(saved);
+      setDraft({
+        codigo: saved.codigo,
+        descripcion: saved.descripcion,
+        precio_unitario: String(saved.precio_unitario),
+        iva_tipo: saved.iva_tipo,
+        activo: saved.activo
+      });
+      setMessage(selected ? "Item actualizado." : "Item creado.");
+      await loadItems();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo guardar el item.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <section className="catalog-view" aria-labelledby="catalog-title">
+      <div className="editor-heading">
+        <div>
+          <p className="eyebrow">Catalogo</p>
+          <h2 id="catalog-title">Productos y servicios</h2>
+        </div>
+        <button className="ghost-action" onClick={onBack} type="button">
+          Volver
+        </button>
+      </div>
+
+      <section className="documents-filters">
+        <label>
+          Buscar
+          <input
+            onChange={(event) => setQuery(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                void loadItems();
+              }
+            }}
+            placeholder="Codigo o descripcion"
+            value={query}
+          />
+        </label>
+        <label>
+          Estado
+          <select onChange={(event) => setActivoFilter(event.target.value as "true" | "false" | "")} value={activoFilter}>
+            <option value="true">Activos</option>
+            <option value="">Todos</option>
+            <option value="false">Inactivos</option>
+          </select>
+        </label>
+        <button className="secondary-action" disabled={loading} onClick={() => void loadItems()} type="button">
+          {loading ? "Cargando..." : "Aplicar"}
+        </button>
+      </section>
+
+      {error ? <p className="form-error">{error}</p> : null}
+      {message ? <p className="editor-alert ready">{message}</p> : null}
+
+      <section className="documents-layout catalog-layout">
+        <div className="documents-list">
+          <button className={!selected ? "document-row active" : "document-row"} onClick={startCreate} type="button">
+            <span>
+              <strong>Nuevo item</strong>
+              <small>Crear producto o servicio</small>
+            </span>
+            <span>
+              <strong>+</strong>
+              <small>Alta</small>
+            </span>
+          </button>
+
+          {items.length === 0 && !loading ? <p className="muted empty-state">Sin items para los filtros actuales.</p> : null}
+          {items.map((item) => (
+            <button
+              className={selected?.id === item.id ? "document-row active" : "document-row"}
+              key={item.id}
+              onClick={() => startEdit(item)}
+              type="button"
+            >
+              <span>
+                <strong>{item.codigo || "Sin codigo"}</strong>
+                <small>{item.descripcion}</small>
+              </span>
+              <span>
+                <strong>{formatGuaranies(item.precio_unitario)}</strong>
+                <small>{item.activo ? "Activo" : "Inactivo"} · {formatIva(item.iva_tipo)}</small>
+              </span>
+            </button>
+          ))}
+        </div>
+
+        <form className="document-detail catalog-form" onSubmit={(event) => void saveItem(event)}>
+          <div className="receipt-heading">
+            <div>
+              <p className="eyebrow">{selected ? "Edicion" : "Alta"}</p>
+              <h3>{selected ? selected.descripcion : "Nuevo item"}</h3>
+              <p className="muted">Se usa en la busqueda del editor de factura.</p>
+            </div>
+            <span className={draft.activo ? "status-pill ready" : "status-pill blocked"}>
+              {draft.activo ? "Activo" : "Inactivo"}
+            </span>
+          </div>
+
+          <div className="field-grid">
+            <label>
+              Codigo
+              <input
+                onChange={(event) => setDraft((current) => ({ ...current, codigo: event.target.value }))}
+                placeholder="SERV-001"
+                value={draft.codigo}
+              />
+            </label>
+            <label>
+              Precio unitario
+              <input
+                inputMode="numeric"
+                min="0"
+                onChange={(event) => setDraft((current) => ({ ...current, precio_unitario: event.target.value }))}
+                required
+                value={draft.precio_unitario}
+              />
+            </label>
+            <label className="span-2">
+              Descripcion
+              <input
+                onChange={(event) => setDraft((current) => ({ ...current, descripcion: event.target.value }))}
+                required
+                value={draft.descripcion}
+              />
+            </label>
+            <label>
+              IVA
+              <select onChange={(event) => setDraft((current) => ({ ...current, iva_tipo: event.target.value as TipoIva }))} value={draft.iva_tipo}>
+                <option value="IVA_10">10%</option>
+                <option value="IVA_5">5%</option>
+                <option value="EXENTA">Exenta</option>
+              </select>
+            </label>
+            <label>
+              Estado
+              <select
+                onChange={(event) => setDraft((current) => ({ ...current, activo: event.target.value === "true" }))}
+                value={draft.activo ? "true" : "false"}
+              >
+                <option value="true">Activo</option>
+                <option value="false">Inactivo</option>
+              </select>
+            </label>
+          </div>
+
+          <div className="result-actions">
+            <button className="primary-action" disabled={saving} type="submit">
+              {saving ? "Guardando..." : selected ? "Guardar cambios" : "Crear item"}
+            </button>
+            <button className="secondary-action" onClick={startCreate} type="button">
+              Limpiar
+            </button>
+          </div>
+        </form>
+      </section>
+    </section>
+  );
+}
+
 function InvoiceEditor({
   accessToken,
   canEmit,
@@ -854,6 +1457,7 @@ function InvoiceEditor({
   onBack: () => void;
 }) {
   const [condicionVenta, setCondicionVenta] = useState<CondicionVenta>("CONTADO");
+  const [creditoPlazoDias, setCreditoPlazoDias] = useState<number>(context?.fiscal_context.credito_plazo_dias ?? 30);
   const [cliente, setCliente] = useState<FacturaClienteInput>({
     documento_tipo: "RUC",
     documento: "",
@@ -863,6 +1467,8 @@ function InvoiceEditor({
     email: ""
   });
   const [lines, setLines] = useState<InvoiceLineDraft[]>(() => [createInvoiceLine()]);
+  const [activeLineId, setActiveLineId] = useState<string | null>(null);
+  const [expandedLineIds, setExpandedLineIds] = useState<Set<string>>(() => new Set());
   const [clienteSuggestions, setClienteSuggestions] = useState<ClienteSearchResult[]>([]);
   const [clienteSearching, setClienteSearching] = useState(false);
   const [clienteSaving, setClienteSaving] = useState(false);
@@ -883,10 +1489,12 @@ function InvoiceEditor({
   const [emailStatus, setEmailStatus] = useState<EmailStatusResponse | null>(null);
   const [deliveryLoading, setDeliveryLoading] = useState(false);
   const [deliveryMessage, setDeliveryMessage] = useState<string | null>(null);
+  const [whatsappPhone, setWhatsappPhone] = useState("");
 
   const api = useMemo(() => createApiClient(accessToken, setAccessToken), [accessToken, setAccessToken]);
   const today = useMemo(() => new Date().toLocaleDateString("es-PY"), []);
   const readyMessage = readiness?.checks.find((check) => !check.ok)?.message ?? "La configuracion operativa esta lista.";
+  const nextFiscalNumber = useMemo(() => getNextFiscalNumber(context?.fiscal_context.documento_nro), [context?.fiscal_context.documento_nro]);
 
   const request = useMemo<FacturaPreviewRequest | null>(() => {
     const items = lines
@@ -906,6 +1514,7 @@ function InvoiceEditor({
 
     return {
       condicion_venta: condicionVenta,
+      credito_plazo_dias: condicionVenta === "CREDITO" ? creditoPlazoDias : null,
       cliente: {
         ...cliente,
         documento: cliente.documento.trim(),
@@ -916,7 +1525,13 @@ function InvoiceEditor({
       },
       items
     };
-  }, [cliente, condicionVenta, lines]);
+  }, [cliente, condicionVenta, creditoPlazoDias, lines]);
+
+  useEffect(() => {
+    if (!activeLineId && lines[0]) {
+      setActiveLineId(lines[0].id);
+    }
+  }, [activeLineId, lines]);
 
   useEffect(() => {
     if (!request) {
@@ -988,9 +1603,11 @@ function InvoiceEditor({
       setDeliveryLink(null);
       setEmailStatus(null);
       setDeliveryMessage(null);
+      setWhatsappPhone("");
       return;
     }
 
+    setWhatsappPhone(emittedDocumento.cliente.telefono ?? "");
     void loadDeliveryData(emittedDocumento.id);
   }, [emittedDocumento?.id, emittedDocumento?.cdc, emittedDocumento?.estado]);
 
@@ -1079,6 +1696,7 @@ function InvoiceEditor({
 
   function resetInvoice() {
     setCondicionVenta("CONTADO");
+    setCreditoPlazoDias(context?.fiscal_context.credito_plazo_dias ?? 30);
     setCliente({
       documento_tipo: "RUC",
       documento: "",
@@ -1087,7 +1705,10 @@ function InvoiceEditor({
       telefono: "",
       email: ""
     });
-    setLines([createInvoiceLine()]);
+    const nextLine = createInvoiceLine();
+    setLines([nextLine]);
+    setActiveLineId(nextLine.id);
+    setExpandedLineIds(new Set());
     setPreview(null);
     setPreviewError(null);
     setEmissionError(null);
@@ -1135,7 +1756,22 @@ function InvoiceEditor({
   }
 
   function removeLine(lineId: string) {
-    setLines((current) => (current.length === 1 ? current : current.filter((line) => line.id !== lineId)));
+    setLines((current) => {
+      if (current.length === 1) {
+        return current;
+      }
+      const next = current.filter((line) => line.id !== lineId);
+      if (activeLineId === lineId) {
+        setActiveLineId(next[0]?.id ?? null);
+      }
+      return next;
+    });
+  }
+
+  function addLineAndEdit() {
+    const nextLine = createInvoiceLine();
+    setLines((current) => [...current, nextLine]);
+    setActiveLineId(nextLine.id);
   }
 
   function applyClienteSuggestion(suggestion: ClienteSearchResult) {
@@ -1157,17 +1793,23 @@ function InvoiceEditor({
     setClienteMessage(null);
 
     try {
-      const saved = await api.post<ClienteResponse>("/clientes", {
+      const payload = {
         documento_tipo: cliente.documento_tipo,
         documento: cliente.documento,
         razon_social: cliente.razon_social,
         direccion: cliente.direccion || null,
         telefono: cliente.telefono || null,
         email: cliente.email || null
-      });
+      };
+      const saved = cliente.cliente_id
+        ? await api.request<ClienteResponse>(`/clientes/${cliente.cliente_id}`, {
+            method: "PATCH",
+            body: JSON.stringify(payload)
+          })
+        : await api.post<ClienteResponse>("/clientes", payload);
       applyClienteSuggestion(saved);
       setClienteModalOpen(false);
-      setClienteMessage("Cliente guardado para este facturador.");
+      setClienteMessage(cliente.cliente_id ? "Cliente actualizado." : "Cliente guardado para este facturador.");
     } catch (error) {
       setClienteMessage(error instanceof Error ? error.message : "No se pudo guardar el cliente.");
     } finally {
@@ -1212,6 +1854,10 @@ function InvoiceEditor({
     }
   }
 
+  const emittedSifenSummary = emittedDocumento ? getSifenSummary(emittedDocumento) : null;
+  const activeLine = lines.find((line) => line.id === activeLineId) ?? lines[0] ?? null;
+  const activeLineIndex = activeLine ? lines.findIndex((line) => line.id === activeLine.id) : -1;
+
   return (
     <section className="invoice-editor" aria-labelledby="invoice-title">
       <div className="editor-heading">
@@ -1226,7 +1872,7 @@ function InvoiceEditor({
 
       <section className="invoice-band">
         <div>
-          <dt>Razon social</dt>
+          <dt>Facturador</dt>
           <dd>{context?.facturador.razon_social ?? "-"}</dd>
         </div>
         <div>
@@ -1234,12 +1880,20 @@ function InvoiceEditor({
           <dd>{context?.facturador.ruc ?? "-"}</dd>
         </div>
         <div>
-          <dt>Actividad</dt>
-          <dd>{context?.fiscal_context.actividad_economica_descripcion ?? context?.fiscal_context.actividad_economica_codigo ?? "-"}</dd>
-        </div>
-        <div>
           <dt>Est./Punto</dt>
           <dd>{context ? `${context.fiscal_context.establecimiento}-${context.fiscal_context.punto_expedicion}` : "-"}</dd>
+        </div>
+        <div>
+          <dt>Fecha</dt>
+          <dd>{today}</dd>
+        </div>
+        <div>
+          <dt>Timbrado</dt>
+          <dd>{context?.fiscal_context.timbrado ?? "-"}</dd>
+        </div>
+        <div>
+          <dt>Siguiente estimado</dt>
+          <dd>{nextFiscalNumber}</dd>
         </div>
       </section>
 
@@ -1265,6 +1919,18 @@ function InvoiceEditor({
             </button>
           ))}
         </div>
+        {condicionVenta === "CREDITO" ? (
+          <label className="credit-term-field">
+            Plazo
+            <select onChange={(event) => setCreditoPlazoDias(Number(event.target.value))} value={creditoPlazoDias}>
+              {[30, 60, 90].map((days) => (
+                <option key={days} value={days}>
+                  {days} dias
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
       </section>
 
       <section className="form-section">
@@ -1285,7 +1951,7 @@ function InvoiceEditor({
               </select>
               <input
                 inputMode="text"
-                onChange={(event) => setCliente((current) => ({ ...current, cliente_id: null, documento: event.target.value }))}
+                onChange={(event) => setCliente((current) => ({ ...current, documento: event.target.value }))}
                 placeholder="80123456-7"
                 value={cliente.documento}
               />
@@ -1309,29 +1975,29 @@ function InvoiceEditor({
           </label>
           <label>
             Nombre o razon social
-            <input onChange={(event) => setCliente((current) => ({ ...current, cliente_id: null, razon_social: event.target.value }))} value={cliente.razon_social} />
+            <input onChange={(event) => setCliente((current) => ({ ...current, razon_social: event.target.value }))} value={cliente.razon_social} />
           </label>
           <label>
             Direccion
-            <input onChange={(event) => setCliente((current) => ({ ...current, cliente_id: null, direccion: event.target.value }))} value={cliente.direccion ?? ""} />
+            <input onChange={(event) => setCliente((current) => ({ ...current, direccion: event.target.value }))} value={cliente.direccion ?? ""} />
           </label>
           <label>
             Telefono
-            <input inputMode="tel" onChange={(event) => setCliente((current) => ({ ...current, cliente_id: null, telefono: event.target.value }))} value={cliente.telefono ?? ""} />
+            <input inputMode="tel" onChange={(event) => setCliente((current) => ({ ...current, telefono: event.target.value }))} value={cliente.telefono ?? ""} />
           </label>
           <label>
             Correo
-            <input inputMode="email" onChange={(event) => setCliente((current) => ({ ...current, cliente_id: null, email: event.target.value }))} value={cliente.email ?? ""} />
+            <input inputMode="email" onChange={(event) => setCliente((current) => ({ ...current, email: event.target.value }))} value={cliente.email ?? ""} />
           </label>
         </div>
         <div className="quick-actions-row">
           <button
             className="secondary-action"
-            disabled={!cliente.documento.trim() || !cliente.razon_social.trim() || Boolean(cliente.cliente_id)}
-            onClick={() => setClienteModalOpen(true)}
+            disabled={!cliente.documento.trim() || !cliente.razon_social.trim()}
+            onClick={() => cliente.cliente_id ? void saveClienteRapido() : setClienteModalOpen(true)}
             type="button"
           >
-            Guardar cliente
+            {cliente.cliente_id ? "Actualizar" : "Guardar cliente"}
           </button>
           {clienteMessage ? <p className="inline-message">{clienteMessage}</p> : null}
         </div>
@@ -1343,112 +2009,166 @@ function InvoiceEditor({
             <p className="eyebrow">Lineas</p>
             <h3>Productos o servicios</h3>
           </div>
-          <button className="secondary-action" onClick={() => setLines((current) => [...current, createInvoiceLine()])} type="button">
-            Agregar
+        </div>
+
+        <div className="line-table" role="table" aria-label="Productos o servicios agregados">
+          <div className="line-table-header" role="row">
+            <span>Cant</span>
+            <span>Cod</span>
+            <span>Descripcion</span>
+            <span>Subtotal</span>
+            <span aria-label="Acciones" />
+          </div>
+          {lines.map((line, index) => {
+            const expanded = expandedLineIds.has(line.id);
+            const description = line.descripcion.trim() || "Sin descripcion";
+            const isLong = description.length > 34;
+            return (
+              <div className={activeLine?.id === line.id ? "line-table-row active" : "line-table-row"} key={line.id} role="row">
+                <button className="line-row-main" onClick={() => setActiveLineId(line.id)} type="button">
+                  <span>{line.cantidad || "1"}</span>
+                  <span>{line.codigo || "-"}</span>
+                  <span>
+                    {expanded || !isLong ? description : `${description.slice(0, 34)}...`}
+                    {isLong ? (
+                      <small
+                        className="line-more"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setExpandedLineIds((current) => {
+                            const next = new Set(current);
+                            if (next.has(line.id)) {
+                              next.delete(line.id);
+                            } else {
+                              next.add(line.id);
+                            }
+                            return next;
+                          });
+                        }}
+                      >
+                        {expanded ? " Ver menos" : " Ver +"}
+                      </small>
+                    ) : null}
+                  </span>
+                  <span>{formatGuaranies(preview?.items[index]?.subtotal ?? 0)}</span>
+                </button>
+                <div className="line-row-actions">
+                  <button aria-label={`Editar linea ${index + 1}`} className="icon-action" onClick={() => setActiveLineId(line.id)} type="button">
+                    Lapiz
+                  </button>
+                  <button aria-label={`Eliminar linea ${index + 1}`} className="icon-action danger" disabled={lines.length === 1} onClick={() => removeLine(line.id)} type="button">
+                    Basura
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+          <button className="line-empty-row" onClick={addLineAndEdit} type="button">
+            <span>+</span>
+            <span>Codigo o descripcion</span>
+            <span>Agregar producto o servicio</span>
           </button>
         </div>
 
-        <div className="invoice-lines">
-          {lines.map((line, index) => (
-            <article className="line-card" key={line.id}>
-              <div className="line-card-header">
-                <strong>Linea {index + 1}</strong>
-                <button className="link-action" disabled={lines.length === 1} onClick={() => removeLine(line.id)} type="button">
-                  Quitar
+        {activeLine ? (
+          <article className="line-card active-editor">
+            <div className="line-card-header">
+              <strong>Editar linea {activeLineIndex + 1}</strong>
+              <button className="link-action" onClick={addLineAndEdit} type="button">
+                Nueva linea
+              </button>
+            </div>
+            <div className="line-grid">
+              <label>
+                Cant.
+                <input inputMode="numeric" min="1" onChange={(event) => updateLine(activeLine.id, { cantidad: event.target.value })} value={activeLine.cantidad} />
+              </label>
+              <label>
+                Codigo
+                <input
+                  disabled={activeLine.lockedFromCatalog}
+                  onChange={(event) =>
+                    updateLine(activeLine.id, { catalogo_item_id: null, codigo: event.target.value, lockedFromCatalog: false })
+                  }
+                  value={activeLine.codigo}
+                />
+              </label>
+              <label className="span-2">
+                Descripcion
+                <input
+                  disabled={activeLine.lockedFromCatalog}
+                  onChange={(event) =>
+                    updateLine(activeLine.id, { catalogo_item_id: null, descripcion: event.target.value, lockedFromCatalog: false })
+                  }
+                  value={activeLine.descripcion}
+                />
+              </label>
+              <label>
+                Precio unit.
+                <input
+                  disabled={activeLine.lockedFromCatalog}
+                  inputMode="numeric"
+                  min="0"
+                  onChange={(event) =>
+                    updateLine(activeLine.id, { catalogo_item_id: null, precio_unitario: event.target.value, lockedFromCatalog: false })
+                  }
+                  value={activeLine.precio_unitario}
+                />
+              </label>
+              <label>
+                IVA
+                <select
+                  disabled={activeLine.lockedFromCatalog}
+                  onChange={(event) =>
+                    updateLine(activeLine.id, { catalogo_item_id: null, iva_tipo: event.target.value as TipoIva, lockedFromCatalog: false })
+                  }
+                  value={activeLine.iva_tipo}
+                >
+                  <option value="IVA_10">10%</option>
+                  <option value="IVA_5">5%</option>
+                  <option value="EXENTA">Exenta</option>
+                </select>
+              </label>
+              <div className="line-subtotal">
+                <dt>Subtotal</dt>
+                <dd>{formatGuaranies(activeLineIndex >= 0 ? preview?.items[activeLineIndex]?.subtotal ?? 0 : 0)}</dd>
+              </div>
+            </div>
+            {catalogSearching[activeLine.id] ? <span className="field-hint">Buscando catalogo...</span> : null}
+            {(catalogSuggestions[activeLine.id] ?? []).length > 0 ? (
+              <div className="suggestion-list catalog">
+                {(catalogSuggestions[activeLine.id] ?? []).map((item) => (
+                  <button key={item.id} onClick={() => applyCatalogItem(activeLine.id, item)} type="button">
+                    <strong>{item.codigo}</strong>
+                    <span>{item.descripcion}</span>
+                    <small>{formatGuaranies(item.precio_unitario)} · {formatIva(item.iva_tipo)}</small>
+                  </button>
+                ))}
+              </div>
+            ) : null}
+            <div className="quick-actions-row compact">
+              {activeLine.lockedFromCatalog ? (
+                <button
+                  className="secondary-action"
+                  onClick={() => updateLine(activeLine.id, { catalogo_item_id: null, lockedFromCatalog: false })}
+                  type="button"
+                >
+                  Editar como nuevo
                 </button>
-              </div>
-              <div className="line-grid">
-                <label>
-                  Cant.
-                  <input inputMode="numeric" min="1" onChange={(event) => updateLine(line.id, { cantidad: event.target.value })} value={line.cantidad} />
-                </label>
-                <label>
-                  Codigo
-                  <input
-                    disabled={line.lockedFromCatalog}
-                    onChange={(event) =>
-                      updateLine(line.id, { catalogo_item_id: null, codigo: event.target.value, lockedFromCatalog: false })
-                    }
-                    value={line.codigo}
-                  />
-                </label>
-                <label className="span-2">
-                  Descripcion
-                  <input
-                    disabled={line.lockedFromCatalog}
-                    onChange={(event) =>
-                      updateLine(line.id, { catalogo_item_id: null, descripcion: event.target.value, lockedFromCatalog: false })
-                    }
-                    value={line.descripcion}
-                  />
-                </label>
-                <label>
-                  Precio unit.
-                  <input
-                    disabled={line.lockedFromCatalog}
-                    inputMode="numeric"
-                    min="0"
-                    onChange={(event) =>
-                      updateLine(line.id, { catalogo_item_id: null, precio_unitario: event.target.value, lockedFromCatalog: false })
-                    }
-                    value={line.precio_unitario}
-                  />
-                </label>
-                <label>
-                  IVA
-                  <select
-                    disabled={line.lockedFromCatalog}
-                    onChange={(event) =>
-                      updateLine(line.id, { catalogo_item_id: null, iva_tipo: event.target.value as TipoIva, lockedFromCatalog: false })
-                    }
-                    value={line.iva_tipo}
-                  >
-                    <option value="IVA_10">10%</option>
-                    <option value="IVA_5">5%</option>
-                    <option value="EXENTA">Exenta</option>
-                  </select>
-                </label>
-                <div className="line-subtotal">
-                  <dt>Subtotal</dt>
-                  <dd>{formatGuaranies(preview?.items[index]?.subtotal ?? 0)}</dd>
-                </div>
-              </div>
-              {catalogSearching[line.id] ? <span className="field-hint">Buscando catalogo...</span> : null}
-              {(catalogSuggestions[line.id] ?? []).length > 0 ? (
-                <div className="suggestion-list catalog">
-                  {(catalogSuggestions[line.id] ?? []).map((item) => (
-                    <button key={item.id} onClick={() => applyCatalogItem(line.id, item)} type="button">
-                      <strong>{item.codigo}</strong>
-                      <span>{item.descripcion}</span>
-                      <small>{formatGuaranies(item.precio_unitario)} · {formatIva(item.iva_tipo)}</small>
-                    </button>
-                  ))}
-                </div>
-              ) : null}
-              <div className="quick-actions-row compact">
-                {line.lockedFromCatalog ? (
-                  <button
-                    className="secondary-action"
-                    onClick={() => updateLine(line.id, { catalogo_item_id: null, lockedFromCatalog: false })}
-                    type="button"
-                  >
-                    Editar como nuevo
-                  </button>
-                ) : (
-                  <button
-                    className="secondary-action"
-                    disabled={!line.descripcion.trim() || !Number.isInteger(Number(line.precio_unitario)) || catalogSaving[line.id]}
-                    onClick={() => void saveQuickCatalogItem(line)}
-                    type="button"
-                  >
-                    {catalogSaving[line.id] ? "Guardando..." : "Guardar item 10%"}
-                  </button>
-                )}
-                {catalogMessage[line.id] ? <p className="inline-message">{catalogMessage[line.id]}</p> : null}
-              </div>
-            </article>
-          ))}
-        </div>
+              ) : (
+                <button
+                  className="secondary-action"
+                  disabled={!activeLine.descripcion.trim() || !Number.isInteger(Number(activeLine.precio_unitario)) || catalogSaving[activeLine.id]}
+                  onClick={() => void saveQuickCatalogItem(activeLine)}
+                  type="button"
+                >
+                  {catalogSaving[activeLine.id] ? "Guardando..." : "Guardar item 10%"}
+                </button>
+              )}
+              {catalogMessage[activeLine.id] ? <p className="inline-message">{catalogMessage[activeLine.id]}</p> : null}
+            </div>
+          </article>
+        ) : null}
       </section>
 
       <section className="totals-section" aria-live="polite">
@@ -1504,9 +2224,16 @@ function InvoiceEditor({
               <dt>Email</dt>
               <dd>{formatEmailStatus(emailStatus?.status ?? emittedDocumento.delivery.email_status)}</dd>
             </div>
+            <div>
+              <dt>SIFEN</dt>
+              <dd>{formatSifenSummary(emittedSifenSummary)}</dd>
+            </div>
           </div>
 
           {getRecoverableMessage(emittedDocumento) ? <p className="editor-alert blocked">{getRecoverableMessage(emittedDocumento)}</p> : null}
+          {emittedDocumento.estado === "RECHAZADA" ? (
+            <p className="editor-alert blocked">{getRejectedSifenMessage(emittedSifenSummary)}</p>
+          ) : null}
           {emailStatus?.message ? <p className="editor-alert ready">{emailStatus.message}</p> : null}
 
           <div className="delivery-actions">
@@ -1531,7 +2258,7 @@ function InvoiceEditor({
             </button>
             <a
               className={deliveryLink ? "secondary-link" : "secondary-link disabled"}
-              href={deliveryLink?.whatsapp_url ?? "#"}
+              href={deliveryLink ? buildWhatsAppShareUrl(deliveryLink.public_url, whatsappPhone) : "#"}
               rel="noreferrer"
               target="_blank"
             >
@@ -1539,9 +2266,15 @@ function InvoiceEditor({
             </a>
           </div>
 
-          <div className="public-link-box">
-            <dt>Link publico</dt>
-            <dd>{deliveryLink?.public_url ?? (deliveryLoading ? "Generando link..." : "No disponible")}</dd>
+          <div className="delivery-inline-form">
+            <label>
+              Numero WhatsApp
+              <input inputMode="tel" onChange={(event) => setWhatsappPhone(event.target.value)} value={whatsappPhone} />
+            </label>
+            <div className="public-link-box">
+              <dt>Link publico</dt>
+              <dd>{deliveryLink?.public_url ?? (deliveryLoading ? "Generando link..." : "No disponible")}</dd>
+            </div>
           </div>
           {deliveryMessage ? <p className="inline-message">{deliveryMessage}</p> : null}
 
@@ -1552,7 +2285,7 @@ function InvoiceEditor({
               onClick={() => void refreshEmittedDocumento()}
               type="button"
             >
-              Refrescar estado
+              Consultar SIFEN
             </button>
             <button
               className="secondary-action"
@@ -1634,8 +2367,11 @@ function LoadingScreen({ message }: { message: string }) {
 function BrandMark({ compact = false }: { compact?: boolean }) {
   return (
     <div className={compact ? "brand-mark compact" : "brand-mark"} aria-label="Ventax Factura">
-      <span className="brand-symbol">V</span>
-      <span className="brand-word">VENTAX</span>
+      <img
+        alt="Ventax"
+        className="brand-logo"
+        src={compact ? "/app/brand/VENTAX-ISO-CELESTE.svg" : "/app/brand/VENTAX-PRINCIPAL.svg"}
+      />
     </div>
   );
 }
@@ -1653,8 +2389,40 @@ function createInvoiceLine(): InvoiceLineDraft {
   };
 }
 
+function createCatalogoDraft(): CatalogoDraft {
+  return {
+    codigo: "",
+    descripcion: "",
+    precio_unitario: "",
+    iva_tipo: "IVA_10",
+    activo: true
+  };
+}
+
 function createIdempotencyKey(): string {
   return `ui-${Date.now()}-${crypto.randomUUID()}`;
+}
+
+function getNextFiscalNumber(current: string | undefined): string {
+  if (!current) {
+    return "-";
+  }
+
+  const numeric = Number(current);
+  if (!Number.isInteger(numeric)) {
+    return current;
+  }
+
+  return String(numeric + 1).padStart(current.length, "0");
+}
+
+function buildWhatsAppShareUrl(publicUrl: string, phone: string): string {
+  const digits = phone.replace(/\D/g, "");
+  const text = encodeURIComponent(`Comprobante Ventax: ${publicUrl}`);
+  if (!digits) {
+    return `https://wa.me/?text=${text}`;
+  }
+  return `https://wa.me/${digits}?text=${text}`;
 }
 
 function formatGuaranies(value: number): string {
@@ -1692,6 +2460,28 @@ function formatDocumentoTipo(value: DocumentoResponse["tipo"]): string {
   return value === "NOTA_CREDITO" ? "Nota credito" : "Factura";
 }
 
+function formatOperationViewTitle(value: OperationView): string {
+  const labels: Record<OperationView, string> = {
+    status: "Informacion",
+    invoice: "Nueva factura",
+    "credit-note": "Nota credito",
+    catalog: "Catalogo",
+    documents: "Documentos"
+  };
+  return labels[value];
+}
+
+function getOperationViewHint(value: OperationView): string {
+  const hints: Record<OperationView, string> = {
+    status: "Facturador y readiness",
+    invoice: "Emitir comprobante",
+    "credit-note": "Emitir NCE",
+    catalog: "Productos y servicios",
+    documents: "Estado y entrega"
+  };
+  return hints[value];
+}
+
 function canCancelDocumento(documento: DocumentoResponse): boolean {
   return documento.tipo === "FACTURA" && documento.estado === "EMITIDA" && Boolean(documento.cdc);
 }
@@ -1718,6 +2508,89 @@ function formatEmailStatus(value: string): string {
     return "Sin email";
   }
   return "Desconocido";
+}
+
+interface SifenSummary {
+  code: string | null;
+  message: string | null;
+  status: string | null;
+  processedAt: string | null;
+}
+
+function getSifenSummary(documento: DocumentoResponse): SifenSummary | null {
+  const source = documento.fiscal_status;
+  if (!source) {
+    return null;
+  }
+
+  const summary: SifenSummary = {
+    code: findNestedFiscalValue(source, "dCodRes"),
+    message: findNestedFiscalValue(source, "dMsgRes"),
+    status: findNestedFiscalValue(source, "dEstRes"),
+    processedAt: findNestedFiscalValue(source, "dFecProc")
+  };
+
+  if (!summary.code && !summary.message && !summary.status && !summary.processedAt) {
+    return null;
+  }
+
+  return summary;
+}
+
+function findNestedFiscalValue(value: unknown, targetKey: string): string | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  for (const [key, nestedValue] of Object.entries(value)) {
+    const normalizedKey = key.includes(":") ? key.split(":").at(-1) : key;
+    if (normalizedKey === targetKey && (typeof nestedValue === "string" || typeof nestedValue === "number")) {
+      return String(nestedValue);
+    }
+
+    if (Array.isArray(nestedValue)) {
+      for (const item of nestedValue) {
+        const found = findNestedFiscalValue(item, targetKey);
+        if (found) {
+          return found;
+        }
+      }
+      continue;
+    }
+
+    const found = findNestedFiscalValue(nestedValue, targetKey);
+    if (found) {
+      return found;
+    }
+  }
+
+  return null;
+}
+
+function formatSifenSummary(summary: SifenSummary | null): string {
+  if (!summary) {
+    return "Sin respuesta fiscal resumida";
+  }
+
+  const status = summary.status ? `${summary.status} · ` : "";
+  if (summary.code && summary.message) {
+    return `${status}${summary.code} · ${summary.message}`;
+  }
+  if (summary.message) {
+    return `${status}${summary.message}`;
+  }
+  if (summary.code) {
+    return `${status}${summary.code}`;
+  }
+  return summary.status ?? "Sin respuesta fiscal resumida";
+}
+
+function getRejectedSifenMessage(summary: SifenSummary | null): string {
+  const base = `Documento rechazado por SIFEN: ${formatSifenSummary(summary)}.`;
+  if (summary?.code === "1306") {
+    return `${base} Use un receptor existente en Marangatu test o un receptor ya validado para pruebas aprobadas.`;
+  }
+  return `${base} Revise los datos del receptor y el detalle fiscal antes de reintentar.`;
 }
 
 function getRecoverableMessage(documento: DocumentoResponse): string | null {
