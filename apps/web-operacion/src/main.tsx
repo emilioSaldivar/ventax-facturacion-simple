@@ -1,4 +1,4 @@
-import React, { FormEvent, useEffect, useMemo, useState } from "react";
+import React, { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./styles.css";
 
@@ -1466,9 +1466,11 @@ function InvoiceEditor({
     telefono: "",
     email: ""
   });
-  const [lines, setLines] = useState<InvoiceLineDraft[]>(() => [createInvoiceLine()]);
+  const [lines, setLines] = useState<InvoiceLineDraft[]>(() => []);
   const [activeLineId, setActiveLineId] = useState<string | null>(null);
   const [expandedLineIds, setExpandedLineIds] = useState<Set<string>>(() => new Set());
+  const [lineSheetOpen, setLineSheetOpen] = useState(false);
+  const [lineAdvancedOpen, setLineAdvancedOpen] = useState(false);
   const [clienteSuggestions, setClienteSuggestions] = useState<ClienteSearchResult[]>([]);
   const [clienteSearching, setClienteSearching] = useState(false);
   const [clienteSaving, setClienteSaving] = useState(false);
@@ -1490,6 +1492,7 @@ function InvoiceEditor({
   const [deliveryLoading, setDeliveryLoading] = useState(false);
   const [deliveryMessage, setDeliveryMessage] = useState<string | null>(null);
   const [whatsappPhone, setWhatsappPhone] = useState("");
+  const descriptionInputRef = useRef<HTMLInputElement | null>(null);
 
   const api = useMemo(() => createApiClient(accessToken, setAccessToken), [accessToken, setAccessToken]);
   const today = useMemo(() => new Date().toLocaleDateString("es-PY"), []);
@@ -1532,6 +1535,18 @@ function InvoiceEditor({
       setActiveLineId(lines[0].id);
     }
   }, [activeLineId, lines]);
+
+  useEffect(() => {
+    if (!lineSheetOpen) {
+      return;
+    }
+
+    const timeout = window.setTimeout(() => {
+      descriptionInputRef.current?.focus();
+    }, 80);
+
+    return () => window.clearTimeout(timeout);
+  }, [lineSheetOpen, activeLineId]);
 
   useEffect(() => {
     if (!request) {
@@ -1705,10 +1720,11 @@ function InvoiceEditor({
       telefono: "",
       email: ""
     });
-    const nextLine = createInvoiceLine();
-    setLines([nextLine]);
-    setActiveLineId(nextLine.id);
+    setLines([]);
+    setActiveLineId(null);
     setExpandedLineIds(new Set());
+    setLineSheetOpen(false);
+    setLineAdvancedOpen(false);
     setPreview(null);
     setPreviewError(null);
     setEmissionError(null);
@@ -1756,22 +1772,37 @@ function InvoiceEditor({
   }
 
   function removeLine(lineId: string) {
-    setLines((current) => {
-      if (current.length === 1) {
-        return current;
-      }
-      const next = current.filter((line) => line.id !== lineId);
-      if (activeLineId === lineId) {
-        setActiveLineId(next[0]?.id ?? null);
-      }
-      return next;
-    });
+    setLines((current) => current.filter((line) => line.id !== lineId));
+    if (activeLineId === lineId) {
+      setActiveLineId(null);
+      setLineSheetOpen(false);
+    }
   }
 
   function addLineAndEdit() {
     const nextLine = createInvoiceLine();
     setLines((current) => [...current, nextLine]);
     setActiveLineId(nextLine.id);
+    setLineAdvancedOpen(false);
+    setLineSheetOpen(true);
+  }
+
+  function editLine(lineId: string) {
+    setActiveLineId(lineId);
+    setLineAdvancedOpen(false);
+    setLineSheetOpen(true);
+  }
+
+  function closeLineSheet() {
+    if (activeLine) {
+      const emptyDraft = !activeLine.codigo.trim() && !activeLine.descripcion.trim() && !activeLine.precio_unitario.trim();
+      if (emptyDraft) {
+        setLines((current) => current.filter((line) => line.id !== activeLine.id));
+        setActiveLineId(null);
+      }
+    }
+    setLineSheetOpen(false);
+    setLineAdvancedOpen(false);
   }
 
   function applyClienteSuggestion(suggestion: ClienteSearchResult) {
@@ -1857,6 +1888,13 @@ function InvoiceEditor({
   const emittedSifenSummary = emittedDocumento ? getSifenSummary(emittedDocumento) : null;
   const activeLine = lines.find((line) => line.id === activeLineId) ?? lines[0] ?? null;
   const activeLineIndex = activeLine ? lines.findIndex((line) => line.id === activeLine.id) : -1;
+  const visibleLines = lines.filter((line) => line.descripcion.trim() || line.codigo.trim() || line.precio_unitario.trim());
+  const previewSubtotalsByLineId = new Map<string, number>();
+  lines
+    .filter((line) => line.descripcion.trim() && Number.isInteger(Number(line.cantidad)) && Number(line.cantidad) > 0 && Number.isInteger(Number(line.precio_unitario)))
+    .forEach((line, index) => {
+      previewSubtotalsByLineId.set(line.id, preview?.items[index]?.subtotal ?? 0);
+    });
 
   return (
     <section className="invoice-editor" aria-labelledby="invoice-title">
@@ -2003,36 +2041,36 @@ function InvoiceEditor({
         </div>
       </section>
 
-      <section className="form-section">
+      <section className="form-section products-section">
         <div className="section-title-row">
           <div>
-            <p className="eyebrow">Lineas</p>
-            <h3>Productos o servicios</h3>
+            <p className="eyebrow">Productos</p>
+            <h3>Lo vendido</h3>
           </div>
         </div>
 
-        <div className="line-table" role="table" aria-label="Productos o servicios agregados">
-          <div className="line-table-header" role="row">
-            <span>Cant</span>
-            <span>Cod</span>
-            <span>Descripcion</span>
-            <span>Subtotal</span>
-            <span aria-label="Acciones" />
-          </div>
-          {lines.map((line, index) => {
+        <div className="sale-list" aria-label="Productos o servicios agregados">
+          {visibleLines.length === 0 ? (
+            <button className="empty-sale-list" onClick={addLineAndEdit} type="button">
+              <strong>+ Agregar producto</strong>
+              <span>Descripcion, cantidad y precio.</span>
+            </button>
+          ) : null}
+          {visibleLines.map((line, index) => {
             const expanded = expandedLineIds.has(line.id);
-            const description = line.descripcion.trim() || "Sin descripcion";
-            const isLong = description.length > 34;
+            const description = line.descripcion.trim() || line.codigo.trim() || "Producto";
+            const isLong = description.length > 58;
+            const quantity = Number(line.cantidad) || 1;
+            const price = Number(line.precio_unitario) || 0;
+            const subtotal = previewSubtotalsByLineId.get(line.id) ?? quantity * price;
             return (
-              <div className={activeLine?.id === line.id ? "line-table-row active" : "line-table-row"} key={line.id} role="row">
-                <button className="line-row-main" onClick={() => setActiveLineId(line.id)} type="button">
-                  <span>{line.cantidad || "1"}</span>
-                  <span>{line.codigo || "-"}</span>
-                  <span>
-                    {expanded || !isLong ? description : `${description.slice(0, 34)}...`}
+              <article className="sale-item-card" key={line.id}>
+                <button className="sale-item-main" onClick={() => editLine(line.id)} type="button">
+                  <strong>
+                    {expanded || !isLong ? description : `${description.slice(0, 58)}...`}
                     {isLong ? (
                       <small
-                        className="line-more"
+                        className="sale-more"
                         onClick={(event) => {
                           event.stopPropagation();
                           setExpandedLineIds((current) => {
@@ -2049,128 +2087,171 @@ function InvoiceEditor({
                         {expanded ? " Ver menos" : " Ver +"}
                       </small>
                     ) : null}
-                  </span>
-                  <span>{formatGuaranies(preview?.items[index]?.subtotal ?? 0)}</span>
+                  </strong>
+                  <span>{quantity} x {formatGuaranies(price)}</span>
+                  <b>{formatGuaranies(subtotal)}</b>
                 </button>
-                <div className="line-row-actions">
-                  <button aria-label={`Editar linea ${index + 1}`} className="icon-action" onClick={() => setActiveLineId(line.id)} type="button">
+                <div className="sale-item-actions">
+                  <button aria-label={`Editar producto ${index + 1}`} className="icon-action" onClick={() => editLine(line.id)} type="button">
                     Lapiz
                   </button>
-                  <button aria-label={`Eliminar linea ${index + 1}`} className="icon-action danger" disabled={lines.length === 1} onClick={() => removeLine(line.id)} type="button">
+                  <button aria-label={`Eliminar producto ${index + 1}`} className="icon-action danger" onClick={() => removeLine(line.id)} type="button">
                     Basura
                   </button>
                 </div>
-              </div>
+              </article>
             );
           })}
-          <button className="line-empty-row" onClick={addLineAndEdit} type="button">
-            <span>+</span>
-            <span>Codigo o descripcion</span>
-            <span>Agregar producto o servicio</span>
-          </button>
+          {visibleLines.length > 0 ? (
+            <button className="add-product-action" onClick={addLineAndEdit} type="button">
+              + Agregar producto
+            </button>
+          ) : null}
         </div>
+      </section>
 
-        {activeLine ? (
-          <article className="line-card active-editor">
-            <div className="line-card-header">
-              <strong>Editar linea {activeLineIndex + 1}</strong>
-              <button className="link-action" onClick={addLineAndEdit} type="button">
-                Nueva linea
+      {lineSheetOpen && activeLine ? (
+        <div className="bottom-sheet-backdrop" role="presentation" onClick={closeLineSheet}>
+          <section
+            aria-label="Agregar producto"
+            aria-modal="true"
+            className="bottom-sheet"
+            onClick={(event) => event.stopPropagation()}
+            role="dialog"
+          >
+            <div className="sheet-handle" />
+            <div className="sheet-header">
+              <h3>{activeLine.descripcion.trim() || activeLine.precio_unitario.trim() ? "Producto" : "Agregar producto"}</h3>
+              <button aria-label="Cerrar" className="sheet-close" onClick={closeLineSheet} type="button">
+                Cerrar
               </button>
             </div>
-            <div className="line-grid">
-              <label>
-                Cant.
-                <input inputMode="numeric" min="1" onChange={(event) => updateLine(activeLine.id, { cantidad: event.target.value })} value={activeLine.cantidad} />
-              </label>
-              <label>
-                Codigo
-                <input
-                  disabled={activeLine.lockedFromCatalog}
-                  onChange={(event) =>
-                    updateLine(activeLine.id, { catalogo_item_id: null, codigo: event.target.value, lockedFromCatalog: false })
-                  }
-                  value={activeLine.codigo}
-                />
-              </label>
-              <label className="span-2">
+
+            <div className="sheet-grid">
+              <label className="sheet-description">
                 Descripcion
                 <input
+                  ref={descriptionInputRef}
+                  autoFocus
                   disabled={activeLine.lockedFromCatalog}
                   onChange={(event) =>
                     updateLine(activeLine.id, { catalogo_item_id: null, descripcion: event.target.value, lockedFromCatalog: false })
                   }
+                  placeholder="Ej. Agua mineral"
                   value={activeLine.descripcion}
                 />
               </label>
-              <label>
-                Precio unit.
-                <input
-                  disabled={activeLine.lockedFromCatalog}
-                  inputMode="numeric"
-                  min="0"
-                  onChange={(event) =>
-                    updateLine(activeLine.id, { catalogo_item_id: null, precio_unitario: event.target.value, lockedFromCatalog: false })
-                  }
-                  value={activeLine.precio_unitario}
-                />
-              </label>
-              <label>
-                IVA
-                <select
-                  disabled={activeLine.lockedFromCatalog}
-                  onChange={(event) =>
-                    updateLine(activeLine.id, { catalogo_item_id: null, iva_tipo: event.target.value as TipoIva, lockedFromCatalog: false })
-                  }
-                  value={activeLine.iva_tipo}
-                >
-                  <option value="IVA_10">10%</option>
-                  <option value="IVA_5">5%</option>
-                  <option value="EXENTA">Exenta</option>
-                </select>
-              </label>
-              <div className="line-subtotal">
-                <dt>Subtotal</dt>
-                <dd>{formatGuaranies(activeLineIndex >= 0 ? preview?.items[activeLineIndex]?.subtotal ?? 0 : 0)}</dd>
+
+              {catalogSearching[activeLine.id] ? <span className="field-hint">Buscando catalogo...</span> : null}
+              {(catalogSuggestions[activeLine.id] ?? []).length > 0 ? (
+                <div className="suggestion-list catalog">
+                  {(catalogSuggestions[activeLine.id] ?? []).map((item) => (
+                    <button key={item.id} onClick={() => applyCatalogItem(activeLine.id, item)} type="button">
+                      <strong>{item.codigo}</strong>
+                      <span>{item.descripcion}</span>
+                      <small>{formatGuaranies(item.precio_unitario)} · {formatIva(item.iva_tipo)}</small>
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+
+              <div className="quantity-price-grid">
+                <label>
+                  Cantidad
+                  <div className="quantity-stepper">
+                    <button
+                      aria-label="Restar cantidad"
+                      onClick={() => updateLine(activeLine.id, { cantidad: String(Math.max(1, Number(activeLine.cantidad || 1) - 1)) })}
+                      type="button"
+                    >
+                      -
+                    </button>
+                    <input inputMode="numeric" min="1" onChange={(event) => updateLine(activeLine.id, { cantidad: event.target.value })} value={activeLine.cantidad} />
+                    <button
+                      aria-label="Sumar cantidad"
+                      onClick={() => updateLine(activeLine.id, { cantidad: String((Number(activeLine.cantidad) || 0) + 1) })}
+                      type="button"
+                    >
+                      +
+                    </button>
+                  </div>
+                </label>
+
+                <label>
+                  Precio
+                  <input
+                    disabled={activeLine.lockedFromCatalog}
+                    inputMode="numeric"
+                    min="0"
+                    onChange={(event) =>
+                      updateLine(activeLine.id, { catalogo_item_id: null, precio_unitario: event.target.value, lockedFromCatalog: false })
+                    }
+                    placeholder="0"
+                    value={activeLine.precio_unitario}
+                  />
+                </label>
               </div>
-            </div>
-            {catalogSearching[activeLine.id] ? <span className="field-hint">Buscando catalogo...</span> : null}
-            {(catalogSuggestions[activeLine.id] ?? []).length > 0 ? (
-              <div className="suggestion-list catalog">
-                {(catalogSuggestions[activeLine.id] ?? []).map((item) => (
-                  <button key={item.id} onClick={() => applyCatalogItem(activeLine.id, item)} type="button">
-                    <strong>{item.codigo}</strong>
-                    <span>{item.descripcion}</span>
-                    <small>{formatGuaranies(item.precio_unitario)} · {formatIva(item.iva_tipo)}</small>
-                  </button>
-                ))}
+
+              <button className="advanced-toggle" onClick={() => setLineAdvancedOpen((current) => !current)} type="button">
+                {lineAdvancedOpen ? "Ocultar opciones fiscales" : "Opciones avanzadas"}
+              </button>
+
+              {lineAdvancedOpen ? (
+                <div className="advanced-fields">
+                  <label>
+                    Codigo
+                    <input
+                      disabled={activeLine.lockedFromCatalog}
+                      onChange={(event) =>
+                        updateLine(activeLine.id, { catalogo_item_id: null, codigo: event.target.value, lockedFromCatalog: false })
+                      }
+                      value={activeLine.codigo}
+                    />
+                  </label>
+                  <label>
+                    IVA
+                    <select
+                      disabled={activeLine.lockedFromCatalog}
+                      onChange={(event) =>
+                        updateLine(activeLine.id, { catalogo_item_id: null, iva_tipo: event.target.value as TipoIva, lockedFromCatalog: false })
+                      }
+                      value={activeLine.iva_tipo}
+                    >
+                      <option value="IVA_10">10%</option>
+                      <option value="IVA_5">5%</option>
+                      <option value="EXENTA">Exenta</option>
+                    </select>
+                  </label>
+                </div>
+              ) : null}
+
+              <div className="sheet-total-row">
+                <span>Total</span>
+                <strong>{formatGuaranies(previewSubtotalsByLineId.get(activeLine.id) ?? (Number(activeLine.cantidad) || 1) * (Number(activeLine.precio_unitario) || 0))}</strong>
               </div>
-            ) : null}
-            <div className="quick-actions-row compact">
+
               {activeLine.lockedFromCatalog ? (
                 <button
-                  className="secondary-action"
+                  className="secondary-action wide"
                   onClick={() => updateLine(activeLine.id, { catalogo_item_id: null, lockedFromCatalog: false })}
                   type="button"
                 >
-                  Editar como nuevo
+                  Editar como producto nuevo
                 </button>
-              ) : (
-                <button
-                  className="secondary-action"
-                  disabled={!activeLine.descripcion.trim() || !Number.isInteger(Number(activeLine.precio_unitario)) || catalogSaving[activeLine.id]}
-                  onClick={() => void saveQuickCatalogItem(activeLine)}
-                  type="button"
-                >
-                  {catalogSaving[activeLine.id] ? "Guardando..." : "Guardar item 10%"}
-                </button>
-              )}
+              ) : null}
               {catalogMessage[activeLine.id] ? <p className="inline-message">{catalogMessage[activeLine.id]}</p> : null}
+              <button
+                className="primary-action wide"
+                disabled={!activeLine.descripcion.trim() || !Number.isInteger(Number(activeLine.precio_unitario))}
+                onClick={() => setLineSheetOpen(false)}
+                type="button"
+              >
+                Agregar
+              </button>
             </div>
-          </article>
-        ) : null}
-      </section>
-
+          </section>
+        </div>
+      ) : null}
       <section className="totals-section" aria-live="polite">
         <div className="totals-grid">
           <TotalRow label="Subtotal" value={preview?.totals.subtotal ?? 0} />
@@ -2417,12 +2498,35 @@ function getNextFiscalNumber(current: string | undefined): string {
 }
 
 function buildWhatsAppShareUrl(publicUrl: string, phone: string): string {
-  const digits = phone.replace(/\D/g, "");
+  const digits = normalizeParaguayWhatsAppDigits(phone);
   const text = encodeURIComponent(`Comprobante Ventax: ${publicUrl}`);
   if (!digits) {
     return `https://wa.me/?text=${text}`;
   }
   return `https://wa.me/${digits}?text=${text}`;
+}
+
+function normalizeParaguayWhatsAppDigits(phone: string): string {
+  const digits = phone.replace(/\D/g, "");
+  if (!digits) {
+    return "";
+  }
+  if (digits.startsWith("00")) {
+    return digits.slice(2);
+  }
+  if (digits.startsWith("595")) {
+    return digits;
+  }
+  if (digits.startsWith("09")) {
+    return `595${digits.slice(1)}`;
+  }
+  if (digits.startsWith("9") && digits.length === 9) {
+    return `595${digits}`;
+  }
+  if (digits.startsWith("0")) {
+    return `595${digits.slice(1)}`;
+  }
+  return digits;
 }
 
 function formatGuaranies(value: number): string {

@@ -138,6 +138,21 @@ Validacion:
 
 ## Grupo 7 - Estabilizacion Operativa Pendiente
 
+Estado: CERRADO CON PENDIENTES DE VALIDACION EXTERNA.
+
+Resultado:
+
+- `EST-004`: DONE, catalogo local de receptores en `docs/RECEPTORES_SIFEN_TEST_v0.1.md`.
+- `EST-005`: DONE, diagnostico SIFEN visible desde `fiscal_status` en API/UI.
+- `EST-006`: PENDING_VALIDATION, smoke extendido pero FE devuelve error al obtener KUDE/PDF.
+- `EST-007`: PENDING_VALIDATION, smoke NCE agregado y payload corregido, sin reintentos FE por bloqueo externo.
+- `EST-008`: DONE, checklist de alta en `docs/CHECKLIST_ALTA_FACTURADOR_MVP_v0.1.md`.
+
+Bloqueos:
+
+- KUDE/PDF: `GET /public/d/{token}/kude.pdf` responde `502` local porque FE retorna `500` (`gateway_code: UPSTREAM_ERROR`).
+- NCE: FE rechazo la NCE con `VALIDATION_ERROR` por `timbrado.documentoNro null`; el payload local fue corregido y queda pendiente validar contra FE cuando el servicio externo este estable.
+
 Tareas:
 
 - `EST-004`: crear catalogo local de receptores de prueba aprobables.
@@ -164,3 +179,27 @@ Al finalizar la ejecucion se debe crear o actualizar `docs/CIERRE_ROADMAP_UI_UX_
 - definiciones operativas o de negocio pendientes;
 - comandos de validacion ejecutados;
 - alcance que quedo explicitamente fuera.
+
+## Ajuste Pre Despliegue - Facturar Como Lista
+
+Estado: DONE.
+
+Objetivo:
+
+- La pantalla principal de factura debe sentirse como escribir una lista de venta, no como operar un ERP.
+
+Resultado:
+
+- Se removio el editor permanente de lineas de la pantalla principal.
+- La pantalla muestra tarjetas simples de productos vendidos y un boton `+ Agregar producto`.
+- La carga/edicion de producto se movio a un bottom sheet mobile-first.
+- El foco inicial del bottom sheet cae en `Descripcion`.
+- `Codigo` e `IVA` quedan ocultos dentro de `Opciones avanzadas`.
+- La tarjeta muestra `descripcion`, `cantidad x precio` y total de linea.
+
+Validacion:
+
+- `npm run typecheck --workspace @facturacion-simple/web-operacion`
+- `npm run build --workspace @facturacion-simple/web-operacion`
+- `bash scripts/deploy.sh`
+- Playwright mobile contra `http://127.0.0.1:8092/app/`: `invoice products UX ok`

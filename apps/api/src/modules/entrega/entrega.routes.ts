@@ -82,7 +82,10 @@ publicEntregaRouter.get(
   validateRequest("params", publicTokenParamsSchema),
   async (req, res, next) => {
     try {
-      const artifact = await getPublicArtifact(String(req.params.token), "kude_pdf", deliveryLinkRepository, fiscalGateway);
+      const artifact = await getPublicArtifact(String(req.params.token), "kude_pdf", deliveryLinkRepository, fiscalGateway, {
+        requestId: String(req.id),
+        endpoint: req.originalUrl
+      });
       res.type(artifact.content_type);
       res.setHeader("content-disposition", `inline; filename="${artifact.filename}"`);
       res.send(artifact.body);
@@ -97,7 +100,10 @@ publicEntregaRouter.get(
   validateRequest("params", publicTokenParamsSchema),
   async (req, res, next) => {
     try {
-      const artifact = await getPublicArtifact(String(req.params.token), "xml", deliveryLinkRepository, fiscalGateway);
+      const artifact = await getPublicArtifact(String(req.params.token), "xml", deliveryLinkRepository, fiscalGateway, {
+        requestId: String(req.id),
+        endpoint: req.originalUrl
+      });
       res.type(artifact.content_type);
       res.setHeader("content-disposition", `attachment; filename="${artifact.filename}"`);
       res.send(artifact.body);

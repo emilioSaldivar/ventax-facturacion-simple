@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import { env } from "../../config/env";
 import { HttpError } from "../../shared/errors/http-error";
+import { logger } from "../../shared/logging/logger";
 import type { OperationalContextResponse } from "../context/context.types";
 import type { FacturaRepository } from "../facturas/facturas.types";
 import { getDocumentoById } from "../facturas/facturas.service";
@@ -88,7 +89,11 @@ export async function getPublicArtifact(
   token: string,
   artifact: "kude_pdf" | "xml",
   repository: DeliveryLinkRepository,
-  gateway: FiscalGateway
+  gateway: FiscalGateway,
+  observability?: {
+    requestId?: string;
+    endpoint?: string;
+  }
 ): Promise<FiscalArtifactResponse> {
   const record = await repository.findPublicByToken(token);
 
@@ -100,6 +105,22 @@ export async function getPublicArtifact(
     return artifact === "kude_pdf" ? await gateway.getKudePdf(record.documento.cdc) : await gateway.getXml(record.documento.cdc);
   } catch (error) {
     if (error instanceof FiscalGatewayError) {
+      logger.error(
+        {
+          event: "fiscal_artifact_fetch_failed",
+          requestId: observability?.requestId ?? null,
+          occurred_at: new Date().toISOString(),
+          endpoint: observability?.endpoint ?? null,
+          artifact,
+          cdc: record.documento.cdc,
+          numero_fiscal: record.documento.numero_fiscal,
+          documento_estado: record.documento.estado,
+          gateway_code: error.code,
+          gateway_details: error.details ?? null
+        },
+        "Fiscal artifact fetch failed"
+      );
+
       throw new HttpError(
         error.code === "TIMEOUT" ? 504 : 502,
         "INTERNAL_ERROR",
