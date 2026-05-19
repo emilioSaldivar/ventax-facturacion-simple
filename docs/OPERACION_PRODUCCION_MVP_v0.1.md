@@ -84,6 +84,37 @@ export DOCKER_LOG_MAX_FILE=5
 
 Aplica a `postgres`, `api`, `migrate` y `frontend`. Cambiar estos valores requiere recrear contenedores.
 
+## Puertos Y Nginx Del Host
+
+En produccion el stack Docker publica sus puertos solo en `127.0.0.1`:
+
+```bash
+FRONTEND_HTTP_PORT=8092
+API_HTTP_PORT=8091
+POSTGRES_HOST_PORT=5433
+```
+
+El dominio publico debe apuntar por DNS a la IP del VPS y Nginx del host debe reenviar HTTPS al frontend:
+
+```nginx
+proxy_pass http://127.0.0.1:8092;
+```
+
+Plantilla disponible:
+
+```text
+infra/nginx-or-caddy/host-production.conf
+```
+
+La plantilla usa el certificado Cloudflare existente del VPS:
+
+```text
+/etc/ssl/cloudflare/ventax.app.pem
+/etc/ssl/cloudflare/ventax.app.key
+```
+
+Si el dominio operativo no es `factura.ventax.app`, reemplazar `server_name` y las variables publicas del `.env` por el subdominio real.
+
 ## Smoke Fiscal FE Test
 
 El smoke fiscal real es opt-in y nunca debe versionar `FE_API_KEY` ni fixtures con datos sensibles.

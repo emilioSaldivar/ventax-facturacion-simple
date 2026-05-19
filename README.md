@@ -44,6 +44,8 @@ En `docker-compose.yml`, el frontend se publica por defecto en el puerto del hos
 
 ```bash
 FRONTEND_HTTP_PORT=8092
+API_HTTP_PORT=8091
+POSTGRES_HOST_PORT=5433
 ```
 
 Por eso, normalmente Nginx puede apuntar a:
@@ -73,13 +75,15 @@ git --version
 nginx -v
 ```
 
-Puertos recomendados:
+Puertos recomendados para este servidor:
 
 - `80`: HTTP para emitir/renovar certificados TLS.
 - `443`: HTTPS publico.
-- `8092`: solo interno/local al host si Nginx hace proxy.
-- `8091`: API directa, no recomendado exponer publicamente.
-- `5433`: PostgreSQL, no exponer publicamente.
+- `8092`: frontend Docker, publicado solo en `127.0.0.1`, usado por Nginx del host.
+- `8091`: API directa, publicada solo en `127.0.0.1`, no exponer publicamente.
+- `5433`: PostgreSQL, publicado solo en `127.0.0.1`, no exponer publicamente.
+
+Con los servicios existentes del VPS (`8090`, `8099`, `9988`, `8088`, `5050`, `5434`), `8092`, `8091` y `5433` quedan separados para `ventax-facturacion-simple`.
 
 ## Clonar Y Preparar
 
@@ -100,6 +104,8 @@ NODE_ENV=production
 PORT=8080
 API_BASE_PATH=/api/v1
 FRONTEND_HTTP_PORT=8092
+API_HTTP_PORT=8091
+POSTGRES_HOST_PORT=5433
 
 APP_ORIGIN=https://factura.tudominio.com
 BACKOFFICE_ORIGIN=https://factura.tudominio.com
@@ -151,7 +157,7 @@ Esta opcion es mas estable porque no depende de la IP interna del contenedor.
 ```yaml
 frontend:
   ports:
-    - "${FRONTEND_HTTP_PORT:-8090}:80"
+    - "127.0.0.1:${FRONTEND_HTTP_PORT:-8092}:80"
 ```
 
 Con `FRONTEND_HTTP_PORT=8092`, usar:
@@ -173,6 +179,14 @@ server {
 ```
 
 Luego agregar TLS con Certbot, Caddy o el mecanismo elegido.
+
+Tambien existe una plantilla lista para adaptar:
+
+```text
+infra/nginx-or-caddy/host-production.conf
+```
+
+La plantilla esta preparada para el VPS actual con certificado Cloudflare en `/etc/ssl/cloudflare/ventax.app.pem` y dominio `factura.ventax.app`. Si se usa otro subdominio, reemplazar `factura.ventax.app` antes de instalarla en Nginx.
 
 ### Opcion Alternativa: Proxy A La IP Docker Asignada
 
