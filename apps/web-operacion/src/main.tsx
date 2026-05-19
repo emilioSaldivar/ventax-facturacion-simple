@@ -1861,7 +1861,7 @@ function InvoiceEditor({
     setCatalogMessage((current) => ({ ...current, [lineId]: "Item seleccionado del catalogo." }));
   }
 
-  async function saveQuickCatalogItem(line: InvoiceLineDraft) {
+  async function saveQuickCatalogItem(line: InvoiceLineDraft): Promise<boolean> {
     setCatalogSaving((current) => ({ ...current, [line.id]: true }));
     setCatalogMessage((current) => ({ ...current, [line.id]: null }));
 
@@ -1870,18 +1870,32 @@ function InvoiceEditor({
         codigo: line.codigo.trim() || null,
         descripcion: line.descripcion.trim(),
         precio_unitario: Number(line.precio_unitario),
-        iva_tipo: "IVA_10",
+        iva_tipo: line.iva_tipo,
         activo: true
       });
       applyCatalogItem(line.id, saved);
-      setCatalogMessage((current) => ({ ...current, [line.id]: "Item rapido guardado con IVA 10%." }));
+      setCatalogMessage((current) => ({ ...current, [line.id]: "Item guardado en catalogo." }));
+      return true;
     } catch (error) {
       setCatalogMessage((current) => ({
         ...current,
         [line.id]: error instanceof Error ? error.message : "No se pudo guardar el item."
       }));
+      return false;
     } finally {
       setCatalogSaving((current) => ({ ...current, [line.id]: false }));
+    }
+  }
+
+  async function confirmLine(line: InvoiceLineDraft) {
+    if (line.catalogo_item_id || line.lockedFromCatalog) {
+      setLineSheetOpen(false);
+      return;
+    }
+
+    const saved = await saveQuickCatalogItem(line);
+    if (saved) {
+      setLineSheetOpen(false);
     }
   }
 
@@ -2242,11 +2256,15 @@ function InvoiceEditor({
               {catalogMessage[activeLine.id] ? <p className="inline-message">{catalogMessage[activeLine.id]}</p> : null}
               <button
                 className="primary-action wide"
-                disabled={!activeLine.descripcion.trim() || !Number.isInteger(Number(activeLine.precio_unitario))}
-                onClick={() => setLineSheetOpen(false)}
+                disabled={
+                  catalogSaving[activeLine.id] ||
+                  !activeLine.descripcion.trim() ||
+                  !Number.isInteger(Number(activeLine.precio_unitario))
+                }
+                onClick={() => void confirmLine(activeLine)}
                 type="button"
               >
-                Agregar
+                {catalogSaving[activeLine.id] ? "Guardando..." : activeLine.catalogo_item_id ? "Agregar" : "Guardar y agregar"}
               </button>
             </div>
           </section>
