@@ -1487,6 +1487,7 @@ function InvoiceEditor({
   const [emissionError, setEmissionError] = useState<string | null>(null);
   const [emittedDocumento, setEmittedDocumento] = useState<DocumentoResponse | null>(null);
   const [idempotencyKey, setIdempotencyKey] = useState(() => createIdempotencyKey());
+  const [lastEmittedRequestFingerprint, setLastEmittedRequestFingerprint] = useState<string | null>(null);
   const [deliveryLink, setDeliveryLink] = useState<DeliveryLinkResponse | null>(null);
   const [emailStatus, setEmailStatus] = useState<EmailStatusResponse | null>(null);
   const [deliveryLoading, setDeliveryLoading] = useState(false);
@@ -1529,6 +1530,7 @@ function InvoiceEditor({
       items
     };
   }, [cliente, condicionVenta, creditoPlazoDias, lines]);
+  const requestFingerprint = useMemo(() => (request ? JSON.stringify(request) : null), [request]);
 
   useEffect(() => {
     if (!activeLineId && lines[0]) {
@@ -1626,6 +1628,24 @@ function InvoiceEditor({
     void loadDeliveryData(emittedDocumento.id);
   }, [emittedDocumento?.id, emittedDocumento?.cdc, emittedDocumento?.estado]);
 
+  useEffect(() => {
+    if (!emittedDocumento || !lastEmittedRequestFingerprint || !requestFingerprint) {
+      return;
+    }
+
+    if (requestFingerprint === lastEmittedRequestFingerprint) {
+      return;
+    }
+
+    setEmittedDocumento(null);
+    setDeliveryLink(null);
+    setEmailStatus(null);
+    setDeliveryMessage(null);
+    setEmissionError(null);
+    setIdempotencyKey(createIdempotencyKey());
+    setLastEmittedRequestFingerprint(null);
+  }, [emittedDocumento, lastEmittedRequestFingerprint, requestFingerprint]);
+
   async function runPreview(nextRequest = request) {
     if (!nextRequest) {
       setPreviewError("Complete cliente y al menos una linea para calcular.");
@@ -1664,6 +1684,7 @@ function InvoiceEditor({
         body: JSON.stringify(request)
       });
       setEmittedDocumento(result);
+      setLastEmittedRequestFingerprint(requestFingerprint ?? JSON.stringify(request));
       setDeliveryLink(null);
       setEmailStatus(null);
     } catch (error) {
@@ -1733,6 +1754,7 @@ function InvoiceEditor({
     setEmailStatus(null);
     setDeliveryMessage(null);
     setIdempotencyKey(createIdempotencyKey());
+    setLastEmittedRequestFingerprint(null);
   }
 
   async function loadDeliveryData(documentoId: string, regenerate = false) {

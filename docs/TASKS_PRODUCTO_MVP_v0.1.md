@@ -74,7 +74,7 @@ Estados:
 | MVP-043 | Nota credito | Crear pantalla `Nueva nota de credito` | DONE | Verificado en contenedores con Playwright mobile: existe una pantalla separada para buscar/seleccionar factura elegible, cargar motivo, emitir NCE total y mostrar resultado/entrega |
 | MVP-044 | Documentos | Filtrar documentos por contado, credito y nota de credito | DONE | Verificado en contenedores con Playwright mobile: el listado permite filtrar `Todos`, `Contado`, `Credito` y `Nota credito`, combinando con busqueda sin overflow |
 | MVP-045 | Branding | Usar logos oficiales de `ventax_logos/` | DONE | Login, header, menu, PWA y pantallas operativas usan assets oficiales de `ventax_logos/` y no un logo generado/recreado |
-| MVP-046 | Integracion | Enviar `receptor.email` a `facturacion-electronica` cuando el cliente tenga email | DONE | El payload real de factura/NCE incluye `receptor.email` si `cliente.email` tiene valor y la cobertura del FiscalGateway lo valida |
+| MVP-046 | Integracion | Enviar `receptor.email` a `facturacion-electronica` cuando el cliente tenga email | DONE | El payload real de factura/NCE incluye `receptor.email` si `cliente.email` tiene valor; la factura en cola conserva email delegado y la UI renueva idempotencia si el formulario cambia |
 
 ## Camino Critico
 
@@ -119,5 +119,5 @@ Estados:
 - `MVP-018A` queda cerrado: `POST /facturas` encola emision, el worker procesa FE con `external_ref`, y la UI permite refrescar/reintentar con feedback gestionable.
 - `MVP-028` queda cerrado con `docs/WIREFRAME_EDITOR_FACTURA_MVP_v0.1.md` antes de implementar `UI-005`.
 - `MVP-035` a `MVP-045` refinan la UI/UX post-MVP para reducir saturacion operativa, modularizar pantallas, mejorar carga de lineas, evitar perdida de progreso por refresh de token, separar NCE, mejorar filtros de documentos y usar branding oficial Ventax.
-- `MVP-046` queda cerrado con el mapeo de `cliente.email` a `receptor.email` en el gateway fiscal real, reutilizado por factura y NCE.
+- `MVP-046` queda cerrado con el mapeo de `cliente.email` a `receptor.email` en el gateway fiscal real, reutilizado por factura y NCE; ademas la factura en cola marca email delegado cuando el cliente trae correo y la UI evita reutilizar una emision idempotente anterior si se edita el formulario.
 - Cualquier cambio nuevo debe agregar filas a esta matriz o actualizar su estado con evidencia.

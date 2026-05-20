@@ -426,10 +426,11 @@ export class PgFacturaRepository implements FacturaRepository {
             cliente_snapshot,
             totals_snapshot,
             fiscal_request_snapshot,
-            fiscal_response_snapshot
+            fiscal_response_snapshot,
+            email_estado
           )
           values (
-            $1, $2, $3, 'FACTURA', $4, 'EMITIENDO', $5, $6, $7::jsonb, $8::jsonb, $9::jsonb, '{}'::jsonb
+            $1, $2, $3, 'FACTURA', $4, 'EMITIENDO', $5, $6, $7::jsonb, $8::jsonb, $9::jsonb, '{}'::jsonb, $10
           )
           returning
             id,
@@ -457,7 +458,8 @@ export class PgFacturaRepository implements FacturaRepository {
           input.idempotencyKey ?? null,
           JSON.stringify(input.input.cliente),
           JSON.stringify(input.preview.totals),
-          JSON.stringify(input.fiscalRequest)
+          JSON.stringify(input.fiscalRequest),
+          input.input.cliente.email?.trim() ? "DELEGATED" : null
         ]
       );
 
