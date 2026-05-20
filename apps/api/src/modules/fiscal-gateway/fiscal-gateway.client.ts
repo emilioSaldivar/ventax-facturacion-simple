@@ -450,6 +450,7 @@ function buildClientReference(entityType: string, externalRef: string, operation
 function buildReceptor(cliente: FiscalEmitFacturaRequest["cliente"]): Record<string, unknown> {
   const documento = cliente.documento.trim();
   const rucMatch = cliente.documento_tipo === "RUC" ? documento.match(/^(\d+)-?(\d)$/) : null;
+  const email = cliente.email?.trim();
 
   return {
     tipoDocumento: mapDocumentoTipo(cliente.documento_tipo),
@@ -457,7 +458,8 @@ function buildReceptor(cliente: FiscalEmitFacturaRequest["cliente"]): Record<str
     ...(rucMatch ? { dv: rucMatch[2] } : {}),
     razonSocial: cliente.razon_social,
     direccion: cliente.direccion ?? null,
-    telefono: cliente.telefono ?? null
+    telefono: cliente.telefono ?? null,
+    ...(email ? { email } : {})
   };
 }
 

@@ -192,7 +192,8 @@ describe("fiscal gateway", () => {
         tipoDocumento: "RUC",
         docNro: "1234567",
         dv: "8",
-        razonSocial: "Cliente"
+        razonSocial: "Cliente",
+        email: "cliente@example.com"
       },
       condicionOperacion: {
         tipo: "CONTADO",
