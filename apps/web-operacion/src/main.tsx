@@ -2089,7 +2089,7 @@ function InvoiceEditor({
         <div className="section-title-row">
           <div>
             <p className="eyebrow">Productos</p>
-            <h3>Lo vendido</h3>
+            <h3>Productos/Servicios</h3>
           </div>
         </div>
 
