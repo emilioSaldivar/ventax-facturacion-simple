@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import { calculateDocumentTotals, type TaxInputLine } from "@facturacion-simple/shared";
 import { HttpError } from "../../shared/errors/http-error";
+import type { ClienteRepository, ClienteResponse } from "../clientes/clientes.types";
 import type { OperationalContextResponse } from "../context/context.types";
 import {
   FiscalGatewayError,
@@ -70,6 +71,45 @@ function validateCliente(input: FacturaPreviewInput): void {
   if (!input.cliente.razon_social.trim()) {
     throw new HttpError(400, "VALIDATION_ERROR", "Razon social de cliente requerida.");
   }
+}
+
+async function resolveFacturaInputCliente(
+  context: OperationalContextResponse,
+  input: FacturaPreviewInput,
+  clienteRepository?: ClienteRepository
+): Promise<FacturaPreviewInput> {
+  const clienteId = input.cliente.cliente_id?.trim();
+
+  if (!clienteId || !clienteRepository) {
+    return input;
+  }
+
+  const agendaCliente = await clienteRepository.findByIdForFacturador({
+    clienteId,
+    facturadorId: context.facturador.id
+  });
+
+  if (!agendaCliente) {
+    throw new HttpError(404, "NOT_FOUND", "Cliente no encontrado en la agenda del facturador.");
+  }
+
+  return {
+    ...input,
+    cliente: {
+      ...input.cliente,
+      direccion: firstNonBlank(input.cliente.direccion, agendaCliente.direccion),
+      telefono: firstNonBlank(input.cliente.telefono, agendaCliente.telefono),
+      email: firstNonBlank(input.cliente.email, agendaCliente.email)
+    }
+  };
+}
+
+function firstNonBlank(primary: string | null | undefined, fallback: ClienteResponse["email"]): string | null {
+  const normalized = primary?.trim();
+  if (normalized) {
+    return normalized;
+  }
+  return fallback?.trim() || null;
 }
 
 export async function listDocumentos(
@@ -361,7 +401,7 @@ export async function emitFacturaAgainstFiscalGateway(
   input: FacturaPreviewInput,
   repository: FacturaRepository,
   gateway: FiscalGateway,
-  options: { idempotencyKey?: string } = {}
+  options: { idempotencyKey?: string; clienteRepository?: ClienteRepository } = {}
 ): Promise<DocumentoResponse> {
   if (options.idempotencyKey) {
     const existing = await repository.findByIdempotencyKey({
@@ -374,9 +414,10 @@ export async function emitFacturaAgainstFiscalGateway(
     }
   }
 
-  const preview = previewFactura(context, input);
+  const resolvedInput = await resolveFacturaInputCliente(context, input, options.clienteRepository);
+  const preview = previewFactura(context, resolvedInput);
   const externalRef = buildExternalRef(context, options.idempotencyKey);
-  const fiscalRequest = buildFiscalEmitRequest(context, input, preview, externalRef);
+  const fiscalRequest = buildFiscalEmitRequest(context, resolvedInput, preview, externalRef);
 
   let fiscalResponse: FiscalEmitFacturaResponse | null = null;
   let fiscalError: Record<string, unknown> | null = null;
@@ -404,7 +445,7 @@ export async function emitFacturaAgainstFiscalGateway(
     userId: context.user.id,
     externalRef,
     idempotencyKey: options.idempotencyKey,
-    input,
+    input: resolvedInput,
     preview,
     fiscalRequest: fiscalRequest as unknown as Record<string, unknown>,
     fiscalResponse,
@@ -417,7 +458,7 @@ export async function enqueueFacturaEmission(
   context: OperationalContextResponse,
   input: FacturaPreviewInput,
   repository: FacturaRepository,
-  options: { idempotencyKey?: string } = {}
+  options: { idempotencyKey?: string; clienteRepository?: ClienteRepository } = {}
 ): Promise<DocumentoResponse> {
   if (options.idempotencyKey) {
     const existing = await repository.findByIdempotencyKey({
@@ -430,9 +471,10 @@ export async function enqueueFacturaEmission(
     }
   }
 
-  const preview = previewFactura(context, input);
+  const resolvedInput = await resolveFacturaInputCliente(context, input, options.clienteRepository);
+  const preview = previewFactura(context, resolvedInput);
   const externalRef = buildExternalRef(context, options.idempotencyKey);
-  const fiscalRequest = buildFiscalEmitRequest(context, input, preview, externalRef);
+  const fiscalRequest = buildFiscalEmitRequest(context, resolvedInput, preview, externalRef);
 
   return repository.createQueuedEmission({
     tenantId: context.tenant.id,
@@ -440,7 +482,7 @@ export async function enqueueFacturaEmission(
     userId: context.user.id,
     externalRef,
     idempotencyKey: options.idempotencyKey,
-    input,
+    input: resolvedInput,
     preview,
     fiscalRequest
   });

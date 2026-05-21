@@ -138,6 +138,34 @@ export class PgClienteRepository implements ClienteRepository {
     };
   }
 
+  async findByIdForFacturador(input: { clienteId: string; facturadorId: string }): Promise<ClienteResponse | null> {
+    const result = await pool.query<ClienteRow>(
+      `
+        select
+          'AGENDA_FACTURADOR'::text as source,
+          fc.id as cliente_id,
+          ci.documento_tipo,
+          ci.documento,
+          fc.razon_social,
+          fc.direccion,
+          fc.telefono,
+          fc.email::text as email,
+          fc.activo
+        from facturador_clientes fc
+        join cliente_identidades ci on ci.id = fc.cliente_identidad_id
+          and ci.deleted_at is null
+        where fc.id = $1
+          and fc.facturador_id = $2
+          and fc.deleted_at is null
+          and fc.activo = true
+        limit 1
+      `,
+      [input.clienteId, input.facturadorId]
+    );
+
+    return result.rows[0] ? mapResponseRow(result.rows[0]) : null;
+  }
+
   async upsertForFacturador(input: {
     tenantId: string;
     facturadorId: string;
@@ -379,4 +407,3 @@ function mapResponseRow(row: ClienteRow): ClienteResponse {
     activo: row.activo ?? true
   };
 }
-

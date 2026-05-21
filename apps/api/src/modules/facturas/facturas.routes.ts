@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { requireAuth } from "../auth/auth.middleware";
+import { clienteRepository } from "../clientes/clientes.repository";
 import { documentoIdentidadTipos } from "../clientes/clientes.types";
 import { operationalContextRepository } from "../context/context.repository";
 import { getOperationalContext } from "../context/context.service";
@@ -203,7 +204,8 @@ facturasRouter.post("/facturas", requireAuth, validateRequest("body", facturaPre
     const context = await getOperationalContext(req.user!.id, operationalContextRepository);
     const idempotencyKey = parseIdempotencyKey(req.get("idempotency-key"));
     const result = await enqueueFacturaEmission(context, req.body, facturasRepository, {
-      idempotencyKey
+      idempotencyKey,
+      clienteRepository
     });
     res.status(201).json(result);
   } catch (error) {

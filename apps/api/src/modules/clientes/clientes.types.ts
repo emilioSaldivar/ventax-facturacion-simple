@@ -34,6 +34,7 @@ export interface ClienteListResponse {
 export interface ClienteRepository {
   search(input: { tenantId: string; facturadorId: string; q: string; limit: number }): Promise<ClienteSearchResult[]>;
   list(input: { facturadorId: string; q?: string; limit: number; offset: number }): Promise<ClienteListResponse>;
+  findByIdForFacturador(input: { clienteId: string; facturadorId: string }): Promise<ClienteResponse | null>;
   upsertForFacturador(input: {
     tenantId: string;
     facturadorId: string;
@@ -47,4 +48,3 @@ export interface ClienteRepository {
     data: ClienteUpsertInput;
   }): Promise<ClienteResponse | null>;
 }
-

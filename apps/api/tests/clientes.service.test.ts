@@ -85,6 +85,10 @@ class FakeClienteRepository implements ClienteRepository {
     return { items: [clienteResponse], total: 1 };
   }
 
+  async findByIdForFacturador(): Promise<ClienteResponse | null> {
+    return clienteResponse;
+  }
+
   async upsertForFacturador(input: {
     tenantId: string;
     facturadorId: string;

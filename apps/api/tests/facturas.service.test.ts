@@ -24,6 +24,7 @@ import {
 } from "../src/modules/facturas/facturas.service";
 import { enqueueFacturaEmission, processNextQueuedFiscalEmission, retryDocumentoEmission } from "../src/modules/facturas/facturas.service";
 import type { OperationalContextResponse } from "../src/modules/context/context.types";
+import type { ClienteRepository, ClienteResponse, ClienteSearchResult } from "../src/modules/clientes/clientes.types";
 import type {
   FacturaPersistInput,
   FacturaQueuedPersistInput,
@@ -249,6 +250,32 @@ class FakeFacturaRepository implements FacturaRepository {
       estado: input.estado,
       fiscal_status: input.fiscalStatus
     };
+  }
+}
+
+class FakeClienteRepository implements ClienteRepository {
+  public findByIdResponse: ClienteResponse | null = null;
+  public lastFindByIdInput: { clienteId: string; facturadorId: string } | null = null;
+
+  async search(): Promise<ClienteSearchResult[]> {
+    return [];
+  }
+
+  async list() {
+    return { items: [], total: 0 };
+  }
+
+  async findByIdForFacturador(input: { clienteId: string; facturadorId: string }): Promise<ClienteResponse | null> {
+    this.lastFindByIdInput = input;
+    return this.findByIdResponse;
+  }
+
+  async upsertForFacturador(): Promise<ClienteResponse> {
+    throw new Error("not implemented");
+  }
+
+  async updateForFacturador(): Promise<ClienteResponse | null> {
+    throw new Error("not implemented");
   }
 }
 
@@ -1075,6 +1102,57 @@ describe("facturas service", () => {
       condicion_venta: "CONTADO",
       cliente: emitInput.cliente,
       totals: { total: 11000 }
+    });
+  });
+
+  it("enriches queued emission customer email from facturador agenda", async () => {
+    const repo = new FakeFacturaRepository();
+    const clientes = new FakeClienteRepository();
+    clientes.findByIdResponse = {
+      source: "AGENDA_FACTURADOR",
+      cliente_id: "99999999-9999-4999-8999-999999999999",
+      documento_tipo: "RUC",
+      documento: "80136968-1",
+      razon_social: "Cliente Demo",
+      direccion: "Direccion guardada",
+      telefono: "0981000000",
+      email: "guardado@example.com",
+      activo: true
+    };
+
+    const result = await enqueueFacturaEmission(
+      context,
+      {
+        ...emitInput,
+        cliente: {
+          ...emitInput.cliente,
+          cliente_id: "99999999-9999-4999-8999-999999999999",
+          direccion: null,
+          telefono: null,
+          email: null
+        }
+      },
+      repo,
+      {
+        idempotencyKey: "idem-async-client-email",
+        clienteRepository: clientes
+      }
+    );
+
+    expect(result.cliente).toMatchObject({
+      cliente_id: "99999999-9999-4999-8999-999999999999",
+      email: "guardado@example.com",
+      telefono: "0981000000",
+      direccion: "Direccion guardada"
+    });
+    expect(repo.lastQueuedInput?.fiscalRequest.cliente).toMatchObject({
+      email: "guardado@example.com",
+      telefono: "0981000000",
+      direccion: "Direccion guardada"
+    });
+    expect(clientes.lastFindByIdInput).toEqual({
+      clienteId: "99999999-9999-4999-8999-999999999999",
+      facturadorId: context.facturador.id
     });
   });
 
