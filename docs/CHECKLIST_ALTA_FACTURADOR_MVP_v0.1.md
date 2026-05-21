@@ -5,6 +5,7 @@ Checklist manual para soporte interno antes de entregar un operador listo para e
 ## Datos Del Facturador
 
 - Confirmar RUC, razon social, nombre fantasia si aplica y estado activo.
+- Confirmar que el nombre fantasia es solo UX interna y no reemplaza la razon social fiscal.
 - Registrar `emisor_id` fiscal usado por `facturacion-electronica`.
 - Confirmar tenant y suscripcion activos.
 
@@ -18,6 +19,7 @@ Checklist manual para soporte interno antes de entregar un operador listo para e
 
 - Confirmar actividad economica principal.
 - Confirmar perfil de emision local si aplica.
+- Registrar alias operativo por actividad economica/perfil si el titulo visible debe diferir del nombre fantasia o de la descripcion oficial.
 - Confirmar flags operativos necesarios para FE, por ejemplo numeracion `ONLINE/SERVICE` y envio u omision de `emission_profile_code`.
 
 ## Operador
@@ -35,6 +37,7 @@ Validar en la pantalla `Informacion y estado`:
 - Usuario con configuracion operativa.
 - Facturador activo.
 - Contexto fiscal local completo.
+- Titulo operativo corresponde a la actividad/perfil que el usuario puede facturar.
 - Backend fiscal disponible.
 
 ## Smoke Obligatorio

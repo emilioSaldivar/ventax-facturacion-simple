@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { clearFiscalReadinessCacheForTests, getOperationalContext, getReadiness } from "../src/modules/context/context.service";
+import { deriveTituloOperativo } from "../src/modules/context/context.repository";
 import type { OperationalContextRepository, OperationalContextResponse, ReadinessCheck } from "../src/modules/context/context.types";
 import type { FiscalGateway } from "../src/modules/fiscal-gateway/fiscal-gateway.types";
 
@@ -96,6 +97,46 @@ class FakeFiscalGateway implements FiscalGateway {
 }
 
 describe("context service", () => {
+  it("derives operative title by activity profile without changing fiscal data", () => {
+    expect(
+      deriveTituloOperativo({
+        actividadPerfilAlias: "Taller mecanico",
+        nombreFantasia: "Autos Demo",
+        actividadAlias: "Servicios",
+        actividadDescripcion: "Servicios administrativos",
+        razonSocial: "Facturador Demo S.A."
+      })
+    ).toBe("Taller mecanico");
+  });
+
+  it("falls back to trade name, activity and legal name for operative title", () => {
+    expect(
+      deriveTituloOperativo({
+        actividadPerfilAlias: " ",
+        nombreFantasia: "Autos Demo",
+        actividadAlias: "Servicios",
+        actividadDescripcion: "Servicios administrativos",
+        razonSocial: "Facturador Demo S.A."
+      })
+    ).toBe("Autos Demo");
+    expect(
+      deriveTituloOperativo({
+        nombreFantasia: null,
+        actividadAlias: "Servicios",
+        actividadDescripcion: "Servicios administrativos",
+        razonSocial: "Facturador Demo S.A."
+      })
+    ).toBe("Servicios");
+    expect(
+      deriveTituloOperativo({
+        nombreFantasia: null,
+        actividadAlias: null,
+        actividadDescripcion: null,
+        razonSocial: "Facturador Demo S.A."
+      })
+    ).toBe("Facturador Demo S.A.");
+  });
+
   it("returns operational context", async () => {
     const repo = new FakeContextRepository(contextFixture, []);
 

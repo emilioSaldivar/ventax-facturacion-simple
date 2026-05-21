@@ -38,17 +38,23 @@ interface OperationalContextResponse {
     emisor_id: string;
     razon_social: string;
     ruc: string;
+    nombre_fantasia?: string | null;
   };
   fiscal_context: {
     establecimiento: string;
     punto_expedicion: string;
     perfil_emision_codigo: string;
+    perfil_emision_alias?: string | null;
     actividad_economica_codigo: string;
     actividad_economica_descripcion: string | null;
+    actividad_economica_alias?: string | null;
     timbrado: string;
     timbrado_inicio: string;
     documento_nro: string;
     credito_plazo_dias: number;
+  };
+  display?: {
+    titulo_operativo: string;
   };
 }
 
@@ -494,7 +500,7 @@ function OperationHome({
             <div>
               <p className="eyebrow">Menu</p>
               <h2>Operacion</h2>
-              <p className="muted">{context?.facturador.razon_social ?? "Sin facturador"}</p>
+              <p className="muted">{getOperationalTitle(context)}</p>
             </div>
             <div className="menu-list">
               {menuItems.map((item) => (
@@ -567,8 +573,10 @@ function StatusView({
       <section className="facturador-band" aria-label="Contexto operativo">
         <div>
           <p className="eyebrow">Facturador</p>
-          <h1>{context?.facturador.razon_social ?? "Sin facturador asignado"}</h1>
-          <p className="muted">{context ? `RUC ${context.facturador.ruc}` : "Configuracion operativa incompleta"}</p>
+          <h1>{getOperationalTitle(context)}</h1>
+          <p className="muted">
+            {context ? `${context.facturador.razon_social} · RUC ${context.facturador.ruc}` : "Configuracion operativa incompleta"}
+          </p>
         </div>
         <span className={canEmit ? "status-pill ready" : "status-pill blocked"}>{canEmit ? "Listo" : "Bloqueado"}</span>
       </section>
@@ -588,11 +596,11 @@ function StatusView({
             </div>
             <div>
               <dt>Perfil</dt>
-              <dd>{context?.fiscal_context.perfil_emision_codigo ?? "-"}</dd>
+              <dd>{formatPerfilOperativo(context)}</dd>
             </div>
             <div>
               <dt>Actividad</dt>
-              <dd>{context?.fiscal_context.actividad_economica_codigo ?? "-"}</dd>
+              <dd>{formatActividadOperativa(context)}</dd>
             </div>
           </dl>
         </article>
@@ -2081,7 +2089,7 @@ function InvoiceEditor({
         <div className="section-title-row">
           <div>
             <p className="eyebrow">Productos</p>
-            <h3>Lo vendido</h3>
+            <h3>Productos/Servicios</h3>
           </div>
         </div>
 
@@ -2624,6 +2632,49 @@ function getOperationViewHint(value: OperationView): string {
     documents: "Estado y entrega"
   };
   return hints[value];
+}
+
+function getOperationalTitle(context: OperationalContextResponse | null): string {
+  return (
+    firstText(
+      context?.display?.titulo_operativo,
+      context?.fiscal_context.perfil_emision_alias,
+      context?.facturador.nombre_fantasia,
+      context?.fiscal_context.actividad_economica_alias,
+      context?.fiscal_context.actividad_economica_descripcion,
+      context?.facturador.razon_social
+    ) ?? "Sin facturador asignado"
+  );
+}
+
+function formatPerfilOperativo(context: OperationalContextResponse | null): string {
+  if (!context) {
+    return "-";
+  }
+
+  return context.fiscal_context.perfil_emision_alias
+    ? `${context.fiscal_context.perfil_emision_codigo} · ${context.fiscal_context.perfil_emision_alias}`
+    : context.fiscal_context.perfil_emision_codigo;
+}
+
+function formatActividadOperativa(context: OperationalContextResponse | null): string {
+  if (!context) {
+    return "-";
+  }
+
+  const label = firstText(context.fiscal_context.actividad_economica_alias, context.fiscal_context.actividad_economica_descripcion);
+  return label ? `${context.fiscal_context.actividad_economica_codigo} · ${label}` : context.fiscal_context.actividad_economica_codigo;
+}
+
+function firstText(...values: Array<string | null | undefined>): string | null {
+  for (const value of values) {
+    const trimmed = value?.trim();
+    if (trimmed) {
+      return trimmed;
+    }
+  }
+
+  return null;
 }
 
 function canCancelDocumento(documento: DocumentoResponse): boolean {

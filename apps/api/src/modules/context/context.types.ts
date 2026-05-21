@@ -11,18 +11,25 @@ export interface FacturadorSummary {
   emisor_id: string;
   razon_social: string;
   ruc: string;
+  nombre_fantasia?: string | null;
 }
 
 export interface FiscalContext {
   establecimiento: string;
   punto_expedicion: string;
   perfil_emision_codigo: string;
+  perfil_emision_alias?: string | null;
   actividad_economica_codigo: string;
   actividad_economica_descripcion: string | null;
+  actividad_economica_alias?: string | null;
   timbrado: string;
   timbrado_inicio: string;
   documento_nro: string;
   credito_plazo_dias: number;
+}
+
+export interface OperationalDisplay {
+  titulo_operativo: string;
 }
 
 export interface OperationalContextResponse {
@@ -30,6 +37,7 @@ export interface OperationalContextResponse {
   tenant: TenantSummary;
   facturador: FacturadorSummary;
   fiscal_context: FiscalContext;
+  display?: OperationalDisplay;
 }
 
 export interface ReadinessCheck {

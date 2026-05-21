@@ -13,11 +13,14 @@ interface ContextRow {
   emisor_id: string;
   razon_social: string;
   ruc: string;
+  nombre_fantasia: string | null;
   establecimiento: string;
   punto_expedicion: string;
   perfil_emision_codigo: string;
+  perfil_emision_alias: string | null;
   actividad_economica_codigo: string;
   actividad_economica_descripcion: string | null;
+  actividad_economica_alias: string | null;
   timbrado: string;
   timbrado_inicio: Date;
   documento_nro: string;
@@ -53,11 +56,14 @@ export class PgOperationalContextRepository implements OperationalContextReposit
           f.emisor_id,
           f.razon_social,
           f.ruc,
+          f.nombre_fantasia,
           e.codigo as establecimiento,
           p.codigo as punto_expedicion,
           pe.codigo as perfil_emision_codigo,
+          app.alias_operativo as perfil_emision_alias,
           a.codigo as actividad_economica_codigo,
           a.descripcion as actividad_economica_descripcion,
+          a.alias_operativo as actividad_economica_alias,
           app.timbrado,
           app.timbrado_inicio,
           app.documento_nro,
@@ -140,18 +146,30 @@ export class PgOperationalContextRepository implements OperationalContextReposit
         id: row.facturador_id,
         emisor_id: row.emisor_id,
         razon_social: row.razon_social,
-        ruc: row.ruc
+        ruc: row.ruc,
+        nombre_fantasia: row.nombre_fantasia
       },
       fiscal_context: {
         establecimiento: row.establecimiento,
         punto_expedicion: row.punto_expedicion,
         perfil_emision_codigo: row.perfil_emision_codigo,
+        perfil_emision_alias: row.perfil_emision_alias,
         actividad_economica_codigo: row.actividad_economica_codigo,
         actividad_economica_descripcion: row.actividad_economica_descripcion,
+        actividad_economica_alias: row.actividad_economica_alias,
         timbrado: row.timbrado,
         timbrado_inicio: row.timbrado_inicio.toISOString().slice(0, 10),
         documento_nro: row.documento_nro,
         credito_plazo_dias: row.credito_plazo_dias
+      },
+      display: {
+        titulo_operativo: deriveTituloOperativo({
+          actividadPerfilAlias: row.perfil_emision_alias,
+          nombreFantasia: row.nombre_fantasia,
+          actividadAlias: row.actividad_economica_alias,
+          actividadDescripcion: row.actividad_economica_descripcion,
+          razonSocial: row.razon_social
+        })
       }
     };
   }
@@ -244,6 +262,35 @@ export class PgOperationalContextRepository implements OperationalContextReposit
       }
     ];
   }
+}
+
+export function deriveTituloOperativo(input: {
+  actividadPerfilAlias?: string | null;
+  nombreFantasia?: string | null;
+  actividadAlias?: string | null;
+  actividadDescripcion?: string | null;
+  razonSocial: string;
+}): string {
+  return (
+    firstNonBlank(
+      input.actividadPerfilAlias,
+      input.nombreFantasia,
+      input.actividadAlias,
+      input.actividadDescripcion,
+      input.razonSocial
+    ) ?? input.razonSocial
+  );
+}
+
+function firstNonBlank(...values: Array<string | null | undefined>): string | null {
+  for (const value of values) {
+    const trimmed = value?.trim();
+    if (trimmed) {
+      return trimmed;
+    }
+  }
+
+  return null;
 }
 
 export const operationalContextRepository = new PgOperationalContextRepository();

@@ -1145,7 +1145,7 @@ components:
 
     OperationalContextResponse:
       type: object
-      required: [user, tenant, facturador, fiscal_context]
+      required: [user, tenant, facturador, fiscal_context, display]
       properties:
         user:
           $ref: "#/components/schemas/UserSummary"
@@ -1155,6 +1155,8 @@ components:
           $ref: "#/components/schemas/FacturadorSummary"
         fiscal_context:
           $ref: "#/components/schemas/FiscalContext"
+        display:
+          $ref: "#/components/schemas/OperationalDisplay"
 
     TenantSummary:
       type: object
@@ -1181,6 +1183,10 @@ components:
           type: string
         ruc:
           type: string
+        nombre_fantasia:
+          type: string
+          nullable: true
+          description: Nombre fantasia usado solo para visualizacion/UX del SaaS; no reemplaza razon social fiscal ni se envia a fe-api.
 
     FiscalContext:
       type: object
@@ -1195,12 +1201,20 @@ components:
         perfil_emision_codigo:
           type: string
           example: SERV
+        perfil_emision_alias:
+          type: string
+          nullable: true
+          description: Alias visual para la combinacion actividad/perfil asignada al usuario; no altera el contrato fiscal con fe-api.
         actividad_economica_codigo:
           type: string
           example: "82110"
         actividad_economica_descripcion:
           type: string
           nullable: true
+        actividad_economica_alias:
+          type: string
+          nullable: true
+          description: Alias visual de la actividad economica activa para UX operativa.
         timbrado:
           type: string
           example: "80136968"
@@ -1216,6 +1230,14 @@ components:
           type: integer
           minimum: 1
           example: 30
+
+    OperationalDisplay:
+      type: object
+      required: [titulo_operativo]
+      properties:
+        titulo_operativo:
+          type: string
+          description: Titulo UX derivado por actividad economica/perfil del usuario. Fallback: alias actividad/perfil, nombre fantasia, alias actividad, descripcion actividad, razon social.
 
     ReadinessResponse:
       type: object
