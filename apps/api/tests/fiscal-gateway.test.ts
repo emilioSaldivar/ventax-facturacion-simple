@@ -216,6 +216,64 @@ describe("fiscal gateway", () => {
     expect(calls[0]?.payload).not.toHaveProperty("condicionOperacion.credito");
   });
 
+  it("maps idempotent 409 emission response as the existing fiscal document", async () => {
+    const gateway = new RealFiscalGateway({
+      mode: "real",
+      baseUrl: "https://fe-api.ventax.app/fcws",
+      apiKey: "secret",
+      timeoutMs: 20000,
+      environment: "test",
+    });
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        new Response(
+          JSON.stringify({
+            document_id: "doc-existing",
+            cdc: "I".repeat(44),
+            nro_factura: "001-001-0000001",
+            status: "APPROVED",
+            idempotent: true,
+            email_status: "FAILED"
+          }),
+          { status: 409, headers: { "content-type": "application/json" } }
+        )
+      )
+    );
+
+    const result = await gateway.emitFactura(request);
+
+    expect(result).toMatchObject({
+      fiscal_document_id: "doc-existing",
+      cdc: "I".repeat(44),
+      numero_fiscal: "001-001-0000001",
+      estado: "EMITIDA",
+      email_status: "FAILED"
+    });
+  });
+
+  it("keeps non-idempotent 409 emission responses as fiscal errors", async () => {
+    const gateway = new RealFiscalGateway({
+      mode: "real",
+      baseUrl: "https://fe-api.ventax.app/fcws",
+      apiKey: "secret",
+      timeoutMs: 20000,
+      environment: "test",
+    });
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        new Response(JSON.stringify({ code: "CONFLICT" }), { status: 409, headers: { "content-type": "application/json" } })
+      )
+    );
+
+    await expect(gateway.emitFactura(request)).rejects.toMatchObject({
+      code: "UPSTREAM_ERROR"
+    });
+  });
+
   it("can omit FE emission profile and let FE service assign numbering", async () => {
     const calls: Array<{ payload: Record<string, unknown> }> = [];
     const gateway = new RealFiscalGateway({

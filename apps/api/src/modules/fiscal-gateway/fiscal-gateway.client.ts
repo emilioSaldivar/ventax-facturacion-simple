@@ -157,7 +157,7 @@ export class RealFiscalGateway implements FiscalGateway {
 
     const body = await readJson(response);
 
-    if (!response.ok) {
+    if (!response.ok && !isIdempotentDocumentConflict(response.status, body)) {
       throw new FiscalGatewayError(
         response.status === 408 || response.status === 504 ? "TIMEOUT" : "UPSTREAM_ERROR",
         "Backend fiscal rechazo la emision.",
@@ -182,7 +182,7 @@ export class RealFiscalGateway implements FiscalGateway {
 
     const body = await readJson(response);
 
-    if (!response.ok) {
+    if (!response.ok && !isIdempotentDocumentConflict(response.status, body)) {
       throw new FiscalGatewayError(
         response.status === 408 || response.status === 504 ? "TIMEOUT" : "UPSTREAM_ERROR",
         "Backend fiscal rechazo la nota de credito.",
@@ -520,6 +520,15 @@ function mapFiscalNotaCreditoResponse(body: unknown): FiscalEmitNotaCreditoRespo
     email_status: mapEmailStatus(data.email_status),
     raw: data
   };
+}
+
+function isIdempotentDocumentConflict(status: number, body: unknown): boolean {
+  if (status !== 409 || !body || typeof body !== "object") {
+    return false;
+  }
+
+  const data = body as Record<string, unknown>;
+  return data.idempotent === true && Boolean(stringOrNull(data.document_id) || stringOrNull(data.cdc));
 }
 
 function stringOrNull(value: unknown): string | null {
