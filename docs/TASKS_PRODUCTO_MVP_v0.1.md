@@ -31,10 +31,10 @@ Estados:
 | MVP-006 | Auth | Implementar login, refresh, logout y sesiones revocables | DONE | JWT corto, refresh httpOnly, rotacion, revocacion server-side, logout y bloqueo por intentos implementados |
 | MVP-007 | Operacion | Modelar configuracion operativa unica por usuario | DONE | Un usuario queda asociado a un solo facturador, establecimiento, punto, perfil y actividad |
 | MVP-008 | Facturadores | Implementar readiness agregado | DONE | La UI puede saber si el operador puede emitir y por que no |
-| MVP-009 | Clientes | Implementar base compartida de identidades de cliente | DONE | La busqueda por documento puede sugerir datos compartidos sin exponer agenda privada |
-| MVP-010 | Clientes | Implementar agenda de clientes por facturador | DONE | Todo cliente usado queda guardado en la agenda del facturador |
+| MVP-009 | Clientes | Implementar base compartida de identidades de cliente | DONE | La busqueda por documento puede sugerir datos compartidos sin exponer agenda privada ni comunicar al operador/cliente final que el dato proviene de una base compartida |
+| MVP-010 | Clientes | Implementar agenda de clientes por facturador | DONE | Todo cliente usado queda guardado en la agenda del facturador; editar una agenda no modifica agendas de otros facturadores |
 | MVP-011 | Clientes | Implementar popup de carga rapida desde factura | DONE | Popup de alta rapida integrado en UI operativa contra `POST /clientes` |
-| MVP-012 | Catalogo | Implementar catalogo de productos/servicios por facturador | DONE | Items tienen codigo, descripcion, precio entero, IVA y estado activo |
+| MVP-012 | Catalogo | Implementar catalogo de productos/servicios por facturador | DONE | Items tienen codigo, descripcion, precio entero, IVA y estado activo; no existe catalogo global ni sugerencias entre facturadores |
 | MVP-013 | Catalogo | Implementar busqueda desde campo codigo | DONE | Busqueda de catalogo integrada desde la grilla del editor |
 | MVP-014 | Catalogo | Implementar codigo autogenerado e item rapido IVA 10% | DONE | Si no se informa codigo, el sistema genera uno; items rapidos quedan con IVA 10% |
 | MVP-015 | Facturacion | Implementar editor mobile-first sin borradores | DONE | Editor operativo permite cargar y editar antes de emitir sin persistir borrador |
@@ -98,6 +98,7 @@ Estados:
 - `MVP-006` queda cerrado con login, refresh rotado, logout revocable, middleware auth y bloqueo por intentos.
 - `MVP-007` y `MVP-008` quedan cerrados con modelo de contexto operativo y endpoints `/me/context` y `/me/readiness`.
 - `MVP-009` y `MVP-010` quedan cerrados con identidad compartida y agenda por facturador.
+- 2026-05-21: aclarado criterio de producto para clientes: la base compartida es solo infraestructura de autocompletado y alta en agenda; no debe comunicarse como "cliente compartido" al operador ni al cliente final.
 - `MVP-011` queda cerrado con popup de alta rapida en la UI operativa.
 - `MVP-012` y `MVP-014` quedan cerrados con modelo/endpoints de catalogo, codigo autogenerado e IVA 10 por defecto.
 - `MVP-013` queda cerrado con busqueda de catalogo integrada en la grilla del editor.

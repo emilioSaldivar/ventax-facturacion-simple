@@ -128,6 +128,8 @@ Campos opcionales:
 - Todo cliente usado en una factura queda guardado.
 - Debe existir una base compartida de informacion fiscal de clientes por documento/RUC/CI, disponible para busqueda predictiva entre facturadores.
 - Cada facturador mantiene su propia agenda/relacion comercial de clientes.
+- La base compartida de clientes no debe exponerse como concepto al operador ni al cliente final. Para cada facturador, la experiencia debe presentar a sus clientes como parte de su propia agenda; la informacion compartida solo puede usarse internamente para autocompletar, sugerir datos fiscales y facilitar el alta en la agenda del facturador.
+- Cuando un facturador crea o modifica un cliente en su agenda, el sistema puede actualizar la identidad global para mejorar futuras sugerencias, pero no debe modificar automaticamente las agendas de otros facturadores.
 - Si el cliente no existe en la agenda del facturador, la pantalla de factura debe abrir un popup de carga rapida con los datos obligatorios.
 - La busqueda por RUC/CI debe consultar primero la agenda del facturador y luego sugerir datos desde la base compartida.
 
@@ -136,6 +138,7 @@ Campos opcionales:
 ### 8.1 Reglas
 
 - Los productos/servicios se guardan para reutilizar por facturador.
+- El catalogo es exclusivo por facturador. No existe catalogo global de productos/servicios y nunca se debe sugerir, mostrar ni reutilizar un item de otro facturador.
 - El codigo no es obligatorio.
 - Si el operador carga una descripcion sin codigo, el sistema genera un codigo interno.
 - Si el operador carga un codigo, se usa ese codigo para el facturador si no entra en conflicto.

@@ -91,7 +91,9 @@ Decisiones de datos:
 
 - `cliente_identidades` guarda informacion compartida por documento/RUC/CI para prediccion.
 - `facturador_clientes` representa la agenda propia del facturador.
+- La identidad compartida debe ser invisible para operadores y clientes finales: se usa solo para autocompletar y facilitar el alta en `facturador_clientes`. La experiencia, copys y respuestas operativas deben presentar siempre al cliente como parte de la agenda propia del facturador.
 - `catalogo_items` pertenece a un solo facturador.
+- No se modela catalogo global: la busqueda y edicion de productos/servicios siempre se aisla por `facturador_id`.
 - `usuario_operacion_config` fija el unico facturador, establecimiento, punto, perfil y actividad efectiva del operador.
 - No se persisten borradores.
 
