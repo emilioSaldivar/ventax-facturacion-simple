@@ -71,6 +71,7 @@ class FakeCatalogoRepository implements CatalogoRepository {
   public lastListInput: unknown;
   public lastCreateInput: unknown;
   public lastUpdateInput: unknown;
+  public lastExistsInput: Parameters<CatalogoRepository["existsByCodigo"]>[0] | null = null;
   public updateResult: CatalogoItem | null = item;
 
   async search(input: { facturadorId: string; q: string; limit: number }): Promise<CatalogoItem[]> {
@@ -110,7 +111,8 @@ class FakeCatalogoRepository implements CatalogoRepository {
     return this.updateResult;
   }
 
-  async existsByCodigo(input: { codigoNormalizado: string }): Promise<boolean> {
+  async existsByCodigo(input: Parameters<CatalogoRepository["existsByCodigo"]>[0]): Promise<boolean> {
+    this.lastExistsInput = input;
     return this.existingCodes.has(input.codigoNormalizado);
   }
 }
@@ -159,6 +161,11 @@ describe("catalogo service", () => {
       )
     ).rejects.toMatchObject({
       statusCode: 409
+    });
+    expect(repo.lastExistsInput).toEqual({
+      facturadorId: context.facturador.id,
+      codigoNormalizado: "SERV-001",
+      excludeItemId: undefined
     });
   });
 
@@ -259,6 +266,11 @@ describe("catalogo service", () => {
       itemId: item.id,
       facturadorId: otherFacturadorContext.facturador.id,
       userId: otherFacturadorContext.user.id
+    });
+    expect(repo.lastExistsInput).toEqual({
+      facturadorId: otherFacturadorContext.facturador.id,
+      codigoNormalizado: "OTRO-002",
+      excludeItemId: item.id
     });
   });
 

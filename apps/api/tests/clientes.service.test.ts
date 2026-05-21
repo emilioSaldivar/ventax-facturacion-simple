@@ -73,11 +73,12 @@ class FakeClienteRepository implements ClienteRepository {
   public lastListInput: unknown;
   public lastUpsertInput: unknown;
   public lastUpdateInput: unknown;
+  public searchResult: ClienteSearchResult[] = [clienteResponse];
   public updateResult: ClienteResponse | null = clienteResponse;
 
   async search(input: { tenantId: string; facturadorId: string; q: string; limit: number }): Promise<ClienteSearchResult[]> {
     this.lastSearchInput = input;
-    return [clienteResponse];
+    return this.searchResult;
   }
 
   async list(input: { facturadorId: string; q?: string; limit: number; offset: number }): Promise<ClienteListResponse> {
@@ -154,6 +155,30 @@ describe("clientes service", () => {
       q: "800",
       limit: 10
     });
+  });
+
+  it("returns global fallback suggestions without creating an agenda entry", async () => {
+    const repo = new FakeClienteRepository();
+    repo.searchResult = [
+      {
+        ...clienteResponse,
+        source: "IDENTIDAD_COMPARTIDA",
+        cliente_id: null,
+        documento: "80003110-5",
+        razon_social: "CAVALLARO S.A.C.E.I"
+      }
+    ];
+
+    const result = await searchClientes(context, { q: "80003110", limit: 5 }, repo);
+
+    expect(result.items).toEqual(repo.searchResult);
+    expect(repo.lastSearchInput).toEqual({
+      tenantId: context.tenant.id,
+      facturadorId: context.facturador.id,
+      q: "80003110",
+      limit: 5
+    });
+    expect(repo.lastUpsertInput).toBeUndefined();
   });
 
   it("lists agenda by facturador", async () => {

@@ -1837,7 +1837,7 @@ function InvoiceEditor({
       telefono: suggestion.telefono ?? "",
       email: suggestion.email ?? ""
     });
-    setClienteMessage(suggestion.source === "AGENDA_FACTURADOR" ? "Cliente seleccionado de la agenda." : "Datos sugeridos desde identidad compartida.");
+    setClienteMessage(suggestion.source === "AGENDA_FACTURADOR" ? "Cliente seleccionado de la agenda." : "Datos encontrados para agregar a tu agenda.");
     setClienteSuggestions([]);
   }
 
@@ -2041,7 +2041,7 @@ function InvoiceEditor({
                   >
                     <strong>{suggestion.documento}</strong>
                     <span>{suggestion.razon_social}</span>
-                    <small>{suggestion.source === "AGENDA_FACTURADOR" ? "Agenda" : "Identidad compartida"}</small>
+                    <small>{suggestion.source === "AGENDA_FACTURADOR" ? "Agenda" : "Sugerencia"}</small>
                   </button>
                 ))}
               </div>
