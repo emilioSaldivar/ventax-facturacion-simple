@@ -5,6 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
 COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.yml}"
+APP_ENV_FILE="${APP_ENV_FILE:-.env}"
 BACKUP_DIR="${BACKUP_DIR:-$ROOT_DIR/backups/postgres}"
 POSTGRES_SERVICE="${POSTGRES_SERVICE:-postgres}"
 POSTGRES_DB="${POSTGRES_DB:-facturacion_simple}"
@@ -16,8 +17,15 @@ BACKUP_FILE="$BACKUP_DIR/${POSTGRES_DB}-${STAMP}.dump"
 
 mkdir -p "$BACKUP_DIR"
 
+if [[ ! -f "$APP_ENV_FILE" ]]; then
+  echo "No existe $APP_ENV_FILE en $ROOT_DIR" >&2
+  exit 1
+fi
+
+COMPOSE_ARGS=(--env-file "$APP_ENV_FILE" -f "$COMPOSE_FILE")
+
 echo "Generando backup PostgreSQL en $BACKUP_FILE..."
-docker compose -f "$COMPOSE_FILE" exec -T "$POSTGRES_SERVICE" \
+docker compose "${COMPOSE_ARGS[@]}" exec -T "$POSTGRES_SERVICE" \
   pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc --no-owner --no-acl > "$BACKUP_FILE"
 
 echo "Backup generado: $BACKUP_FILE"

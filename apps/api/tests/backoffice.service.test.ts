@@ -99,6 +99,24 @@ describe("backoffice service", () => {
     await expect(verifyPassword(repo.lastCreateInput!.passwordHash, "Temporal-12345")).resolves.toBe(true);
   });
 
+  it("allows email-shaped usernames for customer operators", async () => {
+    const repo = new FakeBackofficeRepository();
+
+    const result = await createBackofficeUser(
+      "22222222-2222-4222-8222-222222222222",
+      {
+        username: " Emiliomatasc@Fpuna.Edu.Py ",
+        display_name: "Emilio Saldivar",
+        role: "OPERADOR_FACTURACION",
+        temporary_password: "Temporal-12345"
+      },
+      repo
+    );
+
+    expect(result.username).toBe("emiliomatasc@fpuna.edu.py");
+    expect(repo.lastCreateInput?.username).toBe("emiliomatasc@fpuna.edu.py");
+  });
+
   it("resets password, returns the one-time temporary password and delegates unlock to repository", async () => {
     const repo = new FakeBackofficeRepository();
 

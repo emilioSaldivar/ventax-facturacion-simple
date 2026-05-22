@@ -7,15 +7,15 @@ services:
         max-size: "${DOCKER_LOG_MAX_SIZE:-10m}"
         max-file: "${DOCKER_LOG_MAX_FILE:-5}"
     environment:
-      POSTGRES_DB: facturacion_simple
-      POSTGRES_USER: facturacion_simple
-      POSTGRES_PASSWORD: facturacion_simple
+      POSTGRES_DB: ${POSTGRES_DB:-facturacion_simple}
+      POSTGRES_USER: ${POSTGRES_USER:-facturacion_simple}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-facturacion_simple}
     ports:
       - "127.0.0.1:${POSTGRES_HOST_PORT:-5433}:5432"
     volumes:
       - facturacion_simple_pg:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U facturacion_simple -d facturacion_simple"]
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
       interval: 5s
       timeout: 3s
       retries: 20
@@ -28,11 +28,11 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     env_file:
-      - .env
+      - ${APP_ENV_FILE:-.env}
     environment:
       NODE_ENV: production
       PORT: 8080
-      DATABASE_URL: postgres://facturacion_simple:facturacion_simple@postgres:5432/facturacion_simple
+      DATABASE_URL: ${DATABASE_URL:-postgres://facturacion_simple:facturacion_simple@postgres:5432/facturacion_simple}
       APP_ORIGIN: ${APP_ORIGIN:-http://localhost:8092}
       BACKOFFICE_ORIGIN: ${BACKOFFICE_ORIGIN:-http://localhost:8092}
     depends_on:
@@ -54,10 +54,10 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     env_file:
-      - .env
+      - ${APP_ENV_FILE:-.env}
     environment:
       NODE_ENV: production
-      DATABASE_URL: postgres://facturacion_simple:facturacion_simple@postgres:5432/facturacion_simple
+      DATABASE_URL: ${DATABASE_URL:-postgres://facturacion_simple:facturacion_simple@postgres:5432/facturacion_simple}
     command: ["node", "apps/api/dist/db/migrate.js"]
     depends_on:
       postgres:

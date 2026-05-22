@@ -11,6 +11,11 @@ const sensitiveEnvLinePattern = /^\s*(?:export\s+)?([A-Z][A-Z0-9_]*(?:API_KEY|SE
 
 function isAllowedPlaceholder(value) {
   const normalized = value.trim().replace(/^["']|["']$/g, "");
+  const envDefaultMatch = normalized.match(/^\$\{[A-Z0-9_]+:-(.*)\}$/);
+  if (envDefaultMatch) {
+    return isAllowedPlaceholder(envDefaultMatch[1]);
+  }
+
   return (
     normalized === "" ||
     normalized === "null" ||
@@ -46,7 +51,7 @@ function trackedFiles() {
 }
 
 function checkPrivateFileName(file, findings) {
-  if (file === ".env.example") {
+  if (file === ".env.example" || /^\.env\..+\.example$/.test(file)) {
     return;
   }
 
@@ -61,7 +66,7 @@ function checkPrivateFileName(file, findings) {
 }
 
 function checkTextAssignments(file, text, findings) {
-  if (file !== ".env.example" && file !== "docker-compose.yml") {
+  if (file !== ".env.example" && !/^\.env\..+\.example$/.test(file) && file !== "docker-compose.yml") {
     return;
   }
 

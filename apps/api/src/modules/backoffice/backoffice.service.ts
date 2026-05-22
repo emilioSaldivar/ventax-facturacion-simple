@@ -77,7 +77,14 @@ export async function assignBackofficeOperationConfig(
 function normalizeUsername(username: string): string {
   const normalized = username.trim().toLowerCase();
 
-  if (!/^[a-z0-9._-]{3,120}$/.test(normalized)) {
+  const atCount = normalized.split("@").length - 1;
+
+  if (
+    !/^[a-z0-9._@-]{3,120}$/.test(normalized) ||
+    normalized.startsWith("@") ||
+    normalized.endsWith("@") ||
+    atCount > 1
+  ) {
     throw new HttpError(400, "VALIDATION_ERROR", "Username invalido.");
   }
 

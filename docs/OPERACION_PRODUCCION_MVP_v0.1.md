@@ -86,24 +86,36 @@ Aplica a `postgres`, `api`, `migrate` y `frontend`. Cambiar estos valores requie
 
 ## Puertos Y Nginx Del Host
 
-En produccion el stack Docker publica sus puertos solo en `127.0.0.1`:
+En produccion el stack Docker publica sus puertos solo en `127.0.0.1`. Para dos instancias en el mismo VPS usar puertos y proyecto Compose separados:
 
 ```bash
+# staging / instancia actual
+COMPOSE_PROJECT_NAME=ventax-facturacion-simple
 FRONTEND_HTTP_PORT=8092
 API_HTTP_PORT=8091
 POSTGRES_HOST_PORT=5433
+
+# produccion nueva
+COMPOSE_PROJECT_NAME=ventax-facturacion-simple-prod
+FRONTEND_HTTP_PORT=8192
+API_HTTP_PORT=8191
+POSTGRES_HOST_PORT=5434
 ```
 
 El dominio publico debe apuntar por DNS a la IP del VPS y Nginx del host debe reenviar HTTPS al frontend:
 
 ```nginx
+# staging-factura.ventax.app
 proxy_pass http://127.0.0.1:8092;
+
+# factura.ventax.app
+proxy_pass http://127.0.0.1:8192;
 ```
 
 Plantilla disponible:
 
 ```text
-infra/nginx-or-caddy/host-production.conf
+infra/nginx-or-caddy/host-factura-multi-env.conf
 ```
 
 La plantilla usa el certificado Cloudflare existente del VPS:
@@ -120,7 +132,13 @@ Si el dominio operativo no es `factura.ventax.app`, reemplazar `server_name` y l
 Cuando `facturacion-electronica` corre en el mismo VPS, configurar el SaaS para consumirlo por el host Docker en vez del dominio publico:
 
 ```bash
+# staging -> FE test
 FE_API_BASE_URL=http://host.docker.internal:9988/fcws
+FE_API_ENV=test
+
+# produccion -> FE prod
+FE_API_BASE_URL=http://host.docker.internal:9989/fcws
+FE_API_ENV=prod
 ```
 
 `docker-compose.yml` registra `host.docker.internal:host-gateway` para `api` y `migrate`. Esto evita que las llamadas internas pasen por Cloudflare o por reglas de geolocalizacion.
@@ -230,3 +248,5 @@ Notas:
 - El RUC generico `80000000-1` puede ser rechazado por SIFEN test si no existe en Marangatu; para smoke aprobado se recomienda usar un CI/RUC test validado.
 - El catalogo local de receptores validados esta en `docs/RECEPTORES_SIFEN_TEST_v0.1.md`.
 - El checklist manual de alta de facturador esta en `docs/CHECKLIST_ALTA_FACTURADOR_MVP_v0.1.md`.
+- La guia completa para alta productiva desde servidor, combinando SQL y endpoints de backoffice, esta en `docs/GUIA_PRODUCCION_ALTA_CLIENTE_FINAL_v0.1.md`.
+- La guia para operar dos instancias en el mismo VPS, staging y produccion, esta en `docs/GUIA_DEPLOY_STAGING_PRODUCCION_v0.1.md`.

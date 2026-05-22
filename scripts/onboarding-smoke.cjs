@@ -32,11 +32,12 @@ const itemInput = {
 };
 
 function loadDotEnvIfPresent() {
-  if (!fs.existsSync(".env")) {
+  const envPath = process.env.APP_ENV_FILE ?? ".env";
+  if (!fs.existsSync(envPath)) {
     return;
   }
 
-  const text = fs.readFileSync(".env", "utf8");
+  const text = fs.readFileSync(envPath, "utf8");
   for (const line of text.split(/\r?\n/)) {
     const match = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*?)\s*$/);
     if (!match || process.env[match[1]] !== undefined) {

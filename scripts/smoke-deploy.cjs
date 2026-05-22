@@ -1,9 +1,29 @@
 #!/usr/bin/env node
 
+const fs = require("node:fs");
+
+loadDotEnvIfPresent();
+
 const baseUrl = (process.env.SMOKE_BASE_URL ?? "http://127.0.0.1:8092").replace(/\/$/, "");
 const apiBaseUrl = (process.env.SMOKE_API_BASE_URL ?? `${baseUrl}/api/v1`).replace(/\/$/, "");
 const username = process.env.SMOKE_USERNAME;
 const password = process.env.SMOKE_PASSWORD;
+
+function loadDotEnvIfPresent() {
+  const envPath = process.env.APP_ENV_FILE ?? ".env";
+  if (!fs.existsSync(envPath)) {
+    return;
+  }
+
+  const text = fs.readFileSync(envPath, "utf8");
+  for (const line of text.split(/\r?\n/)) {
+    const match = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*?)\s*$/);
+    if (!match || process.env[match[1]] !== undefined) {
+      continue;
+    }
+    process.env[match[1]] = match[2].replace(/^['"]|['"]$/g, "");
+  }
+}
 
 async function expectOk(label, url, init) {
   const response = await fetch(url, init);

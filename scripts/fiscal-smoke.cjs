@@ -15,7 +15,7 @@ const timeoutMs = Number(process.env.FE_API_TIMEOUT_MS ?? 20000);
 const smokeId = process.env.FE_SMOKE_ID ?? `fe-smoke-${new Date().toISOString().replace(/[-:.TZ]/g, "")}`;
 
 function loadDotEnvIfPresent() {
-  const envPath = path.resolve(".env");
+  const envPath = path.resolve(process.env.APP_ENV_FILE ?? ".env");
   if (!fs.existsSync(envPath)) {
     return;
   }

@@ -1109,6 +1109,7 @@ components:
       properties:
         username:
           type: string
+          description: Username operativo. Puede ser alias tecnico o email del operador.
         password:
           type: string
           format: password
@@ -1723,6 +1724,7 @@ components:
       properties:
         username:
           type: string
+          description: Username operativo. Puede ser alias tecnico o email del operador.
         display_name:
           type: string
         role:
