@@ -44,12 +44,13 @@ POSTGRES_HOST_PORT=5433
 POSTGRES_DB=facturacion_simple
 POSTGRES_USER=facturacion_simple
 POSTGRES_PASSWORD=facturacion_simple
-DATABASE_URL=postgres://facturacion_simple:facturacion_simple@postgres:5432/facturacion_simple
+DATABASE_URL=postgres://facturacion_simple:facturacion_simple@ventax-facturacion-simple-postgres-1:5432/facturacion_simple
 APP_ORIGIN=https://staging-factura.ventax.app
 BACKOFFICE_ORIGIN=https://staging-factura.ventax.app
 PUBLIC_APP_BASE_URL=https://staging-factura.ventax.app
 FE_GATEWAY_MODE=real
-FE_API_BASE_URL=http://host.docker.internal:9988/fcws
+FE_DOCKER_NETWORK=fe-test_default
+FE_API_BASE_URL=http://fe-test-api-1:8080/fcws
 FE_API_ENV=test
 ```
 
@@ -63,16 +64,17 @@ POSTGRES_HOST_PORT=5434
 POSTGRES_DB=facturacion_simple
 POSTGRES_USER=facturacion_simple
 POSTGRES_PASSWORD=<password-postgres-production>
-DATABASE_URL=postgres://facturacion_simple:<password-postgres-production>@postgres:5432/facturacion_simple
+DATABASE_URL=postgres://facturacion_simple:<password-postgres-production-url-encoded>@ventax-facturacion-simple-prod-postgres-1:5432/facturacion_simple
 APP_ORIGIN=https://factura.ventax.app
 BACKOFFICE_ORIGIN=https://factura.ventax.app
 PUBLIC_APP_BASE_URL=https://factura.ventax.app
 FE_GATEWAY_MODE=real
-FE_API_BASE_URL=http://host.docker.internal:9989/fcws
+FE_DOCKER_NETWORK=fe-prod_default
+FE_API_BASE_URL=http://fe-prod-api-1:8080/fcws
 FE_API_ENV=prod
 ```
 
-No usar `https://fe-api.ventax.app/fcws` para produccion mientras ese Nginx del host siga apuntando a `9988`. Para evitar ambiguedad, usar `host.docker.internal:9989` desde el contenedor SaaS productivo.
+No usar dominios publicos ni `host.docker.internal` para la integracion SaaS -> FE cuando FE publica puertos solo en `127.0.0.1`. En el VPS se usa comunicacion por red Docker externa: staging `fe-test_default` -> `fe-test-api-1:8080`, produccion `fe-prod_default` -> `fe-prod-api-1:8080`.
 
 ## DNS Recomendado
 
@@ -130,8 +132,9 @@ FRONTEND_HTTP_PORT=8092
 API_HTTP_PORT=8091
 POSTGRES_HOST_PORT=5433
 POSTGRES_PASSWORD=facturacion_simple
-DATABASE_URL=postgres://facturacion_simple:facturacion_simple@postgres:5432/facturacion_simple
-FE_API_BASE_URL=http://host.docker.internal:9988/fcws
+DATABASE_URL=postgres://facturacion_simple:facturacion_simple@ventax-facturacion-simple-postgres-1:5432/facturacion_simple
+FE_DOCKER_NETWORK=fe-test_default
+FE_API_BASE_URL=http://fe-test-api-1:8080/fcws
 FE_API_ENV=test
 APP_ORIGIN=https://staging-factura.ventax.app
 PUBLIC_APP_BASE_URL=https://staging-factura.ventax.app
@@ -190,8 +193,9 @@ FRONTEND_HTTP_PORT=8192
 API_HTTP_PORT=8191
 POSTGRES_HOST_PORT=5434
 POSTGRES_PASSWORD=<password-postgres-production>
-DATABASE_URL=postgres://facturacion_simple:<password-postgres-production>@postgres:5432/facturacion_simple
-FE_API_BASE_URL=http://host.docker.internal:9989/fcws
+DATABASE_URL=postgres://facturacion_simple:<password-postgres-production-url-encoded>@ventax-facturacion-simple-prod-postgres-1:5432/facturacion_simple
+FE_DOCKER_NETWORK=fe-prod_default
+FE_API_BASE_URL=http://fe-prod-api-1:8080/fcws
 FE_API_ENV=prod
 APP_ORIGIN=https://factura.ventax.app
 PUBLIC_APP_BASE_URL=https://factura.ventax.app
@@ -212,7 +216,7 @@ Comprobacion previa no destructiva recomendada:
 
 ```bash
 docker compose --env-file .env.production -f docker-compose.yml config --services
-docker compose --env-file .env.production -f docker-compose.yml config | grep -E 'container_name|127.0.0.1:8192|127.0.0.1:8191|127.0.0.1:5434|host.docker.internal'
+docker compose --env-file .env.production -f docker-compose.yml config | grep -E 'container_name|127.0.0.1:8192|127.0.0.1:8191|127.0.0.1:5434|fe-test-api-1:8080|fe-prod-api-1:8080'
 ```
 
 Esperado:
@@ -316,6 +320,6 @@ No ejecutar `ONBOARDING_SMOKE_NCE=YES` para facturadores cuya ficha FE tenga `no
 - `API_HTTP_PORT` queda util para diagnostico local, pero el trafico publico entra por frontend/Nginx.
 - `PUBLIC_APP_BASE_URL` define los links de comprobantes. Debe ser distinto por ambiente.
 - FE test y FE prod deben estar separados por URL interna:
-  - staging -> `http://host.docker.internal:9988/fcws`;
-  - produccion -> `http://host.docker.internal:9989/fcws`.
+  - staging -> `FE_DOCKER_NETWORK=fe-test_default` y `FE_API_BASE_URL=http://fe-test-api-1:8080/fcws`;
+  - produccion -> `FE_DOCKER_NETWORK=fe-prod_default` y `FE_API_BASE_URL=http://fe-prod-api-1:8080/fcws`.
 - Si mas adelante `fe-api.ventax.app` se cambia a FE prod, documentar un subdominio separado para FE test antes de usar dominios externos desde el SaaS.

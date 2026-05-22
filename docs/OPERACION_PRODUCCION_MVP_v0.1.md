@@ -129,19 +129,21 @@ Si el dominio operativo no es `factura.ventax.app`, reemplazar `server_name` y l
 
 ## Backend Fiscal Local
 
-Cuando `facturacion-electronica` corre en el mismo VPS, configurar el SaaS para consumirlo por el host Docker en vez del dominio publico:
+Cuando `facturacion-electronica` corre en el mismo VPS y publica sus puertos solo en `127.0.0.1`, configurar el SaaS para consumirlo por red Docker externa en vez del dominio publico o `host.docker.internal`:
 
 ```bash
 # staging -> FE test
-FE_API_BASE_URL=http://host.docker.internal:9988/fcws
+FE_DOCKER_NETWORK=fe-test_default
+FE_API_BASE_URL=http://fe-test-api-1:8080/fcws
 FE_API_ENV=test
 
 # produccion -> FE prod
-FE_API_BASE_URL=http://host.docker.internal:9989/fcws
+FE_DOCKER_NETWORK=fe-prod_default
+FE_API_BASE_URL=http://fe-prod-api-1:8080/fcws
 FE_API_ENV=prod
 ```
 
-`docker-compose.yml` registra `host.docker.internal:host-gateway` para `api` y `migrate`. Esto evita que las llamadas internas pasen por Cloudflare o por reglas de geolocalizacion.
+`docker-compose.yml` conecta el servicio `api` a la red externa indicada por `FE_DOCKER_NETWORK`. Esto evita que las llamadas internas pasen por Cloudflare o dependan de puertos loopback del host.
 
 ## Smoke Fiscal FE Test
 

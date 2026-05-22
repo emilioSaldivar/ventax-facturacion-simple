@@ -38,13 +38,14 @@ PUBLIC_APP_BASE_URL=https://factura.ventax.app
 POSTGRES_DB=facturacion_simple
 POSTGRES_USER=facturacion_simple
 POSTGRES_PASSWORD=<password-postgres-production>
-DATABASE_URL=postgres://facturacion_simple:<password-postgres-production>@postgres:5432/facturacion_simple
+DATABASE_URL=postgres://facturacion_simple:<password-postgres-production-url-encoded>@ventax-facturacion-simple-prod-postgres-1:5432/facturacion_simple
 
 JWT_ACCESS_SECRET=<secret-largo>
 JWT_REFRESH_SECRET=<secret-largo>
 
 FE_GATEWAY_MODE=real
-FE_API_BASE_URL=http://host.docker.internal:9989/fcws
+FE_DOCKER_NETWORK=fe-prod_default
+FE_API_BASE_URL=http://fe-prod-api-1:8080/fcws
 FE_API_KEY=<secret>
 FE_API_ENV=prod
 FE_API_TIMEOUT_MS=20000
@@ -62,7 +63,8 @@ API_HTTP_PORT=8091
 POSTGRES_HOST_PORT=5433
 APP_ORIGIN=https://staging-factura.ventax.app
 PUBLIC_APP_BASE_URL=https://staging-factura.ventax.app
-FE_API_BASE_URL=http://host.docker.internal:9988/fcws
+FE_DOCKER_NETWORK=fe-test_default
+FE_API_BASE_URL=http://fe-test-api-1:8080/fcws
 FE_API_ENV=test
 ```
 
