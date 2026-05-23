@@ -255,9 +255,11 @@ describe("entrega service", () => {
 
     expect(html).toContain("<!doctype html>");
     expect(html).toContain("Ver KUDE/PDF");
+    expect(html).toContain('/app/brand/VENTAX-PRINCIPAL.svg');
     expect(html).toContain(`/public/d/${"A".repeat(43)}/kude.pdf`);
     expect(html).toContain(`/public/d/${"A".repeat(43)}/xml`);
     expect(html).toContain("Cliente &lt;script&gt;alert(1)&lt;/script&gt;");
+    expect(html).not.toContain("<span>V</span> VENTAX");
     expect(html).not.toContain("Cliente <script>");
   });
 

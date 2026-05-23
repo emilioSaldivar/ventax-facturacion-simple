@@ -168,18 +168,13 @@ export function renderPublicDocumentHtml(documento: PublicDocumentResponse): str
       .brand {
         display: inline-flex;
         align-items: center;
-        gap: 10px;
-        color: #07a7e1;
-        font-weight: 900;
+        width: fit-content;
+        min-height: 42px;
       }
-      .brand span {
-        display: grid;
-        width: 34px;
-        height: 34px;
-        place-items: center;
-        border-radius: 8px;
-        background: #07a7e1;
-        color: #ffffff;
+      .brand img {
+        display: block;
+        width: 142px;
+        height: auto;
       }
       .panel {
         display: grid;
@@ -251,7 +246,9 @@ export function renderPublicDocumentHtml(documento: PublicDocumentResponse): str
   <body>
     <main>
       <section class="shell" aria-labelledby="public-document-title">
-        <div class="brand"><span>V</span> VENTAX</div>
+        <div class="brand">
+          <img src="/app/brand/VENTAX-PRINCIPAL.svg" alt="Ventax" width="142" height="46">
+        </div>
         <article class="panel">
           <div class="heading">
             <div>
