@@ -269,6 +269,33 @@ describe("entrega service", () => {
     expect(result.content_type).toBe("application/xml");
   });
 
+  it("keeps public artifacts available for rejected documents when CDC exists", async () => {
+    const deliveryLinks = new FakeDeliveryLinkRepository();
+    deliveryLinks.publicDocument = {
+      ...buildPublicDocument(),
+      documento: {
+        ...buildPublicDocument().documento,
+        estado: "RECHAZADA"
+      }
+    };
+    const gateway = new FakeFiscalGateway();
+
+    const publicDocument = await getPublicDocument("A".repeat(43), deliveryLinks);
+    const artifact = await getPublicArtifact("A".repeat(43), "kude_pdf", deliveryLinks, gateway);
+
+    expect(publicDocument.estado).toBe("RECHAZADA");
+    expect(publicDocument.artifacts.kude_pdf).toEqual({
+      available: true,
+      url: `https://factura.ventax.app/public/d/${"A".repeat(43)}/kude.pdf`
+    });
+    expect(publicDocument.artifacts.xml).toEqual({
+      available: true,
+      url: `https://factura.ventax.app/public/d/${"A".repeat(43)}/xml`
+    });
+    expect(gateway.lastPdfCdc).toBe("A".repeat(44));
+    expect(artifact.content_type).toBe("application/pdf");
+  });
+
   it("returns delegated email status message from document detail", async () => {
     const facturas = new FakeFacturaRepository();
 

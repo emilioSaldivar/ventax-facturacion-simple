@@ -394,7 +394,8 @@ Reglas:
 
 - no debe usar un ID secuencial ni solo el CDC como identificador publico;
 - debe usar un token opaco aleatorio de alta entropia generado por el SaaS;
-- la URL publica debe permitir ver o descargar KUDE/PDF y XML;
+- la URL publica debe permitir ver o descargar KUDE/PDF y XML cuando el backend fiscal ya genero artefactos locales identificables por CDC, independientemente de si el estado SIFEN final es aprobado, pendiente o rechazado;
+- el estado operativo o SIFEN no debe ocultar el link publico ni bloquear los botones de KUDE/PDF y XML si existe CDC; si no existe CDC, la UI debe indicar que el artefacto aun no esta disponible;
 - la URL publica no debe exponer datos internos del tenant, usuario, configuracion fiscal ni trazas tecnicas;
 - el token debe poder revocarse o regenerarse desde soporte/backoffice si se comparte por error;
 - no se define expiracion obligatoria en MVP, para preservar facilidad de uso del cliente final.

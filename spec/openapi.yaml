@@ -802,6 +802,11 @@ paths:
     get:
       tags: [Public]
       summary: Descargar KUDE/PDF publico
+      description: >
+        Proxy publico del KUDE/PDF fiscal por CDC. La descarga no requiere que el
+        documento este aprobado en SIFEN; si existe CDC y el backend fiscal tiene
+        XML local suficiente para generar KUDE, el artefacto debe estar disponible
+        tambien para estados pendientes o rechazados.
       security: []
       parameters:
         - $ref: "#/components/parameters/PublicToken"
@@ -832,6 +837,11 @@ paths:
     get:
       tags: [Public]
       summary: Descargar XML publico
+      description: >
+        Proxy publico del XML fiscal por CDC. La descarga no requiere que el
+        documento este aprobado en SIFEN; si existe CDC y XML local en el backend
+        fiscal, el artefacto debe estar disponible tambien para estados pendientes
+        o rechazados.
       security: []
       parameters:
         - $ref: "#/components/parameters/PublicToken"
@@ -1676,6 +1686,7 @@ components:
       properties:
         available:
           type: boolean
+          description: true cuando el SaaS tiene CDC para construir la URL del artefacto; no implica aprobacion SIFEN.
         url:
           type: string
           format: uri

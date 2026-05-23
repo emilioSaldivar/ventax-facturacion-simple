@@ -147,6 +147,7 @@ Notas:
 - Revocacion con `revoked_at`.
 - No usar CDC puro ni ID secuencial como URL publica.
 - La pagina publica solo permite ver/descargar KUDE/PDF y XML.
+- La disponibilidad de KUDE/PDF y XML depende de que exista CDC y artefacto local en `facturacion-electronica`, no del estado `EMITIDA`; documentos `PENDIENTE_SIFEN` o `RECHAZADA` con CDC deben conservar link publico y acciones de artefactos.
 
 ### 2.9 Email
 
@@ -377,7 +378,7 @@ Responsabilidades:
 - regenerar/revocar token;
 - construir URL publica;
 - exponer pagina publica limitada;
-- resolver KUDE/PDF y XML desde backend fiscal;
+- resolver KUDE/PDF y XML desde backend fiscal por CDC sin filtrar por aprobacion SIFEN;
 - generar URL WhatsApp.
 
 ### 5.8 FiscalGateway

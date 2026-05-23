@@ -45,6 +45,65 @@ paths:
                     type: boolean
                     example: true
 
+  /admin/auth/login:
+    post:
+      tags: [Admin]
+      summary: Iniciar sesion administrativa
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminLoginRequest"
+      responses:
+        "200":
+          description: Sesion administrativa emitida
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminAuthSessionResponse"
+        "401":
+          description: Credenciales invalidas
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Payload invalido
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/auth/me:
+    get:
+      tags: [Admin]
+      summary: Obtener usuario administrativo autenticado
+      security:
+        - AdminBearerAuth: []
+      responses:
+        "200":
+          description: Usuario autenticado y facturadores asignados
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [user, assigned_emisores]
+                properties:
+                  user:
+                    $ref: "#/components/schemas/AdminUserResponse"
+                  assigned_emisores:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/AdminUserEmisorAssignment"
+        "401":
+          description: Token Bearer requerido o invalido
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /admin/emisores:
     get:
       tags: [Admin]
@@ -220,6 +279,52 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AdminActividadResponse"
+
+  /admin/emisores/{id}/actividades/{actividadId}/logo/upload:
+    post:
+      tags: [Admin]
+      summary: Subir logo KUDE de una actividad economica
+      description: |
+        Recibe un archivo de imagen mediante multipart/form-data, lo normaliza a PNG 280x280
+        y actualiza `emisor_actividades.logo_path`. El KUDE usa este logo cuando la factura
+        resuelve esa `actividadEconomicaCodigo`; si no existe logo por actividad, usa el logo
+        general del facturador.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: actividadId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/AdminLogoUploadRequest"
+      responses:
+        "201":
+          description: Logo de actividad cargado correctamente
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminActividadLogoUploadResponse"
+        "404":
+          description: Actividad no encontrada para el emisor
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Archivo invalido
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /admin/emisores/{id}/timbrado-actividades:
     get:
@@ -921,6 +1026,41 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /admin/emisores/{id}/logo/upload:
+    post:
+      tags: [Admin]
+      summary: Subir logo KUDE del facturador
+      description: |
+        Recibe un archivo de imagen mediante multipart/form-data, lo normaliza a PNG 280x280
+        para la caja 70x70 de `Factura.jasper`, lo almacena en storage persistente y actualiza
+        `emisores.logo_path`. El KUDE usa este logo cuando existe; si no existe, el PDF queda
+        sin logo y conserva el nombre/razon social del facturador como identificacion textual.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/AdminLogoUploadRequest"
+      responses:
+        "201":
+          description: Logo cargado correctamente
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminLogoUploadResponse"
+        "422":
+          description: Archivo invalido
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /admin/emisores/{id}/facturas/estado:
     get:
       tags: [Admin]
@@ -1336,7 +1476,7 @@ paths:
         Crea/obtiene un DE idempotente, genera XML v150, firma, inserta QR (AA002).
         Si envio.mode=SYNC: intenta enviar inmediatamente a SIFEN.
         Si envio.mode=BATCH: encola para envío por lote.
-        Si envio.mode=AUTO: intenta SYNC y ante falla técnica pasa a cola BATCH.
+        Si envio.mode=AUTO: intenta SYNC y ante falla técnica, o rechazo SIFEN 1264 por servicio síncrono no habilitado, pasa a cola BATCH.
       requestBody:
         required: true
         content:
@@ -1351,7 +1491,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/EmitirFacturaResponse"
         "202":
-          description: Documento aceptado localmente y encolado por fallback AUTO
+          description: Documento aceptado localmente y encolado por fallback AUTO técnico o por rechazo SIFEN 1264 del servicio síncrono.
           content:
             application/json:
               schema:
@@ -1406,6 +1546,12 @@ paths:
                 $ref: "#/components/schemas/EmitirNotaCreditoResponse"
         "409":
           description: Documento ya existe o monto acumulado de NCE excede la FE asociada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Factura electronica referenciada no encontrada localmente
           content:
             application/json:
               schema:
@@ -1849,7 +1995,7 @@ paths:
         Genera y descarga un PDF KUDE desde el XML local del Documento Electronico.
         Usa `facturacionelectronicapy-kude` y requiere Java disponible en runtime.
         En instancias multi-facturador, usa el logo configurado en el emisor propietario del documento
-        (`emisores.logo_path`) y solo usa el logo global de runtime como fallback.
+        (`emisores.logo_path`). Si el emisor no tiene logo configurado, el KUDE se genera sin imagen de logo.
       parameters:
         - in: path
           name: cdc
@@ -1980,6 +2126,10 @@ components:
       type: apiKey
       in: header
       name: X-API-Key
+    AdminBearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: HMAC
 
   parameters:
     EmisorIdPath:
@@ -2126,7 +2276,8 @@ components:
       properties:
         emisor_id:
           type: string
-          description: Identificador interno del emisor en tu sistema
+          example: "80136968-1"
+          description: RUC completo del emisor configurado en FE (`emisores.ruc_completo`, formato numero-dv). No usar el ID interno numerico de la tabla `emisores`.
         actividadEconomicaCodigo:
           type: string
           example: "82110"
@@ -2190,6 +2341,11 @@ components:
             telefono:
               type: string
               nullable: true
+            email:
+              type: string
+              format: email
+              nullable: true
+              description: Email del cliente final. Si existe, el backend fiscal intenta enviar XML y KUDE PDF.
         fecha:
           type: string
           format: date-time
@@ -2264,6 +2420,11 @@ components:
           type: string
           nullable: true
           enum: [SYNC, BATCH, AUTO_FALLBACK_BATCH]
+        email_status:
+          type: string
+          nullable: true
+          enum: [NOT_APPLICABLE, SENT, FAILED]
+          description: Resultado del envio de XML y KUDE PDF al cliente final.
         number_source:
           type: string
           nullable: true
@@ -2367,6 +2528,8 @@ components:
       properties:
         emisor_id:
           type: string
+          example: "80136968-1"
+          description: RUC completo del emisor configurado en FE (`emisores.ruc_completo`, formato numero-dv). No usar el ID interno numerico de la tabla `emisores`.
         timbrado:
           type: object
           required: [timbrado, establecimiento, puntoExpedicion, documentoNro, fecIni]
@@ -2395,6 +2558,10 @@ components:
               default: CI
             docNro:
               type: string
+              description: |
+                Numero de documento del receptor. Para `tipoDocumento=CI` debe ser numerico.
+                Para `tipoDocumento=RUC` debe informarse como `base-dv` o con `dv` separado.
+                Valores genericos como `S/D` no son validos para NCE.
             dv:
               type: string
               nullable: true
@@ -2480,6 +2647,8 @@ components:
       properties:
         emisor_id:
           type: string
+          example: "80136968-1"
+          description: RUC completo del emisor configurado en FE (`emisores.ruc_completo`, formato numero-dv). No usar el ID interno numerico de la tabla `emisores`.
         cdc:
           type: string
         motivo:
@@ -2492,6 +2661,8 @@ components:
       properties:
         emisor_id:
           type: string
+          example: "80136968-1"
+          description: RUC completo del emisor configurado en FE (`emisores.ruc_completo`, formato numero-dv). No usar el ID interno numerico de la tabla `emisores`.
         establecimiento:
           type: string
           example: "001"
@@ -2767,6 +2938,59 @@ components:
           properties:
             id:
               type: string
+            logo_path:
+              type: string
+              nullable: true
+            logo_original_filename:
+              type: string
+              nullable: true
+            logo_normalized_width:
+              type: integer
+              nullable: true
+            logo_normalized_height:
+              type: integer
+              nullable: true
+            logo_normalized_mime_type:
+              type: string
+              nullable: true
+
+    AdminActividadLogoUploadResponse:
+      allOf:
+        - $ref: "#/components/schemas/AdminActividadResponse"
+        - type: object
+          properties:
+            logo_upload:
+              type: object
+              properties:
+                logoPath:
+                  type: string
+                originalFilename:
+                  type: string
+                mimeType:
+                  type: string
+                  example: image/png
+                fileSizeBytes:
+                  type: integer
+                storageChecksum:
+                  type: string
+                normalized:
+                  type: boolean
+                  example: true
+                normalizedWidth:
+                  type: integer
+                  example: 280
+                normalizedHeight:
+                  type: integer
+                  example: 280
+                normalizedMimeType:
+                  type: string
+                  example: image/png
+                originalWidth:
+                  type: integer
+                originalHeight:
+                  type: integer
+                inputFormat:
+                  type: string
 
     AdminTimbradoActividadRequest:
       type: object
@@ -2824,6 +3048,7 @@ components:
         codigo:
           type: string
           example: SERV
+          description: Codigo interno del perfil. En la UI se genera automaticamente; no es el codigo oficial de actividad economica.
         descripcion:
           type: string
         actividad_id:
@@ -2847,10 +3072,15 @@ components:
           nullable: true
           minLength: 2
           maxLength: 2
+          description: Obligatoria cuando `separation_strategy=FISCAL_SERIES`; debe corresponder a la serie fiscal asignada por SIFEN.
         separation_strategy:
           type: string
           enum: [SHARED_SEQUENCE, FISCAL_SERIES, SEPARATE_EXPEDITION_POINT]
           default: SHARED_SEQUENCE
+          description: |
+            `SHARED_SEQUENCE` comparte numeracion; sin perfiles, la emision se diferencia por `actividadEconomicaCodigo`.
+            `FISCAL_SERIES` requiere `serie_fiscal`.
+            `SEPARATE_EXPEDITION_POINT` requiere al menos 2 actividades activas y 2 puntos de expedicion activos.
         modo_actividad:
           type: string
           enum: [PRINCIPAL, SELECCIONADA, MULTIPLE]
@@ -3182,6 +3412,53 @@ components:
         password_masked:
           type: string
           example: "********"
+
+    AdminLogoUploadRequest:
+      type: object
+      required: [file]
+      properties:
+        file:
+          type: string
+          format: binary
+          description: Archivo de imagen para el logo KUDE. Se aceptan PNG, JPEG, GIF, BMP y TIFF; el backend normaliza a PNG 280x280.
+
+    AdminLogoUploadResponse:
+      allOf:
+        - $ref: "#/components/schemas/AdminEmisorResponse"
+        - type: object
+          properties:
+            logo_upload:
+              type: object
+              properties:
+                logoPath:
+                  type: string
+                originalFilename:
+                  type: string
+                mimeType:
+                  type: string
+                  example: image/png
+                fileSizeBytes:
+                  type: integer
+                storageChecksum:
+                  type: string
+                normalized:
+                  type: boolean
+                  example: true
+                normalizedWidth:
+                  type: integer
+                  example: 280
+                normalizedHeight:
+                  type: integer
+                  example: 280
+                normalizedMimeType:
+                  type: string
+                  example: image/png
+                originalWidth:
+                  type: integer
+                originalHeight:
+                  type: integer
+                inputFormat:
+                  type: string
 
     AdminNumeradorRequest:
       type: object
@@ -3736,6 +4013,34 @@ components:
                 type: string
                 format: date-time
 
+    AdminLoginRequest:
+      type: object
+      required: [username, password]
+      properties:
+        username:
+          type: string
+          example: admin
+        password:
+          type: string
+          format: password
+
+    AdminAuthSessionResponse:
+      type: object
+      required: [token, expires_at, user, assigned_emisores]
+      properties:
+        token:
+          type: string
+          description: Token Bearer administrativo emitido por el backend.
+        expires_at:
+          type: string
+          format: date-time
+        user:
+          $ref: "#/components/schemas/AdminUserResponse"
+        assigned_emisores:
+          type: array
+          items:
+            $ref: "#/components/schemas/AdminUserEmisorAssignment"
+
     AdminUserUpsertRequest:
       type: object
       required: [username, display_name, role]
@@ -3753,6 +4058,13 @@ components:
         activo:
           type: boolean
           default: true
+        password:
+          type: string
+          format: password
+          minLength: 8
+          maxLength: 128
+          nullable: true
+          description: Requerido al crear usuarios; opcional en actualizaciones.
 
     AdminUserResponse:
       type: object
@@ -3772,6 +4084,14 @@ components:
           enum: [ADMIN_GLOBAL, OPERADOR_FACTURADOR]
         activo:
           type: boolean
+        last_login_at:
+          type: string
+          format: date-time
+          nullable: true
+        password_updated_at:
+          type: string
+          format: date-time
+          nullable: true
 
     AdminUserListResponse:
       type: object
@@ -3781,6 +4101,19 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/AdminUserResponse"
+
+    AdminUserEmisorAssignment:
+      type: object
+      required: [emisor_id]
+      properties:
+        emisor_id:
+          type: string
+        razon_social:
+          type: string
+          nullable: true
+        ruc_completo:
+          type: string
+          nullable: true
 
     AdminUserEmisorAssignmentRequest:
       type: object
@@ -3800,17 +4133,7 @@ components:
         items:
           type: array
           items:
-            type: object
-            required: [emisor_id]
-            properties:
-              emisor_id:
-                type: string
-              razon_social:
-                type: string
-                nullable: true
-              ruc_completo:
-                type: string
-                nullable: true
+            $ref: "#/components/schemas/AdminUserEmisorAssignment"
 
     ErrorResponse:
       type: object

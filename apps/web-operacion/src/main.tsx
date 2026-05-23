@@ -834,6 +834,8 @@ function DocumentsView({
   }
 
   const selectedSifenSummary = selected ? getSifenSummary(selected) : null;
+  const selectedKudeUrl = selected && deliveryLink && selected.delivery.artifacts.kude_pdf.available ? `${deliveryLink.public_url}/kude.pdf` : null;
+  const selectedXmlUrl = selected && deliveryLink && selected.delivery.artifacts.xml.available ? `${deliveryLink.public_url}/xml` : null;
 
   return (
     <section className="documents-view" aria-labelledby="documents-title">
@@ -961,10 +963,10 @@ function DocumentsView({
               {emailStatus?.message ? <p className="editor-alert ready">{emailStatus.message}</p> : null}
 
               <div className="delivery-actions">
-                <a className={selected.cdc && deliveryLink ? "secondary-link" : "secondary-link disabled"} href={deliveryLink ? `${deliveryLink.public_url}/kude.pdf` : "#"} rel="noreferrer" target="_blank">
+                <a className={selectedKudeUrl ? "secondary-link" : "secondary-link disabled"} href={selectedKudeUrl ?? "#"} rel="noreferrer" target="_blank">
                   KUDE/PDF
                 </a>
-                <a className={selected.cdc && deliveryLink ? "secondary-link" : "secondary-link disabled"} href={deliveryLink ? `${deliveryLink.public_url}/xml` : "#"} rel="noreferrer" target="_blank">
+                <a className={selectedXmlUrl ? "secondary-link" : "secondary-link disabled"} href={selectedXmlUrl ?? "#"} rel="noreferrer" target="_blank">
                   XML
                 </a>
                 <button className="secondary-action" disabled={!deliveryLink} onClick={() => void copyDetailLink()} type="button">
@@ -1930,6 +1932,9 @@ function InvoiceEditor({
   }
 
   const emittedSifenSummary = emittedDocumento ? getSifenSummary(emittedDocumento) : null;
+  const emittedKudeUrl =
+    emittedDocumento && deliveryLink && emittedDocumento.delivery.artifacts.kude_pdf.available ? `${deliveryLink.public_url}/kude.pdf` : null;
+  const emittedXmlUrl = emittedDocumento && deliveryLink && emittedDocumento.delivery.artifacts.xml.available ? `${deliveryLink.public_url}/xml` : null;
   const activeLine = lines.find((line) => line.id === activeLineId) ?? lines[0] ?? null;
   const activeLineIndex = activeLine ? lines.findIndex((line) => line.id === activeLine.id) : -1;
   const visibleLines = lines.filter((line) => line.descripcion.trim() || line.codigo.trim() || line.precio_unitario.trim());
@@ -2367,16 +2372,16 @@ function InvoiceEditor({
 
           <div className="delivery-actions">
             <a
-              className={emittedDocumento.cdc && deliveryLink ? "secondary-link" : "secondary-link disabled"}
-              href={deliveryLink ? `${deliveryLink.public_url}/kude.pdf` : "#"}
+              className={emittedKudeUrl ? "secondary-link" : "secondary-link disabled"}
+              href={emittedKudeUrl ?? "#"}
               rel="noreferrer"
               target="_blank"
             >
               KUDE/PDF
             </a>
             <a
-              className={emittedDocumento.cdc && deliveryLink ? "secondary-link" : "secondary-link disabled"}
-              href={deliveryLink ? `${deliveryLink.public_url}/xml` : "#"}
+              className={emittedXmlUrl ? "secondary-link" : "secondary-link disabled"}
+              href={emittedXmlUrl ?? "#"}
               rel="noreferrer"
               target="_blank"
             >
