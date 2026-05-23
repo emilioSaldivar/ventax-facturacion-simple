@@ -45,7 +45,9 @@ const context: OperationalContextResponse = {
     timbrado: "80136968",
     timbrado_inicio: "2025-12-30",
     documento_nro: "0000000",
-    credito_plazo_dias: 30
+    credito_plazo_dias: 30,
+    fiscal_envio_modo: "BATCH",
+    batch_enabled: true
   }
 };
 
@@ -318,6 +320,8 @@ function buildDocumento(): DocumentoResponse {
     cdc: "A".repeat(44),
     fiscal_document_id: "doc-1",
     external_ref: "fac-1",
+    fiscal_envio_modo: "BATCH",
+    batch: null,
     cliente: {
       documento_tipo: "RUC",
       documento: "80136968-1",

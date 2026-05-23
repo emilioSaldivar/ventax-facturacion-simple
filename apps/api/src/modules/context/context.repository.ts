@@ -160,7 +160,9 @@ export class PgOperationalContextRepository implements OperationalContextReposit
         timbrado: row.timbrado,
         timbrado_inicio: row.timbrado_inicio.toISOString().slice(0, 10),
         documento_nro: row.documento_nro,
-        credito_plazo_dias: row.credito_plazo_dias
+        credito_plazo_dias: row.credito_plazo_dias,
+        fiscal_envio_modo: "BATCH",
+        batch_enabled: true
       },
       display: {
         titulo_operativo: deriveTituloOperativo({

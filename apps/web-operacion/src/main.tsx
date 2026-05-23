@@ -52,6 +52,8 @@ interface OperationalContextResponse {
     timbrado_inicio: string;
     documento_nro: string;
     credito_plazo_dias: number;
+    fiscal_envio_modo?: "BATCH" | "SYNC";
+    batch_enabled?: boolean | null;
   };
   display?: {
     titulo_operativo: string;
@@ -138,6 +140,8 @@ interface DocumentoResponse {
   cdc: string | null;
   fiscal_document_id: string | null;
   external_ref: string | null;
+  fiscal_envio_modo?: "BATCH" | "SYNC";
+  batch?: Record<string, unknown> | null;
   cliente: FacturaClienteInput;
   totals: FacturaPreviewResponse["totals"];
   fiscal_status: Record<string, unknown> | null;

@@ -31,7 +31,9 @@ const contextFixture: OperationalContextResponse = {
     timbrado: "80136968",
     timbrado_inicio: "2025-12-30",
     documento_nro: "0000000",
-    credito_plazo_dias: 30
+    credito_plazo_dias: 30,
+    fiscal_envio_modo: "BATCH",
+    batch_enabled: true
   }
 };
 

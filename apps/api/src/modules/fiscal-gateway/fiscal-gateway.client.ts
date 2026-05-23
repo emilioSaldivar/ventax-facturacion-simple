@@ -43,9 +43,14 @@ export class MockFiscalGateway implements FiscalGateway {
       cdc,
       numero_fiscal: `${request.fiscal_context.establecimiento}-${request.fiscal_context.punto_expedicion}-${numeric}`,
       estado: "EMITIDA",
+      fiscal_envio_modo: resolveFiscalEnvioModo(request.fiscal_context.fiscal_envio_modo),
+      delivery_mode: "BATCH",
+      batch: null,
       email_status: request.cliente.email ? "DELEGATED" : "NOT_APPLICABLE",
       raw: {
         mode: "mock",
+        fiscal_envio_modo: resolveFiscalEnvioModo(request.fiscal_context.fiscal_envio_modo),
+        delivery_mode: "BATCH",
         external_ref: request.external_ref,
         total: request.totals.total
       }
@@ -62,9 +67,14 @@ export class MockFiscalGateway implements FiscalGateway {
       cdc,
       numero_fiscal: `${request.fiscal_context.establecimiento}-${request.fiscal_context.punto_expedicion}-${numeric}`,
       estado: "EMITIDA",
+      fiscal_envio_modo: resolveFiscalEnvioModo(request.fiscal_context.fiscal_envio_modo),
+      delivery_mode: "BATCH",
+      batch: null,
       email_status: request.cliente.email ? "DELEGATED" : "NOT_APPLICABLE",
       raw: {
         mode: "mock",
+        fiscal_envio_modo: resolveFiscalEnvioModo(request.fiscal_context.fiscal_envio_modo),
+        delivery_mode: "BATCH",
         document_type: "NCE",
         external_ref: request.external_ref,
         referencia_cdc: request.factura_referencia.cdc,
@@ -333,10 +343,7 @@ export class RealFiscalGateway implements FiscalGateway {
         precioUnitario: item.precio_unitario,
         ivaTipo: mapIvaTipo(item.iva_tipo)
       })),
-      envio: {
-        mode: "SYNC",
-        sendNow: true
-      }
+      envio: buildEnvio(request.fiscal_context.fiscal_envio_modo)
     };
 
     if (this.config.sendEmissionProfileCode !== false) {
@@ -381,10 +388,7 @@ export class RealFiscalGateway implements FiscalGateway {
         precioUnitario: item.precio_unitario,
         ivaTipo: mapIvaTipo(item.iva_tipo)
       })),
-      envio: {
-        mode: "SYNC",
-        sendNow: true
-      }
+      envio: buildEnvio(request.fiscal_context.fiscal_envio_modo)
     };
 
     if (this.config.sendEmissionProfileCode !== false) {
@@ -463,6 +467,18 @@ function buildReceptor(cliente: FiscalEmitFacturaRequest["cliente"]): Record<str
   };
 }
 
+function buildEnvio(mode: unknown): Record<string, unknown> {
+  const resolvedMode = resolveFiscalEnvioModo(mode);
+  return {
+    mode: resolvedMode,
+    sendNow: true
+  };
+}
+
+function resolveFiscalEnvioModo(mode: unknown): "BATCH" | "SYNC" {
+  return mode === "SYNC" ? "SYNC" : "BATCH";
+}
+
 function mapIvaTipo(tipo: string): string {
   if (tipo === "IVA_10") {
     return "IVA10";
@@ -500,6 +516,9 @@ function mapFiscalEmitResponse(body: unknown): FiscalEmitFacturaResponse {
     cdc: stringOrNull(data.cdc),
     numero_fiscal: stringOrNull(data.nro_factura) ?? buildNumeroFiscalFromTimbrado(timbrado),
     estado: mapDocumentStatus(status),
+    fiscal_envio_modo: mapFiscalEnvioModo(data),
+    delivery_mode: stringOrNull(data.delivery_mode),
+    batch: mapBatchTransmissionInfo(data.batch),
     email_status: mapEmailStatus(data.email_status),
     raw: data
   };
@@ -517,8 +536,44 @@ function mapFiscalNotaCreditoResponse(body: unknown): FiscalEmitNotaCreditoRespo
     cdc: stringOrNull(data.cdc),
     numero_fiscal: stringOrNull(data.nro_documento) ?? stringOrNull(data.nro_factura),
     estado: mapDocumentStatus(stringOrNull(data.status)),
+    fiscal_envio_modo: mapFiscalEnvioModo(data),
+    delivery_mode: stringOrNull(data.delivery_mode),
+    batch: mapBatchTransmissionInfo(data.batch),
     email_status: mapEmailStatus(data.email_status),
     raw: data
+  };
+}
+
+function mapFiscalEnvioModo(data: Record<string, unknown>): "BATCH" | "SYNC" {
+  const deliveryMode = stringOrNull(data.delivery_mode);
+  if (deliveryMode === "SYNC") {
+    return "SYNC";
+  }
+
+  return "BATCH";
+}
+
+function mapBatchTransmissionInfo(value: unknown): FiscalEmitFacturaResponse["batch"] {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const data = value as Record<string, unknown>;
+  const status = stringOrNull(data.status);
+
+  return {
+    batch_id: stringOrNull(data.batch_id),
+    did: stringOrNull(data.did),
+    dProtConsLote: stringOrNull(data.dProtConsLote),
+    dCodRes: stringOrNull(data.dCodRes),
+    dMsgRes: stringOrNull(data.dMsgRes),
+    dTpoProces: stringOrNull(data.dTpoProces),
+    result_code: stringOrNull(data.result_code),
+    result_message: stringOrNull(data.result_message),
+    status:
+      status === "CREATED" || status === "RECEIVED" || status === "PROCESSING" || status === "DONE" || status === "ERROR"
+        ? status
+        : null
   };
 }
 

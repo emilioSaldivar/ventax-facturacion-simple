@@ -61,7 +61,9 @@ const context: OperationalContextResponse = {
     timbrado: "80136968",
     timbrado_inicio: "2025-12-30",
     documento_nro: "0000000",
-    credito_plazo_dias: 30
+    credito_plazo_dias: 30,
+    fiscal_envio_modo: "BATCH",
+    batch_enabled: true
   }
 };
 
@@ -139,6 +141,8 @@ class FakeFacturaRepository implements FacturaRepository {
       cdc: input.fiscalResponse?.cdc ?? null,
       fiscal_document_id: input.fiscalResponse?.fiscal_document_id ?? null,
       external_ref: input.externalRef,
+      fiscal_envio_modo: input.fiscalResponse?.fiscal_envio_modo ?? "BATCH",
+      batch: input.fiscalResponse?.batch ?? null,
       cliente: input.input.cliente,
       items: input.preview.items,
       totals: input.preview.totals,
@@ -167,6 +171,8 @@ class FakeFacturaRepository implements FacturaRepository {
       cdc: null,
       fiscal_document_id: null,
       external_ref: input.externalRef,
+      fiscal_envio_modo: input.fiscalRequest.fiscal_context.fiscal_envio_modo,
+      batch: null,
       cliente: input.input.cliente,
       items: input.preview.items,
       totals: input.preview.totals,
@@ -195,6 +201,8 @@ class FakeFacturaRepository implements FacturaRepository {
       cdc: input.fiscalResponse?.cdc ?? null,
       fiscal_document_id: input.fiscalResponse?.fiscal_document_id ?? null,
       external_ref: input.externalRef,
+      fiscal_envio_modo: input.fiscalResponse?.fiscal_envio_modo ?? "BATCH",
+      batch: input.fiscalResponse?.batch ?? null,
       fiscal_status: input.fiscalResponse?.raw ?? input.fiscalError,
       documento_relacionado_id: input.original.id,
       nce_motivo: input.motivo,
@@ -387,6 +395,8 @@ function buildDocumento(overrides: Partial<DocumentoResponse> = {}): DocumentoRe
     cdc: "A".repeat(44),
     fiscal_document_id: "doc-1",
     external_ref: "fac-1",
+    fiscal_envio_modo: "BATCH",
+    batch: null,
     cliente: emitInput.cliente,
     items: [],
     totals: {
@@ -1100,6 +1110,10 @@ describe("facturas service", () => {
     expect(repo.lastQueuedInput?.fiscalRequest).toMatchObject({
       external_ref: repo.lastQueuedInput?.externalRef,
       condicion_venta: "CONTADO",
+      fiscal_context: {
+        fiscal_envio_modo: "BATCH",
+        batch_enabled: true
+      },
       cliente: emitInput.cliente,
       totals: { total: 11000 }
     });
@@ -1177,18 +1191,51 @@ describe("facturas service", () => {
       fiscal_document_id: "mock-async",
       cdc: "C".repeat(44),
       numero_fiscal: "001-001-0000003",
-      estado: "EMITIDA",
+      estado: "PENDIENTE_SIFEN",
+      fiscal_envio_modo: "BATCH",
+      delivery_mode: "BATCH",
+      batch: {
+        batch_id: "batch-1",
+        did: "1",
+        dProtConsLote: "123",
+        dCodRes: "0300",
+        dMsgRes: "Lote recibido",
+        dTpoProces: null,
+        result_code: null,
+        result_message: null,
+        status: "RECEIVED"
+      },
       email_status: "DELEGATED",
-      raw: { mode: "mock", async: true }
+      raw: {
+        mode: "mock",
+        async: true,
+        delivery_mode: "BATCH",
+        batch: {
+          batch_id: "batch-1",
+          did: "1",
+          dProtConsLote: "123",
+          dCodRes: "0300",
+          dMsgRes: "Lote recibido",
+          status: "RECEIVED"
+        }
+      }
     });
 
     const result = await processNextQueuedFiscalEmission(repo, gateway);
 
-    expect(result?.estado).toBe("EMITIDA");
+    expect(result?.estado).toBe("PENDIENTE_SIFEN");
     expect(gateway.lastRequest).toEqual(fiscalRequest);
     expect(repo.lastCompletedInput).toMatchObject({
       outboxId: "88888888-8888-4888-8888-888888888888",
-      documentoId: "77777777-7777-4777-8777-777777777777"
+      documentoId: "77777777-7777-4777-8777-777777777777",
+      response: {
+        fiscal_envio_modo: "BATCH",
+        delivery_mode: "BATCH",
+        batch: {
+          batch_id: "batch-1",
+          dProtConsLote: "123"
+        }
+      }
     });
   });
 

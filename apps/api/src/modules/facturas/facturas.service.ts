@@ -214,7 +214,7 @@ export async function refreshDocumentoStatus(
       facturadorId: context.facturador.id,
       documentoId,
       estado: refreshed.estado,
-      fiscalStatus: refreshed.raw
+      fiscalStatus: mergeFiscalStatus(documento.fiscal_status, refreshed.raw)
     });
 
     if (!updated) {
@@ -538,7 +538,9 @@ function buildFiscalEmitRequest(
     facturador: context.facturador,
     fiscal_context: {
       ...context.fiscal_context,
-      credito_plazo_dias: input.credito_plazo_dias ?? context.fiscal_context.credito_plazo_dias
+      credito_plazo_dias: input.credito_plazo_dias ?? context.fiscal_context.credito_plazo_dias,
+      fiscal_envio_modo: context.fiscal_context.fiscal_envio_modo ?? "BATCH",
+      batch_enabled: context.fiscal_context.batch_enabled ?? true
     },
     cliente: input.cliente,
     items: preview.items,
@@ -559,7 +561,11 @@ function buildFiscalNotaCreditoRequest(
   return {
     external_ref: externalRef,
     facturador: context.facturador,
-    fiscal_context: context.fiscal_context,
+    fiscal_context: {
+      ...context.fiscal_context,
+      fiscal_envio_modo: context.fiscal_context.fiscal_envio_modo ?? "BATCH",
+      batch_enabled: context.fiscal_context.batch_enabled ?? true
+    },
     cliente: original.cliente,
     items: original.items,
     totals: original.totals,
@@ -569,6 +575,16 @@ function buildFiscalNotaCreditoRequest(
       cdc: original.cdc,
       numero_fiscal: original.numero_fiscal
     }
+  };
+}
+
+function mergeFiscalStatus(
+  current: Record<string, unknown> | null,
+  refreshed: Record<string, unknown>
+): Record<string, unknown> {
+  return {
+    ...(current ?? {}),
+    ...refreshed
   };
 }
 

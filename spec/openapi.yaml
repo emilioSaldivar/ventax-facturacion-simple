@@ -15,6 +15,7 @@ info:
     - Base imponible e IVA se redondean por linea.
     - La liquidacion por tasa suma lineas ya redondeadas.
     - El link publico usa token opaco, no CDC puro ni ID secuencial.
+    - El envio fiscal operativo por defecto es `BATCH`: el SaaS encola por outbox y `facturacion-electronica` despacha comprobantes a SIFEN por lotes.
 servers:
   - url: /api/v1
 
@@ -445,7 +446,7 @@ paths:
             $ref: "#/components/schemas/DocumentoTipo"
         - in: query
           name: tipo_operativo
-          description: Filtro operativo para UI: facturas contado, facturas credito o notas de credito.
+          description: "Filtro operativo para UI: facturas contado, facturas credito o notas de credito."
           schema:
             $ref: "#/components/schemas/DocumentoTipoOperativo"
         - in: query
@@ -482,8 +483,10 @@ paths:
       description: |
         Valida y persiste la factura operativa sin crear borrador.
         La llamada a `facturacion-electronica` se procesa por outbox/worker usando
-        `external_ref` idempotente. La respuesta inicial puede quedar `EMITIENDO`;
-        el numero fiscal, CDC y estado final vienen del backend fiscal.
+        `external_ref` idempotente y `envio.mode=BATCH` por defecto para el
+        facturador. La respuesta inicial puede quedar `EMITIENDO` o
+        `PENDIENTE_SIFEN` mientras SIFEN procesa el lote; el numero fiscal, CDC,
+        datos de lote y estado final vienen del backend fiscal.
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
@@ -672,7 +675,9 @@ paths:
       summary: Emitir Nota de Credito Electronica desde factura elegible
       description: |
         Emite una NCE total en el MVP. Solo acepta facturas `EMITIDA` con CDC
-        y bloquea una segunda NCE total sobre la misma factura.
+        y bloquea una segunda NCE total sobre la misma factura. El envio fiscal
+        tambien usa `envio.mode=BATCH` por defecto y puede quedar
+        `PENDIENTE_SIFEN` mientras SIFEN procesa el lote.
       parameters:
         - $ref: "#/components/parameters/DocumentoId"
         - $ref: "#/components/parameters/IdempotencyKey"
@@ -1201,7 +1206,7 @@ components:
 
     FiscalContext:
       type: object
-      required: [establecimiento, punto_expedicion, perfil_emision_codigo, actividad_economica_codigo, timbrado, timbrado_inicio, documento_nro, credito_plazo_dias]
+      required: [establecimiento, punto_expedicion, perfil_emision_codigo, actividad_economica_codigo, timbrado, timbrado_inicio, documento_nro, credito_plazo_dias, fiscal_envio_modo]
       properties:
         establecimiento:
           type: string
@@ -1241,6 +1246,12 @@ components:
           type: integer
           minimum: 1
           example: 30
+        fiscal_envio_modo:
+          $ref: "#/components/schemas/FiscalEnvioModo"
+        batch_enabled:
+          type: boolean
+          nullable: true
+          description: Indica si el backend fiscal tiene configuracion batch efectiva para el emisor/facturador.
 
     OperationalDisplay:
       type: object
@@ -1248,7 +1259,7 @@ components:
       properties:
         titulo_operativo:
           type: string
-          description: Titulo UX derivado por actividad economica/perfil del usuario. Fallback: alias actividad/perfil, nombre fantasia, alias actividad, descripcion actividad, razon social.
+          description: "Titulo UX derivado por actividad economica/perfil del usuario. Fallback: alias actividad/perfil, nombre fantasia, alias actividad, descripcion actividad, razon social."
 
     ReadinessResponse:
       type: object
@@ -1411,6 +1422,13 @@ components:
       type: string
       enum: [EMITIENDO, EMITIDA, PENDIENTE_SIFEN, RECHAZADA, ERROR_OPERATIVO, ERROR_TEMPORAL, ANULADA]
 
+    FiscalEnvioModo:
+      type: string
+      description: |
+        Modo solicitado por el SaaS al backend `facturacion-electronica`.
+        `BATCH` es el default operativo de facturadores; `SYNC` queda para smoke opt-in/desarrollo.
+      enum: [BATCH, SYNC]
+
     FacturaPreviewRequest:
       type: object
       required: [condicion_venta, cliente, items]
@@ -1566,6 +1584,10 @@ components:
         external_ref:
           type: string
           nullable: true
+        fiscal_envio_modo:
+          $ref: "#/components/schemas/FiscalEnvioModo"
+        batch:
+          $ref: "#/components/schemas/BatchTransmissionSummary"
         cliente:
           $ref: "#/components/schemas/FacturaClienteInput"
         items:
@@ -1602,6 +1624,44 @@ components:
             $ref: "#/components/schemas/DocumentoResponse"
         total:
           type: integer
+
+    BatchTransmissionSummary:
+      type: object
+      description: Resumen de despacho por lote retornado por `facturacion-electronica`; no incluye XML ni payload fiscal crudo.
+      properties:
+        batch_id:
+          type: string
+          nullable: true
+        did:
+          type: string
+          nullable: true
+          description: Identificador local de envio de lote en FE.
+        dProtConsLote:
+          type: string
+          nullable: true
+          description: Protocolo SIFEN retornado por `siRecepLoteDE` para consulta de lote.
+        dCodRes:
+          type: string
+          nullable: true
+          description: Codigo de recepcion de lote; `0300` indica lote recibido con exito.
+        dMsgRes:
+          type: string
+          nullable: true
+        dTpoProces:
+          type: string
+          nullable: true
+          description: Tiempo promedio de procesamiento informado por SIFEN.
+        result_code:
+          type: string
+          nullable: true
+          description: Codigo de consulta de lote, por ejemplo `0360`, `0361` o `0362`.
+        result_message:
+          type: string
+          nullable: true
+        status:
+          type: string
+          nullable: true
+          enum: [CREATED, RECEIVED, PROCESSING, DONE, ERROR]
 
     NotaCreditoCandidate:
       type: object

@@ -118,7 +118,8 @@ Notas:
 - El valor compartido durante definicion del proyecto debe considerarse sensible.
 - Los datos de facturador, emisor, establecimiento, punto, timbrado, numerador y plazo de credito no viven en `.env`; se resuelven desde la configuracion fiscal-operativa en base de datos.
 - El healthcheck fiscal de referencia es `https://fe-api.ventax.app/fcws/health`.
-- El modo recomendado para evolucionar a produccion es asincrono/recuperable desde el SaaS, con `external_ref` idempotente y consulta posterior por estado. El modo `SYNC` puede seguir como fixture/mock o primer puente tecnico mientras se implementa outbox/worker.
+- El modo operativo por defecto para facturadores es asincrono/recuperable desde el SaaS y por lote hacia SIFEN: el outbox/worker llama a `facturacion-electronica` con `envio.mode=BATCH`, `external_ref` idempotente y consulta posterior por estado/lote.
+- El modo `SYNC` queda limitado a fixture/mock, smoke opt-in o excepcion tecnica controlada; no debe ser el default de facturadores productivos.
 - Si una emision entra en timeout o queda sin confirmacion final, el documento operativo queda en `PENDIENTE_SIFEN` y se permite refrescar estado desde el listado/detalle.
 - Los errores recuperables deben exponer acciones de gestion al cliente final: reintentar envio seguro, refrescar estado, corregir datos antes de una nueva emision cuando no exista documento fiscal confirmado, y ver feedback claro de causa probable sin exponer trazas fiscales internas.
 
@@ -401,8 +402,9 @@ Timeout:
 
 Default:
 
-- `envio.mode=SYNC` solo como puente inicial.
-- La ruta resiliente objetivo es outbox/worker asincrono: el API persiste intento, devuelve estado operativo, un worker envia a FE con `external_ref` idempotente, y la UI permite seguimiento/reintento controlado.
+- `envio.mode=BATCH` para facturas y notas de credito operativas.
+- La ruta resiliente es outbox/worker asincrono: el API persiste intento, devuelve estado operativo, un worker envia a FE con `external_ref` idempotente y `envio.mode=BATCH`, guarda `delivery_mode`/datos de lote si FE los retorna, y la UI permite seguimiento/reintento controlado.
+- `envio.mode=SYNC` no debe habilitarse como comportamiento por defecto de facturadores. Si se conserva para pruebas, debe quedar opt-in, auditable y aislado de produccion.
 
 ### 5.9 Audit
 
@@ -545,8 +547,9 @@ Objetivo:
 Diseno objetivo:
 
 - `POST /facturas` valida datos, calcula preview backend y persiste documento operativo `EMITIENDO` con `external_ref` idempotente;
-- la llamada a `facturacion-electronica` se ejecuta por outbox/worker parametrizable por `FE_OUTBOX_WORKER_ENABLED` y `FE_OUTBOX_WORKER_INTERVAL_MS`;
+- la llamada a `facturacion-electronica` se ejecuta por outbox/worker parametrizable por `FE_OUTBOX_WORKER_ENABLED` y `FE_OUTBOX_WORKER_INTERVAL_MS`, usando `envio.mode=BATCH` por defecto para facturadores;
 - cada intento fiscal registra evento auditable, estado normalizado y causa operativa resumida;
+- cuando FE retorne informacion `batch`, se persisten `batch_id`, `dProtConsLote`, codigo/mensaje de recepcion, codigo/mensaje de consulta y estado resumido para diagnostico y soporte;
 - reintentos usan el mismo `external_ref` cuando se intenta recuperar un documento pendiente, nunca crean numeracion nueva sin decision explicita;
 - si el error es de datos operativos antes de confirmar documento fiscal, la UI debe permitir corregir y emitir nuevamente con feedback claro;
 - si existe CDC/documento fiscal confirmado, las acciones permitidas son refrescar estado, entregar artefactos, cancelacion/anulacion elegible o NCE, no editar la factura original.

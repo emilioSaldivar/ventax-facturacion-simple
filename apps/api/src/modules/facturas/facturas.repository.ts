@@ -1255,6 +1255,7 @@ function buildListWhere(facturadorId: string, filters: DocumentoListFilters): { 
 function mapFacturaRow(row: FacturaRow, items: FacturaItemPreview[]): DocumentoResponse {
   const emailStatus = row.email_estado ?? "NOT_APPLICABLE";
   const cdc = row.cdc;
+  const fiscalStatus = row.fiscal_response_snapshot as Record<string, unknown> | null;
 
   return {
     id: row.id,
@@ -1265,10 +1266,12 @@ function mapFacturaRow(row: FacturaRow, items: FacturaItemPreview[]): DocumentoR
     cdc,
     fiscal_document_id: row.fiscal_document_id,
     external_ref: row.external_ref,
+    fiscal_envio_modo: getFiscalEnvioModo(fiscalStatus),
+    batch: getBatchTransmissionInfo(fiscalStatus),
     cliente: row.cliente_snapshot as DocumentoResponse["cliente"],
     items,
     totals: row.totals_snapshot as DocumentoResponse["totals"],
-    fiscal_status: row.fiscal_response_snapshot as Record<string, unknown>,
+    fiscal_status: fiscalStatus,
     documento_relacionado_id: row.documento_relacionado_id,
     nce_motivo: row.nce_motivo,
     delivery: {
@@ -1288,4 +1291,39 @@ function mapFacturaRow(row: FacturaRow, items: FacturaItemPreview[]): DocumentoR
     },
     created_at: row.created_at.toISOString()
   };
+}
+
+function getFiscalEnvioModo(fiscalStatus: Record<string, unknown> | null): DocumentoResponse["fiscal_envio_modo"] {
+  const deliveryMode = getString(fiscalStatus?.delivery_mode);
+  const explicitMode = getString(fiscalStatus?.fiscal_envio_modo);
+  return deliveryMode === "SYNC" || explicitMode === "SYNC" ? "SYNC" : "BATCH";
+}
+
+function getBatchTransmissionInfo(fiscalStatus: Record<string, unknown> | null): DocumentoResponse["batch"] {
+  const batch = fiscalStatus?.batch;
+  if (!batch || typeof batch !== "object") {
+    return null;
+  }
+
+  const data = batch as Record<string, unknown>;
+  const status = getString(data.status);
+
+  return {
+    batch_id: getString(data.batch_id),
+    did: getString(data.did),
+    dProtConsLote: getString(data.dProtConsLote),
+    dCodRes: getString(data.dCodRes),
+    dMsgRes: getString(data.dMsgRes),
+    dTpoProces: getString(data.dTpoProces),
+    result_code: getString(data.result_code),
+    result_message: getString(data.result_message),
+    status:
+      status === "CREATED" || status === "RECEIVED" || status === "PROCESSING" || status === "DONE" || status === "ERROR"
+        ? status
+        : null
+  };
+}
+
+function getString(value: unknown): string | null {
+  return typeof value === "string" && value.length > 0 ? value : null;
 }

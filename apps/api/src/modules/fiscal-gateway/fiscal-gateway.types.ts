@@ -4,6 +4,19 @@ import type { FacturaClienteInput, FacturaItemPreview } from "../facturas/factur
 
 export type FiscalGatewayMode = "mock" | "real";
 export type FiscalGatewayErrorCode = "TIMEOUT" | "UPSTREAM_ERROR" | "UNAVAILABLE" | "INVALID_RESPONSE";
+export type FiscalEnvioModo = "BATCH" | "SYNC";
+
+export interface FiscalBatchTransmissionInfo {
+  batch_id: string | null;
+  did: string | null;
+  dProtConsLote: string | null;
+  dCodRes: string | null;
+  dMsgRes: string | null;
+  dTpoProces: string | null;
+  result_code: string | null;
+  result_message: string | null;
+  status: "CREATED" | "RECEIVED" | "PROCESSING" | "DONE" | "ERROR" | null;
+}
 
 export interface FiscalGatewayConfig {
   mode: FiscalGatewayMode;
@@ -52,6 +65,9 @@ export interface FiscalEmitFacturaResponse {
   cdc: string | null;
   numero_fiscal: string | null;
   estado: "EMITIDA" | "PENDIENTE_SIFEN" | "RECHAZADA";
+  fiscal_envio_modo?: FiscalEnvioModo;
+  delivery_mode?: string | null;
+  batch?: FiscalBatchTransmissionInfo | null;
   email_status: "NOT_APPLICABLE" | "DELEGATED" | "SENT" | "FAILED" | "UNKNOWN";
   raw: Record<string, unknown>;
 }

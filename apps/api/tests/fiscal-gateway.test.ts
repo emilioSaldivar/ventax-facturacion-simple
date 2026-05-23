@@ -21,7 +21,9 @@ const request: FiscalEmitFacturaRequest = {
     timbrado: "80136968",
     timbrado_inicio: "2025-12-30",
     documento_nro: "0000000",
-    credito_plazo_dias: 30
+    credito_plazo_dias: 30,
+    fiscal_envio_modo: "BATCH",
+    batch_enabled: true
   },
   cliente: {
     documento_tipo: "RUC",
@@ -140,6 +142,14 @@ describe("fiscal gateway", () => {
             cdc: "C".repeat(44),
             nro_factura: "001-002-0000007",
             status: "APPROVED",
+            delivery_mode: "BATCH",
+            batch: {
+              batch_id: "batch-1",
+              dProtConsLote: "123456",
+              dCodRes: "0300",
+              dMsgRes: "Lote recibido",
+              status: "RECEIVED"
+            },
             email_status: "DELEGATED",
             number_source: "SERVICE"
           }),
@@ -155,6 +165,15 @@ describe("fiscal gateway", () => {
       cdc: "C".repeat(44),
       numero_fiscal: "001-002-0000007",
       estado: "EMITIDA",
+      fiscal_envio_modo: "BATCH",
+      delivery_mode: "BATCH",
+      batch: {
+        batch_id: "batch-1",
+        dProtConsLote: "123456",
+        dCodRes: "0300",
+        dMsgRes: "Lote recibido",
+        status: "RECEIVED"
+      },
       email_status: "DELEGATED"
     });
     expect(calls).toHaveLength(1);
@@ -209,7 +228,7 @@ describe("fiscal gateway", () => {
         }
       ],
       envio: {
-        mode: "SYNC",
+        mode: "BATCH",
         sendNow: true
       }
     });
@@ -271,6 +290,67 @@ describe("fiscal gateway", () => {
 
     await expect(gateway.emitFactura(request)).rejects.toMatchObject({
       code: "UPSTREAM_ERROR"
+    });
+  });
+
+  it("maps batch queued emission as PENDIENTE_SIFEN with batch diagnostics", async () => {
+    const gateway = new RealFiscalGateway({
+      mode: "real",
+      baseUrl: "https://fe-api.ventax.app/fcws",
+      apiKey: "secret",
+      timeoutMs: 20000,
+      environment: "test",
+    });
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init: RequestInit) => {
+        const payload = JSON.parse(String(init.body)) as Record<string, unknown>;
+        expect(payload).toMatchObject({
+          envio: {
+            mode: "BATCH",
+            sendNow: true
+          }
+        });
+
+        return new Response(
+          JSON.stringify({
+            document_id: "doc-batch-1",
+            cdc: "B".repeat(44),
+            nro_factura: "001-002-0000008",
+            status: "BATCH_QUEUED",
+            delivery_mode: "BATCH",
+            batch: {
+              batch_id: "batch-queued-1",
+              did: "42",
+              dProtConsLote: "987654",
+              dCodRes: "0300",
+              dMsgRes: "Lote recibido",
+              dTpoProces: "5",
+              status: "RECEIVED"
+            }
+          }),
+          { status: 202, headers: { "content-type": "application/json" } }
+        );
+      })
+    );
+
+    const result = await gateway.emitFactura(request);
+
+    expect(result).toMatchObject({
+      fiscal_document_id: "doc-batch-1",
+      estado: "PENDIENTE_SIFEN",
+      fiscal_envio_modo: "BATCH",
+      delivery_mode: "BATCH",
+      batch: {
+        batch_id: "batch-queued-1",
+        did: "42",
+        dProtConsLote: "987654",
+        dCodRes: "0300",
+        dMsgRes: "Lote recibido",
+        dTpoProces: "5",
+        status: "RECEIVED"
+      }
     });
   });
 
@@ -456,7 +536,7 @@ describe("fiscal gateway", () => {
         }
       ],
       envio: {
-        mode: "SYNC",
+        mode: "BATCH",
         sendNow: true
       }
     });

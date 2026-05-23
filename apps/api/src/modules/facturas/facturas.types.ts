@@ -4,7 +4,9 @@ import type {
   FiscalEmitFacturaRequest,
   FiscalEmitFacturaResponse,
   FiscalEmitNotaCreditoRequest,
-  FiscalEmitNotaCreditoResponse
+  FiscalEmitNotaCreditoResponse,
+  FiscalBatchTransmissionInfo,
+  FiscalEnvioModo
 } from "../fiscal-gateway/fiscal-gateway.types";
 
 export const condicionesVenta = ["CONTADO", "CREDITO"] as const;
@@ -57,6 +59,7 @@ export type DocumentoEstado =
 export type DocumentoTipo = "FACTURA" | "NOTA_CREDITO";
 export type DocumentoTipoOperativo = CondicionVenta | "NOTA_CREDITO";
 export type EmailStatus = "NOT_APPLICABLE" | "DELEGATED" | "SENT" | "FAILED" | "UNKNOWN";
+export type { FiscalBatchTransmissionInfo, FiscalEnvioModo };
 
 export interface DeliverySummary {
   public_url: string | null;
@@ -83,6 +86,8 @@ export interface DocumentoResponse {
   cdc: string | null;
   fiscal_document_id: string | null;
   external_ref: string | null;
+  fiscal_envio_modo: FiscalEnvioModo;
+  batch: FiscalBatchTransmissionInfo | null;
   cliente: FacturaClienteInput;
   items: FacturaItemPreview[];
   totals: TaxTotals;

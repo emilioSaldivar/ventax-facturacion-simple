@@ -197,10 +197,12 @@ Para precios con IVA incluido, en cada linea:
 8. El operador puede editar antes de emitir.
 9. El operador presiona `Emitir`.
 10. El backend SaaS genera `external_ref` idempotente.
-11. El backend SaaS registra la solicitud y envia a `facturacion-electronica` en modo sincrono inicial o asincrono/resiliente cuando exista outbox/worker.
-12. Se persisten snapshots, intentos fiscales, `document_id`, `cdc`, numero fiscal y estado cuando el backend fiscal los confirme.
-13. Si la confirmacion queda pendiente, la UI muestra estado recuperable y acciones de refrescar/reintentar sin duplicar documento fiscal.
-14. La UI muestra comprobante emitido y opciones de ver, descargar, copiar enlace, enviar por WhatsApp o enviar por email cuando existan artefactos.
+11. El backend SaaS registra la solicitud y la procesa por outbox/worker.
+12. Por defecto, todo facturador operativo debe enviar comprobantes a `facturacion-electronica` con `envio.mode=BATCH`; el servicio fiscal genera XML, firma, QR, artefactos locales y encola el despacho SIFEN por lote.
+13. El modo `SYNC` no es el camino operativo normal del MVP SaaS. Solo puede usarse como excepcion tecnica controlada, smoke opt-in o fixture de desarrollo, nunca como default de facturadores productivos.
+14. Se persisten snapshots, intentos fiscales, modo de envio fiscal, datos de lote cuando existan, `document_id`, `cdc`, numero fiscal y estado cuando el backend fiscal los confirme.
+15. Si la confirmacion SIFEN queda pendiente por procesamiento de lote, la UI muestra estado recuperable y acciones de refrescar/reintentar sin duplicar documento fiscal.
+16. La UI muestra comprobante emitido o en seguimiento y opciones de ver, descargar, copiar enlace, enviar por WhatsApp o enviar por email cuando existan artefactos.
 
 Para `CREDITO`, la pantalla debe permitir seleccionar plazo cuando el backend fiscal lo soporte. Los plazos iniciales esperados son `30`, `60` y `90` dias, tomando como autoridad la configuracion disponible en `facturacion-electronica`. Si el plazo configurable aun no esta definido para el facturador, se mantiene el comportamiento actual documentado: emision credito simple sin gestion de cuotas, recibos ni cobranza.
 
@@ -340,7 +342,7 @@ Si corresponde reintentar o corregir, la nueva emision debe usar otra numeracion
 Acciones por estado:
 
 - `EMITIDA`: ver, descargar, copiar enlace, WhatsApp, email automatico si fue enviado por backend fiscal, cancelar/anular si es elegible.
-- `PENDIENTE_SIFEN`: ver detalle, refrescar estado, reintentar envio controlado si el backend confirma que no duplica `external_ref`, contactar soporte solo si no se resuelve.
+- `PENDIENTE_SIFEN`: ver detalle, refrescar estado, ver diagnostico de lote cuando exista, reintentar envio controlado si el backend confirma que no duplica `external_ref`, contactar soporte solo si no se resuelve.
 - `RECHAZADA`: ver detalle, mostrar causa operativa resumida, permitir corregir y emitir un nuevo documento cuando corresponda, contactar soporte solo si la causa no es gestionable.
 - `ERROR_TEMPORAL`: reintentar si no hubo numero fiscal confirmado, refrescar estado o contactar soporte si persiste.
 - `ERROR_OPERATIVO`: corregir datos antes de emitir si aun no se genero documento fiscal.
