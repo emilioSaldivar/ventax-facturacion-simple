@@ -63,6 +63,12 @@ Requisitos:
 
 - mantener informacion fiscal minima visible o accesible sin bloquear el flujo;
 - enfocar la carga del comprobante, cliente e items;
+- incluir selector simple de `tipo de servicio` fiscal con opciones:
+  - `1`: Venta de mercaderia;
+  - `2`: Prestacion de servicios;
+  - `3`: Mixto (mercaderia + servicios);
+  - valor por defecto: `2` (`Prestacion de servicios`);
+- enviar `tipo_transaccion` en preview/emision para que el backend SaaS lo delegue a `facturacion-electronica` como `tipoTransaccion`;
 - dejar la accion de emision cerca del resumen/totales;
 - preservar bloqueo por readiness si el facturador no puede emitir.
 
@@ -73,4 +79,5 @@ Requisitos:
 - Los filtros de fecha funcionan combinados con tipo/condicion y busqueda.
 - La busqueda encuentra documentos por numero fiscal, documento del receptor y nombre/razon social.
 - `Nueva factura` desde inicio lleva al operador directamente al formulario accionable, sin scroll manual por datos del facturador.
+- `Nueva factura` muestra `tipo de servicio` con default `Prestacion de servicios` y permite cambiar a mercaderia o mixto segun necesidad del cliente.
 - La experiencia debe validarse primero en mobile y luego en desktop/tablet.

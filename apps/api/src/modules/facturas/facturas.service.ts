@@ -535,6 +535,7 @@ function buildFiscalEmitRequest(
   return {
     external_ref: externalRef,
     condicion_venta: input.condicion_venta,
+    tipo_transaccion: input.tipo_transaccion ?? 2,
     facturador: context.facturador,
     fiscal_context: {
       ...context.fiscal_context,

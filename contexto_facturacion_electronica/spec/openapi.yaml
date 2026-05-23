@@ -2354,6 +2354,16 @@ components:
             Codigo de actividad economica declarada/configurada para el emisor. Es obligatorio.
             El servicio debe validarlo contra actividades activas del emisor y contra el perfil/boca de emision.
             Este codigo no particiona por si solo la numeracion fiscal ni permite repetir numeros.
+        tipoTransaccion:
+          type: integer
+          enum: [1, 2, 3]
+          default: 1
+          description: |
+            Criterio de clasificacion fiscal para `iTipTra`:
+            - `1`: Venta de mercaderia
+            - `2`: Prestacion de servicios
+            - `3`: Mixto (mercaderia + servicios)
+            Si no se envia, FE aplica fallback a `1`.
         emission_profile_code:
           type: string
           nullable: true

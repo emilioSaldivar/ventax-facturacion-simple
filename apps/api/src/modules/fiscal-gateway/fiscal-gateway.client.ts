@@ -335,6 +335,7 @@ export class RealFiscalGateway implements FiscalGateway {
       client_reference: buildClientReference("factura_operativa", request.external_ref, request.fiscal_context.perfil_emision_codigo),
       receptor: buildReceptor(request.cliente),
       fecha: new Date().toISOString(),
+      tipoTransaccion: request.tipo_transaccion,
       condicionOperacion: buildCondicionOperacion(request),
       items: request.items.map((item) => ({
         codigo: item.codigo ?? `L${String(item.line_no).padStart(3, "0")}`,

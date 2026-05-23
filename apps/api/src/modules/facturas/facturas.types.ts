@@ -33,6 +33,7 @@ export interface FacturaItemInput {
 
 export interface FacturaPreviewInput {
   condicion_venta: CondicionVenta;
+  tipo_transaccion?: 1 | 2 | 3;
   credito_plazo_dias?: number | null;
   cliente: FacturaClienteInput;
   items: FacturaItemInput[];

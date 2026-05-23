@@ -8,6 +8,7 @@ const ACCESS_TOKEN_STORAGE_KEY = "ventax_factura_access_token";
 type ViewState = "checking-session" | "login" | "loading-context" | "operacion";
 type OperationView = "status" | "invoice" | "credit-note" | "documents" | "catalog";
 type CondicionVenta = "CONTADO" | "CREDITO";
+type TipoTransaccionServicio = 1 | 2 | 3;
 type DocumentoIdentidadTipo = "RUC" | "CI" | "PASAPORTE" | "CEDULA_EXTRANJERA" | "NO_ESPECIFICADO";
 type TipoIva = "IVA_10" | "IVA_5" | "EXENTA";
 type DocumentoEstado = "EMITIENDO" | "EMITIDA" | "PENDIENTE_SIFEN" | "RECHAZADA" | "ERROR_OPERATIVO" | "ERROR_TEMPORAL" | "ANULADA";
@@ -108,6 +109,7 @@ interface FacturaItemInput {
 
 interface FacturaPreviewRequest {
   condicion_venta: CondicionVenta;
+  tipo_transaccion: TipoTransaccionServicio;
   credito_plazo_dias?: number | null;
   cliente: FacturaClienteInput;
   items: FacturaItemInput[];
@@ -1471,6 +1473,7 @@ function InvoiceEditor({
   onBack: () => void;
 }) {
   const [condicionVenta, setCondicionVenta] = useState<CondicionVenta>("CONTADO");
+  const [tipoTransaccion, setTipoTransaccion] = useState<TipoTransaccionServicio>(2);
   const [creditoPlazoDias, setCreditoPlazoDias] = useState<number>(context?.fiscal_context.credito_plazo_dias ?? 30);
   const [cliente, setCliente] = useState<FacturaClienteInput>({
     documento_tipo: "RUC",
@@ -1532,6 +1535,7 @@ function InvoiceEditor({
 
     return {
       condicion_venta: condicionVenta,
+      tipo_transaccion: tipoTransaccion,
       credito_plazo_dias: condicionVenta === "CREDITO" ? creditoPlazoDias : null,
       cliente: {
         ...cliente,
@@ -1543,7 +1547,7 @@ function InvoiceEditor({
       },
       items
     };
-  }, [cliente, condicionVenta, creditoPlazoDias, lines]);
+  }, [cliente, condicionVenta, creditoPlazoDias, lines, tipoTransaccion]);
   const requestFingerprint = useMemo(() => (request ? JSON.stringify(request) : null), [request]);
 
   useEffect(() => {
@@ -1746,6 +1750,7 @@ function InvoiceEditor({
 
   function resetInvoice() {
     setCondicionVenta("CONTADO");
+    setTipoTransaccion(2);
     setCreditoPlazoDias(context?.fiscal_context.credito_plazo_dias ?? 30);
     setCliente({
       documento_tipo: "RUC",
@@ -2022,6 +2027,14 @@ function InvoiceEditor({
             </select>
           </label>
         ) : null}
+        <label className="credit-term-field">
+          Tipo de servicio
+          <select onChange={(event) => setTipoTransaccion(Number(event.target.value) as TipoTransaccionServicio)} value={tipoTransaccion}>
+            <option value={1}>1 - Venta de mercadería</option>
+            <option value={2}>2 - Prestación de servicios</option>
+            <option value={3}>3 - Mixto (mercadería + servicios)</option>
+          </select>
+        </label>
       </section>
 
       <section className="form-section">

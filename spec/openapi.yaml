@@ -1410,6 +1410,16 @@ components:
       type: string
       enum: [CONTADO, CREDITO]
 
+    TipoTransaccionServicio:
+      type: integer
+      enum: [1, 2, 3]
+      default: 2
+      description: |
+        Criterio fiscal para clasificacion de transaccion en FE:
+        - `1`: Venta de mercaderia
+        - `2`: Prestacion de servicios
+        - `3`: Mixto (mercaderia + servicios)
+
     DocumentoTipo:
       type: string
       enum: [FACTURA, NOTA_CREDITO]
@@ -1431,10 +1441,12 @@ components:
 
     FacturaPreviewRequest:
       type: object
-      required: [condicion_venta, cliente, items]
+      required: [condicion_venta, tipo_transaccion, cliente, items]
       properties:
         condicion_venta:
           $ref: "#/components/schemas/CondicionVenta"
+        tipo_transaccion:
+          $ref: "#/components/schemas/TipoTransaccionServicio"
         credito_plazo_dias:
           type: integer
           nullable: true

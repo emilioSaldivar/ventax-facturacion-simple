@@ -21,7 +21,9 @@
 | DUX-007 | UI emision | Navegar a nueva factura en seccion accionable | PENDING | Desde pantalla principal, `Nueva factura`/`Emitir factura` deja visible el formulario operativo sin scroll manual por datos del facturador |
 | DUX-008 | QA visual | Validar flujo mobile y desktop | PENDING | Playwright contra contenedores cubre filtros, busqueda, seleccion exclusiva, volver y entrada directa a emision |
 | DUX-009 | Documentacion cierre | Registrar evidencia de validacion | PENDING | Esta matriz contiene comandos, entorno y resultado antes de cerrar tareas |
+| DUX-010 | UI emision/API | Selector tipo de servicio y envio a FE | DONE | `Nueva factura` expone `tipo de servicio` 1/2/3 con default `2` y el backend delega `tipo_transaccion` como `tipoTransaccion` al backend fiscal |
 
 ## Evidencia
 
 - 2026-05-21: creada cadena SDD `DOCUMENTOS_EMISION_UX` para mapear seleccion exclusiva de documentos, filtros por fecha, busqueda por numero/documento/receptor y entrada directa al formulario de emision. No se implemento codigo funcional en esta tarea documental.
+- 2026-05-23: cerrado `DUX-010` con cambios en `apps/web-operacion`, `apps/api`, `spec/openapi.yaml` y pruebas API para soportar selector de tipo de servicio (1/2/3), default UI `Prestacion de servicios` y mapeo a `tipoTransaccion` en FE.

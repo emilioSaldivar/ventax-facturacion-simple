@@ -6,6 +6,7 @@ import type { FiscalEmitFacturaRequest } from "../src/modules/fiscal-gateway/fis
 const request: FiscalEmitFacturaRequest = {
   external_ref: "fac_11111111-1111-4111-8111-111111111111",
   condicion_venta: "CONTADO",
+  tipo_transaccion: 2,
   facturador: {
     id: "33333333-3333-4333-8333-333333333333",
     emisor_id: "80136968-1",
@@ -218,6 +219,7 @@ describe("fiscal gateway", () => {
         tipo: "CONTADO",
         pagos: [{ medio: "EFECTIVO", monto: 11000 }]
       },
+      tipoTransaccion: 2,
       items: [
         {
           codigo: "L001",

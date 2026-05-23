@@ -29,6 +29,7 @@ const documentoEstados = ["EMITIENDO", "EMITIDA", "PENDIENTE_SIFEN", "RECHAZADA"
 
 const facturaPreviewSchema = z.object({
   condicion_venta: z.enum(condicionesVenta),
+  tipo_transaccion: z.coerce.number().int().refine((value) => [1, 2, 3].includes(value), "tipo_transaccion invalido. Use 1, 2 o 3.").default(2),
   credito_plazo_dias: z.coerce.number().int().min(1).max(365).nullable().optional(),
   cliente: z.object({
     cliente_id: z.string().uuid().nullable().optional(),

@@ -63,6 +63,14 @@ Opciones tecnicas aceptables:
 
 La decision final debe priorizar mobile.
 
+Adicionalmente, el bloque `Comprobante` debe incluir un `select` simple para `tipo de servicio` fiscal:
+
+- `1` Venta de mercaderia
+- `2` Prestacion de servicios (default)
+- `3` Mixto (mercaderia + servicios)
+
+El valor seleccionado debe viajar en `POST /facturas/preview` y `POST /facturas` como `tipo_transaccion`, y el backend debe mapearlo al payload FE `tipoTransaccion`.
+
 ## Validacion
 
 Minimo requerido al implementar:
@@ -78,4 +86,5 @@ Minimo requerido al implementar:
   - buscar por razon social;
   - seleccionar documento y verificar que la lista desaparece;
   - volver y verificar filtros preservados;
-  - desde inicio presionar `Nueva factura` y verificar que el formulario accionable queda visible sin scroll manual.
+- desde inicio presionar `Nueva factura` y verificar que el formulario accionable queda visible sin scroll manual.
+- verificar `tipo de servicio` default en `Prestacion de servicios` y envio correcto de `tipo_transaccion`.

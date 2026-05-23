@@ -38,6 +38,7 @@ export interface FiscalGatewayHealth {
 export interface FiscalEmitFacturaRequest {
   external_ref: string;
   condicion_venta: "CONTADO" | "CREDITO";
+  tipo_transaccion: 1 | 2 | 3;
   facturador: FacturadorSummary;
   fiscal_context: FiscalContext;
   cliente: FacturaClienteInput;
