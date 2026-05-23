@@ -1474,6 +1474,8 @@ paths:
       summary: Emitir Factura Electrónica (CONTADO o CREDITO)
       description: |
         Crea/obtiene un DE idempotente, genera XML v150, firma, inserta QR (AA002).
+        El servicio genera y conserva artefactos locales (XML firmado, XML con QR, KUDE y estado de correo)
+        aunque el despacho fiscal por lote quede pendiente o no llegue a enviarse en ese momento.
         Si envio.mode=SYNC: intenta enviar inmediatamente a SIFEN.
         Si envio.mode=BATCH: encola para envío por lote.
         Si envio.mode=AUTO: intenta SYNC y ante falla técnica, o rechazo SIFEN 1264 por servicio síncrono no habilitado, pasa a cola BATCH.
@@ -2165,6 +2167,73 @@ components:
       type: string
       enum: [SYNC, BATCH, AUTO]
 
+    EmailDeliveryStatus:
+      type: string
+      description: Estado operativo de entrega de XML/KUDE al receptor. No representa aceptacion SIFEN.
+      enum: [NOT_APPLICABLE, PENDING, SENT, FAILED]
+
+    LocalArtifactStatus:
+      type: object
+      description: Artefactos locales generados antes o independientemente del despacho fiscal.
+      properties:
+        xml_unsigned:
+          type: boolean
+          description: Existe XML local sin firma.
+        xml_signed:
+          type: boolean
+          description: Existe XML firmado.
+        xml_qr:
+          type: boolean
+          description: Existe XML firmado con QR AA002.
+        kude_pdf:
+          type: boolean
+          description: Existe KUDE PDF local.
+        email_delivery:
+          $ref: "#/components/schemas/EmailDeliveryStatus"
+        email_sent_before_sifen_approval:
+          type: boolean
+          nullable: true
+          description: Indica si el correo operativo fue enviado cuando el DE aun no estaba aprobado por SIFEN.
+
+    BatchTransmissionInfo:
+      type: object
+      description: Datos de despacho por lote conforme MT150.
+      properties:
+        batch_id:
+          type: string
+          nullable: true
+        did:
+          type: string
+          nullable: true
+          description: "`dId` local secuencial por emisor/ambiente usado en `rEnvioLote`."
+        dProtConsLote:
+          type: string
+          nullable: true
+          description: Protocolo SIFEN retornado por `siRecepLoteDE`; debe usarse para `consultaLote`.
+        dCodRes:
+          type: string
+          nullable: true
+          description: Codigo de recepcion de lote; `0300` indica lote recibido con exito.
+        dMsgRes:
+          type: string
+          nullable: true
+          description: Mensaje de recepcion de lote.
+        dTpoProces:
+          type: string
+          nullable: true
+          description: Tiempo promedio de procesamiento informado por SIFEN para diferir polling.
+        result_code:
+          type: string
+          nullable: true
+          description: Codigo de consulta de lote; por ejemplo `0360`, `0361` o `0362`.
+        result_message:
+          type: string
+          nullable: true
+        status:
+          type: string
+          nullable: true
+          enum: [CREATED, RECEIVED, PROCESSING, DONE, ERROR]
+
     CondicionOperacion:
       type: string
       enum: [CONTADO, CREDITO]
@@ -2421,10 +2490,13 @@ components:
           nullable: true
           enum: [SYNC, BATCH, AUTO_FALLBACK_BATCH]
         email_status:
-          type: string
+          $ref: "#/components/schemas/EmailDeliveryStatus"
           nullable: true
-          enum: [NOT_APPLICABLE, SENT, FAILED]
-          description: Resultado del envio de XML y KUDE PDF al cliente final.
+          description: Resultado operativo del envio de XML y KUDE PDF al cliente final; no implica aceptacion SIFEN.
+        local_artifacts:
+          $ref: "#/components/schemas/LocalArtifactStatus"
+        batch:
+          $ref: "#/components/schemas/BatchTransmissionInfo"
         number_source:
           type: string
           nullable: true
@@ -2777,8 +2849,33 @@ components:
                 type: string
               did:
                 type: string
+                description: "`dId` local secuencial por emisor/ambiente. No debe usarse como protocolo de consulta SIFEN."
+              dProtConsLote:
+                type: string
+                nullable: true
+                description: Protocolo SIFEN retornado por `siRecepLoteDE`; requerido para consultar resultado de lote.
+              dCodRes:
+                type: string
+                nullable: true
+                description: Codigo de recepcion de lote; `0300` significa recibido con exito, `0301` lote no encolado.
+              dMsgRes:
+                type: string
+                nullable: true
+                description: Mensaje de recepcion de lote.
+              dTpoProces:
+                type: string
+                nullable: true
+                description: Tiempo promedio de procesamiento informado por SIFEN.
+              result_code:
+                type: string
+                nullable: true
+                description: Codigo de consulta de lote; por ejemplo `0360`, `0361` o `0362`.
+              result_message:
+                type: string
+                nullable: true
               status:
                 type: string
+                enum: [CREATED, RECEIVED, PROCESSING, DONE, ERROR]
               doc_count:
                 type: integer
               tipo_documento:
