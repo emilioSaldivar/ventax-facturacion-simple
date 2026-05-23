@@ -228,11 +228,54 @@ describe("fiscal gateway", () => {
         }
       ],
       envio: {
-        mode: "BATCH",
+        mode: "BATCH"
+      }
+    });
+    expect(calls[0]?.payload.envio).not.toHaveProperty("sendNow");
+    expect(calls[0]?.payload).not.toHaveProperty("condicionOperacion.credito");
+  });
+
+  it("only sends sendNow for explicit SYNC emission mode", async () => {
+    const calls: Array<{ payload: Record<string, unknown> }> = [];
+    const gateway = new RealFiscalGateway({
+      mode: "real",
+      baseUrl: "https://fe-api.ventax.app/fcws",
+      apiKey: "secret",
+      timeoutMs: 20000,
+      environment: "test",
+    });
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init: RequestInit) => {
+        calls.push({ payload: JSON.parse(String(init.body)) as Record<string, unknown> });
+        return new Response(
+          JSON.stringify({
+            document_id: "doc-sync",
+            cdc: "Y".repeat(44),
+            nro_factura: "001-002-0000009",
+            status: "APPROVED",
+            delivery_mode: "SYNC"
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        );
+      })
+    );
+
+    await gateway.emitFactura({
+      ...request,
+      fiscal_context: {
+        ...request.fiscal_context,
+        fiscal_envio_modo: "SYNC"
+      }
+    });
+
+    expect(calls[0]?.payload).toMatchObject({
+      envio: {
+        mode: "SYNC",
         sendNow: true
       }
     });
-    expect(calls[0]?.payload).not.toHaveProperty("condicionOperacion.credito");
   });
 
   it("maps idempotent 409 emission response as the existing fiscal document", async () => {
@@ -308,10 +351,10 @@ describe("fiscal gateway", () => {
         const payload = JSON.parse(String(init.body)) as Record<string, unknown>;
         expect(payload).toMatchObject({
           envio: {
-            mode: "BATCH",
-            sendNow: true
+            mode: "BATCH"
           }
         });
+        expect(payload.envio).not.toHaveProperty("sendNow");
 
         return new Response(
           JSON.stringify({
@@ -536,10 +579,10 @@ describe("fiscal gateway", () => {
         }
       ],
       envio: {
-        mode: "BATCH",
-        sendNow: true
+        mode: "BATCH"
       }
     });
+    expect(calls[0]?.payload.envio).not.toHaveProperty("sendNow");
   });
 
   it("derives fiscal number from resolved timbrado when nro_factura is omitted", async () => {

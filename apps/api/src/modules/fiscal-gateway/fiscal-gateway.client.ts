@@ -469,9 +469,15 @@ function buildReceptor(cliente: FiscalEmitFacturaRequest["cliente"]): Record<str
 
 function buildEnvio(mode: unknown): Record<string, unknown> {
   const resolvedMode = resolveFiscalEnvioModo(mode);
+  if (resolvedMode === "SYNC") {
+    return {
+      mode: resolvedMode,
+      sendNow: true
+    };
+  }
+
   return {
-    mode: resolvedMode,
-    sendNow: true
+    mode: "BATCH"
   };
 }
 
