@@ -249,6 +249,68 @@ El script:
 - levanta PostgreSQL, API y frontend;
 - muestra estado del stack.
 
+### Deploy Por Ambiente (Comandos Copiables)
+
+`scripts/deploy.sh` soporta:
+
+- `APP_ENV_FILE` (default: `.env`)
+- `COMPOSE_FILE` (default: `docker-compose.yml`)
+
+Esto permite desplegar testing/staging y produccion con el mismo script.
+
+Preparar archivos de entorno:
+
+```bash
+cp .env.staging.example .env.staging
+cp .env.production.example .env.production
+chmod 600 .env.staging .env.production
+```
+
+Deploy testing/staging:
+
+```bash
+APP_ENV_FILE=.env.staging bash scripts/deploy.sh
+```
+
+Deploy produccion:
+
+```bash
+APP_ENV_FILE=.env.production bash scripts/deploy.sh
+```
+
+Si se necesita otro compose:
+
+```bash
+COMPOSE_FILE=docker-compose.yml APP_ENV_FILE=.env.staging bash scripts/deploy.sh
+COMPOSE_FILE=docker-compose.yml APP_ENV_FILE=.env.production bash scripts/deploy.sh
+```
+
+Estado del stack por ambiente:
+
+```bash
+docker compose --env-file .env.staging -f docker-compose.yml ps
+docker compose --env-file .env.production -f docker-compose.yml ps
+```
+
+Logs API por ambiente:
+
+```bash
+docker compose --env-file .env.staging -f docker-compose.yml logs -f api
+docker compose --env-file .env.production -f docker-compose.yml logs -f api
+```
+
+Healthchecks recomendados:
+
+```bash
+# staging (ajustar puertos segun .env.staging)
+curl -sS http://127.0.0.1:8092/healthz
+curl -sS http://127.0.0.1:8092/api/v1/health
+
+# produccion (ajustar puertos segun .env.production)
+curl -sS http://127.0.0.1:8192/healthz
+curl -sS http://127.0.0.1:8192/api/v1/health
+```
+
 Verificar:
 
 ```bash
