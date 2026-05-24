@@ -2689,11 +2689,15 @@ function InvoiceEditor({
       <section className="form-section comprobante-section" ref={comprobanteSectionRef}>
         <div>
           <p className="eyebrow">Factura</p>
-          <h3>{cliente.razon_social.trim() ? cliente.razon_social.trim() : "Cliente no seleccionado"}</h3>
+          <h3>
+            {cliente.razon_social.trim()
+              ? cliente.razon_social.trim()
+              : context?.facturador.nombre_fantasia?.trim() || context?.facturador.razon_social || "Cliente no seleccionado"}
+          </h3>
           <p className="muted">Fecha {today} · Timbrado {context?.fiscal_context.timbrado ?? "-"}</p>
         </div>
-        <details className="invoice-options">
-          <summary>Opciones de factura</summary>
+        <div className="invoice-options" aria-label="Opciones de factura">
+          <p className="invoice-options-title">Opciones de factura</p>
           <div className="invoice-options-body">
             <div className="segmented-control" role="group" aria-label="Condicion de venta">
               {(["CONTADO", "CREDITO"] as const).map((value) => (
@@ -2728,7 +2732,7 @@ function InvoiceEditor({
               </select>
             </label>
           </div>
-        </details>
+        </div>
       </section>
 
       <section className="form-section client-section" ref={clientSectionRef}>

@@ -842,24 +842,11 @@ dd {
   padding: 8px 10px;
 }
 
-.invoice-options > summary {
-  cursor: pointer;
+.invoice-options-title {
+  margin: 0;
   color: var(--color-brand-dark);
   font-size: 14px;
   font-weight: 900;
-  list-style: none;
-}
-
-.invoice-options > summary::-webkit-details-marker {
-  display: none;
-}
-
-.invoice-options > summary::before {
-  content: "▼ ";
-}
-
-.invoice-options[open] > summary::before {
-  content: "▲ ";
 }
 
 .invoice-options-body {
