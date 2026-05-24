@@ -13,17 +13,46 @@
 | ID | Fase | Tarea | Estado | Criterio de aceptacion |
 | --- | --- | --- | --- | --- |
 | DUX-001 | SDD | Crear SPEC/PLAN/TASKS de refinamiento documentos/emision | DONE | Existe cadena documental versionada y referenciada desde `AGENTS.md` |
-| DUX-002 | API documentos | Verificar busqueda `GET /facturas?q=` | PENDING | La busqueda cubre numero fiscal, CDC cuando aplique, documento receptor y razon social sin romper filtros existentes |
-| DUX-003 | API documentos | Verificar filtros por fecha | PENDING | `desde` y `hasta` filtran por fecha de emision/creacion operativa segun contrato vigente y se combinan con `q` y tipo |
-| DUX-004 | UI documentos | Separar estado lista y estado detalle | PENDING | Al seleccionar un documento desaparecen listado y filtros, quedando solo detalle y acciones |
-| DUX-005 | UI documentos | Agregar controles fecha y buscador unificado | PENDING | El operador filtra por rango de fecha y busca por numero, RUC/CI o nombre desde un unico campo |
-| DUX-006 | UI documentos | Implementar volver a resultados preservando filtros | PENDING | Desde detalle se vuelve a la lista anterior con filtros y busqueda conservados |
-| DUX-007 | UI emision | Navegar a nueva factura en seccion accionable | PENDING | Desde pantalla principal, `Nueva factura`/`Emitir factura` deja visible el formulario operativo sin scroll manual por datos del facturador |
-| DUX-008 | QA visual | Validar flujo mobile y desktop | PENDING | Playwright contra contenedores cubre filtros, busqueda, seleccion exclusiva, volver y entrada directa a emision |
-| DUX-009 | Documentacion cierre | Registrar evidencia de validacion | PENDING | Esta matriz contiene comandos, entorno y resultado antes de cerrar tareas |
+| DUX-002 | API documentos | Verificar busqueda `GET /facturas?q=` | DONE | La busqueda cubre numero fiscal, CDC cuando aplique, documento receptor y razon social sin romper filtros existentes; combina `q` por OR interno y por AND con filtros restantes |
+| DUX-003 | API documentos | Verificar filtros por fecha | DONE | `desde` y `hasta` filtran por fecha operativa definida y se combinan con `q`, `tipo_operativo` y `estado`; se documenta traduccion SaaS `desde/hasta` a FE `from/to` |
+| DUX-004 | UI documentos | Separar estado lista y estado detalle | DONE | Al seleccionar un documento desaparecen listado y filtros, quedando solo detalle y acciones |
+| DUX-005 | UI documentos | Agregar controles fecha y buscador unificado | DONE | El operador filtra por rango de fecha y busca por numero, RUC/CI o nombre desde un unico campo |
+| DUX-006 | UI documentos | Implementar volver a resultados preservando filtros | DONE | Desde detalle se vuelve a la lista anterior con filtros y busqueda conservados |
+| DUX-007 | UI emision | Navegar a nueva factura en seccion accionable | DONE | Desde pantalla principal, `Nueva factura`/`Emitir factura` deja visible el formulario operativo sin scroll manual por datos del facturador |
+| DUX-008 | QA visual | Validar flujo mobile y desktop | DONE | Playwright contra contenedores cubre filtros, busqueda, seleccion exclusiva, volver y entrada directa a emision |
+| DUX-009 | Documentacion cierre | Registrar evidencia de validacion | DONE | Esta matriz contiene comandos, entorno y resultado antes de cerrar tareas |
 | DUX-010 | UI emision/API | Selector tipo de servicio y envio a FE | DONE | `Nueva factura` expone `tipo de servicio` 1/2/3 con default `2` y el backend delega `tipo_transaccion` como `tipoTransaccion` al backend fiscal |
+| DUX-011 | UI detalle comercial | Mostrar productos/servicios vendidos en detalle | DONE | El detalle de documento muestra lineas con cantidad, descripcion y subtotal; mobile en tarjetas y desktop/tablet en tabla compacta sin overflow |
+| DUX-012 | UX copy comercial | Renombrar acciones tecnicas a lenguaje comercial | DONE | UI usa `Ver factura PDF`, `Documento electronico (XML firmado)`, `Compartir factura` y `Crear nuevo enlace`; no muestra `KUDE/PDF`, `XML` ni `Regenerar link` como textos primarios |
+| DUX-013 | UI acciones | Agrupar acciones por prioridad operacional | DONE | Acciones primarias: `Ver factura PDF` y `Compartir factura`; secundarias, administrativas y tecnicas separadas visualmente; tecnicas colapsadas por defecto |
+| DUX-014 | UI fiscal | Mover CDC y metadatos a bloque expandible | DONE | `CDC`, timbrado, estado SIFEN y fecha envio viven en `Informacion fiscal` expandible y cerrado por defecto |
+| DUX-015 | UI compartir | Consolidar compartir en menu unico | DONE | `Compartir factura` abre opciones `WhatsApp`, `Correo` y `Copiar enlace`; mantiene permiso/estado segun disponibilidad del documento |
+| DUX-016 | UI publica | Simplificar pantalla publica de comprobante | DONE | Pantalla publica prioriza `Ver factura PDF` y `Descargar documento electronico`; agrega ayuda breve para comerciante y reduce terminos tecnicos visibles |
+| DUX-017 | API batch gestion | Verificar mapeo de diagnostico batch FE | DONE | `/facturas/gestion/batch-pendientes` conserva y expone `dProtConsLote`, `dCodRes`, `result_code`, `status`, `batch_id`, `did` con semantica estable para UI |
+| DUX-018 | SDD separado | Definir iniciativa de autogestion avanzada soporte | DONE | Se crea cadena SPEC/PLAN/TASKS separada para `SOPORTE_INTERNO` usando `OPERACION_RECHAZOS_Y_AUTOGESTION_v0.1.md`; no se mezcla con flujo operador comercial |
+| DUX-019 | UI navegacion | Simplificar menu hamburguesa por frecuencia de uso | DONE | El menu prioriza `Nueva factura`, `Agenda/Clientes`, `Documentos`, `Catalogo`, `Nueva nota de credito`; `Informacion y estado` queda como opcion secundaria |
+| DUX-020 | UI agenda | Exponer acceso directo a `Agenda / Clientes` en menu | DONE | Existe entrada clara a agenda de clientes, con iconografia legible tipo contacto y copy comercial simple |
+| DUX-021 | UI documentos | Ocultar acciones avanzadas en primera vista | DONE | `Documentos` muestra primero acciones comerciales; autogestion avanzada queda en bloque secundario o por rol/contexto de alerta |
+| DUX-022 | UX microcopy | Reescribir subtitulos de modulos del menu en lenguaje comercial | DONE | Los subtitulos evitan jerga tecnica y describen accion de negocio (`Emitir`, `Cobrar/compartir`, `Gestionar clientes`, etc.) |
+| DUX-023 | QA navegacion | Validar flujo operativo simplificado mobile-first | DONE | Playwright valida apertura menu, acceso a `Agenda/Clientes`, acceso a `Documentos`, ausencia de saturacion tecnica en primera vista y regreso fluido a `Nueva factura` |
+
+## Definiciones Cerradas Para Implementacion
+
+- Fecha operativa de `GET /facturas`: usar `fecha_emision` como base primaria para `desde/hasta`; si no existe, fallback a `created_at` solo para consistencia historica documentada.
+- Rango de fechas: inclusivo (`>= desde` y `<= hasta`) en `America/Asuncion`.
+- Semantica de `q`: OR entre `numero_fiscal`, `cdc`, `receptor_doc`, `receptor_nombre`.
+- Semantica de filtros combinados: AND entre `q`, fechas, `tipo_operativo` y `estado`.
+- Traduccion SaaS->FE en consultas equivalentes: `desde->from`, `hasta->to`, `q->q`.
+- Jerarquia UX obligatoria de acciones: principal, secundaria, administrativa y tecnica.
+- Bloque fiscal: `Informacion fiscal` cerrado por defecto, expandible bajo demanda.
+- Autogestion avanzada: exclusiva para `SOPORTE_INTERNO` en iniciativa SDD separada.
+- Segmentacion menu: `Informacion y estado` se conserva para soporte/readiness, pero no se prioriza como modulo principal diario.
+- Entrada de agenda: `Agenda / Clientes` es acceso de primer nivel en menu hamburguesa.
 
 ## Evidencia
 
 - 2026-05-21: creada cadena SDD `DOCUMENTOS_EMISION_UX` para mapear seleccion exclusiva de documentos, filtros por fecha, busqueda por numero/documento/receptor y entrada directa al formulario de emision. No se implemento codigo funcional en esta tarea documental.
 - 2026-05-23: cerrado `DUX-010` con cambios en `apps/web-operacion`, `apps/api`, `spec/openapi.yaml` y pruebas API para soportar selector de tipo de servicio (1/2/3), default UI `Prestacion de servicios` y mapeo a `tipoTransaccion` en FE.
+- 2026-05-24: refinada matriz con enfoque comercial no tecnico para `Documentos`/detalle/publico, se agregan tareas `DUX-011`..`DUX-018` y definiciones cerradas de busqueda/filtros/mapeo FE para eliminar ambiguedad antes de implementar.
+- 2026-05-24: se extiende refinamiento UX con navegacion operativa simple y agenda visible en menu; se agregan tareas `DUX-019`..`DUX-023` para simplificar modulos y reducir acciones avanzadas en primera vista.
+- 2026-05-24: implementadas `DUX-002`..`DUX-023` en `apps/api`, `apps/web-operacion`, `apps/api/src/modules/entrega` y `spec/openapi.yaml`. Validaciones ejecutadas: `npm run typecheck --workspace @facturacion-simple/web-operacion`, `npm run typecheck --workspace @facturacion-simple/api`, `npx vitest run apps/api/tests/facturas.service.test.ts apps/api/tests/entrega.service.test.ts`, `npm run typecheck`, `npm run lint`, `npm run build`, `bash scripts/deploy.sh` (fallo inicial por red `bridge`, re-ejecucion OK con `FE_DOCKER_NETWORK=facturacion-electronica_default` y `DATABASE_URL=postgres://facturacion_simple:facturacion_simple@nuevo_repo-postgres-1:5432/facturacion_simple`), healthchecks `GET /api/v1/health` y `/healthz` OK, Playwright mobile+desktop con script `/tmp/dux-playwright.cjs` validando menu simplificado, acceso `Agenda/Clientes`, flujo `Documentos` lista->detalle->volver, acciones comerciales y bloque fiscal expandible.

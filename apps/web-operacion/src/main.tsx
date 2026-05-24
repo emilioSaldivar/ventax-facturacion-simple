@@ -6,7 +6,7 @@ const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?
 const ACCESS_TOKEN_STORAGE_KEY = "ventax_factura_access_token";
 
 type ViewState = "checking-session" | "login" | "loading-context" | "operacion";
-type OperationView = "status" | "invoice" | "credit-note" | "documents" | "catalog";
+type OperationView = "status" | "invoice" | "credit-note" | "documents" | "catalog" | "clients";
 type CondicionVenta = "CONTADO" | "CREDITO";
 type TipoTransaccionServicio = 1 | 2 | 3;
 type DocumentoIdentidadTipo = "RUC" | "CI" | "PASAPORTE" | "CEDULA_EXTRANJERA" | "NO_ESPECIFICADO";
@@ -147,6 +147,7 @@ interface DocumentoResponse {
   fiscal_idempotent?: boolean | null;
   batch?: Record<string, unknown> | null;
   cliente: FacturaClienteInput;
+  items: FacturaPreviewResponse["items"];
   totals: FacturaPreviewResponse["totals"];
   fiscal_status: Record<string, unknown> | null;
   documento_relacionado_id: string | null;
@@ -217,6 +218,8 @@ interface BatchPendientesGestionResponse {
   batches: Array<{
     batch_id: string | null;
     did: string | null;
+    dProtConsLote: string | null;
+    dCodRes: string | null;
     status: string | null;
     doc_count: number | null;
     result_code: string | null;
@@ -262,6 +265,11 @@ interface ClienteSearchResult {
 interface ClienteResponse extends ClienteSearchResult {
   cliente_id: string;
   activo: boolean;
+}
+
+interface ClienteListResponse {
+  items: ClienteResponse[];
+  total: number;
 }
 
 interface CatalogoItem {
@@ -519,11 +527,12 @@ function OperationHome({
   }
 
   const menuItems: Array<{ label: string; view: OperationView; disabled?: boolean }> = [
-    { label: "Informacion y estado", view: "status" },
     { label: "Nueva factura", view: "invoice", disabled: !canEmit },
-    { label: "Nueva nota de credito", view: "credit-note", disabled: !canEmit },
+    { label: "Agenda / Clientes", view: "clients" },
+    { label: "Documentos", view: "documents" },
     { label: "Catalogo", view: "catalog" },
-    { label: "Documentos", view: "documents" }
+    { label: "Nueva nota de credito", view: "credit-note", disabled: !canEmit },
+    { label: "Informacion y estado", view: "status" }
   ];
 
   return (
@@ -594,9 +603,16 @@ function OperationHome({
           onBack={() => goTo("status")}
         />
       ) : operationView === "documents" ? (
-        <DocumentsView accessToken={accessToken} setAccessToken={setAccessToken} onBack={() => goTo("status")} />
+        <DocumentsView
+          accessToken={accessToken}
+          setAccessToken={setAccessToken}
+          onBack={() => goTo("invoice")}
+          role={user?.role ?? "OPERADOR_FACTURACION"}
+        />
+      ) : operationView === "clients" ? (
+        <ClientesAgendaView accessToken={accessToken} setAccessToken={setAccessToken} onBack={() => goTo("invoice")} />
       ) : operationView === "catalog" ? (
-        <CatalogView accessToken={accessToken} setAccessToken={setAccessToken} onBack={() => goTo("status")} />
+        <CatalogView accessToken={accessToken} setAccessToken={setAccessToken} onBack={() => goTo("invoice")} />
       ) : (
         <StatusView
           canEmit={canEmit}
@@ -681,14 +697,17 @@ function StatusView({
         <button className="primary-action wide" disabled={!canEmit} onClick={() => onGoTo("invoice")} type="button">
           Nueva factura
         </button>
-        <button className="secondary-action wide" disabled={!canEmit} onClick={() => onGoTo("credit-note")} type="button">
-          Nueva nota de credito
+        <button className="secondary-action wide" onClick={() => onGoTo("clients")} type="button">
+          Agenda / Clientes
+        </button>
+        <button className="secondary-action wide" onClick={() => onGoTo("documents")} type="button">
+          Documentos
         </button>
         <button className="secondary-action wide" onClick={() => onGoTo("catalog")} type="button">
           Catalogo
         </button>
-        <button className="secondary-action wide" onClick={() => onGoTo("documents")} type="button">
-          Ver documentos
+        <button className="secondary-action wide" disabled={!canEmit} onClick={() => onGoTo("credit-note")} type="button">
+          Nueva nota de credito
         </button>
       </section>
     </>
@@ -698,11 +717,13 @@ function StatusView({
 function DocumentsView({
   accessToken,
   setAccessToken,
-  onBack
+  onBack,
+  role
 }: {
   accessToken: string | null;
   setAccessToken: (token: string | null) => void;
   onBack: () => void;
+  role: UserSummary["role"];
 }) {
   const api = useMemo(() => createApiClient(accessToken, setAccessToken), [accessToken, setAccessToken]);
   const [documents, setDocuments] = useState<DocumentoResponse[]>([]);
@@ -710,6 +731,8 @@ function DocumentsView({
   const [estadoFilter, setEstadoFilter] = useState<DocumentoEstado | "">("");
   const [tipoOperativoFilter, setTipoOperativoFilter] = useState<"TODOS" | "CONTADO" | "CREDITO" | "NOTA_CREDITO">("TODOS");
   const [query, setQuery] = useState("");
+  const [desde, setDesde] = useState("");
+  const [hasta, setHasta] = useState("");
   const [loading, setLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -725,7 +748,7 @@ function DocumentsView({
 
   useEffect(() => {
     void loadDocuments();
-  }, [estadoFilter, tipoOperativoFilter]);
+  }, [estadoFilter, tipoOperativoFilter, desde, hasta]);
 
   async function loadDocuments(nextQuery = query) {
     setLoading(true);
@@ -740,6 +763,12 @@ function DocumentsView({
     }
     if (nextQuery.trim()) {
       params.set("q", nextQuery.trim());
+    }
+    if (desde) {
+      params.set("desde", desde);
+    }
+    if (hasta) {
+      params.set("hasta", hasta);
     }
 
     try {
@@ -956,6 +985,7 @@ function DocumentsView({
         </button>
       </div>
 
+      {!selected ? (
       <section className="documents-filters">
         <div className="filter-tabs" role="group" aria-label="Tipo de documento">
           {(["TODOS", "CONTADO", "CREDITO", "NOTA_CREDITO"] as const).map((value) => (
@@ -995,13 +1025,23 @@ function DocumentsView({
             <option value="ANULADA">Anulada</option>
           </select>
         </label>
+        <label>
+          Desde
+          <input onChange={(event) => setDesde(event.target.value)} type="date" value={desde} />
+        </label>
+        <label>
+          Hasta
+          <input onChange={(event) => setHasta(event.target.value)} type="date" value={hasta} />
+        </label>
         <button className="secondary-action" disabled={loading} onClick={() => void loadDocuments()} type="button">
           {loading ? "Cargando..." : "Aplicar"}
         </button>
       </section>
+      ) : null}
 
       {error ? <p className="form-error">{error}</p> : null}
 
+      {!selected && role !== "OPERADOR_FACTURACION" ? (
       <section className="document-management" aria-label="Gestion de documentos">
         <header className="document-management-header">
           <h3>Gestion de documentos</h3>
@@ -1069,13 +1109,15 @@ function DocumentsView({
           </div>
         ) : null}
       </section>
+      ) : null}
 
+      {!selected ? (
       <section className="documents-layout">
         <div className="documents-list">
           {documents.length === 0 && !loading ? <p className="muted empty-state">Sin documentos para los filtros actuales.</p> : null}
           {documents.map((documento) => (
             <button
-              className={selected?.id === documento.id ? "document-row active" : "document-row"}
+              className="document-row"
               key={documento.id}
               onClick={() => void openDetail(documento.id)}
               type="button"
@@ -1091,22 +1133,26 @@ function DocumentsView({
             </button>
           ))}
         </div>
+      </section>
+      ) : null}
 
+        {selected ? (
         <aside className="document-detail" aria-live="polite">
           {selected ? (
             <>
               <div className="receipt-heading">
                 <div>
-                  <p className="eyebrow">Detalle</p>
+                  <p className="eyebrow">Documento</p>
                   <h3>{formatDocumentoEstado(selected.estado)}</h3>
-                  <p className="muted">
-                    {formatDocumentoTipo(selected.tipo)} · Numero {selected.numero_fiscal ?? "pendiente"} · CDC {selected.cdc ?? "pendiente"}
-                  </p>
+                  <p className="muted">{formatDocumentoTipo(selected.tipo)} · Numero {selected.numero_fiscal ?? "pendiente"}</p>
                 </div>
                 <span className={selected.estado === "EMITIDA" ? "status-pill ready" : "status-pill blocked"}>
                   {formatDocumentoEstado(selected.estado)}
                 </span>
               </div>
+              <button className="ghost-action" onClick={() => setSelected(null)} type="button">
+                ← Volver a resultados
+              </button>
 
               <div className="receipt-summary">
                 <div>
@@ -1125,11 +1171,21 @@ function DocumentsView({
                   <dt>Email</dt>
                   <dd>{formatEmailStatus(emailStatus?.status ?? selected.delivery.email_status)}</dd>
                 </div>
-                <div>
-                  <dt>SIFEN</dt>
-                  <dd>{formatSifenSummary(selectedSifenSummary)}</dd>
-                </div>
               </div>
+
+              <section className="invoice-lines" aria-label="Productos vendidos">
+                <h4>Productos vendidos</h4>
+                <div className="invoice-lines-list">
+                  {selected.items.map((item) => (
+                    <article className="invoice-line-card" key={`${selected.id}-${item.line_no}`}>
+                      <strong>
+                        {item.cantidad} x {item.descripcion}
+                      </strong>
+                      <small>{formatGuaranies(item.subtotal)}</small>
+                    </article>
+                  ))}
+                </div>
+              </section>
 
               {getRecoverableMessage(selected) ? <p className="editor-alert blocked">{getRecoverableMessage(selected)}</p> : null}
               {selected.estado === "RECHAZADA" ? (
@@ -1139,41 +1195,270 @@ function DocumentsView({
 
               <div className="delivery-actions">
                 <a className={selectedKudeUrl ? "secondary-link" : "secondary-link disabled"} href={selectedKudeUrl ?? "#"} rel="noreferrer" target="_blank">
-                  KUDE/PDF
+                  Ver factura PDF
                 </a>
-                <a className={selectedXmlUrl ? "secondary-link" : "secondary-link disabled"} href={selectedXmlUrl ?? "#"} rel="noreferrer" target="_blank">
-                  XML
-                </a>
-                <button className="secondary-action" disabled={!deliveryLink} onClick={() => void copyDetailLink()} type="button">
-                  Copiar link
-                </button>
-                <a className={deliveryLink ? "secondary-link" : "secondary-link disabled"} href={deliveryLink?.whatsapp_url ?? "#"} rel="noreferrer" target="_blank">
-                  WhatsApp
-                </a>
+                <details className="share-block">
+                  <summary>Compartir factura</summary>
+                  <div className="result-actions">
+                    <a className={deliveryLink ? "secondary-link" : "secondary-link disabled"} href={deliveryLink?.whatsapp_url ?? "#"} rel="noreferrer" target="_blank">
+                      Enviar por WhatsApp
+                    </a>
+                    <button className="secondary-action" disabled={!deliveryLink} onClick={() => void copyDetailLink()} type="button">
+                      Copiar enlace
+                    </button>
+                    <a className={selectedXmlUrl ? "secondary-link" : "secondary-link disabled"} href={selectedXmlUrl ?? "#"} rel="noreferrer" target="_blank">
+                      Documento electronico (XML firmado)
+                    </a>
+                  </div>
+                </details>
               </div>
 
               <div className="result-actions">
-                <button className="secondary-action" disabled={actionLoading || !selected.cdc} onClick={() => void refreshSelectedStatus()} type="button">
-                  Consultar SIFEN
-                </button>
-                <button className="secondary-action" disabled={actionLoading || !["PENDIENTE_SIFEN", "ERROR_TEMPORAL"].includes(selected.estado)} onClick={() => void retrySelectedEmission()} type="button">
-                  Reintentar
-                </button>
                 <button className="secondary-action" disabled={actionLoading || !canCancelDocumento(selected)} onClick={() => void cancelSelectedDocumento()} type="button">
-                  Anular
+                  Anular factura
                 </button>
                 <button className="secondary-action" disabled={actionLoading || !canEmitNotaCredito(selected, documents)} onClick={() => void emitSelectedNotaCredito()} type="button">
-                  Nota credito
-                </button>
-                <button className="secondary-action" disabled={actionLoading} onClick={() => void loadDeliveryFor(selected, true)} type="button">
-                  Regenerar link
+                  Crear nota de credito
                 </button>
               </div>
+              <details className="tech-block">
+                <summary>Informacion fiscal</summary>
+                <dl className="receipt-summary">
+                  <div>
+                    <dt>CDC</dt>
+                    <dd>{selected.cdc ?? "Pendiente"}</dd>
+                  </div>
+                  <div>
+                    <dt>SIFEN</dt>
+                    <dd>{formatSifenSummary(selectedSifenSummary)}</dd>
+                  </div>
+                  <div>
+                    <dt>Estado email</dt>
+                    <dd>{formatEmailStatus(emailStatus?.status ?? selected.delivery.email_status)}</dd>
+                  </div>
+                </dl>
+              </details>
+              {(role === "SOPORTE_INTERNO" || role === "ADMIN_INTERNO") ? (
+                <details className="tech-block">
+                  <summary>Opciones tecnicas</summary>
+                  <div className="result-actions">
+                    <button className="secondary-action" disabled={actionLoading || !selected.cdc} onClick={() => void refreshSelectedStatus()} type="button">
+                      Consultar estado fiscal
+                    </button>
+                    <button className="secondary-action" disabled={actionLoading || !["PENDIENTE_SIFEN", "ERROR_TEMPORAL"].includes(selected.estado)} onClick={() => void retrySelectedEmission()} type="button">
+                      Reintentar envio
+                    </button>
+                    <button className="secondary-action" disabled={actionLoading} onClick={() => void loadDeliveryFor(selected, true)} type="button">
+                      Crear nuevo enlace
+                    </button>
+                  </div>
+                </details>
+              ) : null}
               {message ? <p className="inline-message">{message}</p> : null}
             </>
           ) : (
             <p className="muted empty-state">Seleccione un documento para ver detalle y acciones.</p>
           )}
+        </aside>
+        ) : null}
+    </section>
+  );
+}
+
+function ClientesAgendaView({
+  accessToken,
+  setAccessToken,
+  onBack
+}: {
+  accessToken: string | null;
+  setAccessToken: (token: string | null) => void;
+  onBack: () => void;
+}) {
+  const api = useMemo(() => createApiClient(accessToken, setAccessToken), [accessToken, setAccessToken]);
+  const [items, setItems] = useState<ClienteResponse[]>([]);
+  const [query, setQuery] = useState("");
+  const [selected, setSelected] = useState<ClienteResponse | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [draft, setDraft] = useState<FacturaClienteInput>({
+    documento_tipo: "CI",
+    documento: "",
+    razon_social: "",
+    direccion: "",
+    telefono: "",
+    email: ""
+  });
+
+  useEffect(() => {
+    void loadClientes();
+  }, []);
+
+  async function loadClientes(nextQuery = query) {
+    setLoading(true);
+    setMessage(null);
+    const params = new URLSearchParams({ limit: "30", offset: "0" });
+    if (nextQuery.trim()) {
+      params.set("q", nextQuery.trim());
+    }
+    try {
+      const result = await api.get<ClienteListResponse>(`/clientes?${params.toString()}`);
+      setItems(result.items);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "No se pudo cargar la agenda.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function useCliente(cliente: ClienteResponse) {
+    setSelected(cliente);
+    setDraft({
+      cliente_id: cliente.cliente_id,
+      documento_tipo: cliente.documento_tipo,
+      documento: cliente.documento,
+      razon_social: cliente.razon_social,
+      direccion: cliente.direccion,
+      telefono: cliente.telefono,
+      email: cliente.email
+    });
+  }
+
+  async function saveCliente() {
+    setSaving(true);
+    setMessage(null);
+    try {
+      const payload = {
+        documento_tipo: draft.documento_tipo,
+        documento: draft.documento.trim(),
+        razon_social: draft.razon_social.trim(),
+        direccion: draft.direccion?.trim() || null,
+        telefono: draft.telefono?.trim() || null,
+        email: draft.email?.trim() || null
+      };
+      const result = selected
+        ? await api.request<ClienteResponse>(`/clientes/${selected.cliente_id}`, { method: "PATCH", body: JSON.stringify(payload) })
+        : await api.post<ClienteResponse>("/clientes", payload);
+      setMessage(selected ? "Cliente actualizado." : "Cliente agregado a la agenda.");
+      setSelected(result);
+      setDraft({
+        cliente_id: result.cliente_id,
+        documento_tipo: result.documento_tipo,
+        documento: result.documento,
+        razon_social: result.razon_social,
+        direccion: result.direccion,
+        telefono: result.telefono,
+        email: result.email
+      });
+      await loadClientes();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "No se pudo guardar el cliente.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <section className="documents-view" aria-labelledby="clientes-title">
+      <div className="editor-heading">
+        <div>
+          <p className="eyebrow">Agenda</p>
+          <h2 id="clientes-title">Clientes</h2>
+        </div>
+        <button className="ghost-action" onClick={onBack} type="button">
+          Volver
+        </button>
+      </div>
+      <section className="documents-filters">
+        <label>
+          Buscar cliente
+          <input
+            onChange={(event) => setQuery(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                void loadClientes();
+              }
+            }}
+            placeholder="RUC, CI o nombre"
+            value={query}
+          />
+        </label>
+        <button className="secondary-action" disabled={loading} onClick={() => void loadClientes()} type="button">
+          {loading ? "Buscando..." : "Buscar"}
+        </button>
+      </section>
+      <section className="documents-layout">
+        <div className="documents-list">
+          {items.map((cliente) => (
+            <button
+              className={selected?.cliente_id === cliente.cliente_id ? "document-row active" : "document-row"}
+              key={cliente.cliente_id}
+              onClick={() => useCliente(cliente)}
+              type="button"
+            >
+              <span>
+                <strong>👤 {cliente.razon_social}</strong>
+                <small>{cliente.documento_tipo} · {cliente.documento}</small>
+              </span>
+            </button>
+          ))}
+        </div>
+        <aside className="document-detail">
+          <div className="receipt-heading">
+            <div>
+              <p className="eyebrow">Cliente</p>
+              <h3>{selected ? "Editar cliente" : "Nuevo cliente"}</h3>
+            </div>
+          </div>
+          <div className="documents-filters">
+            <label>
+              Tipo documento
+              <select value={draft.documento_tipo} onChange={(event) => setDraft((current) => ({ ...current, documento_tipo: event.target.value as DocumentoIdentidadTipo }))}>
+                <option value="CI">CI</option>
+                <option value="RUC">RUC</option>
+                <option value="PASAPORTE">Pasaporte</option>
+                <option value="CEDULA_EXTRANJERA">Cedula extranjera</option>
+                <option value="NO_ESPECIFICADO">No especificado</option>
+              </select>
+            </label>
+            <label>
+              Documento
+              <input value={draft.documento} onChange={(event) => setDraft((current) => ({ ...current, documento: event.target.value }))} />
+            </label>
+            <label>
+              Nombre o razon social
+              <input value={draft.razon_social} onChange={(event) => setDraft((current) => ({ ...current, razon_social: event.target.value }))} />
+            </label>
+            <label>
+              Telefono
+              <input value={draft.telefono ?? ""} onChange={(event) => setDraft((current) => ({ ...current, telefono: event.target.value }))} />
+            </label>
+          </div>
+          <div className="result-actions">
+            <button className="primary-action" disabled={saving} onClick={() => void saveCliente()} type="button">
+              {saving ? "Guardando..." : selected ? "Actualizar cliente" : "Agregar cliente"}
+            </button>
+            {selected ? (
+              <button
+                className="secondary-action"
+                onClick={() => {
+                  setSelected(null);
+                  setDraft({
+                    documento_tipo: "CI",
+                    documento: "",
+                    razon_social: "",
+                    direccion: "",
+                    telefono: "",
+                    email: ""
+                  });
+                }}
+                type="button"
+              >
+                Nuevo cliente
+              </button>
+            ) : null}
+          </div>
+          {message ? <p className="inline-message">{message}</p> : null}
         </aside>
       </section>
     </section>
@@ -2913,6 +3198,7 @@ function formatOperationViewTitle(value: OperationView): string {
   const labels: Record<OperationView, string> = {
     status: "Informacion",
     invoice: "Nueva factura",
+    clients: "Agenda clientes",
     "credit-note": "Nota credito",
     catalog: "Catalogo",
     documents: "Documentos"
@@ -2922,11 +3208,12 @@ function formatOperationViewTitle(value: OperationView): string {
 
 function getOperationViewHint(value: OperationView): string {
   const hints: Record<OperationView, string> = {
-    status: "Facturador y readiness",
+    status: "Configuracion y readiness",
     invoice: "Emitir comprobante",
+    clients: "Contactos de clientes",
     "credit-note": "Emitir NCE",
     catalog: "Productos y servicios",
-    documents: "Estado y entrega"
+    documents: "Ver, compartir y anular"
   };
   return hints[value];
 }

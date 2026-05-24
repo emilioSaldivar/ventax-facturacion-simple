@@ -267,8 +267,8 @@ export function renderPublicDocumentHtml(documento: PublicDocumentResponse): str
               <dd>${escapeHtml(documento.cliente.documento)}</dd>
             </div>
             <div>
-              <dt>CDC</dt>
-              <dd>${escapeHtml(documento.cdc ?? "pendiente")}</dd>
+              <dt>Referencia</dt>
+              <dd>${escapeHtml(documento.numero_fiscal ?? "pendiente")}</dd>
             </div>
             <div>
               <dt>Email</dt>
@@ -280,9 +280,10 @@ export function renderPublicDocumentHtml(documento: PublicDocumentResponse): str
             <dd>${escapeHtml(formatGuaranies(documento.totals.total))}</dd>
           </div>
           <div class="actions">
-            <a class="primary${kudeUrl ? "" : " disabled"}" href="${escapeAttribute(kudeUrl ?? "#")}">Ver KUDE/PDF</a>
-            <a class="${xmlUrl ? "" : "disabled"}" href="${escapeAttribute(xmlUrl ?? "#")}">Descargar XML</a>
+            <a class="primary${kudeUrl ? "" : " disabled"}" href="${escapeAttribute(kudeUrl ?? "#")}">Ver factura PDF</a>
+            <a class="${xmlUrl ? "" : "disabled"}" href="${escapeAttribute(xmlUrl ?? "#")}">Descargar documento electronico</a>
           </div>
+          <p class="muted">La factura PDF es la representacion visual de la factura electronica.</p>
         </article>
       </section>
     </main>

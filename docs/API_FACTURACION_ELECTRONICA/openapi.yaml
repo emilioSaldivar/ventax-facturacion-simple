@@ -1323,6 +1323,105 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /admin/emisores/{id}/facturas/{documentId}/validate-cdc-impact:
+    post:
+      tags: [Admin]
+      summary: Validar impacto CDC antes de regularización
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: documentId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminFacturaValidateCdcImpactRequest"
+      responses:
+        "200":
+          description: Resultado de prevalidación CDC
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminFacturaValidateCdcImpactResponse"
+
+  /admin/emisores/{id}/facturas/{documentId}/retry-same-cdc:
+    post:
+      tags: [Admin]
+      summary: Reintentar documento preservando CDC
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: documentId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminFacturaRetrySameCdcRequest"
+      responses:
+        "200":
+          description: Reintento ejecutado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminFacturaResendResponse"
+        "202":
+          description: Reencolado para batch
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminFacturaResendResponse"
+        "409":
+          description: El cambio requiere inutilización y nuevo DE
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/emisores/{id}/facturas/{documentId}/create-derived:
+    post:
+      tags: [Admin]
+      summary: Crear nuevo DE derivado con nueva numeración/CDC
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: documentId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminFacturaCreateDerivedRequest"
+      responses:
+        "201":
+          description: DE derivado creado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminFacturaCreateDerivedResponse"
+
   /admin/emisores/{id}/facturas/{documentId}/decision:
     get:
       tags: [Admin]
@@ -1376,6 +1475,64 @@ paths:
                 $ref: "#/components/schemas/AdminFacturaCancelSendResponse"
         "409":
           description: Documento no elegible para cancelacion de envio local
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/emisores/{id}/facturas/{documentId}/eventos:
+    get:
+      tags: [Admin]
+      summary: Listar eventos asociados a la factura (cancelación/inutilización)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: documentId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Eventos asociados al documento por CDC o rango fiscal
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminFacturaEventosResponse"
+
+  /admin/emisores/{id}/facturas/{documentId}/void-number:
+    post:
+      tags: [Admin]
+      summary: Solicitar inutilización puntual de numeración para factura
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: documentId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminFacturaVoidRequest"
+      responses:
+        "200":
+          description: Evento de inutilización solicitado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminFacturaVoidResponse"
+        "409":
+          description: Documento no elegible o rango no válido
           content:
             application/json:
               schema:
@@ -4232,6 +4389,41 @@ components:
           type: string
           nullable: true
 
+    AdminFacturaValidateCdcImpactRequest:
+      type: object
+      properties:
+        json_input:
+          type: object
+          additionalProperties: true
+
+    AdminFacturaRetrySameCdcRequest:
+      type: object
+      properties:
+        mode:
+          $ref: "#/components/schemas/EmitMode"
+        send_now:
+          type: boolean
+        comment:
+          type: string
+          nullable: true
+        json_input:
+          type: object
+          additionalProperties: true
+
+    AdminFacturaCreateDerivedRequest:
+      type: object
+      properties:
+        mode:
+          $ref: "#/components/schemas/EmitMode"
+        send_now:
+          type: boolean
+        comment:
+          type: string
+          nullable: true
+        json_input:
+          type: object
+          additionalProperties: true
+
     AdminFacturaCancelSendResponse:
       type: object
       required: [document_id, previous_status, status, action_result, reason_codes, recommended_next_action]
@@ -4250,6 +4442,73 @@ components:
             type: string
         recommended_next_action:
           type: string
+
+    AdminFacturaVoidRequest:
+      type: object
+      required: [motivo]
+      properties:
+        motivo:
+          type: string
+          maxLength: 150
+
+    AdminFacturaVoidResponse:
+      type: object
+      required: [document_id, event_id, status]
+      properties:
+        document_id:
+          type: string
+        event_id:
+          type: string
+        status:
+          type: string
+        sifen:
+          type: object
+          nullable: true
+          additionalProperties: true
+
+    AdminFacturaEventosResponse:
+      type: object
+      required: [document_id, items]
+      properties:
+        document_id:
+          type: string
+        items:
+          type: array
+          items:
+            type: object
+            required: [event_id, type, status, reason, created_at]
+            properties:
+              event_id:
+                type: string
+              type:
+                type: string
+                enum: [CANCEL, VOID_RANGE]
+              status:
+                type: string
+              reason:
+                type: string
+              cdc:
+                type: string
+                nullable: true
+              establecimiento:
+                type: string
+                nullable: true
+              punto_expedicion:
+                type: string
+                nullable: true
+              range_from:
+                type: string
+                nullable: true
+              range_to:
+                type: string
+                nullable: true
+              created_at:
+                type: string
+                format: date-time
+              response_payload:
+                type: object
+                nullable: true
+                additionalProperties: true
 
     AdminFacturaDecisionResponse:
       type: object
@@ -4319,6 +4578,28 @@ components:
           nullable: true
           additionalProperties: true
 
+    AdminFacturaValidateCdcImpactResponse:
+      type: object
+      required: [document_id, cdc_impact]
+      properties:
+        document_id:
+          type: string
+        current_cdc:
+          type: string
+          nullable: true
+        candidate_cdc:
+          type: string
+          nullable: true
+        cdc_impact:
+          type: string
+          enum: [CDC_NO_CHANGE, CDC_CHANGE]
+        reason:
+          type: string
+        allowed_actions:
+          type: object
+          additionalProperties:
+            type: boolean
+
     AdminFacturaResendResponse:
       type: object
       required: [document_id, status, revision_number, accepted_by_sifen]
@@ -4341,6 +4622,29 @@ components:
         queued_for_batch:
           type: boolean
           nullable: true
+
+    AdminFacturaCreateDerivedResponse:
+      type: object
+      required: [source_document_id, derived_document_id, status, accepted_by_sifen]
+      properties:
+        source_document_id:
+          type: string
+        derived_document_id:
+          type: string
+        status:
+          $ref: "#/components/schemas/DocumentStatus"
+        cdc:
+          type: string
+          nullable: true
+        nro_factura:
+          type: string
+          nullable: true
+        accepted_by_sifen:
+          type: boolean
+        sifen_status:
+          type: object
+          nullable: true
+          additionalProperties: true
 
     AdminFacturaRevisionListResponse:
       type: object

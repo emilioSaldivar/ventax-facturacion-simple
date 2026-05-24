@@ -439,6 +439,14 @@ paths:
     get:
       tags: [Facturas]
       summary: Listar facturas y notas emitidas del facturador del usuario
+      description: |
+        La busqueda opera sobre datos SaaS persistidos localmente.
+        Semantica:
+        - `q` busca por OR en `numero_fiscal`, `cdc`, `receptor_doc` y `receptor_nombre`.
+        - `q` usa `contains` case-insensitive para texto y prefijo para `numero_fiscal`/`cdc`.
+        - `desde` y `hasta` se interpretan en `America/Asuncion`, son inclusivos, y filtran por
+          fecha operativa `fecha_emision` (fallback `created_at` cuando no existe emision confirmada).
+        - Filtros `q`, `desde/hasta`, `tipo_operativo` y `estado` se combinan por AND.
       parameters:
         - in: query
           name: tipo
@@ -1824,6 +1832,12 @@ components:
                 type: string
                 nullable: true
               did:
+                type: string
+                nullable: true
+              dProtConsLote:
+                type: string
+                nullable: true
+              dCodRes:
                 type: string
                 nullable: true
               status:

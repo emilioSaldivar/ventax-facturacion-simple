@@ -156,6 +156,8 @@ export interface BatchPendientesGestionResponse {
   batches: Array<{
     batch_id: string | null;
     did: string | null;
+    dProtConsLote: string | null;
+    dCodRes: string | null;
     status: string | null;
     doc_count: number | null;
     result_code: string | null;

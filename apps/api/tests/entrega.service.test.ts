@@ -266,7 +266,8 @@ describe("entrega service", () => {
     const html = renderPublicDocumentHtml(publicDocument);
 
     expect(html).toContain("<!doctype html>");
-    expect(html).toContain("Ver KUDE/PDF");
+    expect(html).toContain("Ver factura PDF");
+    expect(html).toContain("Descargar documento electronico");
     expect(html).toContain('/app/brand/VENTAX-PRINCIPAL.svg');
     expect(html).toContain(`/public/d/${"A".repeat(43)}/kude.pdf`);
     expect(html).toContain(`/public/d/${"A".repeat(43)}/xml`);

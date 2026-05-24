@@ -931,6 +931,8 @@ function mapFiscalBatchPendientesResponse(body: unknown): FiscalBatchPendientesR
       return {
         batch_id: stringOrNull(row.batch_id),
         did: stringOrNull(row.did),
+        dProtConsLote: stringOrNull(row.dProtConsLote),
+        dCodRes: stringOrNull(row.dCodRes),
         status: stringOrNull(row.status),
         doc_count: numberOrNull(row.doc_count),
         result_code: stringOrNull(row.result_code),

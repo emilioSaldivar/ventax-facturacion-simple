@@ -1203,6 +1203,7 @@ function isUniqueViolation(error: unknown): boolean {
 function buildListWhere(facturadorId: string, filters: DocumentoListFilters): { where: string; params: unknown[] } {
   const params: unknown[] = [facturadorId];
   const clauses = ["facturador_id = $1", "deleted_at is null"];
+  const fechaOperativaExpr = "(coalesce(emitted_at, created_at) at time zone 'America/Asuncion')::date";
 
   if (filters.tipo) {
     params.push(filters.tipo);
@@ -1226,23 +1227,27 @@ function buildListWhere(facturadorId: string, filters: DocumentoListFilters): { 
 
   if (filters.desde) {
     params.push(filters.desde);
-    clauses.push(`created_at >= $${params.length}::date`);
+    clauses.push(`${fechaOperativaExpr} >= $${params.length}::date`);
   }
 
   if (filters.hasta) {
     params.push(filters.hasta);
-    clauses.push(`created_at < ($${params.length}::date + interval '1 day')`);
+    clauses.push(`${fechaOperativaExpr} <= $${params.length}::date`);
   }
 
   const q = filters.q?.trim();
   if (q) {
-    params.push(`%${q}%`);
+    const numeroFiscalOrCdcPrefix = `${q}%`;
+    const containsQuery = `%${q}%`;
+    params.push(numeroFiscalOrCdcPrefix);
+    const prefixParamIndex = params.length;
+    params.push(containsQuery);
+    const containsParamIndex = params.length;
     clauses.push(`(
-      numero_fiscal ilike $${params.length}
-      or cdc ilike $${params.length}
-      or external_ref ilike $${params.length}
-      or cliente_snapshot->>'documento' ilike $${params.length}
-      or cliente_snapshot->>'razon_social' ilike $${params.length}
+      numero_fiscal ilike $${prefixParamIndex}
+      or cdc ilike $${prefixParamIndex}
+      or cliente_snapshot->>'documento' ilike $${containsParamIndex}
+      or cliente_snapshot->>'razon_social' ilike $${containsParamIndex}
     )`);
   }
 

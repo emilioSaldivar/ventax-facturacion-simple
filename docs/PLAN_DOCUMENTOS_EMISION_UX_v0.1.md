@@ -12,6 +12,8 @@
 
 Resolver la mejora como refinamiento de UX operativo, con cambios acotados en frontend y solo extender backend si el repositorio no cumple la busqueda requerida.
 
+Adicionalmente, reorganizar navegacion para priorizar modulos de uso diario (`Nueva factura`, `Agenda/Clientes`, `Documentos`, `Catalogo`) y mover opciones menos frecuentes a capas secundarias.
+
 ## Documentos: Estado Lista Y Estado Detalle
 
 La vista `Documentos` debe modelarse con un estado explicito:
@@ -38,17 +40,84 @@ Frontend:
 
 Backend:
 
+- normalizar traduccion de filtros de SaaS a FE sin ambiguedad:
+  - `desde` SaaS -> `from` FE;
+  - `hasta` SaaS -> `to` FE;
+  - `q` SaaS -> `q` FE;
 - verificar que `GET /facturas?q=` busque en:
   - numero fiscal;
   - CDC cuando sea util para soporte;
   - documento del receptor;
   - nombre o razon social del receptor.
+- definir semantica operativa de `q`:
+  - busqueda `contains` case-insensitive para texto;
+  - busqueda por OR entre campos habilitados;
+  - combinacion con `desde/hasta/tipo_operativo/estado` por AND global.
 - si falta algun campo, ajustar repository/service sin cambiar el contrato HTTP.
 
 OpenAPI:
 
 - el contrato ya contempla `desde`, `hasta` y `q`;
-- solo se actualiza si se necesita documentar semantica especifica de busqueda para `GET /facturas`.
+- documentar explicitamente semantica de `q` y mapeo `desde/hasta` si aun no esta en el contrato.
+
+## UX Comercial En Detalle De Documento
+
+Objetivo de lenguaje:
+
+- priorizar terminos entendibles para comerciante no tecnico;
+- mantener terminos fiscales en secciones secundarias.
+
+Cambios de presentacion:
+
+- `KUDE/PDF` -> `Ver factura PDF`;
+- `XML` -> `Documento electronico (XML firmado)`;
+- `Copiar link` + `WhatsApp` + `correo` -> `Compartir factura` con menu de opciones;
+- `Regenerar link` -> `Crear nuevo enlace`.
+
+Jerarquia visual:
+
+- principal: `Ver factura PDF`, `Compartir factura`;
+- secundaria: `Descargar documento electronico`;
+- administrativa: `Anular factura`, `Crear nota de credito`;
+- tecnica colapsada: `Consultar estado fiscal`, `Reintentar envio`, `Crear nuevo enlace`.
+
+## Menu Hamburguesa Y Segmentacion De Modulos
+
+Orden recomendado del menu:
+
+1. `Nueva factura`
+2. `Agenda / Clientes`
+3. `Documentos`
+4. `Catalogo`
+5. `Nueva nota de credito`
+6. `Informacion y estado` (secundario)
+
+Regla de simplicidad:
+
+- mostrar al operador comun solo acciones de frecuencia alta;
+- opciones avanzadas de autogestion en `Documentos` quedan dentro de bloque secundario y/o visibles por rol y alerta.
+
+## Contenido Operativo Del Detalle
+
+La vista de detalle debe mostrar lineas vendidas para contexto comercial:
+
+- `cantidad x descripcion` + subtotal por item (tarjetas en mobile);
+- tabla compacta en desktop/tablet.
+
+Seccion `Informacion fiscal` expandible:
+
+- CDC;
+- timbrado;
+- estado SIFEN;
+- fecha de envio.
+
+No se muestra este bloque expandido por defecto para no saturar.
+
+## Alcance Relacionado Pero Separado
+
+La autogestion avanzada de rechazos/correcciones basada en FE (`decision`, `retry-same-cdc`, `create-derived`, `void-number`, `cancel-send`) queda fuera de esta iniciativa DUX y debe abrirse como cadena SDD separada para `SOPORTE_INTERNO`, tomando como referencia:
+
+- `docs/API_FACTURACION_ELECTRONICA/OPERACION_RECHAZOS_Y_AUTOGESTION_v0.1.md`
 
 ## Nueva Factura Sin Scroll Inicial
 
@@ -84,7 +153,13 @@ Minimo requerido al implementar:
   - buscar por numero;
   - buscar por documento receptor;
   - buscar por razon social;
+  - buscar por CDC cuando exista;
   - seleccionar documento y verificar que la lista desaparece;
   - volver y verificar filtros preservados;
+  - validar detalle de productos/servicios con cantidad y subtotal;
+  - validar jerarquia de acciones (principal/secundaria/administrativa/tecnica);
+  - validar `Informacion fiscal` colapsada por defecto y expandible;
+  - validar menu hamburguesa con `Agenda / Clientes` visible y `Informacion y estado` en posicion secundaria;
+  - validar que opciones avanzadas de documentos no saturan la primera vista.
 - desde inicio presionar `Nueva factura` y verificar que el formulario accionable queda visible sin scroll manual.
 - verificar `tipo de servicio` default en `Prestacion de servicios` y envio correcto de `tipo_transaccion`.
