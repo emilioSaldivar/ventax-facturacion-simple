@@ -1181,7 +1181,7 @@ dd {
 .quantity-price-grid,
 .advanced-fields {
   display: grid;
-  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
   gap: 10px;
 }
 
@@ -1197,13 +1197,15 @@ dd {
   border-radius: 8px;
   background: #ffffff;
   color: var(--color-brand-dark);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 900;
+  text-transform: uppercase;
 }
 
-.catalog-save-choice button.active {
-  border-color: var(--color-brand);
-  background: #e7f7ff;
+.catalog-save-choice .save-catalog {
+  border-color: #2f9e44;
+  background: #2f9e44;
+  color: #ffffff;
 }
 
 .iva-chip-row {

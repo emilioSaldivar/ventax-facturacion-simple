@@ -1657,7 +1657,6 @@ function InvoiceEditor({
   const [expandedLineIds, setExpandedLineIds] = useState<Set<string>>(() => new Set());
   const [lineSheetOpen, setLineSheetOpen] = useState(false);
   const [lineCodeOpen, setLineCodeOpen] = useState(false);
-  const [lineSaveInCatalog, setLineSaveInCatalog] = useState(false);
   const [headerDetailsOpen, setHeaderDetailsOpen] = useState(false);
   const [clienteSuggestions, setClienteSuggestions] = useState<ClienteSearchResult[]>([]);
   const [clienteSearching, setClienteSearching] = useState(false);
@@ -2099,13 +2098,13 @@ function InvoiceEditor({
     }
   }
 
-  async function confirmLine(line: InvoiceLineDraft) {
+  async function confirmLine(line: InvoiceLineDraft, saveInCatalog: boolean) {
     if (line.catalogo_item_id || line.lockedFromCatalog) {
       setLineSheetOpen(false);
       return;
     }
 
-    if (lineSaveInCatalog) {
+    if (saveInCatalog) {
       const saved = await saveQuickCatalogItem(line);
       if (!saved) {
         return;
@@ -2404,32 +2403,32 @@ function InvoiceEditor({
                   </div>
                 </label>
 
-                <label>
-                  Precio
+                <label className="sheet-description">
+                  Descripcion
                   <input
+                    ref={descriptionInputRef}
+                    autoFocus
                     disabled={activeLine.lockedFromCatalog}
-                    inputMode="numeric"
-                    min="0"
                     onChange={(event) =>
-                      updateLine(activeLine.id, { catalogo_item_id: null, precio_unitario: event.target.value, lockedFromCatalog: false })
+                      updateLine(activeLine.id, { catalogo_item_id: null, descripcion: event.target.value, lockedFromCatalog: false })
                     }
-                    placeholder="0"
-                    value={activeLine.precio_unitario}
+                    placeholder="Ingrese descripcion"
+                    value={activeLine.descripcion}
                   />
                 </label>
               </div>
 
-              <label className="sheet-description">
-                Descripcion
+              <label>
+                Precio
                 <input
-                  ref={descriptionInputRef}
-                  autoFocus
                   disabled={activeLine.lockedFromCatalog}
+                  inputMode="numeric"
+                  min="0"
                   onChange={(event) =>
-                    updateLine(activeLine.id, { catalogo_item_id: null, descripcion: event.target.value, lockedFromCatalog: false })
+                    updateLine(activeLine.id, { catalogo_item_id: null, precio_unitario: event.target.value, lockedFromCatalog: false })
                   }
-                  placeholder="Ingrese descripcion"
-                  value={activeLine.descripcion}
+                  placeholder="0"
+                  value={activeLine.precio_unitario}
                 />
               </label>
 
@@ -2445,15 +2444,6 @@ function InvoiceEditor({
                   ))}
                 </div>
               ) : null}
-
-              <div className="catalog-save-choice" role="group" aria-label="Guardar producto en catalogo">
-                <button className={lineSaveInCatalog ? "" : "active"} onClick={() => setLineSaveInCatalog(false)} type="button">
-                  No guardar
-                </button>
-                <button className={lineSaveInCatalog ? "active" : ""} onClick={() => setLineSaveInCatalog(true)} type="button">
-                  Guardar en catalogo
-                </button>
-              </div>
 
               <div className="iva-chip-row" role="group" aria-label="IVA del producto">
                 {[
@@ -2507,18 +2497,32 @@ function InvoiceEditor({
                 </button>
               ) : null}
               {catalogMessage[activeLine.id] ? <p className="inline-message">{catalogMessage[activeLine.id]}</p> : null}
-              <button
-                className="primary-action wide"
-                disabled={
-                  catalogSaving[activeLine.id] ||
-                  !activeLine.descripcion.trim() ||
-                  !Number.isInteger(Number(activeLine.precio_unitario))
-                }
-                onClick={() => void confirmLine(activeLine)}
-                type="button"
-              >
-                {catalogSaving[activeLine.id] ? "Guardando..." : activeLine.catalogo_item_id || !lineSaveInCatalog ? "Agregar" : "Guardar y agregar"}
-              </button>
+              <div className="catalog-save-choice" role="group" aria-label="Agregar producto y decidir guardado">
+                <button
+                  className="primary-action save-catalog"
+                  disabled={
+                    catalogSaving[activeLine.id] ||
+                    !activeLine.descripcion.trim() ||
+                    !Number.isInteger(Number(activeLine.precio_unitario))
+                  }
+                  onClick={() => void confirmLine(activeLine, true)}
+                  type="button"
+                >
+                  {catalogSaving[activeLine.id] ? "Guardando..." : "AGREGAR Y GUARDAR"}
+                </button>
+                <button
+                  className="secondary-action"
+                  disabled={
+                    catalogSaving[activeLine.id] ||
+                    !activeLine.descripcion.trim() ||
+                    !Number.isInteger(Number(activeLine.precio_unitario))
+                  }
+                  onClick={() => void confirmLine(activeLine, false)}
+                  type="button"
+                >
+                  AGREGAR Y NO GUARDAR
+                </button>
+              </div>
             </div>
           </section>
         </div>
