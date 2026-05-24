@@ -516,13 +516,14 @@ function mapFiscalEmitResponse(body: unknown): FiscalEmitFacturaResponse {
 
   const data = body as Record<string, unknown>;
   const status = typeof data.status === "string" ? data.status : null;
+  const fiscalCode = findNestedStringValue(data, "dCodRes") ?? stringOrNull(data.result_code);
   const timbrado = data.timbrado && typeof data.timbrado === "object" ? (data.timbrado as Record<string, unknown>) : null;
 
   return {
     fiscal_document_id: stringOrNull(data.document_id),
     cdc: stringOrNull(data.cdc),
     numero_fiscal: stringOrNull(data.nro_factura) ?? buildNumeroFiscalFromTimbrado(timbrado),
-    estado: mapDocumentStatus(status),
+    estado: mapDocumentStatusWithCode(status, fiscalCode),
     fiscal_envio_modo: mapFiscalEnvioModo(data),
     delivery_mode: stringOrNull(data.delivery_mode),
     batch: mapBatchTransmissionInfo(data.batch),
@@ -537,18 +538,29 @@ function mapFiscalNotaCreditoResponse(body: unknown): FiscalEmitNotaCreditoRespo
   }
 
   const data = body as Record<string, unknown>;
+  const fiscalCode = findNestedStringValue(data, "dCodRes") ?? stringOrNull(data.result_code);
 
   return {
     fiscal_document_id: stringOrNull(data.document_id),
     cdc: stringOrNull(data.cdc),
     numero_fiscal: stringOrNull(data.nro_documento) ?? stringOrNull(data.nro_factura),
-    estado: mapDocumentStatus(stringOrNull(data.status)),
+    estado: mapDocumentStatusWithCode(stringOrNull(data.status), fiscalCode),
     fiscal_envio_modo: mapFiscalEnvioModo(data),
     delivery_mode: stringOrNull(data.delivery_mode),
     batch: mapBatchTransmissionInfo(data.batch),
     email_status: mapEmailStatus(data.email_status),
     raw: data
   };
+}
+
+function mapDocumentStatusWithCode(status: string | null, fiscalCode: string | null): FiscalEmitFacturaResponse["estado"] {
+  if (isApprovedFiscalStatus(status) || isApprovedFiscalCode(fiscalCode)) {
+    return "EMITIDA";
+  }
+  if (status === "REJECTED" || status === "RECHAZADO") {
+    return "RECHAZADA";
+  }
+  return "PENDIENTE_SIFEN";
 }
 
 function mapFiscalEnvioModo(data: Record<string, unknown>): "BATCH" | "SYNC" {
@@ -597,29 +609,6 @@ function stringOrNull(value: unknown): string | null {
   return typeof value === "string" && value.length > 0 ? value : null;
 }
 
-function mapDocumentStatus(status: string | null): FiscalEmitFacturaResponse["estado"] {
-  if (status === "APPROVED" || status === "APPROVED_WITH_OBS" || status === "ACEPTADO" || status === "APROBADO") {
-    return "EMITIDA";
-  }
-  if (status === "REJECTED" || status === "RECHAZADO") {
-    return "RECHAZADA";
-  }
-  return "PENDIENTE_SIFEN";
-}
-
-function mapRefreshDocumentStatus(status: string | null): FiscalRefreshStatusResponse["estado"] {
-  if (status === "APPROVED" || status === "APPROVED_WITH_OBS" || status === "ACEPTADO" || status === "APROBADO") {
-    return "EMITIDA";
-  }
-  if (status === "REJECTED" || status === "RECHAZADO") {
-    return "RECHAZADA";
-  }
-  if (status === "CANCELLED" || status === "VOIDED" || status === "ANULADO" || status === "CANCELADO") {
-    return "ANULADA";
-  }
-  return "PENDIENTE_SIFEN";
-}
-
 function mapFiscalRefreshStatusResponse(body: unknown): FiscalRefreshStatusResponse {
   if (!body || typeof body !== "object") {
     throw new FiscalGatewayError("INVALID_RESPONSE", "Respuesta fiscal invalida.", body);
@@ -632,11 +621,71 @@ function mapFiscalRefreshStatusResponse(body: unknown): FiscalRefreshStatusRespo
     stringOrNull(statusPayload.estado) ??
     stringOrNull(statusPayload.document_status) ??
     stringOrNull(data.document_status);
+  const sifenStatus =
+    statusPayload.sifen_status && typeof statusPayload.sifen_status === "object"
+      ? (statusPayload.sifen_status as Record<string, unknown>)
+      : null;
+  const fiscalCode =
+    stringOrNull(sifenStatus?.code) ??
+    findNestedStringValue(data, "dCodRes") ??
+    stringOrNull(data.result_code) ??
+    stringOrNull((statusPayload as Record<string, unknown>).result_code);
 
   return {
-    estado: mapRefreshDocumentStatus(status),
+    estado: mapRefreshDocumentStatusWithCode(status, fiscalCode),
     raw: data
   };
+}
+
+function mapRefreshDocumentStatusWithCode(status: string | null, fiscalCode: string | null): FiscalRefreshStatusResponse["estado"] {
+  if (isApprovedFiscalStatus(status) || isApprovedFiscalCode(fiscalCode)) {
+    return "EMITIDA";
+  }
+  if (status === "REJECTED" || status === "RECHAZADO") {
+    return "RECHAZADA";
+  }
+  if (status === "CANCELLED" || status === "VOIDED" || status === "ANULADO" || status === "CANCELADO") {
+    return "ANULADA";
+  }
+  return "PENDIENTE_SIFEN";
+}
+
+function isApprovedFiscalStatus(status: string | null): boolean {
+  return status === "APPROVED" || status === "APPROVED_WITH_OBS" || status === "ACEPTADO" || status === "APROBADO";
+}
+
+function isApprovedFiscalCode(code: string | null): boolean {
+  return code === "0260" || code === "0422";
+}
+
+function findNestedStringValue(value: unknown, targetKey: string): string | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  for (const [key, nested] of Object.entries(value)) {
+    const normalizedKey = key.includes(":") ? key.split(":").at(-1) : key;
+    if (normalizedKey === targetKey && (typeof nested === "string" || typeof nested === "number")) {
+      return String(nested);
+    }
+
+    if (Array.isArray(nested)) {
+      for (const item of nested) {
+        const found = findNestedStringValue(item, targetKey);
+        if (found) {
+          return found;
+        }
+      }
+      continue;
+    }
+
+    const found = findNestedStringValue(nested, targetKey);
+    if (found) {
+      return found;
+    }
+  }
+
+  return null;
 }
 
 function mapFiscalCancelResponse(body: unknown): FiscalCancelFacturaResponse {

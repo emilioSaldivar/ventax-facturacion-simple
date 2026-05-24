@@ -492,8 +492,8 @@ function OperationHome({
           <span />
         </button>
         <div className="topbar-title">
+          <strong>{context?.facturador.nombre_fantasia?.trim() || getOperationalTitle(context)}</strong>
           <BrandMark compact />
-          <strong>{formatOperationViewTitle(operationView)}</strong>
         </div>
         <button className="ghost-action compact" onClick={() => void onLogout()} type="button">
           Salir
@@ -574,6 +574,9 @@ function StatusView({
   user: UserSummary | null;
   onGoTo: (view: OperationView) => void;
 }) {
+  const businessChecks = mapBusinessReadinessChecks(readiness?.checks ?? []);
+  const statusLabel = canEmit ? "Listo para facturar" : "Faltan requisitos para facturar";
+
   return (
     <>
       <section className="facturador-band" aria-label="Contexto operativo">
@@ -612,10 +615,10 @@ function StatusView({
         </article>
 
         <article className="context-card">
-          <p className="eyebrow">Readiness</p>
-          <h2>{canEmit ? "Puede emitir" : "No puede emitir todavia"}</h2>
+          <p className="eyebrow">Estado para facturar</p>
+          <h2>{statusLabel}</h2>
           <ul className="check-list">
-            {(readiness?.checks ?? []).map((check) => (
+            {businessChecks.map((check) => (
               <li key={check.code} className={check.ok ? "check-ok" : "check-fail"}>
                 <span aria-hidden="true">{check.ok ? "✓" : "!"}</span>
                 {check.message}
@@ -1487,7 +1490,9 @@ function InvoiceEditor({
   const [activeLineId, setActiveLineId] = useState<string | null>(null);
   const [expandedLineIds, setExpandedLineIds] = useState<Set<string>>(() => new Set());
   const [lineSheetOpen, setLineSheetOpen] = useState(false);
-  const [lineAdvancedOpen, setLineAdvancedOpen] = useState(false);
+  const [lineCodeOpen, setLineCodeOpen] = useState(false);
+  const [lineSaveInCatalog, setLineSaveInCatalog] = useState(false);
+  const [headerDetailsOpen, setHeaderDetailsOpen] = useState(false);
   const [clienteSuggestions, setClienteSuggestions] = useState<ClienteSearchResult[]>([]);
   const [clienteSearching, setClienteSearching] = useState(false);
   const [clienteSaving, setClienteSaving] = useState(false);
@@ -1511,10 +1516,10 @@ function InvoiceEditor({
   const [deliveryMessage, setDeliveryMessage] = useState<string | null>(null);
   const [whatsappPhone, setWhatsappPhone] = useState("");
   const descriptionInputRef = useRef<HTMLInputElement | null>(null);
+  const sendSectionRef = useRef<HTMLElement | null>(null);
 
   const api = useMemo(() => createApiClient(accessToken, setAccessToken), [accessToken, setAccessToken]);
   const today = useMemo(() => new Date().toLocaleDateString("es-PY"), []);
-  const readyMessage = readiness?.checks.find((check) => !check.ok)?.message ?? "La configuracion operativa esta lista.";
   const nextFiscalNumber = useMemo(() => getNextFiscalNumber(context?.fiscal_context.documento_nro), [context?.fiscal_context.documento_nro]);
 
   const request = useMemo<FacturaPreviewRequest | null>(() => {
@@ -1764,7 +1769,7 @@ function InvoiceEditor({
     setActiveLineId(null);
     setExpandedLineIds(new Set());
     setLineSheetOpen(false);
-    setLineAdvancedOpen(false);
+    setLineCodeOpen(false);
     setPreview(null);
     setPreviewError(null);
     setEmissionError(null);
@@ -1824,13 +1829,13 @@ function InvoiceEditor({
     const nextLine = createInvoiceLine();
     setLines((current) => [...current, nextLine]);
     setActiveLineId(nextLine.id);
-    setLineAdvancedOpen(false);
+    setLineCodeOpen(false);
     setLineSheetOpen(true);
   }
 
   function editLine(lineId: string) {
     setActiveLineId(lineId);
-    setLineAdvancedOpen(false);
+    setLineCodeOpen(false);
     setLineSheetOpen(true);
   }
 
@@ -1843,7 +1848,7 @@ function InvoiceEditor({
       }
     }
     setLineSheetOpen(false);
-    setLineAdvancedOpen(false);
+    setLineCodeOpen(false);
   }
 
   function applyClienteSuggestion(suggestion: ClienteSearchResult) {
@@ -1934,10 +1939,17 @@ function InvoiceEditor({
       return;
     }
 
-    const saved = await saveQuickCatalogItem(line);
-    if (saved) {
-      setLineSheetOpen(false);
+    if (lineSaveInCatalog) {
+      const saved = await saveQuickCatalogItem(line);
+      if (!saved) {
+        return;
+      }
     }
+
+    setLineSheetOpen(false);
+    window.setTimeout(() => {
+      sendSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 80);
   }
 
   const emittedSifenSummary = emittedDocumento ? getSifenSummary(emittedDocumento) : null;
@@ -1961,41 +1973,51 @@ function InvoiceEditor({
           <p className="eyebrow">Nueva factura</p>
           <h2 id="invoice-title">Editor de emision</h2>
         </div>
-        <button className="ghost-action" onClick={onBack} type="button">
-          Volver
-        </button>
+        <div className="header-actions">
+          <button
+            aria-label={headerDetailsOpen ? "Ocultar datos de cabecera" : "Ver datos de cabecera"}
+            className="ghost-action icon-eye"
+            onClick={() => setHeaderDetailsOpen((current) => !current)}
+            type="button"
+          >
+            {headerDetailsOpen ? "Ocultar" : "Ver"}
+          </button>
+          <button className="ghost-action" onClick={onBack} type="button">
+            Volver
+          </button>
+        </div>
       </div>
 
-      <section className="invoice-band">
-        <div>
-          <dt>Facturador</dt>
-          <dd>{context?.facturador.razon_social ?? "-"}</dd>
-        </div>
-        <div>
-          <dt>RUC</dt>
-          <dd>{context?.facturador.ruc ?? "-"}</dd>
-        </div>
-        <div>
-          <dt>Est./Punto</dt>
-          <dd>{context ? `${context.fiscal_context.establecimiento}-${context.fiscal_context.punto_expedicion}` : "-"}</dd>
-        </div>
-        <div>
-          <dt>Fecha</dt>
-          <dd>{today}</dd>
-        </div>
-        <div>
-          <dt>Timbrado</dt>
-          <dd>{context?.fiscal_context.timbrado ?? "-"}</dd>
-        </div>
-        <div>
-          <dt>Siguiente estimado</dt>
-          <dd>{nextFiscalNumber}</dd>
-        </div>
-      </section>
-
-      <section className={canEmit ? "editor-alert ready" : "editor-alert blocked"}>
-        {canEmit ? "Numero fiscal pendiente de emision. El sistema lo asigna al confirmar con SIFEN." : readyMessage}
-      </section>
+      {headerDetailsOpen ? (
+        <section className="invoice-band">
+          <div>
+            <dt>Facturador</dt>
+            <dd>{context?.facturador.razon_social ?? "-"}</dd>
+          </div>
+          <div>
+            <dt>RUC</dt>
+            <dd>{context?.facturador.ruc ?? "-"}</dd>
+          </div>
+          <div>
+            <dt>Est./Punto</dt>
+            <dd>{context ? `${context.fiscal_context.establecimiento}-${context.fiscal_context.punto_expedicion}` : "-"}</dd>
+          </div>
+          <div>
+            <dt>Fecha</dt>
+            <dd>{today}</dd>
+          </div>
+          <div>
+            <dt>Timbrado</dt>
+            <dd>{context?.fiscal_context.timbrado ?? "-"}</dd>
+          </div>
+          <div>
+            <dt>Siguiente estimado</dt>
+            <dd>{nextFiscalNumber}</dd>
+          </div>
+        </section>
+      ) : (
+        <section className="editor-alert ready">Datos de cabecera ocultos.</section>
+      )}
 
       <section className="form-section comprobante-section">
         <div>
@@ -2040,7 +2062,7 @@ function InvoiceEditor({
       <section className="form-section">
         <p className="eyebrow">Cliente</p>
         <div className="field-grid">
-          <label>
+          <label className="required-field">
             Documento
             <div className="inline-fields">
               <select
@@ -2054,9 +2076,9 @@ function InvoiceEditor({
                 <option value="NO_ESPECIFICADO">No especificado</option>
               </select>
               <input
-                inputMode="text"
+                inputMode={cliente.documento_tipo === "RUC" || cliente.documento_tipo === "CI" ? "numeric" : "text"}
                 onChange={(event) => setCliente((current) => ({ ...current, documento: event.target.value }))}
-                placeholder="80123456-7"
+                placeholder="Ingrese numero de documento"
                 value={cliente.documento}
               />
             </div>
@@ -2077,20 +2099,20 @@ function InvoiceEditor({
               </div>
             ) : null}
           </label>
-          <label>
+          <label className="required-field">
             Nombre o razon social
             <input onChange={(event) => setCliente((current) => ({ ...current, razon_social: event.target.value }))} value={cliente.razon_social} />
           </label>
           <label>
-            Direccion
+            Direccion <small>(opcional)</small>
             <input onChange={(event) => setCliente((current) => ({ ...current, direccion: event.target.value }))} value={cliente.direccion ?? ""} />
           </label>
           <label>
-            Telefono
+            Telefono <small>(opcional)</small>
             <input inputMode="tel" onChange={(event) => setCliente((current) => ({ ...current, telefono: event.target.value }))} value={cliente.telefono ?? ""} />
           </label>
           <label>
-            Correo
+            Correo <small>(opcional)</small>
             <input inputMode="email" onChange={(event) => setCliente((current) => ({ ...current, email: event.target.value }))} value={cliente.email ?? ""} />
           </label>
         </div>
@@ -2194,33 +2216,6 @@ function InvoiceEditor({
             </div>
 
             <div className="sheet-grid">
-              <label className="sheet-description">
-                Descripcion
-                <input
-                  ref={descriptionInputRef}
-                  autoFocus
-                  disabled={activeLine.lockedFromCatalog}
-                  onChange={(event) =>
-                    updateLine(activeLine.id, { catalogo_item_id: null, descripcion: event.target.value, lockedFromCatalog: false })
-                  }
-                  placeholder="Ej. Agua mineral"
-                  value={activeLine.descripcion}
-                />
-              </label>
-
-              {catalogSearching[activeLine.id] ? <span className="field-hint">Buscando catalogo...</span> : null}
-              {(catalogSuggestions[activeLine.id] ?? []).length > 0 ? (
-                <div className="suggestion-list catalog">
-                  {(catalogSuggestions[activeLine.id] ?? []).map((item) => (
-                    <button key={item.id} onClick={() => applyCatalogItem(activeLine.id, item)} type="button">
-                      <strong>{item.codigo}</strong>
-                      <span>{item.descripcion}</span>
-                      <small>{formatGuaranies(item.precio_unitario)} · {formatIva(item.iva_tipo)}</small>
-                    </button>
-                  ))}
-                </div>
-              ) : null}
-
               <div className="quantity-price-grid">
                 <label>
                   Cantidad
@@ -2258,14 +2253,68 @@ function InvoiceEditor({
                 </label>
               </div>
 
-              <button className="advanced-toggle" onClick={() => setLineAdvancedOpen((current) => !current)} type="button">
-                {lineAdvancedOpen ? "Ocultar opciones fiscales" : "Opciones avanzadas"}
+              <label className="sheet-description">
+                Descripcion
+                <input
+                  ref={descriptionInputRef}
+                  autoFocus
+                  disabled={activeLine.lockedFromCatalog}
+                  onChange={(event) =>
+                    updateLine(activeLine.id, { catalogo_item_id: null, descripcion: event.target.value, lockedFromCatalog: false })
+                  }
+                  placeholder="Ingrese descripcion"
+                  value={activeLine.descripcion}
+                />
+              </label>
+
+              {catalogSearching[activeLine.id] ? <span className="field-hint">Buscando catalogo...</span> : null}
+              {(catalogSuggestions[activeLine.id] ?? []).length > 0 ? (
+                <div className="suggestion-list catalog">
+                  {(catalogSuggestions[activeLine.id] ?? []).map((item) => (
+                    <button key={item.id} onClick={() => applyCatalogItem(activeLine.id, item)} type="button">
+                      <strong>{item.codigo}</strong>
+                      <span>{item.descripcion}</span>
+                      <small>{formatGuaranies(item.precio_unitario)} · {formatIva(item.iva_tipo)}</small>
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+
+              <div className="catalog-save-choice" role="group" aria-label="Guardar producto en catalogo">
+                <button className={lineSaveInCatalog ? "" : "active"} onClick={() => setLineSaveInCatalog(false)} type="button">
+                  No guardar
+                </button>
+                <button className={lineSaveInCatalog ? "active" : ""} onClick={() => setLineSaveInCatalog(true)} type="button">
+                  Guardar en catalogo
+                </button>
+              </div>
+
+              <div className="iva-chip-row" role="group" aria-label="IVA del producto">
+                {[
+                  { value: "IVA_5" as const, label: "IVA 5%" },
+                  { value: "IVA_10" as const, label: "IVA 10%" },
+                  { value: "EXENTA" as const, label: "EX" }
+                ].map((option) => (
+                  <button
+                    className={activeLine.iva_tipo === option.value ? "active" : ""}
+                    disabled={activeLine.lockedFromCatalog}
+                    key={option.value}
+                    onClick={() => updateLine(activeLine.id, { catalogo_item_id: null, iva_tipo: option.value, lockedFromCatalog: false })}
+                    type="button"
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+
+              <button className="advanced-toggle" onClick={() => setLineCodeOpen((current) => !current)} type="button">
+                {lineCodeOpen ? "Ocultar codigo interno" : "+ Agregar codigo interno"}
               </button>
 
-              {lineAdvancedOpen ? (
+              {lineCodeOpen ? (
                 <div className="advanced-fields">
                   <label>
-                    Codigo
+                    Codigo interno
                     <input
                       disabled={activeLine.lockedFromCatalog}
                       onChange={(event) =>
@@ -2273,20 +2322,6 @@ function InvoiceEditor({
                       }
                       value={activeLine.codigo}
                     />
-                  </label>
-                  <label>
-                    IVA
-                    <select
-                      disabled={activeLine.lockedFromCatalog}
-                      onChange={(event) =>
-                        updateLine(activeLine.id, { catalogo_item_id: null, iva_tipo: event.target.value as TipoIva, lockedFromCatalog: false })
-                      }
-                      value={activeLine.iva_tipo}
-                    >
-                      <option value="IVA_10">10%</option>
-                      <option value="IVA_5">5%</option>
-                      <option value="EXENTA">Exenta</option>
-                    </select>
                   </label>
                 </div>
               ) : null}
@@ -2316,13 +2351,13 @@ function InvoiceEditor({
                 onClick={() => void confirmLine(activeLine)}
                 type="button"
               >
-                {catalogSaving[activeLine.id] ? "Guardando..." : activeLine.catalogo_item_id ? "Agregar" : "Guardar y agregar"}
+                {catalogSaving[activeLine.id] ? "Guardando..." : activeLine.catalogo_item_id || !lineSaveInCatalog ? "Agregar" : "Guardar y agregar"}
               </button>
             </div>
           </section>
         </div>
       ) : null}
-      <section className="totals-section" aria-live="polite">
+      <section className="totals-section" aria-live="polite" ref={sendSectionRef}>
         <div className="totals-grid">
           <TotalRow label="Subtotal" value={preview?.totals.subtotal ?? 0} />
           <TotalRow label="Total sin IVA" value={preview?.totals.total_sin_iva ?? 0} />
@@ -2597,6 +2632,44 @@ function normalizeParaguayWhatsAppDigits(phone: string): string {
     return `595${digits.slice(1)}`;
   }
   return digits;
+}
+
+function mapBusinessReadinessChecks(
+  checks: Array<{
+    code: string;
+    ok: boolean;
+    message: string;
+  }>
+): Array<{ code: string; ok: boolean; message: string }> {
+  const byCode = new Map(checks.map((check) => [check.code, check]));
+
+  const tenant = byCode.get("tenant_activo");
+  const suscripcion = byCode.get("suscripcion_activa");
+  const facturador = byCode.get("facturador_activo");
+  const contexto = byCode.get("contexto_fiscal_local_completo");
+
+  return [
+    {
+      code: "membresia_activa",
+      ok: tenant?.ok ?? false,
+      message: tenant?.ok ? "Membresia activa" : "Membresia inactiva. Contacte a soporte para reactivarla."
+    },
+    {
+      code: "suscripcion_al_dia",
+      ok: suscripcion?.ok ?? false,
+      message: suscripcion?.ok ? "Suscripcion al dia" : "Suscripcion con pagos pendientes. Regularice para facturar."
+    },
+    {
+      code: "facturador_activo",
+      ok: facturador?.ok ?? false,
+      message: facturador?.ok ? "Facturador activo" : "Facturador inactivo. Solicite activacion al administrador."
+    },
+    {
+      code: "configuracion_fiscal_completa",
+      ok: contexto?.ok ?? false,
+      message: contexto?.ok ? "Configuracion fiscal completa" : "Faltan datos fiscales. Contacte al equipo de configuracion."
+    }
+  ];
 }
 
 function formatGuaranies(value: number): string {

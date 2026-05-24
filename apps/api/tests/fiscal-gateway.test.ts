@@ -399,6 +399,40 @@ describe("fiscal gateway", () => {
     });
   });
 
+  it("maps fiscal code 0422 (CDC encontrado) as approved emission", async () => {
+    const gateway = new RealFiscalGateway({
+      mode: "real",
+      baseUrl: "https://fe-api.ventax.app/fcws",
+      apiKey: "secret",
+      timeoutMs: 20000,
+      environment: "test"
+    });
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        new Response(
+          JSON.stringify({
+            document_id: "doc-cdc-found",
+            cdc: "Z".repeat(44),
+            nro_factura: "001-001-0000011",
+            status: "PENDING",
+            status_detail: {
+              dCodRes: "0422",
+              dMsgRes: "CDC encontrado"
+            }
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        )
+      )
+    );
+
+    const result = await gateway.emitFactura(request);
+
+    expect(result.estado).toBe("EMITIDA");
+    expect(result.numero_fiscal).toBe("001-001-0000011");
+  });
+
   it("can omit FE emission profile and let FE service assign numbering", async () => {
     const calls: Array<{ payload: Record<string, unknown> }> = [];
     const gateway = new RealFiscalGateway({
@@ -657,6 +691,36 @@ describe("fiscal gateway", () => {
       refreshed: true
     });
     expect(calls[0]).toBe(`https://fe-api.ventax.app/fcws/consultar/comprobanteSifen/${"F".repeat(44)}?env=test&refresh=true`);
+  });
+
+  it("maps refresh code 0422 (CDC encontrado) as approved state", async () => {
+    const gateway = new RealFiscalGateway({
+      mode: "real",
+      baseUrl: "https://fe-api.ventax.app/fcws",
+      apiKey: "secret",
+      timeoutMs: 20000,
+      environment: "test"
+    });
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        new Response(
+          JSON.stringify({
+            cdc: "G".repeat(44),
+            status: {
+              status: "PENDING",
+              sifen_status: { code: "0422", message: "CDC encontrado" }
+            },
+            refreshed: true
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        )
+      )
+    );
+
+    const result = await gateway.refreshFacturaStatus({ cdc: "G".repeat(44) });
+    expect(result.estado).toBe("EMITIDA");
   });
 
   it("sends cancellation event to real fiscal backend", async () => {
