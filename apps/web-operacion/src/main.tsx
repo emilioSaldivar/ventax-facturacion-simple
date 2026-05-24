@@ -2381,47 +2381,43 @@ function InvoiceEditor({
             </div>
 
             <div className="sheet-grid">
-              <div className="quantity-price-grid">
-                <label>
-                  Cantidad
-                  <div className="quantity-stepper">
-                    <button
-                      aria-label="Restar cantidad"
-                      onClick={() => updateLine(activeLine.id, { cantidad: String(Math.max(1, Number(activeLine.cantidad || 1) - 1)) })}
-                      type="button"
-                    >
-                      -
-                    </button>
-                    <input inputMode="numeric" min="1" onChange={(event) => updateLine(activeLine.id, { cantidad: event.target.value })} value={activeLine.cantidad} />
-                    <button
-                      aria-label="Sumar cantidad"
-                      onClick={() => updateLine(activeLine.id, { cantidad: String((Number(activeLine.cantidad) || 0) + 1) })}
-                      type="button"
-                    >
-                      +
-                    </button>
-                  </div>
-                </label>
+              <label>
+                Cantidad
+                <div className="quantity-stepper">
+                  <button
+                    aria-label="Restar cantidad"
+                    onClick={() => updateLine(activeLine.id, { cantidad: String(Math.max(1, Number(activeLine.cantidad || 1) - 1)) })}
+                    type="button"
+                  >
+                    -
+                  </button>
+                  <input inputMode="numeric" min="1" onChange={(event) => updateLine(activeLine.id, { cantidad: event.target.value })} value={activeLine.cantidad} />
+                  <button
+                    aria-label="Sumar cantidad"
+                    onClick={() => updateLine(activeLine.id, { cantidad: String((Number(activeLine.cantidad) || 0) + 1) })}
+                    type="button"
+                  >
+                    +
+                  </button>
+                </div>
+              </label>
 
-                <label className="sheet-description">
-                  Descripcion
-                  <input
-                    ref={descriptionInputRef}
-                    autoFocus
-                    disabled={activeLine.lockedFromCatalog}
-                    onChange={(event) =>
-                      updateLine(activeLine.id, { catalogo_item_id: null, descripcion: event.target.value, lockedFromCatalog: false })
-                    }
-                    placeholder="Ingrese descripcion"
-                    value={activeLine.descripcion}
-                  />
-                </label>
-              </div>
+              <label className="sheet-description">
+                Descripcion
+                <input
+                  ref={descriptionInputRef}
+                  autoFocus
+                  onChange={(event) =>
+                    updateLine(activeLine.id, { catalogo_item_id: null, descripcion: event.target.value, lockedFromCatalog: false })
+                  }
+                  placeholder="Ingrese descripcion"
+                  value={activeLine.descripcion}
+                />
+              </label>
 
               <label>
                 Precio
                 <input
-                  disabled={activeLine.lockedFromCatalog}
                   inputMode="numeric"
                   min="0"
                   onChange={(event) =>
