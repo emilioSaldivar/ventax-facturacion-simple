@@ -35,6 +35,11 @@
 | DUX-021 | UI documentos | Ocultar acciones avanzadas en primera vista | DONE | `Documentos` muestra primero acciones comerciales; autogestion avanzada queda en bloque secundario o por rol/contexto de alerta |
 | DUX-022 | UX microcopy | Reescribir subtitulos de modulos del menu en lenguaje comercial | DONE | Los subtitulos evitan jerga tecnica y describen accion de negocio (`Emitir`, `Cobrar/compartir`, `Gestionar clientes`, etc.) |
 | DUX-023 | QA navegacion | Validar flujo operativo simplificado mobile-first | DONE | Playwright valida apertura menu, acceso a `Agenda/Clientes`, acceso a `Documentos`, ausencia de saturacion tecnica en primera vista y regreso fluido a `Nueva factura` |
+| DUX-024 | UI emision mobile | Auto-scroll al bloque Cliente al enfocar documento/campos | DONE | Con teclado abierto en mobile, foco en `Documento` y campos de cliente ancla la vista en seccion `Cliente` sin que el teclado tape el contexto |
+| DUX-025 | UI emision mobile | Mantener anclaje en Cliente al seleccionar agenda/sugerencia | DONE | Al tocar un cliente sugerido/agenda, la pantalla queda posicionada en bloque `Cliente`, evitando quedar entre cabecera y formulario |
+| DUX-026 | UI productos mobile | Bottom sheet fullscreen util con teclado | DONE | Popup `Agregar producto` usa alto util completo (`visualViewport`) y elimina espacio superior innecesario con teclado abierto |
+| DUX-027 | UI emision mobile | Auto-scroll al resultado tras emitir | DONE | Luego de emitir factura, la vista se desplaza automaticamente a `Resultado` para ver/compartir comprobante sin scroll manual |
+| DUX-028 | QA UX por secciones | Validar flujo `Cabecera -> Cliente -> Productos -> Resultado` | DONE | Playwright mobile valida anclajes de foco, seleccion de cliente, comportamiento del popup de productos y scroll final a resultado |
 
 ## Definiciones Cerradas Para Implementacion
 
@@ -48,6 +53,7 @@
 - Autogestion avanzada: exclusiva para `SOPORTE_INTERNO` en iniciativa SDD separada.
 - Segmentacion menu: `Informacion y estado` se conserva para soporte/readiness, pero no se prioriza como modulo principal diario.
 - Entrada de agenda: `Agenda / Clientes` es acceso de primer nivel en menu hamburguesa.
+- Scope operativo de emision mobile: `Cabecera`, `Cliente`, `Productos` y `Resultado` son secciones guiadas con anclaje automatico segun accion del operador.
 
 ## Evidencia
 
@@ -56,3 +62,4 @@
 - 2026-05-24: refinada matriz con enfoque comercial no tecnico para `Documentos`/detalle/publico, se agregan tareas `DUX-011`..`DUX-018` y definiciones cerradas de busqueda/filtros/mapeo FE para eliminar ambiguedad antes de implementar.
 - 2026-05-24: se extiende refinamiento UX con navegacion operativa simple y agenda visible en menu; se agregan tareas `DUX-019`..`DUX-023` para simplificar modulos y reducir acciones avanzadas en primera vista.
 - 2026-05-24: implementadas `DUX-002`..`DUX-023` en `apps/api`, `apps/web-operacion`, `apps/api/src/modules/entrega` y `spec/openapi.yaml`. Validaciones ejecutadas: `npm run typecheck --workspace @facturacion-simple/web-operacion`, `npm run typecheck --workspace @facturacion-simple/api`, `npx vitest run apps/api/tests/facturas.service.test.ts apps/api/tests/entrega.service.test.ts`, `npm run typecheck`, `npm run lint`, `npm run build`, `bash scripts/deploy.sh` (fallo inicial por red `bridge`, re-ejecucion OK con `FE_DOCKER_NETWORK=facturacion-electronica_default` y `DATABASE_URL=postgres://facturacion_simple:facturacion_simple@nuevo_repo-postgres-1:5432/facturacion_simple`), healthchecks `GET /api/v1/health` y `/healthz` OK, Playwright mobile+desktop con script `/tmp/dux-playwright.cjs` validando menu simplificado, acceso `Agenda/Clientes`, flujo `Documentos` lista->detalle->volver, acciones comerciales y bloque fiscal expandible.
+- 2026-05-24: implementadas `DUX-024`..`DUX-028` en `apps/web-operacion/src/main.tsx` y `apps/web-operacion/src/styles.css` con enfoque mobile-first por secciones de emision (`Cabecera`, `Cliente`, `Productos`, `Resultado`). Validaciones: `npm run typecheck --workspace @facturacion-simple/web-operacion`, `npm run build --workspace @facturacion-simple/web-operacion` y Playwright mobile sobre stack local para comprobar anclajes con teclado, bottom sheet fullscreen y scroll automatico post-emision.

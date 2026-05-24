@@ -140,6 +140,23 @@ Adicionalmente, el bloque `Comprobante` debe incluir un `select` simple para `ti
 
 El valor seleccionado debe viajar en `POST /facturas/preview` y `POST /facturas` como `tipo_transaccion`, y el backend debe mapearlo al payload FE `tipoTransaccion`.
 
+## Refinamiento De Flujo Por Secciones (Mobile)
+
+Para evitar friccion con teclado y scroll en emision mobile, implementar anclaje por secciones:
+
+1. `Cabecera/Comprobante`: entrada inicial al editor.
+2. `Cliente`: foco prioritario al capturar documento y seleccionar sugerencias.
+3. `Productos`: carga en bottom sheet fullscreen.
+4. `Resultado`: foco automatico tras emision.
+
+Implementacion:
+
+- agregar refs por seccion en el editor;
+- al `focus` de campos de cliente, ejecutar `scrollIntoView` suave hacia seccion `Cliente`;
+- al aplicar sugerencia de agenda/cliente, re-anclar `Cliente`;
+- en bottom sheet de productos, usar `height` dinamico ligado a `visualViewport` para ocupar area util con teclado;
+- al registrar `emittedDocumento`, hacer scroll automatico al bloque de resultado.
+
 ## Validacion
 
 Minimo requerido al implementar:
@@ -160,6 +177,10 @@ Minimo requerido al implementar:
   - validar jerarquia de acciones (principal/secundaria/administrativa/tecnica);
   - validar `Informacion fiscal` colapsada por defecto y expandible;
   - validar menu hamburguesa con `Agenda / Clientes` visible y `Informacion y estado` en posicion secundaria;
-  - validar que opciones avanzadas de documentos no saturan la primera vista.
+- validar que opciones avanzadas de documentos no saturan la primera vista.
 - desde inicio presionar `Nueva factura` y verificar que el formulario accionable queda visible sin scroll manual.
 - verificar `tipo de servicio` default en `Prestacion de servicios` y envio correcto de `tipo_transaccion`.
+- validar en mobile que foco en `Documento` lleve a la seccion `Cliente` con teclado abierto.
+- validar que al seleccionar cliente desde sugerencias la pantalla permanezca anclada en `Cliente`.
+- validar que popup `Agregar producto` ocupe alto util completo con teclado, sin hueco superior.
+- validar que tras emitir se haga scroll automatico a `Resultado` (`Ver/Compartir comprobante`).

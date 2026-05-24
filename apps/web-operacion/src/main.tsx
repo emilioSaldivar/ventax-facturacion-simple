@@ -1968,6 +1968,10 @@ function InvoiceEditor({
   const descriptionInputRef = useRef<HTMLInputElement | null>(null);
   const lineSheetRef = useRef<HTMLElement | null>(null);
   const sendSectionRef = useRef<HTMLElement | null>(null);
+  const comprobanteSectionRef = useRef<HTMLElement | null>(null);
+  const clientSectionRef = useRef<HTMLElement | null>(null);
+  const productsSectionRef = useRef<HTMLElement | null>(null);
+  const emissionResultRef = useRef<HTMLElement | null>(null);
 
   const api = useMemo(() => createApiClient(accessToken, setAccessToken), [accessToken, setAccessToken]);
   const today = useMemo(() => new Date().toLocaleDateString("es-PY"), []);
@@ -2034,7 +2038,7 @@ function InvoiceEditor({
     const sheetElement = lineSheetRef.current;
     const updateSheetMaxHeight = () => {
       const viewportHeight = window.visualViewport?.height ?? window.innerHeight;
-      sheetElement.style.maxHeight = `${Math.max(320, Math.floor(viewportHeight - 8))}px`;
+      sheetElement.style.height = `${Math.max(320, Math.floor(viewportHeight))}px`;
     };
 
     updateSheetMaxHeight();
@@ -2046,9 +2050,61 @@ function InvoiceEditor({
       window.visualViewport?.removeEventListener("resize", updateSheetMaxHeight);
       window.visualViewport?.removeEventListener("scroll", updateSheetMaxHeight);
       window.removeEventListener("resize", updateSheetMaxHeight);
-      sheetElement.style.removeProperty("max-height");
+      sheetElement.style.removeProperty("height");
     };
   }, [lineSheetOpen]);
+
+  useEffect(() => {
+    if (!emittedDocumento || !emissionResultRef.current) {
+      return;
+    }
+
+    const timeout = window.setTimeout(() => {
+      const element = emissionResultRef.current;
+      if (!element) {
+        return;
+      }
+      scrollToElement(element);
+    }, 120);
+
+    return () => window.clearTimeout(timeout);
+  }, [emittedDocumento?.id]);
+
+  function getScrollableParent(element: HTMLElement): HTMLElement | null {
+    let current: HTMLElement | null = element.parentElement;
+    while (current) {
+      const style = window.getComputedStyle(current);
+      const canScroll = /(auto|scroll)/.test(style.overflowY) && current.scrollHeight > current.clientHeight;
+      if (canScroll) {
+        return current;
+      }
+      current = current.parentElement;
+    }
+    return null;
+  }
+
+  function scrollToElement(element: HTMLElement) {
+    const scrollParent = getScrollableParent(element);
+    if (scrollParent) {
+      const parentRect = scrollParent.getBoundingClientRect();
+      const elementRect = element.getBoundingClientRect();
+      const top = Math.max(0, scrollParent.scrollTop + elementRect.top - parentRect.top - 12);
+      scrollParent.scrollTo({ top, behavior: "smooth" });
+      return;
+    }
+    const top = Math.max(0, window.scrollY + element.getBoundingClientRect().top - 12);
+    window.scrollTo({ top, behavior: "smooth" });
+  }
+
+  function scrollSection(ref: React.RefObject<HTMLElement>) {
+    window.setTimeout(() => {
+      const element = ref.current;
+      if (!element) {
+        return;
+      }
+      scrollToElement(element);
+    }, 120);
+  }
 
   useEffect(() => {
     if (!request) {
@@ -2187,6 +2243,14 @@ function InvoiceEditor({
       setLastEmittedRequestFingerprint(requestFingerprint ?? JSON.stringify(request));
       setDeliveryLink(null);
       setEmailStatus(null);
+      window.setTimeout(() => {
+        const element = emissionResultRef.current;
+        if (element) {
+          scrollToElement(element);
+          return;
+        }
+        window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
+      }, 220);
     } catch (error) {
       setEmissionError(error instanceof Error ? error.message : "No se pudo emitir la factura.");
     } finally {
@@ -2340,6 +2404,7 @@ function InvoiceEditor({
     });
     setClienteMessage(suggestion.source === "AGENDA_FACTURADOR" ? "Cliente seleccionado de la agenda." : "Datos encontrados para agregar a tu agenda.");
     setClienteSuggestions([]);
+    scrollSection(clientSectionRef);
   }
 
   async function saveClienteRapido() {
@@ -2466,7 +2531,7 @@ function InvoiceEditor({
       </div>
 
       {headerDetailsOpen ? (
-        <section className="invoice-band">
+        <section className="invoice-band" ref={comprobanteSectionRef}>
           <div>
             <dt>Facturador</dt>
             <dd>{context?.facturador.razon_social ?? "-"}</dd>
@@ -2496,7 +2561,7 @@ function InvoiceEditor({
         <section className="editor-alert ready">Datos de cabecera ocultos.</section>
       )}
 
-      <section className="form-section comprobante-section">
+      <section className="form-section comprobante-section" ref={comprobanteSectionRef}>
         <div>
           <p className="eyebrow">Comprobante</p>
           <h3>Factura electronica</h3>
@@ -2536,7 +2601,7 @@ function InvoiceEditor({
         </label>
       </section>
 
-      <section className="form-section">
+      <section className="form-section" ref={clientSectionRef}>
         <p className="eyebrow">Cliente</p>
         <div className="field-grid">
           <label className="required-field">
@@ -2554,6 +2619,7 @@ function InvoiceEditor({
               </select>
               <input
                 inputMode={cliente.documento_tipo === "RUC" || cliente.documento_tipo === "CI" ? "numeric" : "text"}
+                onFocus={() => scrollSection(clientSectionRef)}
                 onChange={(event) => setCliente((current) => ({ ...current, documento: event.target.value }))}
                 placeholder="Ingrese numero de documento"
                 value={cliente.documento}
@@ -2578,19 +2644,19 @@ function InvoiceEditor({
           </label>
           <label className="required-field">
             Nombre o razon social
-            <input onChange={(event) => setCliente((current) => ({ ...current, razon_social: event.target.value }))} value={cliente.razon_social} />
+            <input onFocus={() => scrollSection(clientSectionRef)} onChange={(event) => setCliente((current) => ({ ...current, razon_social: event.target.value }))} value={cliente.razon_social} />
           </label>
           <label>
             Direccion <small>(opcional)</small>
-            <input onChange={(event) => setCliente((current) => ({ ...current, direccion: event.target.value }))} value={cliente.direccion ?? ""} />
+            <input onFocus={() => scrollSection(clientSectionRef)} onChange={(event) => setCliente((current) => ({ ...current, direccion: event.target.value }))} value={cliente.direccion ?? ""} />
           </label>
           <label>
             Telefono <small>(opcional)</small>
-            <input inputMode="tel" onChange={(event) => setCliente((current) => ({ ...current, telefono: event.target.value }))} value={cliente.telefono ?? ""} />
+            <input inputMode="tel" onFocus={() => scrollSection(clientSectionRef)} onChange={(event) => setCliente((current) => ({ ...current, telefono: event.target.value }))} value={cliente.telefono ?? ""} />
           </label>
           <label>
             Correo <small>(opcional)</small>
-            <input inputMode="email" onChange={(event) => setCliente((current) => ({ ...current, email: event.target.value }))} value={cliente.email ?? ""} />
+            <input inputMode="email" onFocus={() => scrollSection(clientSectionRef)} onChange={(event) => setCliente((current) => ({ ...current, email: event.target.value }))} value={cliente.email ?? ""} />
           </label>
         </div>
         <div className="quick-actions-row">
@@ -2606,7 +2672,7 @@ function InvoiceEditor({
         </div>
       </section>
 
-      <section className="form-section products-section">
+      <section className="form-section products-section" ref={productsSectionRef}>
         <div className="section-title-row">
           <div>
             <p className="eyebrow">Productos</p>
@@ -2860,7 +2926,7 @@ function InvoiceEditor({
       </section>
 
       {emittedDocumento ? (
-        <section className="emission-result" aria-live="polite">
+        <section className="emission-result" aria-live="polite" ref={emissionResultRef}>
           <div className="receipt-heading">
             <div>
               <p className="eyebrow">Comprobante</p>

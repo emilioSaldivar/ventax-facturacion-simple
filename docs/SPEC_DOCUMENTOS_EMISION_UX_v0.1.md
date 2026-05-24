@@ -137,6 +137,22 @@ Requisitos:
 - dejar la accion de emision cerca del resumen/totales;
 - preservar bloqueo por readiness si el facturador no puede emitir.
 
+## Scope De Pantallas En Emision (Mobile First)
+
+La experiencia del editor de emision debe guiar al operador por cuatro bloques operativos, en este orden:
+
+1. `Cabecera/Comprobante`
+2. `Cliente`
+3. `Detalles y carga de productos`
+4. `Resultado de emision` (ver/compartir comprobante)
+
+Reglas UX obligatorias para mobile:
+
+- al enfocar el campo de documento del cliente (RUC/CI), la vista debe anclar la seccion `Cliente` para evitar que el teclado tape el campo;
+- al seleccionar un cliente desde sugerencias/agenda, la vista debe permanecer anclada en `Cliente`, sin quedar entre cabecera y cliente;
+- en `Agregar producto`, el popup (bottom sheet) debe ocupar alto completo util de pantalla y reajustarse al teclado, evitando huecos superiores innecesarios;
+- al emitir exitosamente, la vista debe desplazarse automaticamente al bloque `Resultado de emision`, sin exigir scroll manual para llegar a `Ver/Compartir comprobante`.
+
 ## Criterios De Aceptacion
 
 - Desde `Documentos`, una seleccion muestra solo el detalle y no mantiene visible la lista completa.
@@ -153,4 +169,7 @@ Requisitos:
 - En `Documentos`, las acciones avanzadas no aparecen por defecto para operador comun.
 - `Nueva factura` desde inicio lleva al operador directamente al formulario accionable, sin scroll manual por datos del facturador.
 - `Nueva factura` muestra `tipo de servicio` con default `Prestacion de servicios` y permite cambiar a mercaderia o mixto segun necesidad del cliente.
+- Al enfocar y completar datos de cliente en mobile, el formulario se mantiene anclado en la seccion `Cliente` con teclado abierto.
+- El popup de productos usa alto completo util y evita espacios muertos al abrir teclado.
+- Luego de emitir, el resultado queda visible automaticamente en pantalla.
 - La experiencia debe validarse primero en mobile y luego en desktop/tablet.
