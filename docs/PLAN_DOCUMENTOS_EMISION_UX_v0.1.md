@@ -157,6 +157,55 @@ Implementacion:
 - en bottom sheet de productos, usar `height` dinamico ligado a `visualViewport` para ocupar area util con teclado;
 - al registrar `emittedDocumento`, hacer scroll automatico al bloque de resultado.
 
+## Plan UXS De Usabilidad No Tecnica
+
+### UXS-Menu
+
+- introducir cards de menu con icono, titulo y subtitulo corto;
+- separar visualmente grupos `principal`, `secundario`, `administracion`;
+- aplicar color semantico:
+  - principal: azul Ventax;
+  - informativo/secundario: gris suave;
+  - administracion: gris neutro;
+  - salida: rojo suave;
+- destacar `Nueva factura` con mayor tamano/contraste y badge `Recomendado`.
+
+### UXS-Cabecera Contextual
+
+- eliminar patron ambiguo de boton + mensaje separados (`Ver` + `Datos ... ocultos`);
+- reemplazar por control unico tipo accordion:
+  - colapsado: `Mostrar datos` (facturador/fiscales);
+  - expandido: `Ocultar datos`;
+- mantener estado inicial colapsado en mobile.
+
+### UXS-Flujo Primero Cliente/Productos
+
+- reordenar secciones para mostrar primero `Cliente` y luego `Productos/Servicios`;
+- mover `contado/credito`, `tipo de servicio` y ajustes fiscales a bloque `Opciones de factura` colapsable;
+- mantener validaciones fiscales existentes sin alterar contrato API.
+
+### UXS-Resumen Operativo Superior
+
+- reemplazar encabezado tecnico por resumen corto de operacion:
+  - `Nueva factura`
+  - fecha actual
+  - cliente seleccionado/no seleccionado
+  - condicion de venta visible
+- dejar metadatos fiscales en `Informacion fiscal` expandible.
+
+### UXS-Uso Una Mano
+
+- acercar acciones frecuentes a zona inferior:
+  - `Agregar producto`
+  - `Guardar`
+  - `Crear factura`/`Emitir factura`
+- desplazar acciones secundarias (`Volver`, opciones tecnicas) a zona superior o menus de menor prioridad.
+
+### UXS-Lenguaje Comercial
+
+- aplicar diccionario de reemplazos en labels, botones, titulos y microcopy;
+- conservar terminos tecnicos solo como apoyo secundario (tooltip, texto aclaratorio o panel tecnico).
+
 ## Validacion
 
 Minimo requerido al implementar:
@@ -184,3 +233,5 @@ Minimo requerido al implementar:
 - validar que al seleccionar cliente desde sugerencias la pantalla permanezca anclada en `Cliente`.
 - validar que popup `Agregar producto` ocupe alto util completo con teclado, sin hueco superior.
 - validar que tras emitir se haga scroll automatico a `Resultado` (`Ver/Compartir comprobante`).
+- test de descubrimiento rapido: usuario nuevo ubica `Nueva factura` en <= 2 segundos.
+- test de comprension: usuario no tecnico entiende acciones principales sin capacitacion previa.

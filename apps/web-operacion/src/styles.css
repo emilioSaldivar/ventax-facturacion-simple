@@ -336,12 +336,28 @@ h2 {
 
 .menu-list {
   display: grid;
+  gap: 12px;
+}
+
+.menu-group {
+  display: grid;
   gap: 8px;
+}
+
+.menu-group-title {
+  margin: 0;
+  color: #4b616a;
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
 }
 
 .menu-item {
   display: grid;
-  gap: 4px;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  column-gap: 8px;
+  row-gap: 2px;
   width: 100%;
   min-height: 58px;
   border: 1px solid #d2e1e7;
@@ -358,14 +374,61 @@ h2 {
   box-shadow: 0 0 0 3px rgb(7 167 225 / 0.12);
 }
 
+.menu-item-featured {
+  min-height: 66px;
+  border-color: #8fcde2;
+  background: #edf8fd;
+}
+
+.menu-item-primary {
+  background: #f3fbff;
+}
+
+.menu-item-secondary {
+  background: #f9fcfd;
+}
+
+.menu-item-admin {
+  background: #f6f8f9;
+}
+
+.menu-item-icon {
+  font-size: 18px;
+  line-height: 1;
+}
+
 .menu-item span {
   font-weight: 900;
 }
 
+.menu-item-badge {
+  justify-self: end;
+  border: 1px solid #8fcde2;
+  border-radius: 999px;
+  background: #ffffff;
+  color: var(--color-brand-dark);
+  padding: 2px 8px;
+  font-size: 10px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
 .menu-item small {
+  grid-column: 2 / span 1;
   color: var(--color-muted);
   font-size: 12px;
   font-weight: 800;
+}
+
+.menu-exit-action {
+  display: inline-grid;
+  place-items: center;
+  min-height: 48px;
+  border: 1px solid #f2c9c9;
+  border-radius: 8px;
+  background: #fff5f5;
+  color: #a22a2a;
+  font-weight: 900;
 }
 
 .facturador-band,
@@ -735,6 +798,59 @@ dd {
 .comprobante-section {
   display: grid;
   gap: 14px;
+}
+
+.client-section {
+  order: 10;
+}
+
+.products-section {
+  order: 11;
+}
+
+.totals-section {
+  order: 12;
+}
+
+.comprobante-section {
+  order: 13;
+}
+
+.emission-result {
+  order: 14;
+}
+
+.invoice-options {
+  border: 1px solid #d7e5ea;
+  border-radius: 8px;
+  background: #fbfdfe;
+  padding: 8px 10px;
+}
+
+.invoice-options > summary {
+  cursor: pointer;
+  color: var(--color-brand-dark);
+  font-size: 14px;
+  font-weight: 900;
+  list-style: none;
+}
+
+.invoice-options > summary::-webkit-details-marker {
+  display: none;
+}
+
+.invoice-options > summary::before {
+  content: "▼ ";
+}
+
+.invoice-options[open] > summary::before {
+  content: "▲ ";
+}
+
+.invoice-options-body {
+  display: grid;
+  gap: 12px;
+  margin-top: 10px;
 }
 
 .segmented-control {

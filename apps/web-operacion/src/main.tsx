@@ -526,13 +526,25 @@ function OperationHome({
     setMenuOpen(false);
   }
 
-  const menuItems: Array<{ label: string; view: OperationView; disabled?: boolean }> = [
-    { label: "Nueva factura", view: "invoice", disabled: !canEmit },
-    { label: "Agenda / Clientes", view: "clients" },
-    { label: "Documentos", view: "documents" },
-    { label: "Catalogo", view: "catalog" },
-    { label: "Nueva nota de credito", view: "credit-note", disabled: !canEmit },
-    { label: "Informacion y estado", view: "status" }
+  const menuItems: Array<{
+    label: string;
+    view: OperationView;
+    disabled?: boolean;
+    icon: string;
+    group: "primary" | "secondary" | "admin";
+    featured?: boolean;
+  }> = [
+    { label: "Nueva factura", view: "invoice", disabled: !canEmit, icon: "🧾", group: "primary", featured: true },
+    { label: "Agenda / Clientes", view: "clients", icon: "👥", group: "primary" },
+    { label: "Documentos", view: "documents", icon: "📂", group: "primary" },
+    { label: "Catalogo", view: "catalog", icon: "📦", group: "secondary" },
+    { label: "Devolver factura", view: "credit-note", disabled: !canEmit, icon: "↩", group: "secondary" },
+    { label: "Informacion y estado", view: "status", icon: "🛡", group: "admin" }
+  ];
+  const menuSections: Array<{ title: string; key: "primary" | "secondary" | "admin" }> = [
+    { title: "Operaciones principales", key: "primary" },
+    { title: "Operaciones secundarias", key: "secondary" },
+    { title: "Administracion", key: "admin" }
   ];
 
   return (
@@ -567,21 +579,33 @@ function OperationHome({
               <p className="muted">{getOperationalTitle(context)}</p>
             </div>
             <div className="menu-list">
-              {menuItems.map((item) => (
-                <button
-                  className={operationView === item.view ? "menu-item active" : "menu-item"}
-                  disabled={item.disabled}
-                  key={item.view}
-                  onClick={() => goTo(item.view)}
-                  type="button"
-                >
-                  <span>{item.label}</span>
-                  <small>{getOperationViewHint(item.view)}</small>
-                </button>
+              {menuSections.map((section) => (
+                <div className="menu-group" key={section.key}>
+                  <p className="menu-group-title">{section.title}</p>
+                  {menuItems.filter((item) => item.group === section.key).map((item) => (
+                    <button
+                      className={[
+                        "menu-item",
+                        `menu-item-${item.group}`,
+                        operationView === item.view ? "active" : "",
+                        item.featured ? "menu-item-featured" : ""
+                      ].filter(Boolean).join(" ")}
+                      disabled={item.disabled}
+                      key={item.view}
+                      onClick={() => goTo(item.view)}
+                      type="button"
+                    >
+                      <span className="menu-item-icon" aria-hidden="true">{item.icon}</span>
+                      <span>{item.label}</span>
+                      {item.featured ? <strong className="menu-item-badge">Recomendado</strong> : null}
+                      <small>{getOperationViewHint(item.view)}</small>
+                    </button>
+                  ))}
+                </div>
               ))}
             </div>
-            <button className="secondary-action wide" onClick={() => void onLogout()} type="button">
-              Salir
+            <button className="menu-exit-action wide" onClick={() => void onLogout()} type="button">
+              🚪 Salir
             </button>
           </nav>
         </div>
@@ -2513,16 +2537,16 @@ function InvoiceEditor({
       <div className="editor-heading">
         <div>
           <p className="eyebrow">Nueva factura</p>
-          <h2 id="invoice-title">Editor de emision</h2>
+          <h2 id="invoice-title">Nueva factura</h2>
         </div>
         <div className="header-actions">
           <button
-            aria-label={headerDetailsOpen ? "Ocultar datos de cabecera" : "Ver datos de cabecera"}
+            aria-label={headerDetailsOpen ? "Ocultar datos del facturador" : "Mostrar datos del facturador"}
             className="ghost-action icon-eye"
             onClick={() => setHeaderDetailsOpen((current) => !current)}
             type="button"
           >
-            {headerDetailsOpen ? "Ocultar" : "Ver"}
+            {headerDetailsOpen ? "🙈 Ocultar datos del facturador" : "👁 Mostrar datos del facturador"}
           </button>
           <button className="ghost-action" onClick={onBack} type="button">
             Volver
@@ -2557,51 +2581,54 @@ function InvoiceEditor({
             <dd>{nextFiscalNumber}</dd>
           </div>
         </section>
-      ) : (
-        <section className="editor-alert ready">Datos de cabecera ocultos.</section>
-      )}
+      ) : null}
 
       <section className="form-section comprobante-section" ref={comprobanteSectionRef}>
         <div>
-          <p className="eyebrow">Comprobante</p>
-          <h3>Factura electronica</h3>
+          <p className="eyebrow">Factura</p>
+          <h3>{cliente.razon_social.trim() ? cliente.razon_social.trim() : "Cliente no seleccionado"}</h3>
           <p className="muted">Fecha {today} · Timbrado {context?.fiscal_context.timbrado ?? "-"}</p>
         </div>
-        <div className="segmented-control" role="group" aria-label="Condicion de venta">
-          {(["CONTADO", "CREDITO"] as const).map((value) => (
-            <button
-              className={condicionVenta === value ? "active" : ""}
-              key={value}
-              onClick={() => setCondicionVenta(value)}
-              type="button"
-            >
-              {value === "CONTADO" ? "Contado" : "Credito"}
-            </button>
-          ))}
-        </div>
-        {condicionVenta === "CREDITO" ? (
-          <label className="credit-term-field">
-            Plazo
-            <select onChange={(event) => setCreditoPlazoDias(Number(event.target.value))} value={creditoPlazoDias}>
-              {[30, 60, 90].map((days) => (
-                <option key={days} value={days}>
-                  {days} dias
-                </option>
+        <details className="invoice-options">
+          <summary>Opciones de factura</summary>
+          <div className="invoice-options-body">
+            <div className="segmented-control" role="group" aria-label="Condicion de venta">
+              {(["CONTADO", "CREDITO"] as const).map((value) => (
+                <button
+                  className={condicionVenta === value ? "active" : ""}
+                  key={value}
+                  onClick={() => setCondicionVenta(value)}
+                  type="button"
+                >
+                  {value === "CONTADO" ? "Contado" : "Credito"}
+                </button>
               ))}
-            </select>
-          </label>
-        ) : null}
-        <label className="credit-term-field">
-          Tipo de servicio
-          <select onChange={(event) => setTipoTransaccion(Number(event.target.value) as TipoTransaccionServicio)} value={tipoTransaccion}>
-            <option value={1}>1 - Venta de mercadería</option>
-            <option value={2}>2 - Prestación de servicios</option>
-            <option value={3}>3 - Mixto (mercadería + servicios)</option>
-          </select>
-        </label>
+            </div>
+            {condicionVenta === "CREDITO" ? (
+              <label className="credit-term-field">
+                Plazo
+                <select onChange={(event) => setCreditoPlazoDias(Number(event.target.value))} value={creditoPlazoDias}>
+                  {[30, 60, 90].map((days) => (
+                    <option key={days} value={days}>
+                      {days} dias
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
+            <label className="credit-term-field">
+              Tipo de servicio
+              <select onChange={(event) => setTipoTransaccion(Number(event.target.value) as TipoTransaccionServicio)} value={tipoTransaccion}>
+                <option value={1}>1 - Venta de mercadería</option>
+                <option value={2}>2 - Prestación de servicios</option>
+                <option value={3}>3 - Mixto (mercadería + servicios)</option>
+              </select>
+            </label>
+          </div>
+        </details>
       </section>
 
-      <section className="form-section" ref={clientSectionRef}>
+      <section className="form-section client-section" ref={clientSectionRef}>
         <p className="eyebrow">Cliente</p>
         <div className="field-grid">
           <label className="required-field">
@@ -2919,7 +2946,7 @@ function InvoiceEditor({
             {previewing ? "Calculando..." : "Calcular"}
           </button>
           <button className="primary-action wide" disabled={!canEmit || !preview || emitting} onClick={() => void emitFactura()} type="button">
-            {emitting ? "Procesando..." : "Emitir factura"}
+            {emitting ? "Procesando..." : "Crear factura"}
           </button>
         </div>
         {emissionError ? <p className="form-error">{emissionError}</p> : null}
@@ -2929,7 +2956,7 @@ function InvoiceEditor({
         <section className="emission-result" aria-live="polite" ref={emissionResultRef}>
           <div className="receipt-heading">
             <div>
-              <p className="eyebrow">Comprobante</p>
+              <p className="eyebrow">Factura</p>
               <h3>{formatDocumentoEstado(emittedDocumento.estado)}</h3>
               <p className="muted">
                 Numero {emittedDocumento.numero_fiscal ?? "pendiente"} · CDC {emittedDocumento.cdc ?? "pendiente"}
@@ -3265,7 +3292,7 @@ function formatOperationViewTitle(value: OperationView): string {
     status: "Informacion",
     invoice: "Nueva factura",
     clients: "Agenda clientes",
-    "credit-note": "Nota credito",
+    "credit-note": "Devolver factura",
     catalog: "Catalogo",
     documents: "Documentos"
   };
@@ -3274,12 +3301,12 @@ function formatOperationViewTitle(value: OperationView): string {
 
 function getOperationViewHint(value: OperationView): string {
   const hints: Record<OperationView, string> = {
-    status: "Configuracion y readiness",
-    invoice: "Emitir comprobante",
-    clients: "Contactos de clientes",
-    "credit-note": "Emitir NCE",
+    status: "Estado del facturador",
+    invoice: "Crear factura electronica",
+    clients: "Agenda de contactos",
+    "credit-note": "Devolver una factura",
     catalog: "Productos y servicios",
-    documents: "Ver, compartir y anular"
+    documents: "Facturas y notas emitidas"
   };
   return hints[value];
 }

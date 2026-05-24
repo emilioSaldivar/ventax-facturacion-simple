@@ -153,6 +153,51 @@ Reglas UX obligatorias para mobile:
 - en `Agregar producto`, el popup (bottom sheet) debe ocupar alto completo util de pantalla y reajustarse al teclado, evitando huecos superiores innecesarios;
 - al emitir exitosamente, la vista debe desplazarse automaticamente al bloque `Resultado de emision`, sin exigir scroll manual para llegar a `Ver/Compartir comprobante`.
 
+## Usabilidad No Tecnica (Refinamiento UXS)
+
+Para usuarios de comercio sin perfil tecnico, la UI debe priorizar reconocimiento visual rapido y acciones de negocio.
+
+Principios obligatorios:
+
+- menu principal por frecuencia de uso, con iconografia y contraste semantico;
+- lenguaje comercial simple en lugar de jerga tecnica;
+- flujo de emision centrado en `Cliente` y `Productos` antes de opciones fiscales avanzadas;
+- controles contextuales unificados (sin botones ambiguos o mensajes duplicados);
+- ergonomia mobile para operacion con una sola mano.
+
+### Menu Principal Orientado A Tareas
+
+- grupo principal: `Nueva factura`, `Agenda / Clientes`, `Documentos`;
+- grupo secundario: `Catalogo`, `Devolver factura` (nota de credito);
+- grupo administracion: `Informacion y estado`, `Salir`.
+
+`Nueva factura` debe tener mayor peso visual (tamano/contraste/badge recomendado) y ser identificable en menos de 2 segundos por usuario nuevo.
+
+### Flujo De Emision Prioritario
+
+El editor debe iniciar en contexto operativo y no administrativo:
+
+- primero `Cliente` y `Productos/Servicios`;
+- opciones fiscales dentro de bloque expandible (`Opciones de factura` o `Informacion fiscal`);
+- encabezado simplificado como resumen operativo (`Nueva factura`, fecha, condicion de venta, cliente seleccionado/no seleccionado).
+
+### Diccionario Comercial De UI
+
+Reemplazos de texto visibles al operador:
+
+- `Comprobante` -> `Factura`
+- `Documento electronico` -> `Archivo electronico`
+- `XML` -> `Archivo fiscal`
+- `KUDE/PDF` -> `Factura PDF`
+- `CDC` -> `Codigo fiscal`
+- `Emitir comprobante` -> `Crear factura`
+- `Reintentar` -> `Volver a enviar`
+- `Regenerar link` -> `Crear nuevo enlace`
+- `Consultar SIFEN` -> `Verificar estado con SET`
+- `Nota credito` -> `Devolver factura`
+
+Nota de alcance: el termino tecnico original puede mantenerse en tooltip/ayuda secundaria para soporte interno, sin ser el label primario.
+
 ## Criterios De Aceptacion
 
 - Desde `Documentos`, una seleccion muestra solo el detalle y no mantiene visible la lista completa.

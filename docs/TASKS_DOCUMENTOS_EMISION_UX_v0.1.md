@@ -41,6 +41,23 @@
 | DUX-027 | UI emision mobile | Auto-scroll al resultado tras emitir | DONE | Luego de emitir factura, la vista se desplaza automaticamente a `Resultado` para ver/compartir comprobante sin scroll manual |
 | DUX-028 | QA UX por secciones | Validar flujo `Cabecera -> Cliente -> Productos -> Resultado` | DONE | Playwright mobile valida anclajes de foco, seleccion de cliente, comportamiento del popup de productos y scroll final a resultado |
 
+## Matriz UXS (Nueva Iteracion Usabilidad)
+
+| ID | Fase | Tarea | Estado | Criterio de aceptacion |
+| --- | --- | --- | --- | --- |
+| UXS-001 | SDD | Consolidar especificacion UX no tecnica en SPEC/PLAN/TASKS | DONE | La cadena SDD define alcance de menu, lenguaje, cabecera contextual, flujo prioritario y ergonomia mobile |
+| UXS-002 | UI menu | Simplificar menu principal con jerarquia por frecuencia | DONE | `Nueva factura`, `Agenda/Clientes` y `Documentos` aparecen primero y con mayor contraste que modulos secundarios/administrativos |
+| UXS-003 | UI menu | Incorporar iconografia consistente por modulo | DONE | Cada modulo principal/secundario usa icono estable, reconocible y coherente con su accion de negocio |
+| UXS-004 | UI menu | Aplicar color semantico y destacar accion principal | DONE | `Nueva factura` queda destacada con mayor peso visual y badge `Recomendado`; `Salir` usa variante visual diferenciada |
+| UXS-005 | UX copy | Reducir texto secundario y orientar subtitulos a negocio | DONE | Subtitulos evitan jerga administrativa y explican accion concreta (`Crear factura electronica`, `Facturas y notas emitidas`) |
+| UXS-006 | UI emision | Reemplazar `Ver` + mensaje de oculto por control contextual unico | DONE | Existe un solo control para mostrar/ocultar datos del facturador; se elimina mensaje separado de oculto |
+| UXS-007 | UI emision | Priorizar carga `Cliente` y `Productos` sobre configuracion fiscal | DONE | `Cliente` y `Productos` quedan antes en el flujo visual; configuracion fiscal vive en `Opciones de factura` colapsable |
+| UXS-008 | UI emision | Convertir cabecera superior en resumen operativo | DONE | Encabezado muestra estado operativo breve (`Nueva factura`, cliente seleccionado/no seleccionado, fecha) y deja detalle tecnico secundario |
+| UXS-009 | UI emision mobile | Optimizar acciones para uso con una sola mano | DONE | Flujo visual prioriza `Cliente`/`Productos` y mantiene acciones de carga/emision en tramo inferior operativo del editor |
+| UXS-010 | UX lenguaje | Aplicar diccionario comercial reemplazando terminos tecnicos | DONE | Se reemplazan labels primarios visibles por copy comercial en menu y emision (`Factura`, `Crear factura`, `Devolver factura`) |
+| UXS-011 | QA usabilidad | Validar descubrimiento y comprension con usuarios no tecnicos | TODO | Evidencia de prueba: descubrimiento de `Nueva factura` <=2s y comprension de acciones sin capacitacion tecnica |
+| UXS-012 | QA visual | Validar mobile-first con Playwright sobre stack desplegado | TODO | Playwright cubre menu, flujo emision, copy comercial, jerarquia visual y ergonomia de acciones |
+
 ## Definiciones Cerradas Para Implementacion
 
 - Fecha operativa de `GET /facturas`: usar `fecha_emision` como base primaria para `desde/hasta`; si no existe, fallback a `created_at` solo para consistencia historica documentada.
@@ -54,6 +71,7 @@
 - Segmentacion menu: `Informacion y estado` se conserva para soporte/readiness, pero no se prioriza como modulo principal diario.
 - Entrada de agenda: `Agenda / Clientes` es acceso de primer nivel en menu hamburguesa.
 - Scope operativo de emision mobile: `Cabecera`, `Cliente`, `Productos` y `Resultado` son secciones guiadas con anclaje automatico segun accion del operador.
+- Diccionario UX no tecnico de referencia: `Factura`, `Archivo fiscal`, `Factura PDF`, `Codigo fiscal`, `Crear factura`, `Volver a enviar`, `Crear nuevo enlace`, `Verificar estado con SET`, `Devolver factura`.
 
 ## Evidencia
 
@@ -63,3 +81,5 @@
 - 2026-05-24: se extiende refinamiento UX con navegacion operativa simple y agenda visible en menu; se agregan tareas `DUX-019`..`DUX-023` para simplificar modulos y reducir acciones avanzadas en primera vista.
 - 2026-05-24: implementadas `DUX-002`..`DUX-023` en `apps/api`, `apps/web-operacion`, `apps/api/src/modules/entrega` y `spec/openapi.yaml`. Validaciones ejecutadas: `npm run typecheck --workspace @facturacion-simple/web-operacion`, `npm run typecheck --workspace @facturacion-simple/api`, `npx vitest run apps/api/tests/facturas.service.test.ts apps/api/tests/entrega.service.test.ts`, `npm run typecheck`, `npm run lint`, `npm run build`, `bash scripts/deploy.sh` (fallo inicial por red `bridge`, re-ejecucion OK con `FE_DOCKER_NETWORK=facturacion-electronica_default` y `DATABASE_URL=postgres://facturacion_simple:facturacion_simple@nuevo_repo-postgres-1:5432/facturacion_simple`), healthchecks `GET /api/v1/health` y `/healthz` OK, Playwright mobile+desktop con script `/tmp/dux-playwright.cjs` validando menu simplificado, acceso `Agenda/Clientes`, flujo `Documentos` lista->detalle->volver, acciones comerciales y bloque fiscal expandible.
 - 2026-05-24: implementadas `DUX-024`..`DUX-028` en `apps/web-operacion/src/main.tsx` y `apps/web-operacion/src/styles.css` con enfoque mobile-first por secciones de emision (`Cabecera`, `Cliente`, `Productos`, `Resultado`). Validaciones: `npm run typecheck --workspace @facturacion-simple/web-operacion`, `npm run build --workspace @facturacion-simple/web-operacion` y Playwright mobile sobre stack local para comprobar anclajes con teclado, bottom sheet fullscreen y scroll automatico post-emision.
+- 2026-05-24: creada matriz `UXS-001`..`UXS-012` para nueva iteracion de usabilidad no tecnica (menu, cabecera contextual, flujo primero cliente/productos, ergonomia una mano y diccionario comercial). Pendiente de implementacion.
+- 2026-05-24: implementadas `UXS-002`..`UXS-010` en `apps/web-operacion/src/main.tsx` y `apps/web-operacion/src/styles.css` sin modificar comportamientos base ya cerrados en `DUX-024`..`DUX-028` (auto-anclajes cliente, popup fullscreen con `visualViewport`, auto-scroll de resultado). Cambios: menu agrupado con iconografia y semantica visual, accion principal destacada, copy comercial, control unico de datos del facturador y bloque `Opciones de factura` colapsable. Validaciones: `npm run typecheck --workspace @facturacion-simple/web-operacion`, `npm run build --workspace @facturacion-simple/web-operacion`.
