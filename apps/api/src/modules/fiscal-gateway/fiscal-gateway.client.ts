@@ -3,6 +3,7 @@ import { env } from "../../config/env";
 import { buildFiscalGatewayConfig } from "./fiscal-gateway.config";
 import {
   FiscalGatewayError,
+  type FiscalDeliveryMode,
   type FiscalEmitFacturaRequest,
   type FiscalEmitFacturaResponse,
   type FiscalEmitNotaCreditoRequest,
@@ -10,9 +11,12 @@ import {
   type FiscalArtifactResponse,
   type FiscalCancelFacturaRequest,
   type FiscalCancelFacturaResponse,
+  type FiscalBatchPendientesResponse,
+  type FiscalDocumentoEventosResponse,
   type FiscalGateway,
   type FiscalGatewayConfig,
   type FiscalGatewayHealth,
+  type FiscalFacturalistaResponse,
   type FiscalRefreshStatusRequest,
   type FiscalRefreshStatusResponse
 } from "./fiscal-gateway.types";
@@ -123,6 +127,53 @@ export class MockFiscalGateway implements FiscalGateway {
       body: Buffer.from(`Mock KUDE/PDF ${cdc}`, "utf8"),
       content_type: "application/pdf",
       filename: `${cdc}.pdf`
+    };
+  }
+
+  async getDocumentoEventos(_cdc: string): Promise<FiscalDocumentoEventosResponse> {
+    return {
+      events: [],
+      raw: {
+        mode: "mock",
+        cdc: _cdc,
+        events: []
+      }
+    };
+  }
+
+  async getBatchPendientesByEmisor(input: {
+    emisorId: string;
+    limit: number;
+    offset: number;
+  }): Promise<FiscalBatchPendientesResponse> {
+    return {
+      documents: [],
+      batches: [],
+      raw: {
+        mode: "mock",
+        emisor_id: input.emisorId,
+        limit: input.limit,
+        offset: input.offset
+      }
+    };
+  }
+
+  async getFacturalistaByEmisor(input: {
+    emisorId: string;
+    offset: number;
+    limit: number;
+    q?: string;
+  }): Promise<FiscalFacturalistaResponse> {
+    return {
+      items: [],
+      next: null,
+      raw: {
+        mode: "mock",
+        emisor_id: input.emisorId,
+        offset: input.offset,
+        limit: input.limit,
+        q: input.q ?? null
+      }
     };
   }
 }
@@ -265,6 +316,84 @@ export class RealFiscalGateway implements FiscalGateway {
     );
   }
 
+  async getDocumentoEventos(cdc: string): Promise<FiscalDocumentoEventosResponse> {
+    const url = new URL(`${this.config.baseUrl}/consultar/evento/${encodeURIComponent(cdc)}`);
+    url.searchParams.set("env", this.config.environment);
+
+    const response = await this.fetchWithTimeout(url.toString(), {
+      method: "GET",
+      headers: this.buildHeaders()
+    });
+
+    const body = await readJson(response);
+    if (!response.ok) {
+      throw new FiscalGatewayError(
+        response.status === 408 || response.status === 504 ? "TIMEOUT" : "UPSTREAM_ERROR",
+        "Backend fiscal rechazo la consulta de eventos.",
+        { status: response.status, body }
+      );
+    }
+
+    return mapFiscalDocumentoEventosResponse(body);
+  }
+
+  async getBatchPendientesByEmisor(input: {
+    emisorId: string;
+    limit: number;
+    offset: number;
+  }): Promise<FiscalBatchPendientesResponse> {
+    const url = new URL(`${this.config.baseUrl}/consultar/${encodeURIComponent(input.emisorId)}/batch-pendientes`);
+    url.searchParams.set("env", this.config.environment);
+    url.searchParams.set("limit", String(input.limit));
+    url.searchParams.set("offset", String(input.offset));
+
+    const response = await this.fetchWithTimeout(url.toString(), {
+      method: "GET",
+      headers: this.buildHeaders()
+    });
+
+    const body = await readJson(response);
+    if (!response.ok) {
+      throw new FiscalGatewayError(
+        response.status === 408 || response.status === 504 ? "TIMEOUT" : "UPSTREAM_ERROR",
+        "Backend fiscal rechazo la consulta de pendientes batch.",
+        { status: response.status, body }
+      );
+    }
+
+    return mapFiscalBatchPendientesResponse(body);
+  }
+
+  async getFacturalistaByEmisor(input: {
+    emisorId: string;
+    offset: number;
+    limit: number;
+    q?: string;
+  }): Promise<FiscalFacturalistaResponse> {
+    const url = new URL(`${this.config.baseUrl}/consultar/${encodeURIComponent(input.emisorId)}/facturalista/${input.offset}`);
+    url.searchParams.set("env", this.config.environment);
+    url.searchParams.set("limit", String(input.limit));
+    if (input.q?.trim()) {
+      url.searchParams.set("q", input.q.trim());
+    }
+
+    const response = await this.fetchWithTimeout(url.toString(), {
+      method: "GET",
+      headers: this.buildHeaders()
+    });
+
+    const body = await readJson(response);
+    if (!response.ok) {
+      throw new FiscalGatewayError(
+        response.status === 408 || response.status === 504 ? "TIMEOUT" : "UPSTREAM_ERROR",
+        "Backend fiscal rechazo la consulta de lista fiscal.",
+        { status: response.status, body }
+      );
+    }
+
+    return mapFiscalFacturalistaResponse(body);
+  }
+
   private async fetchWithTimeout(url: string, init: RequestInit): Promise<Response> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.config.timeoutMs);
@@ -289,7 +418,10 @@ export class RealFiscalGateway implements FiscalGateway {
   }
 
   private async fetchArtifact(url: string, accept: string, filename: string): Promise<FiscalArtifactResponse> {
-    const response = await this.fetchWithTimeout(url, {
+    const endpoint = new URL(url);
+    endpoint.searchParams.set("env", this.config.environment);
+
+    const response = await this.fetchWithTimeout(endpoint.toString(), {
       method: "GET",
       headers: {
         ...this.buildHeaders(),
@@ -525,7 +657,8 @@ function mapFiscalEmitResponse(body: unknown): FiscalEmitFacturaResponse {
     numero_fiscal: stringOrNull(data.nro_factura) ?? buildNumeroFiscalFromTimbrado(timbrado),
     estado: mapDocumentStatusWithCode(status, fiscalCode),
     fiscal_envio_modo: mapFiscalEnvioModo(data),
-    delivery_mode: stringOrNull(data.delivery_mode),
+    delivery_mode: mapDeliveryMode(data.delivery_mode),
+    idempotent: booleanOrNull(data.idempotent),
     batch: mapBatchTransmissionInfo(data.batch),
     email_status: mapEmailStatus(data.email_status),
     raw: data
@@ -546,7 +679,8 @@ function mapFiscalNotaCreditoResponse(body: unknown): FiscalEmitNotaCreditoRespo
     numero_fiscal: stringOrNull(data.nro_documento) ?? stringOrNull(data.nro_factura),
     estado: mapDocumentStatusWithCode(stringOrNull(data.status), fiscalCode),
     fiscal_envio_modo: mapFiscalEnvioModo(data),
-    delivery_mode: stringOrNull(data.delivery_mode),
+    delivery_mode: mapDeliveryMode(data.delivery_mode),
+    idempotent: booleanOrNull(data.idempotent),
     batch: mapBatchTransmissionInfo(data.batch),
     email_status: mapEmailStatus(data.email_status),
     raw: data
@@ -564,12 +698,20 @@ function mapDocumentStatusWithCode(status: string | null, fiscalCode: string | n
 }
 
 function mapFiscalEnvioModo(data: Record<string, unknown>): "BATCH" | "SYNC" {
-  const deliveryMode = stringOrNull(data.delivery_mode);
+  const deliveryMode = mapDeliveryMode(data.delivery_mode);
   if (deliveryMode === "SYNC") {
     return "SYNC";
   }
 
   return "BATCH";
+}
+
+function mapDeliveryMode(value: unknown): FiscalDeliveryMode | null {
+  if (value === "SYNC" || value === "BATCH" || value === "AUTO_FALLBACK_BATCH") {
+    return value;
+  }
+
+  return null;
 }
 
 function mapBatchTransmissionInfo(value: unknown): FiscalEmitFacturaResponse["batch"] {
@@ -607,6 +749,10 @@ function isIdempotentDocumentConflict(status: number, body: unknown): boolean {
 
 function stringOrNull(value: unknown): string | null {
   return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+function booleanOrNull(value: unknown): boolean | null {
+  return typeof value === "boolean" ? value : null;
 }
 
 function mapFiscalRefreshStatusResponse(body: unknown): FiscalRefreshStatusResponse {
@@ -698,9 +844,32 @@ function mapFiscalCancelResponse(body: unknown): FiscalCancelFacturaResponse {
 
   return {
     event_id: stringOrNull(data.event_id),
-    estado: status === "PENDING" || status === "PENDIENTE" || status === "PROCESSING" ? "PENDIENTE_SIFEN" : "ANULADA",
+    estado: mapCancelStatus(status),
     raw: data
   };
+}
+
+function mapCancelStatus(status: string | null): FiscalCancelFacturaResponse["estado"] {
+  if (!status) {
+    return "PENDIENTE_SIFEN";
+  }
+
+  if (
+    status === "SENT" ||
+    status === "RECEIVED" ||
+    status === "PENDING" ||
+    status === "PENDIENTE" ||
+    status === "PROCESSING" ||
+    status === "EN_PROCESO"
+  ) {
+    return "PENDIENTE_SIFEN";
+  }
+
+  if (status === "DONE" || status === "APPROVED" || status === "ACEPTADO" || status === "ANULADO" || status === "CANCELADO") {
+    return "ANULADA";
+  }
+
+  return "PENDIENTE_SIFEN";
 }
 
 function mapEmailStatus(value: unknown): FiscalEmitFacturaResponse["email_status"] {
@@ -711,6 +880,91 @@ function mapEmailStatus(value: unknown): FiscalEmitFacturaResponse["email_status
     value === "UNKNOWN"
     ? value
     : "UNKNOWN";
+}
+
+function mapFiscalDocumentoEventosResponse(body: unknown): FiscalDocumentoEventosResponse {
+  if (!body || typeof body !== "object") {
+    throw new FiscalGatewayError("INVALID_RESPONSE", "Respuesta fiscal invalida.", body);
+  }
+
+  const data = body as Record<string, unknown>;
+  const events = Array.isArray(data.events) ? data.events : [];
+
+  return {
+    events: events.map((event) => {
+      const row = event && typeof event === "object" ? (event as Record<string, unknown>) : {};
+      return {
+        event_id: stringOrNull(row.event_id),
+        type: stringOrNull(row.type),
+        status: stringOrNull(row.status),
+        created_at: stringOrNull(row.created_at),
+        response: row.response && typeof row.response === "object" ? (row.response as Record<string, unknown>) : null
+      };
+    }),
+    raw: data
+  };
+}
+
+function mapFiscalBatchPendientesResponse(body: unknown): FiscalBatchPendientesResponse {
+  if (!body || typeof body !== "object") {
+    throw new FiscalGatewayError("INVALID_RESPONSE", "Respuesta fiscal invalida.", body);
+  }
+
+  const data = body as Record<string, unknown>;
+  const documents = Array.isArray(data.documents) ? data.documents : [];
+  const batches = Array.isArray(data.batches) ? data.batches : [];
+
+  return {
+    documents: documents.map((doc) => {
+      const row = doc && typeof doc === "object" ? (doc as Record<string, unknown>) : {};
+      return {
+        document_id: stringOrNull(row.document_id),
+        cdc: stringOrNull(row.cdc),
+        nro_factura: stringOrNull(row.nro_factura),
+        status: stringOrNull(row.status),
+        fecha_emision: stringOrNull(row.fecha_emision),
+        tipo_documento: stringOrNull(row.tipo_documento)
+      };
+    }),
+    batches: batches.map((batch) => {
+      const row = batch && typeof batch === "object" ? (batch as Record<string, unknown>) : {};
+      return {
+        batch_id: stringOrNull(row.batch_id),
+        did: stringOrNull(row.did),
+        status: stringOrNull(row.status),
+        doc_count: numberOrNull(row.doc_count),
+        result_code: stringOrNull(row.result_code),
+        result_message: stringOrNull(row.result_message)
+      };
+    }),
+    raw: data
+  };
+}
+
+function mapFiscalFacturalistaResponse(body: unknown): FiscalFacturalistaResponse {
+  if (!body || typeof body !== "object") {
+    throw new FiscalGatewayError("INVALID_RESPONSE", "Respuesta fiscal invalida.", body);
+  }
+
+  const data = body as Record<string, unknown>;
+  const items = Array.isArray(data.items) ? data.items : [];
+
+  return {
+    items: items.map((item) => {
+      const row = item && typeof item === "object" ? (item as Record<string, unknown>) : {};
+      return {
+        document_id: stringOrNull(row.document_id),
+        cdc: stringOrNull(row.cdc),
+        nro_factura: stringOrNull(row.nro_factura),
+        status: stringOrNull(row.status),
+        fecha_emision: stringOrNull(row.fecha_emision),
+        receptor_doc: stringOrNull(row.receptor_doc),
+        receptor_nombre: stringOrNull(row.receptor_nombre)
+      };
+    }),
+    next: numberOrNull(data.next),
+    raw: data
+  };
 }
 
 function buildNumeroFiscalFromTimbrado(timbrado: Record<string, unknown> | null): string | null {
@@ -727,6 +981,10 @@ function buildNumeroFiscalFromTimbrado(timbrado: Record<string, unknown> | null)
   }
 
   return `${establecimiento}-${puntoExpedicion}-${documentoNro}`;
+}
+
+function numberOrNull(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
 function mapFetchError(error: unknown): FiscalGatewayError {

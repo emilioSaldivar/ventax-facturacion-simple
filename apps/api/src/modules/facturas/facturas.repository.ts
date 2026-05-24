@@ -1267,6 +1267,8 @@ function mapFacturaRow(row: FacturaRow, items: FacturaItemPreview[]): DocumentoR
     fiscal_document_id: row.fiscal_document_id,
     external_ref: row.external_ref,
     fiscal_envio_modo: getFiscalEnvioModo(fiscalStatus),
+    delivery_mode: getDeliveryMode(fiscalStatus),
+    fiscal_idempotent: getBoolean(fiscalStatus?.idempotent),
     batch: getBatchTransmissionInfo(fiscalStatus),
     cliente: row.cliente_snapshot as DocumentoResponse["cliente"],
     items,
@@ -1299,6 +1301,15 @@ function getFiscalEnvioModo(fiscalStatus: Record<string, unknown> | null): Docum
   return deliveryMode === "SYNC" || explicitMode === "SYNC" ? "SYNC" : "BATCH";
 }
 
+function getDeliveryMode(fiscalStatus: Record<string, unknown> | null): DocumentoResponse["delivery_mode"] {
+  const deliveryMode = getString(fiscalStatus?.delivery_mode);
+  if (deliveryMode === "SYNC" || deliveryMode === "BATCH" || deliveryMode === "AUTO_FALLBACK_BATCH") {
+    return deliveryMode;
+  }
+
+  return null;
+}
+
 function getBatchTransmissionInfo(fiscalStatus: Record<string, unknown> | null): DocumentoResponse["batch"] {
   const batch = fiscalStatus?.batch;
   if (!batch || typeof batch !== "object") {
@@ -1326,4 +1337,8 @@ function getBatchTransmissionInfo(fiscalStatus: Record<string, unknown> | null):
 
 function getString(value: unknown): string | null {
   return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+function getBoolean(value: unknown): boolean | null {
+  return typeof value === "boolean" ? value : null;
 }

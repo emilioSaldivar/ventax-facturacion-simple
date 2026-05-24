@@ -557,6 +557,107 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
+  /facturas/{documentoId}/eventos:
+    get:
+      tags: [Facturas]
+      summary: Consultar historial del documento
+      parameters:
+        - $ref: "#/components/parameters/DocumentoId"
+      responses:
+        "200":
+          description: Historial de eventos del documento
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DocumentoEventosListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Documento sin CDC fiscal para historial
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: Backend fiscal no disponible o rechazo la consulta
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "504":
+          description: Timeout al consultar backend fiscal
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /facturas/gestion/batch-pendientes:
+    get:
+      tags: [Facturas]
+      summary: Consultar documentos en espera de confirmacion
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+      responses:
+        "200":
+          description: Resumen de documentos/lotes pendientes en FE
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BatchPendientesGestionResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "502":
+          description: Backend fiscal no disponible o rechazo la consulta
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "504":
+          description: Timeout al consultar backend fiscal
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /facturas/gestion/reconciliacion:
+    get:
+      tags: [Facturas]
+      summary: Comparar documentos con registro fiscal (soporte interno)
+      parameters:
+        - $ref: "#/components/parameters/Q"
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+      responses:
+        "200":
+          description: Lista fiscal FE para conciliacion operativa
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReconciliacionFiscalResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Disponible solo para soporte interno
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: Backend fiscal no disponible o rechazo la consulta
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "504":
+          description: Timeout al consultar backend fiscal
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /facturas/{documentoId}/refresh-status:
     post:
       tags: [Facturas]
@@ -1194,7 +1295,7 @@ components:
           type: string
         emisor_id:
           type: string
-          description: ID del emisor en facturacion-electronica Ventax.
+          description: RUC completo del emisor en `facturacion-electronica` (formato numero-dv, ejemplo `80136968-1`).
         razon_social:
           type: string
         ruc:
@@ -1439,6 +1540,13 @@ components:
         `BATCH` es el default operativo de facturadores; `SYNC` queda para smoke opt-in/desarrollo.
       enum: [BATCH, SYNC]
 
+    FiscalDeliveryMode:
+      type: string
+      description: |
+        Modo de despacho efectivo retornado por `facturacion-electronica` para el documento emitido.
+        `AUTO_FALLBACK_BATCH` indica que FE recibio solicitud con auto/fallback y despacho final por lote.
+      enum: [SYNC, BATCH, AUTO_FALLBACK_BATCH]
+
     FacturaPreviewRequest:
       type: object
       required: [condicion_venta, tipo_transaccion, cliente, items]
@@ -1598,6 +1706,14 @@ components:
           nullable: true
         fiscal_envio_modo:
           $ref: "#/components/schemas/FiscalEnvioModo"
+        delivery_mode:
+          allOf:
+            - $ref: "#/components/schemas/FiscalDeliveryMode"
+          nullable: true
+        fiscal_idempotent:
+          type: boolean
+          nullable: true
+          description: Indica si FE reporto respuesta idempotente reutilizando un documento fiscal existente.
         batch:
           $ref: "#/components/schemas/BatchTransmissionSummary"
         cliente:
@@ -1636,6 +1752,126 @@ components:
             $ref: "#/components/schemas/DocumentoResponse"
         total:
           type: integer
+
+    DocumentoEventoResponse:
+      type: object
+      required: [event_id, type, status, created_at]
+      properties:
+        event_id:
+          type: string
+          nullable: true
+        type:
+          type: string
+          nullable: true
+        status:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    DocumentoEventosListResponse:
+      type: object
+      required: [documento_id, cdc, events]
+      properties:
+        documento_id:
+          type: string
+        cdc:
+          type: string
+        events:
+          type: array
+          items:
+            $ref: "#/components/schemas/DocumentoEventoResponse"
+
+    BatchPendientesGestionResponse:
+      type: object
+      required: [documents_pending, batches_pending, documents, batches]
+      properties:
+        documents_pending:
+          type: integer
+        batches_pending:
+          type: integer
+        documents:
+          type: array
+          items:
+            type: object
+            properties:
+              document_id:
+                type: string
+                nullable: true
+              cdc:
+                type: string
+                nullable: true
+              nro_factura:
+                type: string
+                nullable: true
+              status:
+                type: string
+                nullable: true
+              fecha_emision:
+                type: string
+                nullable: true
+              tipo_documento:
+                type: string
+                nullable: true
+        batches:
+          type: array
+          items:
+            type: object
+            properties:
+              batch_id:
+                type: string
+                nullable: true
+              did:
+                type: string
+                nullable: true
+              status:
+                type: string
+                nullable: true
+              doc_count:
+                type: integer
+                nullable: true
+              result_code:
+                type: string
+                nullable: true
+              result_message:
+                type: string
+                nullable: true
+
+    ReconciliacionFiscalResponse:
+      type: object
+      required: [items, next]
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              document_id:
+                type: string
+                nullable: true
+              cdc:
+                type: string
+                nullable: true
+              nro_factura:
+                type: string
+                nullable: true
+              status:
+                type: string
+                nullable: true
+              fecha_emision:
+                type: string
+                nullable: true
+              receptor_doc:
+                type: string
+                nullable: true
+              receptor_nombre:
+                type: string
+                nullable: true
+        next:
+          type: integer
+          nullable: true
 
     BatchTransmissionSummary:
       type: object
@@ -1858,6 +2094,7 @@ components:
           format: uuid
         emisor_id:
           type: string
+          description: RUC completo del emisor en FE (`numero-dv`), no ID interno numerico.
         establecimiento:
           type: string
         punto_expedicion:

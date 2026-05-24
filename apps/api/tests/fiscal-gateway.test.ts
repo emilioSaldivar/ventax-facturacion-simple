@@ -399,6 +399,37 @@ describe("fiscal gateway", () => {
     });
   });
 
+  it("maps AUTO_FALLBACK_BATCH delivery mode without ambiguities", async () => {
+    const gateway = new RealFiscalGateway({
+      mode: "real",
+      baseUrl: "https://fe-api.ventax.app/fcws",
+      apiKey: "secret",
+      timeoutMs: 20000,
+      environment: "test"
+    });
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        new Response(
+          JSON.stringify({
+            document_id: "doc-auto-fallback",
+            cdc: "A".repeat(44),
+            nro_factura: "001-001-0000999",
+            status: "PENDING",
+            delivery_mode: "AUTO_FALLBACK_BATCH"
+          }),
+          { status: 202, headers: { "content-type": "application/json" } }
+        )
+      )
+    );
+
+    const result = await gateway.emitFactura(request);
+    expect(result.estado).toBe("PENDIENTE_SIFEN");
+    expect(result.fiscal_envio_modo).toBe("BATCH");
+    expect(result.delivery_mode).toBe("AUTO_FALLBACK_BATCH");
+  });
+
   it("maps fiscal code 0422 (CDC encontrado) as approved emission", async () => {
     const gateway = new RealFiscalGateway({
       mode: "real",
@@ -758,7 +789,7 @@ describe("fiscal gateway", () => {
 
     expect(result).toMatchObject({
       event_id: "evt-real-1",
-      estado: "ANULADA"
+      estado: "PENDIENTE_SIFEN"
     });
     expect(calls).toHaveLength(1);
     expect(calls[0]?.url).toBe("https://fe-api.ventax.app/fcws/evento/cancelar");
@@ -772,5 +803,65 @@ describe("fiscal gateway", () => {
       cdc: "C".repeat(44),
       motivo: "Error en datos del receptor"
     });
+  });
+
+  it("adds env query when downloading XML and KUDE artifacts", async () => {
+    const calls: string[] = [];
+    const gateway = new RealFiscalGateway({
+      mode: "real",
+      baseUrl: "https://fe-api.ventax.app/fcws",
+      apiKey: "secret",
+      timeoutMs: 20000,
+      environment: "test"
+    });
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        calls.push(url);
+        return new Response("artifact", { status: 200, headers: { "content-type": "application/pdf" } });
+      })
+    );
+
+    await gateway.getXml("X".repeat(44));
+    await gateway.getKudePdf("Y".repeat(44));
+
+    expect(calls[0]).toBe(`https://fe-api.ventax.app/fcws/files/xml/${"X".repeat(44)}?env=test`);
+    expect(calls[1]).toBe(`https://fe-api.ventax.app/fcws/files/kude/${"Y".repeat(44)}.pdf?env=test`);
+  });
+
+  it("queries eventos, pendientes batch y facturalista with env", async () => {
+    const calls: string[] = [];
+    const gateway = new RealFiscalGateway({
+      mode: "real",
+      baseUrl: "https://fe-api.ventax.app/fcws",
+      apiKey: "secret",
+      timeoutMs: 20000,
+      environment: "test"
+    });
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        calls.push(url);
+
+        if (url.includes("/consultar/evento/")) {
+          return new Response(JSON.stringify({ events: [] }), { status: 200, headers: { "content-type": "application/json" } });
+        }
+        if (url.includes("/batch-pendientes")) {
+          return new Response(JSON.stringify({ documents: [], batches: [] }), { status: 200, headers: { "content-type": "application/json" } });
+        }
+
+        return new Response(JSON.stringify({ items: [], next: null }), { status: 200, headers: { "content-type": "application/json" } });
+      })
+    );
+
+    await gateway.getDocumentoEventos("C".repeat(44));
+    await gateway.getBatchPendientesByEmisor({ emisorId: "80136968-1", limit: 20, offset: 0 });
+    await gateway.getFacturalistaByEmisor({ emisorId: "80136968-1", offset: 0, limit: 20 });
+
+    expect(calls[0]).toBe(`https://fe-api.ventax.app/fcws/consultar/evento/${"C".repeat(44)}?env=test`);
+    expect(calls[1]).toBe("https://fe-api.ventax.app/fcws/consultar/80136968-1/batch-pendientes?env=test&limit=20&offset=0");
+    expect(calls[2]).toBe("https://fe-api.ventax.app/fcws/consultar/80136968-1/facturalista/0?env=test&limit=20");
   });
 });

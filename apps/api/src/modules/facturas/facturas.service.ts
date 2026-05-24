@@ -15,12 +15,15 @@ import type {
   DocumentoListFilters,
   DocumentoListResponse,
   DocumentoEstado,
+  DocumentoEventosListResponse,
   DocumentoResponse,
   FacturaItemPreview,
   FacturaPreviewInput,
   FacturaPreviewResponse,
   FacturaRepository,
-  NotaCreditoCandidateListResponse
+  BatchPendientesGestionResponse,
+  NotaCreditoCandidateListResponse,
+  ReconciliacionFiscalResponse
 } from "./facturas.types";
 
 export function previewFactura(
@@ -310,6 +313,113 @@ export async function cancelDocumento(
         error.code === "TIMEOUT" ? 504 : 502,
         "INTERNAL_ERROR",
         error.code === "TIMEOUT" ? "Timeout al cancelar documento fiscal." : "No se pudo cancelar documento fiscal.",
+        {
+          gateway_code: error.code,
+          details: error.details ?? null
+        }
+      );
+    }
+    throw error;
+  }
+}
+
+export async function getDocumentoEventos(
+  context: OperationalContextResponse,
+  documentoId: string,
+  repository: FacturaRepository,
+  gateway: FiscalGateway
+): Promise<DocumentoEventosListResponse> {
+  const documento = await getDocumentoById(context, documentoId, repository);
+  if (!documento.cdc) {
+    throw new HttpError(409, "CONFLICT", "Documento sin CDC fiscal para consultar historial.");
+  }
+
+  try {
+    const response = await gateway.getDocumentoEventos(documento.cdc);
+    return {
+      documento_id: documento.id,
+      cdc: documento.cdc,
+      events: response.events
+    };
+  } catch (error) {
+    if (error instanceof FiscalGatewayError) {
+      throw new HttpError(
+        error.code === "TIMEOUT" ? 504 : 502,
+        "INTERNAL_ERROR",
+        error.code === "TIMEOUT" ? "Timeout al consultar historial fiscal." : "No se pudo consultar historial fiscal.",
+        {
+          gateway_code: error.code,
+          details: error.details ?? null
+        }
+      );
+    }
+    throw error;
+  }
+}
+
+export async function getBatchPendientesGestion(
+  context: OperationalContextResponse,
+  input: { limit: number; offset: number },
+  gateway: FiscalGateway
+): Promise<BatchPendientesGestionResponse> {
+  try {
+    const response = await gateway.getBatchPendientesByEmisor({
+      emisorId: context.facturador.emisor_id,
+      limit: input.limit,
+      offset: input.offset
+    });
+
+    return {
+      documents_pending: response.documents.length,
+      batches_pending: response.batches.length,
+      documents: response.documents,
+      batches: response.batches
+    };
+  } catch (error) {
+    if (error instanceof FiscalGatewayError) {
+      throw new HttpError(
+        error.code === "TIMEOUT" ? 504 : 502,
+        "INTERNAL_ERROR",
+        error.code === "TIMEOUT"
+          ? "Timeout al consultar documentos en espera de confirmacion."
+          : "No se pudo consultar documentos en espera de confirmacion.",
+        {
+          gateway_code: error.code,
+          details: error.details ?? null
+        }
+      );
+    }
+    throw error;
+  }
+}
+
+export async function getReconciliacionFiscal(
+  context: OperationalContextResponse,
+  input: { offset: number; limit: number; q?: string },
+  gateway: FiscalGateway
+): Promise<ReconciliacionFiscalResponse> {
+  if (context.user.role === "OPERADOR_FACTURACION") {
+    throw new HttpError(403, "FORBIDDEN", "Comparar con registro fiscal disponible solo para soporte interno.");
+  }
+
+  try {
+    const response = await gateway.getFacturalistaByEmisor({
+      emisorId: context.facturador.emisor_id,
+      offset: input.offset,
+      limit: input.limit,
+      q: input.q
+    });
+
+    return {
+      items: response.items,
+      next: response.next
+    };
+  } catch (error) {
+    if (error instanceof FiscalGatewayError) {
+      throw new HttpError(
+        error.code === "TIMEOUT" ? 504 : 502,
+        "INTERNAL_ERROR",
+        error.code === "TIMEOUT" ? "Timeout al comparar con registro fiscal." : "No se pudo comparar con registro fiscal.",
         {
           gateway_code: error.code,
           details: error.details ?? null

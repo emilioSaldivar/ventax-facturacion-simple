@@ -143,6 +143,8 @@ interface DocumentoResponse {
   fiscal_document_id: string | null;
   external_ref: string | null;
   fiscal_envio_modo?: "BATCH" | "SYNC";
+  delivery_mode?: "SYNC" | "BATCH" | "AUTO_FALLBACK_BATCH" | null;
+  fiscal_idempotent?: boolean | null;
   batch?: Record<string, unknown> | null;
   cliente: FacturaClienteInput;
   totals: FacturaPreviewResponse["totals"];
@@ -186,6 +188,53 @@ interface DeliveryLinkResponse {
 interface EmailStatusResponse {
   status: DocumentoResponse["delivery"]["email_status"];
   message: string | null;
+}
+
+interface DocumentoEventoResponse {
+  event_id: string | null;
+  type: string | null;
+  status: string | null;
+  created_at: string | null;
+}
+
+interface DocumentoEventosListResponse {
+  documento_id: string;
+  cdc: string;
+  events: DocumentoEventoResponse[];
+}
+
+interface BatchPendientesGestionResponse {
+  documents_pending: number;
+  batches_pending: number;
+  documents: Array<{
+    document_id: string | null;
+    cdc: string | null;
+    nro_factura: string | null;
+    status: string | null;
+    fecha_emision: string | null;
+    tipo_documento: string | null;
+  }>;
+  batches: Array<{
+    batch_id: string | null;
+    did: string | null;
+    status: string | null;
+    doc_count: number | null;
+    result_code: string | null;
+    result_message: string | null;
+  }>;
+}
+
+interface ReconciliacionFiscalResponse {
+  items: Array<{
+    document_id: string | null;
+    cdc: string | null;
+    nro_factura: string | null;
+    status: string | null;
+    fecha_emision: string | null;
+    receptor_doc: string | null;
+    receptor_nombre: string | null;
+  }>;
+  next: number | null;
 }
 
 interface InvoiceLineDraft {
@@ -668,6 +717,11 @@ function DocumentsView({
   const [emailStatus, setEmailStatus] = useState<EmailStatusResponse | null>(null);
   const [whatsappPhone, setWhatsappPhone] = useState("");
   const [message, setMessage] = useState<string | null>(null);
+  const [eventos, setEventos] = useState<DocumentoEventosListResponse | null>(null);
+  const [batchPendientes, setBatchPendientes] = useState<BatchPendientesGestionResponse | null>(null);
+  const [reconciliacion, setReconciliacion] = useState<ReconciliacionFiscalResponse | null>(null);
+  const [gestionTab, setGestionTab] = useState<"STATUS" | "EVENTOS" | "PENDIENTES" | "RECONCILIACION">("STATUS");
+  const [gestionLoading, setGestionLoading] = useState(false);
 
   useEffect(() => {
     void loadDocuments();
@@ -842,6 +896,50 @@ function DocumentsView({
     }
   }
 
+  async function loadEventosDocumento() {
+    if (!selected) {
+      setMessage("Seleccione un documento para consultar historial.");
+      return;
+    }
+
+    setGestionLoading(true);
+    setGestionTab("EVENTOS");
+    try {
+      const result = await api.get<DocumentoEventosListResponse>(`/facturas/${selected.id}/eventos`);
+      setEventos(result);
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "No se pudo consultar historial del documento.");
+    } finally {
+      setGestionLoading(false);
+    }
+  }
+
+  async function loadBatchPendientes() {
+    setGestionLoading(true);
+    setGestionTab("PENDIENTES");
+    try {
+      const result = await api.get<BatchPendientesGestionResponse>("/facturas/gestion/batch-pendientes?limit=20&offset=0");
+      setBatchPendientes(result);
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "No se pudo consultar documentos en espera.");
+    } finally {
+      setGestionLoading(false);
+    }
+  }
+
+  async function loadReconciliacion() {
+    setGestionLoading(true);
+    setGestionTab("RECONCILIACION");
+    try {
+      const result = await api.get<ReconciliacionFiscalResponse>("/facturas/gestion/reconciliacion?limit=20&offset=0");
+      setReconciliacion(result);
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "No se pudo comparar con registro fiscal.");
+    } finally {
+      setGestionLoading(false);
+    }
+  }
+
   const selectedSifenSummary = selected ? getSifenSummary(selected) : null;
   const selectedKudeUrl = selected && deliveryLink && selected.delivery.artifacts.kude_pdf.available ? `${deliveryLink.public_url}/kude.pdf` : null;
   const selectedXmlUrl = selected && deliveryLink && selected.delivery.artifacts.xml.available ? `${deliveryLink.public_url}/xml` : null;
@@ -903,6 +1001,74 @@ function DocumentsView({
       </section>
 
       {error ? <p className="form-error">{error}</p> : null}
+
+      <section className="document-management" aria-label="Gestion de documentos">
+        <header className="document-management-header">
+          <h3>Gestion de documentos</h3>
+          <p className="muted">Accesos rapidos para seguimiento y autogestion operativa.</p>
+        </header>
+        <div className="document-management-grid">
+          <article className="document-management-card">
+            <h4>Estado de mis documentos</h4>
+            <p className="muted">Revise emision, pendientes y rechazados en un solo lugar.</p>
+            <button className="secondary-action" onClick={() => setGestionTab("STATUS")} type="button">
+              Ver estado
+            </button>
+          </article>
+          <article className="document-management-card">
+            <h4>Historial del documento</h4>
+            <p className="muted">Consulte eventos y cambios de estado por comprobante.</p>
+            <button className="secondary-action" onClick={() => void loadEventosDocumento()} type="button">
+              Consultar historial
+            </button>
+          </article>
+          <article className="document-management-card">
+            <h4>Documentos en espera de confirmacion</h4>
+            <p className="muted">Identifique comprobantes pendientes de respuesta fiscal.</p>
+            <button className="secondary-action" onClick={() => void loadBatchPendientes()} type="button">
+              Ver pendientes
+            </button>
+          </article>
+          <article className="document-management-card">
+            <h4>Comparar con registro fiscal</h4>
+            <p className="muted">Contraste documentos operativos contra el registro fiscal.</p>
+            <button className="secondary-action" onClick={() => void loadReconciliacion()} type="button">
+              Comparar
+            </button>
+          </article>
+        </div>
+        {gestionLoading ? <p className="muted">Consultando gestion de documentos...</p> : null}
+        {gestionTab === "EVENTOS" && eventos ? (
+          <div className="document-management-results">
+            <strong>Historial del documento</strong>
+            {eventos.events.length === 0 ? <p className="muted">Sin eventos registrados para este documento.</p> : null}
+            {eventos.events.map((event) => (
+              <p className="muted" key={`${event.event_id ?? "evt"}-${event.created_at ?? "time"}`}>
+                {(event.type ?? "EVENTO")} · {(event.status ?? "SIN_ESTADO")} · {event.created_at ?? "sin fecha"}
+              </p>
+            ))}
+          </div>
+        ) : null}
+        {gestionTab === "PENDIENTES" && batchPendientes ? (
+          <div className="document-management-results">
+            <strong>Documentos en espera de confirmacion</strong>
+            <p className="muted">
+              Documentos: {batchPendientes.documents_pending} · Lotes: {batchPendientes.batches_pending}
+            </p>
+          </div>
+        ) : null}
+        {gestionTab === "RECONCILIACION" && reconciliacion ? (
+          <div className="document-management-results">
+            <strong>Comparar con registro fiscal</strong>
+            {reconciliacion.items.length === 0 ? <p className="muted">Sin diferencias visibles para la consulta actual.</p> : null}
+            {reconciliacion.items.slice(0, 3).map((item) => (
+              <p className="muted" key={`${item.document_id ?? "doc"}-${item.cdc ?? "cdc"}`}>
+                {(item.nro_factura ?? "sin numero")} · {(item.status ?? "sin estado")} · {(item.receptor_nombre ?? "sin receptor")}
+              </p>
+            ))}
+          </div>
+        ) : null}
+      </section>
 
       <section className="documents-layout">
         <div className="documents-list">

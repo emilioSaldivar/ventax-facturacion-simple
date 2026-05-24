@@ -5,10 +5,13 @@ import {
   type FiscalGatewayHealth,
   type FiscalCancelFacturaRequest,
   type FiscalCancelFacturaResponse,
+  type FiscalBatchPendientesResponse,
+  type FiscalDocumentoEventosResponse,
   type FiscalEmitFacturaRequest,
   type FiscalEmitFacturaResponse,
   type FiscalEmitNotaCreditoRequest,
   type FiscalEmitNotaCreditoResponse,
+  type FiscalFacturalistaResponse,
   type FiscalRefreshStatusRequest,
   type FiscalRefreshStatusResponse
 } from "../src/modules/fiscal-gateway/fiscal-gateway.types";
@@ -16,7 +19,10 @@ import {
   emitFacturaAgainstFiscalGateway,
   cancelDocumento,
   emitNotaCreditoTotal,
+  getBatchPendientesGestion,
   getDocumentoById,
+  getDocumentoEventos,
+  getReconciliacionFiscal,
   listNotaCreditoCandidates,
   listDocumentos,
   previewFactura,
@@ -311,6 +317,20 @@ class FakeFiscalGateway implements FiscalGateway {
       estado: "EMITIDA",
       email_status: "DELEGATED",
       raw: { document_id: "nce-doc-1", status: "APPROVED" }
+    },
+    private readonly eventosResponse: FiscalDocumentoEventosResponse = {
+      events: [],
+      raw: { events: [] }
+    },
+    private readonly batchPendientesResponse: FiscalBatchPendientesResponse = {
+      documents: [],
+      batches: [],
+      raw: { documents: [], batches: [] }
+    },
+    private readonly facturalistaResponse: FiscalFacturalistaResponse = {
+      items: [],
+      next: null,
+      raw: { items: [], next: null }
     }
   ) {}
 
@@ -364,6 +384,18 @@ class FakeFiscalGateway implements FiscalGateway {
       content_type: "application/pdf",
       filename: "mock.pdf"
     };
+  }
+
+  async getDocumentoEventos(): Promise<FiscalDocumentoEventosResponse> {
+    return this.eventosResponse;
+  }
+
+  async getBatchPendientesByEmisor(): Promise<FiscalBatchPendientesResponse> {
+    return this.batchPendientesResponse;
+  }
+
+  async getFacturalistaByEmisor(): Promise<FiscalFacturalistaResponse> {
+    return this.facturalistaResponse;
   }
 }
 
@@ -1478,5 +1510,116 @@ describe("facturas service", () => {
       facturadorId: context.facturador.id,
       idempotencyKey: "idem-async-existing"
     });
+  });
+
+  it("returns fiscal events by documento id using CDC", async () => {
+    const repo = new FakeFacturaRepository();
+    repo.findByIdResponse = buildDocumento();
+    const gateway = new FakeFiscalGateway(
+      new FiscalGatewayError("UPSTREAM_ERROR", "unused"),
+      undefined,
+      undefined,
+      undefined,
+      {
+        events: [
+          {
+            event_id: "evt-1",
+            type: "CANCEL",
+            status: "SENT",
+            created_at: "2026-05-24T00:00:00.000Z",
+            response: null
+          }
+        ],
+        raw: { events: [{ event_id: "evt-1" }] }
+      }
+    );
+
+    const result = await getDocumentoEventos(context, repo.findByIdResponse.id, repo, gateway);
+
+    expect(result).toEqual({
+      documento_id: repo.findByIdResponse.id,
+      cdc: repo.findByIdResponse.cdc,
+      events: [
+        {
+          event_id: "evt-1",
+          type: "CANCEL",
+          status: "SENT",
+          created_at: "2026-05-24T00:00:00.000Z",
+          response: null
+        }
+      ]
+    });
+  });
+
+  it("returns batch pending management summary", async () => {
+    const gateway = new FakeFiscalGateway(
+      new FiscalGatewayError("UPSTREAM_ERROR", "unused"),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      {
+        documents: [{ document_id: "doc-1", cdc: "A".repeat(44), nro_factura: "001-001-0000001", status: "PENDING", fecha_emision: null, tipo_documento: "1" }],
+        batches: [{ batch_id: "batch-1", did: "1", status: "PROCESSING", doc_count: 1, result_code: "0360", result_message: "OK" }],
+        raw: {}
+      }
+    );
+
+    const result = await getBatchPendientesGestion(context, { limit: 50, offset: 0 }, gateway);
+    expect(result.documents_pending).toBe(1);
+    expect(result.batches_pending).toBe(1);
+    expect(result.documents[0]?.document_id).toBe("doc-1");
+    expect(result.batches[0]?.batch_id).toBe("batch-1");
+  });
+
+  it("restricts reconciliation endpoint for operator role", async () => {
+    const gateway = new FakeFiscalGateway(new FiscalGatewayError("UPSTREAM_ERROR", "unused"));
+
+    await expect(
+      getReconciliacionFiscal(
+        {
+          ...context,
+          user: {
+            ...context.user,
+            role: "OPERADOR_FACTURACION"
+          }
+        },
+        { offset: 0, limit: 20 },
+        gateway
+      )
+    ).rejects.toMatchObject({
+      statusCode: 403
+    });
+  });
+
+  it("allows reconciliation endpoint for support role", async () => {
+    const gateway = new FakeFiscalGateway(
+      new FiscalGatewayError("UPSTREAM_ERROR", "unused"),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      {
+        items: [{ document_id: "doc-1", cdc: "A".repeat(44), nro_factura: "001-001-0000001", status: "APPROVED", fecha_emision: null, receptor_doc: "492019", receptor_nombre: "CLIENTE" }],
+        next: 20,
+        raw: {}
+      }
+    );
+
+    const result = await getReconciliacionFiscal(
+      {
+        ...context,
+        user: {
+          ...context.user,
+          role: "SOPORTE_INTERNO"
+        }
+      },
+      { offset: 0, limit: 20, q: "492019" },
+      gateway
+    );
+
+    expect(result.items).toHaveLength(1);
+    expect(result.next).toBe(20);
   });
 });

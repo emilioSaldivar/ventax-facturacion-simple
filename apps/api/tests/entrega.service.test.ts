@@ -142,6 +142,18 @@ class FakeFiscalGateway implements FiscalGateway {
     throw new Error("not needed");
   }
 
+  async getDocumentoEventos() {
+    throw new Error("not needed");
+  }
+
+  async getBatchPendientesByEmisor() {
+    throw new Error("not needed");
+  }
+
+  async getFacturalistaByEmisor() {
+    throw new Error("not needed");
+  }
+
   async getXml(cdc: string) {
     this.lastXmlCdc = cdc;
     return {

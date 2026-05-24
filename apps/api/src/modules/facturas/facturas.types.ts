@@ -1,6 +1,7 @@
 import type { TaxCalculatedLine, TaxTotals, TipoIva } from "@facturacion-simple/shared";
 import type { DocumentoIdentidadTipo } from "../clientes/clientes.types";
 import type {
+  FiscalDeliveryMode,
   FiscalEmitFacturaRequest,
   FiscalEmitFacturaResponse,
   FiscalEmitNotaCreditoRequest,
@@ -88,6 +89,8 @@ export interface DocumentoResponse {
   fiscal_document_id: string | null;
   external_ref: string | null;
   fiscal_envio_modo: FiscalEnvioModo;
+  delivery_mode?: FiscalDeliveryMode | null;
+  fiscal_idempotent?: boolean | null;
   batch: FiscalBatchTransmissionInfo | null;
   cliente: FacturaClienteInput;
   items: FacturaItemPreview[];
@@ -124,6 +127,53 @@ export interface NotaCreditoCandidate {
 export interface NotaCreditoCandidateListResponse {
   items: NotaCreditoCandidate[];
   total: number;
+}
+
+export interface DocumentoEventoResponse {
+  event_id: string | null;
+  type: string | null;
+  status: string | null;
+  created_at: string | null;
+}
+
+export interface DocumentoEventosListResponse {
+  documento_id: string;
+  cdc: string;
+  events: DocumentoEventoResponse[];
+}
+
+export interface BatchPendientesGestionResponse {
+  documents_pending: number;
+  batches_pending: number;
+  documents: Array<{
+    document_id: string | null;
+    cdc: string | null;
+    nro_factura: string | null;
+    status: string | null;
+    fecha_emision: string | null;
+    tipo_documento: string | null;
+  }>;
+  batches: Array<{
+    batch_id: string | null;
+    did: string | null;
+    status: string | null;
+    doc_count: number | null;
+    result_code: string | null;
+    result_message: string | null;
+  }>;
+}
+
+export interface ReconciliacionFiscalResponse {
+  items: Array<{
+    document_id: string | null;
+    cdc: string | null;
+    nro_factura: string | null;
+    status: string | null;
+    fecha_emision: string | null;
+    receptor_doc: string | null;
+    receptor_nombre: string | null;
+  }>;
+  next: number | null;
 }
 
 export interface FacturaPersistInput {

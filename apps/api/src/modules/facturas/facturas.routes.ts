@@ -12,7 +12,10 @@ import {
   cancelDocumento,
   enqueueFacturaEmission,
   emitNotaCreditoTotal,
+  getBatchPendientesGestion,
   getDocumentoById,
+  getDocumentoEventos,
+  getReconciliacionFiscal,
   listNotaCreditoCandidates,
   listDocumentos,
   previewFactura,
@@ -80,6 +83,17 @@ const documentoParamsSchema = z.object({
   documentoId: z.string().uuid()
 });
 
+const gestionBatchQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(200).default(50),
+  offset: z.coerce.number().int().min(0).default(0)
+});
+
+const reconciliacionQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(200).default(50),
+  offset: z.coerce.number().int().min(0).default(0),
+  q: z.string().trim().min(1).max(120).optional()
+});
+
 const cancelacionSchema = z.object({
   motivo: z.string().trim().min(1).max(150)
 });
@@ -124,6 +138,66 @@ facturasRouter.get("/facturas/:documentoId", requireAuth, validateRequest("param
     next(error);
   }
 });
+
+facturasRouter.get(
+  "/facturas/:documentoId/eventos",
+  requireAuth,
+  validateRequest("params", documentoParamsSchema),
+  async (req, res, next) => {
+    try {
+      const context = await getOperationalContext(req.user!.id, operationalContextRepository);
+      const result = await getDocumentoEventos(context, String(req.params.documentoId), facturasRepository, fiscalGateway);
+      res.json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+facturasRouter.get(
+  "/facturas/gestion/batch-pendientes",
+  requireAuth,
+  validateRequest("query", gestionBatchQuerySchema),
+  async (req, res, next) => {
+    try {
+      const context = await getOperationalContext(req.user!.id, operationalContextRepository);
+      const result = await getBatchPendientesGestion(
+        context,
+        {
+          limit: Number(req.query.limit),
+          offset: Number(req.query.offset)
+        },
+        fiscalGateway
+      );
+      res.json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+facturasRouter.get(
+  "/facturas/gestion/reconciliacion",
+  requireAuth,
+  validateRequest("query", reconciliacionQuerySchema),
+  async (req, res, next) => {
+    try {
+      const context = await getOperationalContext(req.user!.id, operationalContextRepository);
+      const result = await getReconciliacionFiscal(
+        context,
+        {
+          offset: Number(req.query.offset),
+          limit: Number(req.query.limit),
+          q: typeof req.query.q === "string" ? req.query.q : undefined
+        },
+        fiscalGateway
+      );
+      res.json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
 
 facturasRouter.post(
   "/facturas/:documentoId/refresh-status",

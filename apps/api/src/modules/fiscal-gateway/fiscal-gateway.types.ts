@@ -5,6 +5,7 @@ import type { FacturaClienteInput, FacturaItemPreview } from "../facturas/factur
 export type FiscalGatewayMode = "mock" | "real";
 export type FiscalGatewayErrorCode = "TIMEOUT" | "UPSTREAM_ERROR" | "UNAVAILABLE" | "INVALID_RESPONSE";
 export type FiscalEnvioModo = "BATCH" | "SYNC";
+export type FiscalDeliveryMode = "SYNC" | "BATCH" | "AUTO_FALLBACK_BATCH";
 
 export interface FiscalBatchTransmissionInfo {
   batch_id: string | null;
@@ -67,7 +68,8 @@ export interface FiscalEmitFacturaResponse {
   numero_fiscal: string | null;
   estado: "EMITIDA" | "PENDIENTE_SIFEN" | "RECHAZADA";
   fiscal_envio_modo?: FiscalEnvioModo;
-  delivery_mode?: string | null;
+  delivery_mode?: FiscalDeliveryMode | null;
+  idempotent?: boolean | null;
   batch?: FiscalBatchTransmissionInfo | null;
   email_status: "NOT_APPLICABLE" | "DELEGATED" | "SENT" | "FAILED" | "UNKNOWN";
   raw: Record<string, unknown>;
@@ -96,6 +98,59 @@ export interface FiscalCancelFacturaResponse {
   raw: Record<string, unknown>;
 }
 
+export interface FiscalDocumentoEvento {
+  event_id: string | null;
+  type: string | null;
+  status: string | null;
+  created_at: string | null;
+  response: Record<string, unknown> | null;
+}
+
+export interface FiscalDocumentoEventosResponse {
+  events: FiscalDocumentoEvento[];
+  raw: Record<string, unknown>;
+}
+
+export interface FiscalBatchPendienteDocumento {
+  document_id: string | null;
+  cdc: string | null;
+  nro_factura: string | null;
+  status: string | null;
+  fecha_emision: string | null;
+  tipo_documento: string | null;
+}
+
+export interface FiscalBatchPendienteLote {
+  batch_id: string | null;
+  did: string | null;
+  status: string | null;
+  doc_count: number | null;
+  result_code: string | null;
+  result_message: string | null;
+}
+
+export interface FiscalBatchPendientesResponse {
+  documents: FiscalBatchPendienteDocumento[];
+  batches: FiscalBatchPendienteLote[];
+  raw: Record<string, unknown>;
+}
+
+export interface FiscalFacturalistaItem {
+  document_id: string | null;
+  cdc: string | null;
+  nro_factura: string | null;
+  status: string | null;
+  fecha_emision: string | null;
+  receptor_doc: string | null;
+  receptor_nombre: string | null;
+}
+
+export interface FiscalFacturalistaResponse {
+  items: FiscalFacturalistaItem[];
+  next: number | null;
+  raw: Record<string, unknown>;
+}
+
 export interface FiscalArtifactResponse {
   body: Buffer;
   content_type: string;
@@ -108,6 +163,9 @@ export interface FiscalGateway {
   emitNotaCredito(request: FiscalEmitNotaCreditoRequest): Promise<FiscalEmitNotaCreditoResponse>;
   refreshFacturaStatus(request: FiscalRefreshStatusRequest): Promise<FiscalRefreshStatusResponse>;
   cancelFactura(request: FiscalCancelFacturaRequest): Promise<FiscalCancelFacturaResponse>;
+  getDocumentoEventos(cdc: string): Promise<FiscalDocumentoEventosResponse>;
+  getBatchPendientesByEmisor(input: { emisorId: string; limit: number; offset: number }): Promise<FiscalBatchPendientesResponse>;
+  getFacturalistaByEmisor(input: { emisorId: string; offset: number; limit: number; q?: string }): Promise<FiscalFacturalistaResponse>;
   getXml(cdc: string): Promise<FiscalArtifactResponse>;
   getKudePdf(cdc: string): Promise<FiscalArtifactResponse>;
 }
