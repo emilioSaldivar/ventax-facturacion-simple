@@ -2381,27 +2381,6 @@ function InvoiceEditor({
             </div>
 
             <div className="sheet-grid">
-              <label>
-                Cantidad
-                <div className="quantity-stepper">
-                  <button
-                    aria-label="Restar cantidad"
-                    onClick={() => updateLine(activeLine.id, { cantidad: String(Math.max(1, Number(activeLine.cantidad || 1) - 1)) })}
-                    type="button"
-                  >
-                    -
-                  </button>
-                  <input inputMode="numeric" min="1" onChange={(event) => updateLine(activeLine.id, { cantidad: event.target.value })} value={activeLine.cantidad} />
-                  <button
-                    aria-label="Sumar cantidad"
-                    onClick={() => updateLine(activeLine.id, { cantidad: String((Number(activeLine.cantidad) || 0) + 1) })}
-                    type="button"
-                  >
-                    +
-                  </button>
-                </div>
-              </label>
-
               <label className="sheet-description">
                 Descripcion
                 <input
@@ -2415,18 +2394,41 @@ function InvoiceEditor({
                 />
               </label>
 
-              <label>
-                Precio
-                <input
-                  inputMode="numeric"
-                  min="0"
-                  onChange={(event) =>
-                    updateLine(activeLine.id, { catalogo_item_id: null, precio_unitario: event.target.value, lockedFromCatalog: false })
-                  }
-                  placeholder="0"
-                  value={activeLine.precio_unitario}
-                />
-              </label>
+              <div className="quantity-price-grid">
+                <label>
+                  Cantidad
+                  <div className="quantity-stepper">
+                    <button
+                      aria-label="Restar cantidad"
+                      onClick={() => updateLine(activeLine.id, { cantidad: String(Math.max(1, Number(activeLine.cantidad || 1) - 1)) })}
+                      type="button"
+                    >
+                      -
+                    </button>
+                    <input inputMode="numeric" min="1" onChange={(event) => updateLine(activeLine.id, { cantidad: event.target.value })} value={activeLine.cantidad} />
+                    <button
+                      aria-label="Sumar cantidad"
+                      onClick={() => updateLine(activeLine.id, { cantidad: String((Number(activeLine.cantidad) || 0) + 1) })}
+                      type="button"
+                    >
+                      +
+                    </button>
+                  </div>
+                </label>
+
+                <label>
+                  Precio
+                  <input
+                    inputMode="numeric"
+                    min="0"
+                    onChange={(event) =>
+                      updateLine(activeLine.id, { catalogo_item_id: null, precio_unitario: event.target.value, lockedFromCatalog: false })
+                    }
+                    placeholder="0"
+                    value={activeLine.precio_unitario}
+                  />
+                </label>
+              </div>
 
               {catalogSearching[activeLine.id] ? <span className="field-hint">Buscando catalogo...</span> : null}
               {(catalogSuggestions[activeLine.id] ?? []).length > 0 ? (
