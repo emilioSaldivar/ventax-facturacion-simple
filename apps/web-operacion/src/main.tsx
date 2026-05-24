@@ -12,6 +12,13 @@ type TipoTransaccionServicio = 1 | 2 | 3;
 type DocumentoIdentidadTipo = "RUC" | "CI" | "PASAPORTE" | "CEDULA_EXTRANJERA" | "NO_ESPECIFICADO";
 type TipoIva = "IVA_10" | "IVA_5" | "EXENTA";
 type DocumentoEstado = "EMITIENDO" | "EMITIDA" | "PENDIENTE_SIFEN" | "RECHAZADA" | "ERROR_OPERATIVO" | "ERROR_TEMPORAL" | "ANULADA";
+type BeforeInstallPromptChoice = { outcome: "accepted" | "dismissed"; platform?: string };
+
+interface BeforeInstallPromptEvent extends Event {
+  readonly platforms: string[];
+  readonly userChoice: Promise<BeforeInstallPromptChoice>;
+  prompt: () => Promise<void>;
+}
 
 interface UserSummary {
   id: string;
@@ -514,12 +521,85 @@ function OperationHome({
   const canEmit = Boolean(readiness?.ready);
   const [operationView, setOperationView] = useState<OperationView>(() => (canEmit ? "invoice" : "status"));
   const [menuOpen, setMenuOpen] = useState(false);
+  const [installPromptEvent, setInstallPromptEvent] = useState<BeforeInstallPromptEvent | null>(null);
+  const [showInstallHint, setShowInstallHint] = useState(false);
+  const [installing, setInstalling] = useState(false);
+
+  const isStandalone = useMemo(() => {
+    if (typeof window === "undefined") {
+      return false;
+    }
+    return window.matchMedia("(display-mode: standalone)").matches || (window.navigator as Navigator & { standalone?: boolean }).standalone === true;
+  }, []);
+  const isIosSafari = useMemo(() => {
+    if (typeof navigator === "undefined") {
+      return false;
+    }
+    const ua = navigator.userAgent.toLowerCase();
+    return /iphone|ipad|ipod/.test(ua) && /safari/.test(ua) && !/crios|fxios/.test(ua);
+  }, []);
 
   useEffect(() => {
     if (!canEmit) {
       setOperationView("status");
     }
   }, [canEmit]);
+
+  useEffect(() => {
+    if (isStandalone) {
+      return;
+    }
+    if (localStorage.getItem("ventax_pwa_install_dismissed") === "1") {
+      return;
+    }
+
+    const onBeforeInstallPrompt = (event: Event) => {
+      event.preventDefault();
+      setInstallPromptEvent(event as BeforeInstallPromptEvent);
+      setShowInstallHint(true);
+    };
+
+    const onInstalled = () => {
+      setShowInstallHint(false);
+      setInstallPromptEvent(null);
+      localStorage.setItem("ventax_pwa_install_dismissed", "1");
+    };
+
+    window.addEventListener("beforeinstallprompt", onBeforeInstallPrompt);
+    window.addEventListener("appinstalled", onInstalled);
+
+    if (isIosSafari) {
+      setShowInstallHint(true);
+    }
+
+    return () => {
+      window.removeEventListener("beforeinstallprompt", onBeforeInstallPrompt);
+      window.removeEventListener("appinstalled", onInstalled);
+    };
+  }, [isStandalone, isIosSafari]);
+
+  async function promptInstall() {
+    if (!installPromptEvent) {
+      return;
+    }
+    setInstalling(true);
+    try {
+      await installPromptEvent.prompt();
+      const choice = await installPromptEvent.userChoice;
+      if (choice.outcome === "accepted") {
+        setShowInstallHint(false);
+        localStorage.setItem("ventax_pwa_install_dismissed", "1");
+      }
+      setInstallPromptEvent(null);
+    } finally {
+      setInstalling(false);
+    }
+  }
+
+  function dismissInstallHint() {
+    setShowInstallHint(false);
+    localStorage.setItem("ventax_pwa_install_dismissed", "1");
+  }
 
   function goTo(view: OperationView) {
     setOperationView(view);
@@ -609,6 +689,29 @@ function OperationHome({
             </button>
           </nav>
         </div>
+      ) : null}
+
+      {showInstallHint && !isStandalone ? (
+        <section className="install-banner" aria-live="polite">
+          <div>
+            <strong>Instala Ventax en tu dispositivo</strong>
+            <small>
+              {installPromptEvent
+                ? "Acceso rapido desde pantalla de inicio, como una app."
+                : "En iPhone/iPad usa Compartir -> Agregar a pantalla de inicio."}
+            </small>
+          </div>
+          <div className="install-banner-actions">
+            {installPromptEvent ? (
+              <button className="primary-action" disabled={installing} onClick={() => void promptInstall()} type="button">
+                {installing ? "Abriendo..." : "Instalar app"}
+              </button>
+            ) : null}
+            <button className="ghost-action" onClick={dismissInstallHint} type="button">
+              Cerrar
+            </button>
+          </div>
+        </section>
       ) : null}
 
       {operationView === "invoice" ? (
@@ -2546,7 +2649,7 @@ function InvoiceEditor({
             onClick={() => setHeaderDetailsOpen((current) => !current)}
             type="button"
           >
-            {headerDetailsOpen ? "🙈 Ocultar datos del facturador" : "👁 Mostrar datos del facturador"}
+            {headerDetailsOpen ? "🙈 Ocultar datos" : "👁 Mostrar datos"}
           </button>
           <button className="ghost-action" onClick={onBack} type="button">
             Volver

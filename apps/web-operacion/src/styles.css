@@ -439,6 +439,37 @@ h2 {
   margin-left: auto;
 }
 
+.install-banner {
+  display: grid;
+  gap: 10px;
+  max-width: 520px;
+  margin: 0 auto 12px;
+  border: 1px solid #9ed9ec;
+  border-radius: 8px;
+  background: #ebf8fe;
+  padding: 12px;
+}
+
+.install-banner strong {
+  display: block;
+  margin: 0;
+  color: #0c4f68;
+  font-size: 14px;
+}
+
+.install-banner small {
+  display: block;
+  margin-top: 4px;
+  color: #35525d;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.install-banner-actions {
+  display: flex;
+  gap: 8px;
+}
+
 .facturador-band {
   display: flex;
   align-items: flex-start;
@@ -593,10 +624,14 @@ dd {
 .header-actions {
   display: flex;
   gap: 8px;
+  align-items: center;
 }
 
 .icon-eye {
-  min-width: 72px;
+  min-width: 0;
+  min-height: 36px;
+  padding: 6px 10px;
+  font-size: 13px;
 }
 
 .editor-heading h2,
@@ -798,26 +833,6 @@ dd {
 .comprobante-section {
   display: grid;
   gap: 14px;
-}
-
-.client-section {
-  order: 10;
-}
-
-.products-section {
-  order: 11;
-}
-
-.totals-section {
-  order: 12;
-}
-
-.comprobante-section {
-  order: 13;
-}
-
-.emission-result {
-  order: 14;
 }
 
 .invoice-options {
