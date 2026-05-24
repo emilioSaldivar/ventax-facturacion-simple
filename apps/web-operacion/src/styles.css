@@ -1109,7 +1109,7 @@ dd {
   display: grid;
   gap: 12px;
   width: min(100%, 560px);
-  max-height: min(88vh, calc(100vh - 8px));
+  max-height: min(88vh, calc(100dvh - 8px));
   margin: 0 auto;
   overflow-y: auto;
   border-radius: 18px 18px 0 0;

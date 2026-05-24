@@ -1681,6 +1681,7 @@ function InvoiceEditor({
   const [deliveryMessage, setDeliveryMessage] = useState<string | null>(null);
   const [whatsappPhone, setWhatsappPhone] = useState("");
   const descriptionInputRef = useRef<HTMLInputElement | null>(null);
+  const lineSheetRef = useRef<HTMLElement | null>(null);
   const sendSectionRef = useRef<HTMLElement | null>(null);
 
   const api = useMemo(() => createApiClient(accessToken, setAccessToken), [accessToken, setAccessToken]);
@@ -1732,11 +1733,37 @@ function InvoiceEditor({
     }
 
     const timeout = window.setTimeout(() => {
+      window.scrollTo({ top: 0, behavior: "auto" });
+      lineSheetRef.current?.scrollTo({ top: 0, behavior: "auto" });
       descriptionInputRef.current?.focus();
     }, 80);
 
     return () => window.clearTimeout(timeout);
   }, [lineSheetOpen, activeLineId]);
+
+  useEffect(() => {
+    if (!lineSheetOpen || !lineSheetRef.current) {
+      return;
+    }
+
+    const sheetElement = lineSheetRef.current;
+    const updateSheetMaxHeight = () => {
+      const viewportHeight = window.visualViewport?.height ?? window.innerHeight;
+      sheetElement.style.maxHeight = `${Math.max(320, Math.floor(viewportHeight - 8))}px`;
+    };
+
+    updateSheetMaxHeight();
+    window.visualViewport?.addEventListener("resize", updateSheetMaxHeight);
+    window.visualViewport?.addEventListener("scroll", updateSheetMaxHeight);
+    window.addEventListener("resize", updateSheetMaxHeight);
+
+    return () => {
+      window.visualViewport?.removeEventListener("resize", updateSheetMaxHeight);
+      window.visualViewport?.removeEventListener("scroll", updateSheetMaxHeight);
+      window.removeEventListener("resize", updateSheetMaxHeight);
+      sheetElement.style.removeProperty("max-height");
+    };
+  }, [lineSheetOpen]);
 
   useEffect(() => {
     if (!request) {
@@ -2369,6 +2396,7 @@ function InvoiceEditor({
             aria-label="Agregar producto"
             aria-modal="true"
             className="bottom-sheet"
+            ref={lineSheetRef}
             onClick={(event) => event.stopPropagation()}
             role="dialog"
           >
@@ -2814,7 +2842,9 @@ function mapBusinessReadinessChecks(
   const tenant = byCode.get("tenant_activo");
   const suscripcion = byCode.get("suscripcion_activa");
   const facturador = byCode.get("facturador_activo");
-  const contexto = byCode.get("contexto_fiscal_local_completo");
+  const contexto = byCode.get("fiscal_context_local") ?? byCode.get("contexto_fiscal_local_completo");
+  const backendFiscal = byCode.get("fiscal_backend_ready");
+  const integracionFiscalOk = Boolean(contexto?.ok) && Boolean(backendFiscal?.ok);
 
   return [
     {
@@ -2833,9 +2863,13 @@ function mapBusinessReadinessChecks(
       message: facturador?.ok ? "Facturador activo" : "Facturador inactivo. Solicite activacion al administrador."
     },
     {
-      code: "configuracion_fiscal_completa",
-      ok: contexto?.ok ?? false,
-      message: contexto?.ok ? "Configuracion fiscal completa" : "Faltan datos fiscales. Contacte al equipo de configuracion."
+      code: "operacion_fiscal_habilitada",
+      ok: integracionFiscalOk,
+      message: integracionFiscalOk
+        ? "Integracion con facturacion-electronica lista para operar"
+        : !contexto?.ok
+          ? "Faltan datos fiscales. Contacte al equipo de configuracion."
+          : "Conexion con facturacion-electronica no disponible. Intente nuevamente o contacte a soporte."
     }
   ];
 }
