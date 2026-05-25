@@ -21,7 +21,67 @@ interface ClienteRow {
   total_count?: string;
 }
 
+interface DnitRow {
+  ruc_sin_dv: string;
+  dv: string;
+  ruc: string;
+  nombre: string | null;
+  apellido: string | null;
+  razon_social: string;
+  codigo_dnit: string | null;
+  estado: string | null;
+}
+
 export class PgClienteRepository implements ClienteRepository {
+  async findDnitByDocumento(input: {
+    documentoTipo: "RUC" | "CI";
+    rucSinDv: string;
+    dv?: string;
+  }): Promise<{
+    status: "FOUND" | "NOT_FOUND" | "AMBIGUOUS";
+    item?: DnitRow;
+  }> {
+    if (input.dv) {
+      const result = await pool.query<DnitRow>(
+        `
+          select ruc_sin_dv, dv, ruc, nombre, apellido, razon_social, codigo_dnit, estado
+          from dnit_ruc_contribuyentes
+          where ruc_sin_dv = $1
+            and dv = $2
+          limit 1
+        `,
+        [input.rucSinDv, input.dv]
+      );
+
+      if (!result.rows[0]) {
+        return { status: "NOT_FOUND" };
+      }
+
+      return { status: "FOUND", item: result.rows[0] };
+    }
+
+    const result = await pool.query<DnitRow>(
+      `
+        select ruc_sin_dv, dv, ruc, nombre, apellido, razon_social, codigo_dnit, estado
+        from dnit_ruc_contribuyentes
+        where ruc_sin_dv = $1
+        order by updated_at desc
+        limit 2
+      `,
+      [input.rucSinDv]
+    );
+
+    if (result.rows.length === 0) {
+      return { status: "NOT_FOUND" };
+    }
+
+    if (result.rows.length > 1) {
+      return { status: "AMBIGUOUS" };
+    }
+
+    return { status: "FOUND", item: result.rows[0] };
+  }
+
   async search(input: { tenantId: string; facturadorId: string; q: string; limit: number }): Promise<ClienteSearchResult[]> {
     const q = input.q.trim();
     const documentoQ = normalizeDocumento(q);

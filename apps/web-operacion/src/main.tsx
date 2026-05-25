@@ -279,6 +279,21 @@ interface ClienteListResponse {
   total: number;
 }
 
+interface DnitAutocompleteResponse {
+  found: boolean;
+  ambiguous: boolean;
+  message?: string;
+  cliente?: {
+    documento_tipo: "RUC" | "CI";
+    documento: string;
+    razon_social: string;
+    nombre: string | null;
+    apellido: string | null;
+    codigo_dnit: string | null;
+    estado: string | null;
+  };
+}
+
 interface CatalogoItem {
   id: string;
   codigo: string;
@@ -2072,6 +2087,7 @@ function InvoiceEditor({
   const [headerDetailsOpen, setHeaderDetailsOpen] = useState(false);
   const [clienteSuggestions, setClienteSuggestions] = useState<ClienteSearchResult[]>([]);
   const [clienteSearching, setClienteSearching] = useState(false);
+  const [clienteAutocompleting, setClienteAutocompleting] = useState(false);
   const [clienteSaving, setClienteSaving] = useState(false);
   const [clienteMessage, setClienteMessage] = useState<string | null>(null);
   const [clienteModalOpen, setClienteModalOpen] = useState(false);
@@ -2530,6 +2546,49 @@ function InvoiceEditor({
     scrollSection(clientSectionRef);
   }
 
+  async function tryAutocompleteDnit() {
+    const documentoTipo = cliente.documento_tipo;
+    if (documentoTipo !== "RUC" && documentoTipo !== "CI") {
+      return;
+    }
+
+    const rawDocumento = cliente.documento.trim();
+    if (rawDocumento.length < 3) {
+      return;
+    }
+
+    const normalizedInput = normalizeDocKey(rawDocumento);
+    const exactAgendaOrGlobalMatch = clienteSuggestions.some((suggestion) => normalizeDocKey(suggestion.documento) === normalizedInput);
+    if (exactAgendaOrGlobalMatch) {
+      return;
+    }
+
+    setClienteAutocompleting(true);
+    try {
+      const result = await api.get<DnitAutocompleteResponse>(
+        `/clientes/dnit/autocomplete?documento_tipo=${documentoTipo}&documento=${encodeURIComponent(rawDocumento)}`
+      );
+
+      if (!result.found || !result.cliente) {
+        if (result.message && result.ambiguous) {
+          setClienteMessage(result.message);
+        }
+        return;
+      }
+
+      setCliente((current) => ({
+        ...current,
+        documento: result.cliente?.documento ?? current.documento,
+        razon_social: result.cliente?.razon_social ?? current.razon_social
+      }));
+      setClienteMessage("Nombre o razon social autocompletado.");
+    } catch {
+      // No interrumpir el flujo operativo cuando DNIT no esta disponible.
+    } finally {
+      setClienteAutocompleting(false);
+    }
+  }
+
   async function saveClienteRapido() {
     setClienteSaving(true);
     setClienteMessage(null);
@@ -2750,12 +2809,37 @@ function InvoiceEditor({
               <input
                 inputMode={cliente.documento_tipo === "RUC" || cliente.documento_tipo === "CI" ? "numeric" : "text"}
                 onFocus={() => scrollSection(clientSectionRef)}
-                onChange={(event) => setCliente((current) => ({ ...current, documento: event.target.value }))}
+                onBlur={() => void tryAutocompleteDnit()}
+                onChange={(event) =>
+                  setCliente((current) => {
+                    const nextDocumento = event.target.value;
+                    if (nextDocumento === current.documento) {
+                      return current;
+                    }
+
+                    return {
+                      ...current,
+                      cliente_id: null,
+                      documento: nextDocumento,
+                      razon_social: "",
+                      direccion: "",
+                      telefono: "",
+                      email: ""
+                    };
+                  })
+                }
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === "Tab") {
+                    void tryAutocompleteDnit();
+                  }
+                }}
                 placeholder="Ingrese numero de documento"
                 value={cliente.documento}
               />
             </div>
-            {clienteSearching ? <span className="field-hint">Buscando cliente...</span> : null}
+            {clienteSearching || clienteAutocompleting ? (
+              <span className="field-hint">{clienteSearching ? "Buscando cliente..." : "Autocompletando..."}</span>
+            ) : null}
             {clienteSuggestions.length > 0 ? (
               <div className="suggestion-list">
                 {clienteSuggestions.map((suggestion) => (
@@ -3600,6 +3684,10 @@ function getRecoverableMessage(documento: DocumentoResponse): string | null {
     return "Hubo un error temporal de comunicacion fiscal. Puede reintentar sin duplicar el documento operativo.";
   }
   return null;
+}
+
+function normalizeDocKey(value: string): string {
+  return value.trim().toUpperCase().replace(/[^0-9A-Z]/g, "");
 }
 
 function createApiClient(accessToken: string | null, setAccessToken: (token: string | null) => void) {

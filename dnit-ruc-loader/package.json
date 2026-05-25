@@ -1,0 +1,21 @@
+{
+  "name": "dnit-ruc-loader",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Cargador mensual de RUC DNIT a PostgreSQL.",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "node src/main.js",
+    "import": "node src/main.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "adm-zip": "^0.5.16",
+    "axios": "^1.13.2",
+    "cheerio": "1.0.0-rc.12",
+    "dotenv": "^16.6.1",
+    "pg": "^8.16.3"
+  }
+}

@@ -277,6 +277,43 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
+  /clientes/dnit/autocomplete:
+    get:
+      tags: [Clientes]
+      summary: Autocompletar identidad desde padron DNIT para RUC o CI
+      parameters:
+        - in: query
+          name: documento_tipo
+          required: true
+          schema:
+            type: string
+            enum: [RUC, CI]
+        - in: query
+          name: documento
+          required: true
+          schema:
+            type: string
+            minLength: 3
+            maxLength: 40
+          description: Documento con o sin DV (ej. 1001210 o 1001210-9).
+      responses:
+        "200":
+          description: Resultado de autocompletado DNIT
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DnitAutocompleteResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          description: Usuario sin configuracion operativa completa
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
   /catalogo/items/search:
     get:
       tags: [Catalogo]
@@ -1457,6 +1494,45 @@ components:
             $ref: "#/components/schemas/ClienteResponse"
         total:
           type: integer
+
+    DnitAutocompleteResponse:
+      type: object
+      required: [found, ambiguous]
+      properties:
+        found:
+          type: boolean
+        ambiguous:
+          type: boolean
+        message:
+          type: string
+          nullable: true
+        cliente:
+          $ref: "#/components/schemas/DnitClienteData"
+          nullable: true
+
+    DnitClienteData:
+      type: object
+      required: [documento_tipo, documento, razon_social]
+      properties:
+        documento_tipo:
+          type: string
+          enum: [RUC, CI]
+        documento:
+          type: string
+        razon_social:
+          type: string
+        nombre:
+          type: string
+          nullable: true
+        apellido:
+          type: string
+          nullable: true
+        codigo_dnit:
+          type: string
+          nullable: true
+        estado:
+          type: string
+          nullable: true
 
     DocumentoIdentidadTipo:
       type: string

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  autocompleteClienteFromDnit,
   createCliente,
   listClientes,
   normalizeClienteInput,
@@ -73,8 +74,36 @@ class FakeClienteRepository implements ClienteRepository {
   public lastListInput: unknown;
   public lastUpsertInput: unknown;
   public lastUpdateInput: unknown;
+  public lastDnitInput: unknown;
   public searchResult: ClienteSearchResult[] = [clienteResponse];
   public updateResult: ClienteResponse | null = clienteResponse;
+  public dnitResult:
+    | {
+        status: "FOUND" | "NOT_FOUND" | "AMBIGUOUS";
+        item?: {
+          ruc_sin_dv: string;
+          dv: string;
+          ruc: string;
+          nombre: string | null;
+          apellido: string | null;
+          razon_social: string;
+          codigo_dnit: string | null;
+          estado: string | null;
+        };
+      }
+    = {
+      status: "FOUND",
+      item: {
+        ruc_sin_dv: "1001210",
+        dv: "9",
+        ruc: "1001210-9",
+        nombre: "MILCIADES ANTONIO",
+        apellido: "SILVERO IBAÑEZ",
+        razon_social: "MILCIADES ANTONIO SILVERO IBAÑEZ",
+        codigo_dnit: "SIIM6816200",
+        estado: "ACTIVO"
+      }
+    };
 
   async search(input: { tenantId: string; facturadorId: string; q: string; limit: number }): Promise<ClienteSearchResult[]> {
     this.lastSearchInput = input;
@@ -108,6 +137,11 @@ class FakeClienteRepository implements ClienteRepository {
   }): Promise<ClienteResponse | null> {
     this.lastUpdateInput = input;
     return this.updateResult;
+  }
+
+  async findDnitByDocumento(input: { documentoTipo: "RUC" | "CI"; rucSinDv: string; dv?: string }) {
+    this.lastDnitInput = input;
+    return this.dnitResult;
   }
 }
 
@@ -269,5 +303,114 @@ describe("clientes service", () => {
         razon_social: "Cliente"
       })
     ).toThrow(/Documento invalido/);
+  });
+
+  it("autocompletes from dnit with documento including dv", async () => {
+    const repo = new FakeClienteRepository();
+
+    const result = await autocompleteClienteFromDnit(
+      {
+        documento_tipo: "RUC",
+        documento: "1001210-9"
+      },
+      repo
+    );
+
+    expect(result).toMatchObject({
+      found: true,
+      cliente: {
+        documento: "1001210-9",
+        razon_social: "MILCIADES ANTONIO SILVERO IBAÑEZ"
+      }
+    });
+    expect(repo.lastDnitInput).toEqual({
+      documentoTipo: "RUC",
+      rucSinDv: "1001210",
+      dv: "9"
+    });
+  });
+
+  it("returns ambiguous=false when dnit does not match", async () => {
+    const repo = new FakeClienteRepository();
+    repo.dnitResult = { status: "NOT_FOUND" };
+
+    const result = await autocompleteClienteFromDnit(
+      {
+        documento_tipo: "CI",
+        documento: "1001210"
+      },
+      repo
+    );
+
+    expect(result).toEqual({
+      found: false,
+      ambiguous: false,
+      message: "Sin coincidencias DNIT."
+    });
+  });
+
+  it("returns documento without dv for inactive fisica", async () => {
+    const repo = new FakeClienteRepository();
+    repo.dnitResult = {
+      status: "FOUND",
+      item: {
+        ruc_sin_dv: "1001210",
+        dv: "9",
+        ruc: "1001210-9",
+        nombre: "MILCIADES ANTONIO",
+        apellido: "SILVERO IBAÑEZ",
+        razon_social: "MILCIADES ANTONIO SILVERO IBAÑEZ",
+        codigo_dnit: "SIIM6816200",
+        estado: "CANCELADO"
+      }
+    };
+
+    const result = await autocompleteClienteFromDnit(
+      {
+        documento_tipo: "CI",
+        documento: "1001210"
+      },
+      repo
+    );
+
+    expect(result).toMatchObject({
+      found: true,
+      cliente: {
+        documento: "1001210"
+      }
+    });
+  });
+
+  it("returns documento with dv for juridica even if not active", async () => {
+    const repo = new FakeClienteRepository();
+    repo.dnitResult = {
+      status: "FOUND",
+      item: {
+        ruc_sin_dv: "80163532",
+        dv: "2",
+        ruc: "80163532-2",
+        nombre: null,
+        apellido: null,
+        razon_social: "AML SOCIEDAD ANONIMA",
+        codigo_dnit: "AMLA257700X",
+        estado: "BLOQUEADO"
+      }
+    };
+
+    const result = await autocompleteClienteFromDnit(
+      {
+        documento_tipo: "RUC",
+        documento: "80163532"
+      },
+      repo
+    );
+
+    expect(result).toMatchObject({
+      found: true,
+      cliente: {
+        documento: "80163532-2",
+        razon_social: "AML SOCIEDAD ANONIMA"
+      }
+    });
   });
 });

@@ -47,4 +47,21 @@ export interface ClienteRepository {
     userId: string;
     data: ClienteUpsertInput;
   }): Promise<ClienteResponse | null>;
+  findDnitByDocumento(input: {
+    documentoTipo: "RUC" | "CI";
+    rucSinDv: string;
+    dv?: string;
+  }): Promise<{
+    status: "FOUND" | "NOT_FOUND" | "AMBIGUOUS";
+    item?: {
+      ruc_sin_dv: string;
+      dv: string;
+      ruc: string;
+      nombre: string | null;
+      apellido: string | null;
+      razon_social: string;
+      codigo_dnit: string | null;
+      estado: string | null;
+    };
+  }>;
 }

@@ -82,6 +82,28 @@ services:
       timeout: 3s
       retries: 20
 
+  dnit-ruc-loader-cron:
+    build:
+      context: ./dnit-ruc-loader
+      dockerfile: Dockerfile
+    logging: *default-logging
+    env_file:
+      - ${APP_ENV_FILE:-.env}
+    environment:
+      DNIT_RUC_URL: ${DNIT_RUC_URL:-https://www.dnit.gov.py/en/web/portal-institucional/listado-de-ruc-con-sus-equivalencias}
+      DATABASE_URL: ${DATABASE_URL:-postgres://facturacion_simple:facturacion_simple@postgres:5432/facturacion_simple}
+      DATA_DIR: /app/data
+      IMPORT_BATCH_SIZE: ${DNIT_IMPORT_BATCH_SIZE:-5000}
+      DNIT_CRON_DAY: ${DNIT_CRON_DAY:-05}
+      DNIT_CRON_HOUR: ${DNIT_CRON_HOUR:-3}
+      DNIT_CRON_MINUTE: ${DNIT_CRON_MINUTE:-0}
+      DNIT_RUN_ON_START: ${DNIT_RUN_ON_START:-false}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./dnit-ruc-loader/data:/app/data
+
 volumes:
   facturacion_simple_pg:
 

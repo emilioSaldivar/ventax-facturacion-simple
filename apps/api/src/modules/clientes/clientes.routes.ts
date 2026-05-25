@@ -5,7 +5,7 @@ import { getOperationalContext } from "../context/context.service";
 import { operationalContextRepository } from "../context/context.repository";
 import { validateRequest } from "../../shared/validation/validate-request";
 import { clienteRepository } from "./clientes.repository";
-import { createCliente, listClientes, searchClientes, updateCliente } from "./clientes.service";
+import { autocompleteClienteFromDnit, createCliente, listClientes, searchClientes, updateCliente } from "./clientes.service";
 import { documentoIdentidadTipos } from "./clientes.types";
 
 const clienteUpsertSchema = z.object({
@@ -30,6 +30,11 @@ const listQuerySchema = z.object({
 
 const clienteParamsSchema = z.object({
   clienteId: z.string().uuid()
+});
+
+const dnitAutocompleteQuerySchema = z.object({
+  documento_tipo: z.enum(["RUC", "CI"]),
+  documento: z.string().trim().min(3).max(40)
 });
 
 export const clientesRouter = Router();
@@ -58,6 +63,23 @@ clientesRouter.get("/clientes", requireAuth, validateRequest("query", listQueryS
     next(error);
   }
 });
+
+clientesRouter.get(
+  "/clientes/dnit/autocomplete",
+  requireAuth,
+  validateRequest("query", dnitAutocompleteQuerySchema),
+  async (req, res, next) => {
+    try {
+      const result = await autocompleteClienteFromDnit(
+        req.query as unknown as z.infer<typeof dnitAutocompleteQuerySchema>,
+        clienteRepository
+      );
+      res.json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
 
 clientesRouter.post("/clientes", requireAuth, validateRequest("body", clienteUpsertSchema), async (req, res, next) => {
   try {
