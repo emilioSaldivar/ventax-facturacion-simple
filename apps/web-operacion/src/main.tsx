@@ -2421,34 +2421,6 @@ function InvoiceEditor({
     }
   }
 
-  function resetInvoice() {
-    setCondicionVenta("CONTADO");
-    setTipoTransaccion(2);
-    setCreditoPlazoDias(context?.fiscal_context.credito_plazo_dias ?? 30);
-    setCliente({
-      documento_tipo: "RUC",
-      documento: "",
-      razon_social: "",
-      direccion: "",
-      telefono: "",
-      email: ""
-    });
-    setLines([]);
-    setActiveLineId(null);
-    setExpandedLineIds(new Set());
-    setLineSheetOpen(false);
-    setLineCodeOpen(false);
-    setPreview(null);
-    setPreviewError(null);
-    setEmissionError(null);
-    setEmittedDocumento(null);
-    setDeliveryLink(null);
-    setEmailStatus(null);
-    setDeliveryMessage(null);
-    setIdempotencyKey(createIdempotencyKey());
-    setLastEmittedRequestFingerprint(null);
-  }
-
   async function loadDeliveryData(documentoId: string, regenerate = false) {
     setDeliveryLoading(true);
     setDeliveryMessage(null);
@@ -2478,6 +2450,30 @@ function InvoiceEditor({
       setDeliveryMessage("Link copiado.");
     } catch {
       setDeliveryMessage(url);
+    }
+  }
+
+  async function sharePublicLink() {
+    const url = deliveryLink?.public_url;
+    if (!url) {
+      return;
+    }
+
+    const payload = {
+      title: "Factura Ventax",
+      text: "Factura disponible para compartir",
+      url
+    };
+
+    try {
+      if (navigator.share) {
+        await navigator.share(payload);
+        return;
+      }
+      await navigator.clipboard.writeText(url);
+      setDeliveryMessage("Enlace copiado para compartir.");
+    } catch {
+      setDeliveryMessage("No se pudo abrir el menu de compartir.");
     }
   }
 
@@ -3064,13 +3060,11 @@ function InvoiceEditor({
           <div className="receipt-heading">
             <div>
               <p className="eyebrow">Factura</p>
-              <h3>{formatDocumentoEstado(emittedDocumento.estado)}</h3>
-              <p className="muted">
-                Numero {emittedDocumento.numero_fiscal ?? "pendiente"} · CDC {emittedDocumento.cdc ?? "pendiente"}
-              </p>
+              <h3>{getSimpleDocumentoEstado(emittedDocumento.estado)}</h3>
+              <p className="muted">Numero {emittedDocumento.numero_fiscal ?? "pendiente"}</p>
             </div>
             <span className={emittedDocumento.estado === "EMITIDA" ? "status-pill ready" : "status-pill blocked"}>
-              {formatDocumentoEstado(emittedDocumento.estado)}
+              {getSimpleDocumentoEstado(emittedDocumento.estado)}
             </span>
           </div>
 
@@ -3091,89 +3085,92 @@ function InvoiceEditor({
               <dt>Email</dt>
               <dd>{formatEmailStatus(emailStatus?.status ?? emittedDocumento.delivery.email_status)}</dd>
             </div>
-            <div>
-              <dt>SIFEN</dt>
-              <dd>{formatSifenSummary(emittedSifenSummary)}</dd>
+          </div>
+
+          <p className="editor-alert blocked">{getSimpleDocumentoHint(emittedDocumento.estado)}</p>
+          {emailStatus?.message ? <p className="editor-alert ready">{emailStatus.message}</p> : null}
+
+          <div className="action-group">
+            <p className="group-title">Acciones mas frecuentes</p>
+            <div className="delivery-inline-form">
+              <label>
+                📱 WhatsApp
+                <input inputMode="tel" onChange={(event) => setWhatsappPhone(event.target.value)} placeholder="Ingrese numero" value={whatsappPhone} />
+              </label>
+            </div>
+            <a
+              className={deliveryLink ? "primary-action wide secondary-link-as-button" : "primary-action wide secondary-link-as-button disabled"}
+              href={deliveryLink ? buildWhatsAppShareUrl(deliveryLink.public_url, whatsappPhone) : "#"}
+              rel="noreferrer"
+              target="_blank"
+            >
+              Enviar por WhatsApp
+            </a>
+            <div className="delivery-actions">
+              <button className="secondary-action" disabled={!deliveryLink} onClick={() => void sharePublicLink()} type="button">
+                Compartir factura
+              </button>
+              <button className="secondary-action" disabled={!deliveryLink} onClick={() => void copyPublicLink()} type="button">
+                Copiar enlace
+              </button>
             </div>
           </div>
 
-          {getRecoverableMessage(emittedDocumento) ? <p className="editor-alert blocked">{getRecoverableMessage(emittedDocumento)}</p> : null}
-          {emittedDocumento.estado === "RECHAZADA" ? (
-            <p className="editor-alert blocked">{getRejectedSifenMessage(emittedSifenSummary)}</p>
-          ) : null}
-          {emailStatus?.message ? <p className="editor-alert ready">{emailStatus.message}</p> : null}
-
-          <div className="delivery-actions">
+          <div className="action-group">
+            <p className="group-title">Consulta del documento</p>
             <a
               className={emittedKudeUrl ? "secondary-link" : "secondary-link disabled"}
               href={emittedKudeUrl ?? "#"}
               rel="noreferrer"
               target="_blank"
             >
-              KUDE/PDF
+              Ver factura PDF
             </a>
-            <a
-              className={emittedXmlUrl ? "secondary-link" : "secondary-link disabled"}
-              href={emittedXmlUrl ?? "#"}
-              rel="noreferrer"
-              target="_blank"
-            >
-              XML
-            </a>
-            <button className="secondary-action" disabled={!deliveryLink} onClick={() => void copyPublicLink()} type="button">
-              Copiar link
-            </button>
-            <a
-              className={deliveryLink ? "secondary-link" : "secondary-link disabled"}
-              href={deliveryLink ? buildWhatsAppShareUrl(deliveryLink.public_url, whatsappPhone) : "#"}
-              rel="noreferrer"
-              target="_blank"
-            >
-              WhatsApp
-            </a>
-          </div>
-
-          <div className="delivery-inline-form">
-            <label>
-              Numero WhatsApp
-              <input inputMode="tel" onChange={(event) => setWhatsappPhone(event.target.value)} value={whatsappPhone} />
-            </label>
             <div className="public-link-box">
-              <dt>Link publico</dt>
-              <dd>{deliveryLink?.public_url ?? (deliveryLoading ? "Generando link..." : "No disponible")}</dd>
+              <dt>Enlace publico</dt>
+              <dd>{deliveryLink ? "Factura disponible para compartir" : deliveryLoading ? "Generando enlace publico..." : "Enlace publico no disponible"}</dd>
             </div>
           </div>
-          {deliveryMessage ? <p className="inline-message">{deliveryMessage}</p> : null}
 
-          <div className="result-actions">
-            <button
-              className="secondary-action"
-              disabled={emitting || !emittedDocumento.cdc}
-              onClick={() => void refreshEmittedDocumento()}
-              type="button"
-            >
-              Consultar SIFEN
-            </button>
-            <button
-              className="secondary-action"
-              disabled={emitting || !["PENDIENTE_SIFEN", "ERROR_TEMPORAL"].includes(emittedDocumento.estado)}
-              onClick={() => void retryEmittedDocumento()}
-              type="button"
-            >
-              Reintentar emision
-            </button>
-            <button
-              className="secondary-action"
-              disabled={deliveryLoading}
-              onClick={() => void loadDeliveryData(emittedDocumento.id, true)}
-              type="button"
-            >
-              Regenerar link
-            </button>
-            <button className="primary-action" onClick={resetInvoice} type="button">
-              Nueva factura
-            </button>
-          </div>
+          <details className="action-group">
+            <summary className="group-title">Mas opciones</summary>
+            <div className="result-actions">
+              <a
+                className={emittedXmlUrl ? "secondary-link" : "secondary-link disabled"}
+                href={emittedXmlUrl ?? "#"}
+                rel="noreferrer"
+                target="_blank"
+              >
+                Descargar documento electronico (XML)
+              </a>
+              <button
+                className="secondary-action"
+                disabled={deliveryLoading}
+                onClick={() => void loadDeliveryData(emittedDocumento.id, true)}
+                type="button"
+              >
+                Regenerar enlace
+              </button>
+              <button
+                className="secondary-action"
+                disabled={emitting || !emittedDocumento.cdc}
+                onClick={() => void refreshEmittedDocumento()}
+                type="button"
+              >
+                Consultar estado fiscal
+              </button>
+              <button
+                className="secondary-action"
+                disabled={emitting || !["PENDIENTE_SIFEN", "ERROR_TEMPORAL"].includes(emittedDocumento.estado)}
+                onClick={() => void retryEmittedDocumento()}
+                type="button"
+              >
+                Reintentar validacion
+              </button>
+            </div>
+          </details>
+
+          {deliveryMessage ? <p className="inline-message">{deliveryMessage}</p> : null}
         </section>
       ) : null}
 
@@ -3388,6 +3385,26 @@ function formatDocumentoEstado(value: DocumentoEstado): string {
     ANULADA: "Anulada"
   };
   return labels[value];
+}
+
+function getSimpleDocumentoEstado(value: DocumentoEstado): string {
+  if (value === "EMITIDA") {
+    return "🟢 Factura emitida";
+  }
+  if (value === "RECHAZADA" || value === "ERROR_OPERATIVO" || value === "ERROR_TEMPORAL" || value === "ANULADA") {
+    return "🔴 Requiere revision";
+  }
+  return "🟡 Procesando factura";
+}
+
+function getSimpleDocumentoHint(value: DocumentoEstado): string {
+  if (value === "EMITIDA") {
+    return "Factura lista para enviar por WhatsApp, compartir enlace o abrir PDF.";
+  }
+  if (value === "RECHAZADA" || value === "ERROR_OPERATIVO" || value === "ERROR_TEMPORAL" || value === "ANULADA") {
+    return "El documento requiere revision antes de continuar.";
+  }
+  return "Estamos procesando la factura. Puede compartir el enlace cuando este disponible.";
 }
 
 function formatDocumentoTipo(value: DocumentoResponse["tipo"]): string {
