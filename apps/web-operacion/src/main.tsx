@@ -3404,7 +3404,7 @@ function getSimpleDocumentoHint(value: DocumentoEstado): string {
   if (value === "RECHAZADA" || value === "ERROR_OPERATIVO" || value === "ERROR_TEMPORAL" || value === "ANULADA") {
     return "El documento requiere revision antes de continuar.";
   }
-  return "Estamos procesando la factura. Puede compartir el enlace cuando este disponible.";
+  return "Estamos procesando la factura. Puede compartir el enlace al cliente.";
 }
 
 function formatDocumentoTipo(value: DocumentoResponse["tipo"]): string {

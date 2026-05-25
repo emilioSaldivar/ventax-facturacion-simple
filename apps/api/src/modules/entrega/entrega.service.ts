@@ -323,15 +323,15 @@ function buildEmailStatusMessage(status: EmailStatusResponse["status"], hasEmail
   }
 
   if (status === "DELEGATED") {
-    return "Envio de email delegado a Ventax FE.";
+    return "El documento se enviara en el correo del cliente.";
   }
 
   if (status === "SENT") {
-    return "Ventax FE informo envio de email.";
+    return "Ventax informo envio de email.";
   }
 
   if (status === "FAILED") {
-    return "Ventax FE informo fallo de email; usar link publico o WhatsApp.";
+    return "Ventax informo fallo de envio (email no cargado o incorrecto); Usar link publico o WhatsApp.";
   }
 
   return "Estado de email delegado no disponible.";
