@@ -3044,13 +3044,17 @@ function InvoiceEditor({
                 <label>
                   Precio
                   <input
-                    inputMode="numeric"
+                    inputMode="decimal"
                     min="0"
                     onChange={(event) =>
-                      updateLine(activeLine.id, { catalogo_item_id: null, precio_unitario: event.target.value, lockedFromCatalog: false })
+                      updateLine(activeLine.id, {
+                        catalogo_item_id: null,
+                        precio_unitario: normalizePriceInput(event.target.value),
+                        lockedFromCatalog: false
+                      })
                     }
                     placeholder="0"
-                    value={activeLine.precio_unitario}
+                    value={formatPriceInput(activeLine.precio_unitario)}
                   />
                 </label>
               </div>
@@ -3715,6 +3719,18 @@ function getRecoverableMessage(documento: DocumentoResponse): string | null {
 
 function normalizeDocKey(value: string): string {
   return value.trim().toUpperCase().replace(/[^0-9A-Z]/g, "");
+}
+
+function normalizePriceInput(value: string): string {
+  return value.replace(/[^\d]/g, "");
+}
+
+function formatPriceInput(value: string): string {
+  const digits = normalizePriceInput(value);
+  if (!digits) {
+    return "";
+  }
+  return Number(digits).toLocaleString("es-PY");
 }
 
 function createApiClient(accessToken: string | null, setAccessToken: (token: string | null) => void) {
