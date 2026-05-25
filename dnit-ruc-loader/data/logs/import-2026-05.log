@@ -1,0 +1,10 @@
+[dnit-ruc-loader] error connect ECONNREFUSED 127.0.0.1:5433
+[dnit-ruc-loader] error connect ECONNREFUSED 127.0.0.1:5433
+DNIT import summary
+- zip_links_found: 10
+- zip_files_downloaded: 10
+- txt_files_processed: 10
+- rows_parsed: 1978626
+- rows_inserted: 1978626
+- invalid_lines: 12
+- duration_ms: 99532

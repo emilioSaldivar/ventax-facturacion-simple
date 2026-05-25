@@ -29,11 +29,11 @@ const dbFromUrl = parseDatabaseUrl(process.env.DATABASE_URL);
 module.exports = {
   dnitRucUrl: process.env.DNIT_RUC_URL || 'https://www.dnit.gov.py/en/web/portal-institucional/listado-de-ruc-con-sus-equivalencias',
   db: {
-    host: process.env.DB_HOST || dbFromUrl?.host || '127.0.0.1',
-    port: Number(process.env.DB_PORT || dbFromUrl?.port || 5432),
-    database: process.env.DB_NAME || dbFromUrl?.database || 'ventax',
-    user: process.env.DB_USER || dbFromUrl?.user || 'postgres',
-    password: process.env.DB_PASSWORD || dbFromUrl?.password || 'postgres'
+    host: dbFromUrl?.host || process.env.DB_HOST || '127.0.0.1',
+    port: Number(dbFromUrl?.port || process.env.DB_PORT || 5432),
+    database: dbFromUrl?.database || process.env.DB_NAME || 'ventax',
+    user: dbFromUrl?.user || process.env.DB_USER || 'postgres',
+    password: dbFromUrl?.password || process.env.DB_PASSWORD || 'postgres'
   },
   importBatchSize: Number(process.env.IMPORT_BATCH_SIZE || 5000),
   paths: {
