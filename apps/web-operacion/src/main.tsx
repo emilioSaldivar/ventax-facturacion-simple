@@ -2676,10 +2676,8 @@ function InvoiceEditor({
     }, 80);
   }
 
-  const emittedSifenSummary = emittedDocumento ? getSifenSummary(emittedDocumento) : null;
-  const emittedKudeUrl =
-    emittedDocumento && deliveryLink && emittedDocumento.delivery.artifacts.kude_pdf.available ? `${deliveryLink.public_url}/kude.pdf` : null;
   const emittedXmlUrl = emittedDocumento && deliveryLink && emittedDocumento.delivery.artifacts.xml.available ? `${deliveryLink.public_url}/xml` : null;
+  const hasEmissionResult = Boolean(emittedDocumento);
   const activeLine = lines.find((line) => line.id === activeLineId) ?? lines[0] ?? null;
   const activeLineIndex = activeLine ? lines.findIndex((line) => line.id === activeLine.id) : -1;
   const visibleLines = lines.filter((line) => line.descripcion.trim() || line.codigo.trim() || line.precio_unitario.trim());
@@ -2689,6 +2687,40 @@ function InvoiceEditor({
     .forEach((line, index) => {
       previewSubtotalsByLineId.set(line.id, preview?.items[index]?.subtotal ?? 0);
     });
+
+  function createNuevaFactura() {
+    setCondicionVenta("CONTADO");
+    setTipoTransaccion(2);
+    setCreditoPlazoDias(context?.fiscal_context.credito_plazo_dias ?? 30);
+    setCliente({
+      documento_tipo: "RUC",
+      documento: "",
+      razon_social: "",
+      direccion: "",
+      telefono: "",
+      email: ""
+    });
+    setLines([]);
+    setActiveLineId(null);
+    setExpandedLineIds(new Set());
+    setLineSheetOpen(false);
+    setLineCodeOpen(false);
+    setClienteSuggestions([]);
+    setClienteMessage(null);
+    setCatalogSuggestions({});
+    setCatalogMessage({});
+    setPreview(null);
+    setPreviewError(null);
+    setEmissionError(null);
+    setEmittedDocumento(null);
+    setLastEmittedRequestFingerprint(null);
+    setDeliveryLink(null);
+    setEmailStatus(null);
+    setDeliveryMessage(null);
+    setWhatsappPhone("");
+    setIdempotencyKey(createIdempotencyKey());
+    scrollSection(comprobanteSectionRef);
+  }
 
   return (
     <section className="invoice-editor" aria-labelledby="invoice-title">
@@ -3132,7 +3164,12 @@ function InvoiceEditor({
           <button className="secondary-action wide" disabled={previewing} onClick={() => void runPreview()} type="button">
             {previewing ? "Calculando..." : "Calcular"}
           </button>
-          <button className="primary-action wide" disabled={!canEmit || !preview || emitting} onClick={() => void emitFactura()} type="button">
+          <button
+            className="primary-action wide"
+            disabled={!canEmit || !preview || emitting || hasEmissionResult}
+            onClick={() => void emitFactura()}
+            type="button"
+          >
             {emitting ? "Procesando..." : "Crear factura"}
           </button>
         </div>
@@ -3201,19 +3238,9 @@ function InvoiceEditor({
           </div>
 
           <div className="action-group">
-            <p className="group-title">Consulta del documento</p>
-            <a
-              className={emittedKudeUrl ? "secondary-link" : "secondary-link disabled"}
-              href={emittedKudeUrl ?? "#"}
-              rel="noreferrer"
-              target="_blank"
-            >
-              Ver factura PDF
-            </a>
-            <div className="public-link-box">
-              <dt>Enlace publico</dt>
-              <dd>{deliveryLink ? "Factura disponible para compartir" : deliveryLoading ? "Generando enlace publico..." : "Enlace publico no disponible"}</dd>
-            </div>
+            <button className="primary-action wide" onClick={createNuevaFactura} type="button">
+              Crear nueva factura
+            </button>
           </div>
 
           <details className="action-group">
