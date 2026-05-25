@@ -11,3 +11,7 @@ npm-debug.log*
 test-results/
 playwright-report/
 .local/
+dnit-ruc-loader/data/downloads/
+dnit-ruc-loader/data/extracted/
+dnit-ruc-loader/data/logs/
+dnit-ruc-loader/data/**/*.log
