@@ -2165,13 +2165,28 @@ function InvoiceEditor({
     }
 
     const timeout = window.setTimeout(() => {
-      window.scrollTo({ top: 0, behavior: "auto" });
       lineSheetRef.current?.scrollTo({ top: 0, behavior: "auto" });
       descriptionInputRef.current?.focus();
     }, 80);
 
     return () => window.clearTimeout(timeout);
   }, [lineSheetOpen, activeLineId]);
+
+  useEffect(() => {
+    if (!lineSheetOpen) {
+      return;
+    }
+
+    const scrollY = window.scrollY;
+    document.body.classList.add("sheet-scroll-lock");
+    document.body.style.top = `-${scrollY}px`;
+
+    return () => {
+      document.body.classList.remove("sheet-scroll-lock");
+      document.body.style.top = "";
+      window.scrollTo({ top: scrollY, behavior: "auto" });
+    };
+  }, [lineSheetOpen]);
 
   useEffect(() => {
     if (!lineSheetOpen || !lineSheetRef.current) {
@@ -2520,6 +2535,11 @@ function InvoiceEditor({
   }
 
   function closeLineSheet() {
+    const activeElement = document.activeElement;
+    if (activeElement instanceof HTMLElement) {
+      activeElement.blur();
+    }
+
     if (activeLine) {
       const emptyDraft = !activeLine.codigo.trim() && !activeLine.descripcion.trim() && !activeLine.precio_unitario.trim();
       if (emptyDraft) {
@@ -2529,6 +2549,7 @@ function InvoiceEditor({
     }
     setLineSheetOpen(false);
     setLineCodeOpen(false);
+    scrollSection(productsSectionRef);
   }
 
   function applyClienteSuggestion(suggestion: ClienteSearchResult) {
@@ -2660,6 +2681,9 @@ function InvoiceEditor({
   async function confirmLine(line: InvoiceLineDraft, saveInCatalog: boolean) {
     if (line.catalogo_item_id || line.lockedFromCatalog) {
       setLineSheetOpen(false);
+      window.setTimeout(() => {
+        sendSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 80);
       return;
     }
 

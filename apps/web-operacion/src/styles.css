@@ -27,6 +27,12 @@ body {
   margin: 0;
 }
 
+body.sheet-scroll-lock {
+  position: fixed;
+  width: 100%;
+  overflow: hidden;
+}
+
 button,
 input,
 select {
@@ -1221,6 +1227,7 @@ dd {
   display: grid;
   align-items: end;
   background: rgb(13 30 38 / 0.36);
+  overscroll-behavior: contain;
 }
 
 .bottom-sheet {
@@ -1231,6 +1238,8 @@ dd {
   max-height: 100dvh;
   margin: 0 auto;
   overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
   border-radius: 18px 18px 0 0;
   background: #ffffff;
   padding: 10px 16px calc(18px + env(safe-area-inset-bottom));
