@@ -1874,9 +1874,9 @@ function CatalogView({
       activo: draft.activo
     };
 
-    if (!payload.descripcion || !Number.isInteger(payload.precio_unitario) || payload.precio_unitario < 0) {
+    if (!payload.descripcion || !Number.isInteger(payload.precio_unitario) || payload.precio_unitario <= 0) {
       setSaving(false);
-      setError("Complete descripcion y precio entero valido.");
+      setError("Complete descripcion y precio entero mayor a cero.");
       return;
     }
 
@@ -2130,7 +2130,14 @@ function InvoiceEditor({
         precio_unitario: Number(line.precio_unitario),
         iva_tipo: line.iva_tipo
       }))
-      .filter((line) => line.descripcion && Number.isInteger(line.cantidad) && line.cantidad > 0 && Number.isInteger(line.precio_unitario));
+      .filter(
+        (line) =>
+          line.descripcion &&
+          Number.isInteger(line.cantidad) &&
+          line.cantidad > 0 &&
+          Number.isInteger(line.precio_unitario) &&
+          line.precio_unitario > 0
+      );
 
     if (!cliente.documento.trim() || !cliente.razon_social.trim() || items.length === 0) {
       return null;
@@ -2656,6 +2663,12 @@ function InvoiceEditor({
     setCatalogSaving((current) => ({ ...current, [line.id]: true }));
     setCatalogMessage((current) => ({ ...current, [line.id]: null }));
 
+    if (!Number.isInteger(Number(line.precio_unitario)) || Number(line.precio_unitario) <= 0) {
+      setCatalogMessage((current) => ({ ...current, [line.id]: "Ingrese un precio entero mayor a cero." }));
+      setCatalogSaving((current) => ({ ...current, [line.id]: false }));
+      return false;
+    }
+
     try {
       const saved = await api.post<CatalogoItem>("/catalogo/items", {
         codigo: line.codigo.trim() || null,
@@ -2707,7 +2720,14 @@ function InvoiceEditor({
   const visibleLines = lines.filter((line) => line.descripcion.trim() || line.codigo.trim() || line.precio_unitario.trim());
   const previewSubtotalsByLineId = new Map<string, number>();
   lines
-    .filter((line) => line.descripcion.trim() && Number.isInteger(Number(line.cantidad)) && Number(line.cantidad) > 0 && Number.isInteger(Number(line.precio_unitario)))
+    .filter(
+      (line) =>
+        line.descripcion.trim() &&
+        Number.isInteger(Number(line.cantidad)) &&
+        Number(line.cantidad) > 0 &&
+        Number.isInteger(Number(line.precio_unitario)) &&
+        Number(line.precio_unitario) > 0
+    )
     .forEach((line, index) => {
       previewSubtotalsByLineId.set(line.id, preview?.items[index]?.subtotal ?? 0);
     });
@@ -3154,7 +3174,8 @@ function InvoiceEditor({
                   disabled={
                     catalogSaving[activeLine.id] ||
                     !activeLine.descripcion.trim() ||
-                    !Number.isInteger(Number(activeLine.precio_unitario))
+                    !Number.isInteger(Number(activeLine.precio_unitario)) ||
+                    Number(activeLine.precio_unitario) <= 0
                   }
                   onClick={() => void confirmLine(activeLine, true)}
                   type="button"
@@ -3166,7 +3187,8 @@ function InvoiceEditor({
                   disabled={
                     catalogSaving[activeLine.id] ||
                     !activeLine.descripcion.trim() ||
-                    !Number.isInteger(Number(activeLine.precio_unitario))
+                    !Number.isInteger(Number(activeLine.precio_unitario)) ||
+                    Number(activeLine.precio_unitario) <= 0
                   }
                   onClick={() => void confirmLine(activeLine, false)}
                   type="button"
