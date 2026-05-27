@@ -2606,6 +2606,7 @@ function InvoiceEditor({
 
       setCliente((current) => ({
         ...current,
+        documento_tipo: result.cliente?.documento_tipo ?? current.documento_tipo,
         documento: result.cliente?.documento ?? current.documento,
         razon_social: result.cliente?.razon_social ?? current.razon_social
       }));
