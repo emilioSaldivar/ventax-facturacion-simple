@@ -305,7 +305,7 @@ describe("clientes service", () => {
     ).toThrow(/Documento invalido/);
   });
 
-  it("autocompletes from dnit with documento including dv", async () => {
+  it("returns RUC with documento con DV for active fisica", async () => {
     const repo = new FakeClienteRepository();
 
     const result = await autocompleteClienteFromDnit(
@@ -319,6 +319,7 @@ describe("clientes service", () => {
     expect(result).toMatchObject({
       found: true,
       cliente: {
+        documento_tipo: "RUC",
         documento: "1001210-9",
         razon_social: "MILCIADES ANTONIO SILVERO IBAÑEZ"
       }
@@ -349,7 +350,7 @@ describe("clientes service", () => {
     });
   });
 
-  it("returns documento without dv for inactive fisica", async () => {
+  it("returns documento without dv and switches to CI for inactive fisica when requested as RUC", async () => {
     const repo = new FakeClienteRepository();
     repo.dnitResult = {
       status: "FOUND",
@@ -367,7 +368,7 @@ describe("clientes service", () => {
 
     const result = await autocompleteClienteFromDnit(
       {
-        documento_tipo: "CI",
+        documento_tipo: "RUC",
         documento: "1001210"
       },
       repo
@@ -376,6 +377,7 @@ describe("clientes service", () => {
     expect(result).toMatchObject({
       found: true,
       cliente: {
+        documento_tipo: "CI",
         documento: "1001210"
       }
     });
@@ -408,6 +410,7 @@ describe("clientes service", () => {
     expect(result).toMatchObject({
       found: true,
       cliente: {
+        documento_tipo: "RUC",
         documento: "80163532-2",
         razon_social: "AML SOCIEDAD ANONIMA"
       }

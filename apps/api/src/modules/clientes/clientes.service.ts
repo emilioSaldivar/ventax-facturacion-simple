@@ -115,12 +115,14 @@ export async function autocompleteClienteFromDnit(
     return { found: false, ambiguous: true, message: "Se encontraron multiples registros. Verifique el digito verificador." };
   }
 
+  const resolvedIdentity = resolveAutocompleteIdentity(data.documento_tipo, result.item);
+
   return {
     found: true,
     ambiguous: false,
     cliente: {
-      documento_tipo: data.documento_tipo,
-      documento: resolveAutocompleteDocumento(result.item),
+      documento_tipo: resolvedIdentity.documento_tipo,
+      documento: resolvedIdentity.documento,
       razon_social: result.item.razon_social,
       nombre: result.item.nombre,
       apellido: result.item.apellido,
@@ -130,26 +132,32 @@ export async function autocompleteClienteFromDnit(
   };
 }
 
-function resolveAutocompleteDocumento(item: {
-  ruc_sin_dv: string;
-  dv: string;
-  ruc: string;
-  estado: string | null;
-  nombre: string | null;
-  apellido: string | null;
-}): string {
-  const estado = (item.estado ?? "").trim().toUpperCase();
+function resolveAutocompleteIdentity(
+  _requestedTipo: "RUC" | "CI",
+  item: {
+    ruc_sin_dv: string;
+    dv: string;
+    ruc: string;
+    estado: string | null;
+    nombre: string | null;
+    apellido: string | null;
+  }
+): { documento_tipo: "RUC" | "CI"; documento: string } {
   const isJuridica = isJuridicaByRuc(item.ruc_sin_dv);
+  const estado = (item.estado ?? "").trim().toUpperCase();
+  const isActive = estado === "ACTIVO";
 
-  if (isJuridica) {
-    return item.ruc;
+  if (isJuridica || isActive) {
+    return {
+      documento_tipo: "RUC",
+      documento: item.ruc
+    };
   }
 
-  if (estado === "ACTIVO") {
-    return item.ruc;
-  }
-
-  return item.ruc_sin_dv;
+  return {
+    documento_tipo: "CI",
+    documento: item.ruc_sin_dv
+  };
 }
 
 function isJuridicaByRuc(rucSinDv: string): boolean {
