@@ -1285,11 +1285,11 @@ function DocumentsView({
               <div className="receipt-heading">
                 <div>
                   <p className="eyebrow">Documento</p>
-                  <h3>{formatDocumentoEstado(selected.estado)}</h3>
+                  <h3>{formatDocumentoEstadoSimple(selected.estado)}</h3>
                   <p className="muted">{formatDocumentoTipo(selected.tipo)} · Numero {selected.numero_fiscal ?? "pendiente"}</p>
                 </div>
                 <span className={selected.estado === "EMITIDA" ? "status-pill ready" : "status-pill blocked"}>
-                  {formatDocumentoEstado(selected.estado)}
+                  {formatDocumentoEstadoSimple(selected.estado)}
                 </span>
               </div>
               <button className="ghost-action" onClick={() => setSelected(null)} type="button">
@@ -1336,42 +1336,41 @@ function DocumentsView({
               {emailStatus?.message ? <p className="editor-alert ready">{emailStatus.message}</p> : null}
 
               <div className="delivery-actions">
-                <a className={selectedKudeUrl ? "secondary-link" : "secondary-link disabled"} href={selectedKudeUrl ?? "#"} rel="noreferrer" target="_blank">
-                  Ver factura PDF
-                </a>
-                <details className="share-block">
-                  <summary>Compartir factura</summary>
-                  <div className="result-actions">
-                    <a className={deliveryLink ? "secondary-link" : "secondary-link disabled"} href={deliveryLink?.whatsapp_url ?? "#"} rel="noreferrer" target="_blank">
-                      Enviar por WhatsApp
-                    </a>
-                    <button className="secondary-action" disabled={!deliveryLink} onClick={() => void copyDetailLink()} type="button">
-                      Copiar enlace
-                    </button>
-                    <a className={selectedXmlUrl ? "secondary-link" : "secondary-link disabled"} href={selectedXmlUrl ?? "#"} rel="noreferrer" target="_blank">
-                      Documento electronico (XML firmado)
-                    </a>
-                  </div>
-                </details>
+                <div className="action-group action-group-primary">
+                  <h4 className="group-title">Acciones frecuentes</h4>
+                  <a className={selectedKudeUrl ? "secondary-link" : "secondary-link disabled"} href={selectedKudeUrl ?? "#"} rel="noreferrer" target="_blank">
+                    📄 Ver factura PDF
+                  </a>
+                  <a className={deliveryLink ? "secondary-link" : "secondary-link disabled"} href={deliveryLink?.whatsapp_url ?? "#"} rel="noreferrer" target="_blank">
+                    📱 Enviar por WhatsApp
+                  </a>
+                  <a className={deliveryLink ? "secondary-link" : "secondary-link disabled"} href={deliveryLink?.public_url ?? "#"} rel="noreferrer" target="_blank">
+                    🔗 Compartir factura
+                  </a>
+                  <button className="secondary-action" disabled={!deliveryLink} onClick={() => void copyDetailLink()} type="button">
+                    📋 Copiar enlace
+                  </button>
+                </div>
               </div>
 
-              <div className="result-actions">
-                <button className="secondary-action" disabled={actionLoading || !canCancelDocumento(selected)} onClick={() => void cancelSelectedDocumento()} type="button">
-                  Anular factura
-                </button>
+              <div className="action-group action-group-secondary">
+                <h4 className="group-title">Gestion comercial</h4>
                 <button className="secondary-action" disabled={actionLoading || !canEmitNotaCredito(selected, documents)} onClick={() => void emitSelectedNotaCredito()} type="button">
-                  Crear nota de credito
+                  ↩ Crear nota de credito
+                </button>
+                <button className="secondary-action" disabled={actionLoading || !canCancelDocumento(selected)} onClick={() => void cancelSelectedDocumento()} type="button">
+                  ⚠ Anular factura
                 </button>
               </div>
               <details className="tech-block">
                 <summary>Informacion fiscal</summary>
                 <dl className="receipt-summary">
                   <div>
-                    <dt>CDC</dt>
+                    <dt>Codigo fiscal</dt>
                     <dd>{selected.cdc ?? "Pendiente"}</dd>
                   </div>
                   <div>
-                    <dt>SIFEN</dt>
+                    <dt>Estado fiscal</dt>
                     <dd>{formatSifenSummary(selectedSifenSummary)}</dd>
                   </div>
                   <div>
@@ -1380,22 +1379,23 @@ function DocumentsView({
                   </div>
                 </dl>
               </details>
-              {(role === "SOPORTE_INTERNO" || role === "ADMIN_INTERNO") ? (
-                <details className="tech-block">
-                  <summary>Opciones tecnicas</summary>
-                  <div className="result-actions">
-                    <button className="secondary-action" disabled={actionLoading || !selected.cdc} onClick={() => void refreshSelectedStatus()} type="button">
-                      Consultar estado fiscal
-                    </button>
-                    <button className="secondary-action" disabled={actionLoading || !["PENDIENTE_SIFEN", "ERROR_TEMPORAL"].includes(selected.estado)} onClick={() => void retrySelectedEmission()} type="button">
-                      Reintentar envio
-                    </button>
-                    <button className="secondary-action" disabled={actionLoading} onClick={() => void loadDeliveryFor(selected, true)} type="button">
-                      Crear nuevo enlace
-                    </button>
-                  </div>
-                </details>
-              ) : null}
+              <details className="tech-block">
+                <summary>Opciones avanzadas</summary>
+                <div className="result-actions">
+                  <button className="secondary-action" disabled={actionLoading || !selected.cdc} onClick={() => void refreshSelectedStatus()} type="button">
+                    Verificar estado fiscal
+                  </button>
+                  <button className="secondary-action" disabled={actionLoading || !["PENDIENTE_SIFEN", "ERROR_TEMPORAL"].includes(selected.estado)} onClick={() => void retrySelectedEmission()} type="button">
+                    Volver a verificar
+                  </button>
+                  <button className="secondary-action" disabled={actionLoading} onClick={() => void loadDeliveryFor(selected, true)} type="button">
+                    Crear nuevo enlace
+                  </button>
+                  <a className={selectedXmlUrl ? "secondary-link" : "secondary-link disabled"} href={selectedXmlUrl ?? "#"} rel="noreferrer" target="_blank">
+                    Descargar documento electronico
+                  </a>
+                </div>
+              </details>
               {message ? <p className="inline-message">{message}</p> : null}
             </>
           ) : (
@@ -1423,6 +1423,9 @@ function ClientesAgendaView({
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [searchSuggestions, setSearchSuggestions] = useState<ClienteSearchResult[]>([]);
+  const [autocompleting, setAutocompleting] = useState(false);
   const [draft, setDraft] = useState<FacturaClienteInput>({
     documento_tipo: "CI",
     documento: "",
@@ -1435,6 +1438,28 @@ function ClientesAgendaView({
   useEffect(() => {
     void loadClientes();
   }, []);
+
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      void loadClientes(query);
+    }, 220);
+    return () => clearTimeout(timeout);
+  }, [query]);
+
+  useEffect(() => {
+    if (!editorOpen) {
+      return;
+    }
+    const documento = draft.documento.trim();
+    if (!documento) {
+      setSearchSuggestions([]);
+      return;
+    }
+    const timeout = setTimeout(() => {
+      void findSuggestions(documento);
+    }, 180);
+    return () => clearTimeout(timeout);
+  }, [draft.documento, editorOpen]);
 
   async function loadClientes(nextQuery = query) {
     setLoading(true);
@@ -1453,17 +1478,95 @@ function ClientesAgendaView({
     }
   }
 
+  function openEditor(cliente?: ClienteResponse) {
+    if (cliente) {
+      setSelected(cliente);
+      setDraft({
+        cliente_id: cliente.cliente_id,
+        documento_tipo: cliente.documento_tipo,
+        documento: cliente.documento,
+        razon_social: cliente.razon_social,
+        direccion: cliente.direccion,
+        telefono: cliente.telefono,
+        email: cliente.email
+      });
+    } else {
+      setSelected(null);
+      setDraft({
+        documento_tipo: "CI",
+        documento: "",
+        razon_social: "",
+        direccion: "",
+        telefono: "",
+        email: ""
+      });
+    }
+    setEditorOpen(true);
+  }
+
   function useCliente(cliente: ClienteResponse) {
     setSelected(cliente);
-    setDraft({
-      cliente_id: cliente.cliente_id,
-      documento_tipo: cliente.documento_tipo,
-      documento: cliente.documento,
-      razon_social: cliente.razon_social,
-      direccion: cliente.direccion,
-      telefono: cliente.telefono,
-      email: cliente.email
-    });
+    setMessage(`Cliente listo para usar: ${cliente.razon_social}.`);
+  }
+
+  function applySuggestion(suggestion: ClienteSearchResult) {
+    setDraft((current) => ({
+      ...current,
+      cliente_id: suggestion.cliente_id ?? current.cliente_id ?? null,
+      documento_tipo: suggestion.documento_tipo,
+      documento: suggestion.documento,
+      razon_social: suggestion.razon_social,
+      direccion: suggestion.direccion ?? current.direccion ?? "",
+      telefono: suggestion.telefono ?? current.telefono ?? "",
+      email: suggestion.email ?? current.email ?? ""
+    }));
+    setSearchSuggestions([]);
+  }
+
+  async function findSuggestions(documento: string) {
+    setAutocompleting(true);
+    try {
+      const result = await api.get<{ items: ClienteSearchResult[] }>(`/clientes/search?q=${encodeURIComponent(documento)}&limit=5`);
+      setSearchSuggestions(result.items);
+    } catch {
+      setSearchSuggestions([]);
+    } finally {
+      setAutocompleting(false);
+    }
+  }
+
+  async function autocompleteFromDnit() {
+    if (!["RUC", "CI"].includes(draft.documento_tipo)) {
+      return;
+    }
+    const documento = draft.documento.trim();
+    if (!documento) {
+      return;
+    }
+    const alreadyExists = items.some((cliente) => normalizeDocKey(cliente.documento) === normalizeDocKey(documento));
+    if (alreadyExists) {
+      setMessage("Cliente encontrado en la agenda.");
+      return;
+    }
+    setAutocompleting(true);
+    try {
+      const result = await api.get<DnitAutocompleteResponse>(
+        `/clientes/dnit/autocomplete?documento_tipo=${draft.documento_tipo}&documento=${encodeURIComponent(documento)}`
+      );
+      if (!result.found || !result.cliente) {
+        return;
+      }
+      setDraft((current) => ({
+        ...current,
+        documento_tipo: result.cliente?.documento_tipo ?? current.documento_tipo,
+        documento: result.cliente?.documento ?? current.documento,
+        razon_social: result.cliente?.razon_social ?? current.razon_social
+      }));
+    } catch {
+      // No interrumpir carga manual cuando DNIT no esta disponible.
+    } finally {
+      setAutocompleting(false);
+    }
   }
 
   async function saveCliente() {
@@ -1483,15 +1586,8 @@ function ClientesAgendaView({
         : await api.post<ClienteResponse>("/clientes", payload);
       setMessage(selected ? "Cliente actualizado." : "Cliente agregado a la agenda.");
       setSelected(result);
-      setDraft({
-        cliente_id: result.cliente_id,
-        documento_tipo: result.documento_tipo,
-        documento: result.documento,
-        razon_social: result.razon_social,
-        direccion: result.direccion,
-        telefono: result.telefono,
-        email: result.email
-      });
+      setEditorOpen(false);
+      setSearchSuggestions([]);
       await loadClientes();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "No se pudo guardar el cliente.");
@@ -1516,93 +1612,121 @@ function ClientesAgendaView({
           Buscar cliente
           <input
             onChange={(event) => setQuery(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") {
-                void loadClientes();
-              }
-            }}
-            placeholder="RUC, CI o nombre"
+            placeholder="Buscar cliente..."
             value={query}
           />
         </label>
-        <button className="secondary-action" disabled={loading} onClick={() => void loadClientes()} type="button">
-          {loading ? "Buscando..." : "Buscar"}
-        </button>
       </section>
       <section className="documents-layout">
         <div className="documents-list">
+          {items.length === 0 && !loading ? (
+            <article className="empty-callout">
+              <strong>No encontramos clientes.</strong>
+              <p className="muted">Puede crear uno nuevo.</p>
+              <button className="primary-action wide" onClick={() => openEditor()} type="button">
+                + Crear cliente
+              </button>
+            </article>
+          ) : null}
           {items.map((cliente) => (
-            <button
-              className={selected?.cliente_id === cliente.cliente_id ? "document-row active" : "document-row"}
-              key={cliente.cliente_id}
-              onClick={() => useCliente(cliente)}
-              type="button"
-            >
+            <article className={selected?.cliente_id === cliente.cliente_id ? "document-row client-card active" : "document-row client-card"} key={cliente.cliente_id}>
               <span>
                 <strong>👤 {cliente.razon_social}</strong>
-                <small>{cliente.documento_tipo} · {cliente.documento}</small>
+                <small>{cliente.documento_tipo}: {cliente.documento}</small>
               </span>
-            </button>
+              <div className="card-actions">
+                <button className="secondary-action" onClick={() => useCliente(cliente)} type="button">
+                  Usar
+                </button>
+                <button className="secondary-action" onClick={() => openEditor(cliente)} type="button">
+                  Editar
+                </button>
+                {cliente.telefono ? (
+                  <a className="secondary-link secondary-link-as-button" href={`https://wa.me/${cliente.telefono.replace(/\D/g, "")}`} rel="noreferrer" target="_blank">
+                    WhatsApp
+                  </a>
+                ) : null}
+              </div>
+            </article>
           ))}
         </div>
-        <aside className="document-detail">
-          <div className="receipt-heading">
-            <div>
-              <p className="eyebrow">Cliente</p>
-              <h3>{selected ? "Editar cliente" : "Nuevo cliente"}</h3>
-            </div>
-          </div>
-          <div className="documents-filters">
-            <label>
-              Tipo documento
-              <select value={draft.documento_tipo} onChange={(event) => setDraft((current) => ({ ...current, documento_tipo: event.target.value as DocumentoIdentidadTipo }))}>
-                <option value="CI">CI</option>
-                <option value="RUC">RUC</option>
-                <option value="PASAPORTE">Pasaporte</option>
-                <option value="CEDULA_EXTRANJERA">Cedula extranjera</option>
-                <option value="NO_ESPECIFICADO">No especificado</option>
-              </select>
-            </label>
-            <label>
-              Documento
-              <input value={draft.documento} onChange={(event) => setDraft((current) => ({ ...current, documento: event.target.value }))} />
-            </label>
-            <label>
-              Nombre o razon social
-              <input value={draft.razon_social} onChange={(event) => setDraft((current) => ({ ...current, razon_social: event.target.value }))} />
-            </label>
-            <label>
-              Telefono
-              <input value={draft.telefono ?? ""} onChange={(event) => setDraft((current) => ({ ...current, telefono: event.target.value }))} />
-            </label>
-          </div>
-          <div className="result-actions">
-            <button className="primary-action" disabled={saving} onClick={() => void saveCliente()} type="button">
-              {saving ? "Guardando..." : selected ? "Actualizar cliente" : "Agregar cliente"}
-            </button>
-            {selected ? (
-              <button
-                className="secondary-action"
-                onClick={() => {
-                  setSelected(null);
-                  setDraft({
-                    documento_tipo: "CI",
-                    documento: "",
-                    razon_social: "",
-                    direccion: "",
-                    telefono: "",
-                    email: ""
-                  });
-                }}
-                type="button"
-              >
-                Nuevo cliente
-              </button>
-            ) : null}
-          </div>
-          {message ? <p className="inline-message">{message}</p> : null}
-        </aside>
+        <button className="primary-action wide floating-create-client" onClick={() => openEditor()} type="button">
+          + Nuevo cliente
+        </button>
       </section>
+      {message ? <p className="inline-message">{message}</p> : null}
+      {editorOpen ? (
+        <div className="modal-backdrop">
+          <section className="modal-panel" aria-labelledby="cliente-editor-title" role="dialog" aria-modal="true">
+            <header className="editor-heading">
+              <div>
+                <p className="eyebrow">Cliente</p>
+                <h3 id="cliente-editor-title">{selected ? "Editar cliente" : "Nuevo cliente"}</h3>
+              </div>
+              <button className="ghost-action" onClick={() => setEditorOpen(false)} type="button">
+                Cerrar
+              </button>
+            </header>
+            <div className="documents-filters">
+              <label>
+                Tipo documento
+                <select value={draft.documento_tipo} onChange={(event) => setDraft((current) => ({ ...current, documento_tipo: event.target.value as DocumentoIdentidadTipo }))}>
+                  <option value="CI">CI</option>
+                  <option value="RUC">RUC</option>
+                  <option value="PASAPORTE">Pasaporte</option>
+                  <option value="CEDULA_EXTRANJERA">Cedula extranjera</option>
+                  <option value="NO_ESPECIFICADO">No especificado</option>
+                </select>
+              </label>
+              <label>
+                Documento
+                <input
+                  onBlur={() => void autocompleteFromDnit()}
+                  value={draft.documento}
+                  onChange={(event) => setDraft((current) => ({ ...current, documento: event.target.value }))}
+                />
+              </label>
+              {autocompleting ? <small className="muted">Autocompletando...</small> : null}
+              {searchSuggestions.length > 0 ? (
+                <div className="suggestion-list">
+                  {searchSuggestions.map((suggestion) => (
+                    <button
+                      key={`${suggestion.source}-${suggestion.cliente_id ?? suggestion.documento}`}
+                      onClick={() => applySuggestion(suggestion)}
+                      type="button"
+                    >
+                      <strong>{suggestion.documento}</strong>
+                      <span>{suggestion.razon_social}</span>
+                      <small>{suggestion.source === "AGENDA_FACTURADOR" ? "Agenda" : "Sugerencia"}</small>
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+              <label>
+                Nombre o razon social
+                <input value={draft.razon_social} onChange={(event) => setDraft((current) => ({ ...current, razon_social: event.target.value }))} />
+              </label>
+              <label>
+                Telefono
+                <input value={draft.telefono ?? ""} onChange={(event) => setDraft((current) => ({ ...current, telefono: event.target.value }))} />
+              </label>
+              <label>
+                Correo
+                <input value={draft.email ?? ""} onChange={(event) => setDraft((current) => ({ ...current, email: event.target.value }))} />
+              </label>
+              <label>
+                Direccion
+                <input value={draft.direccion ?? ""} onChange={(event) => setDraft((current) => ({ ...current, direccion: event.target.value }))} />
+              </label>
+            </div>
+            <div className="result-actions">
+              <button className="primary-action" disabled={saving || !draft.documento.trim() || !draft.razon_social.trim()} onClick={() => void saveCliente()} type="button">
+                {saving ? "Guardando..." : "Guardar"}
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -3846,6 +3970,20 @@ async function readApiError(response: Response): Promise<string> {
     return body.error?.message ?? body.message ?? "Solicitud rechazada.";
   } catch {
     return "No se pudo completar la solicitud.";
+  }
+}
+
+function formatDocumentoEstadoSimple(value: DocumentoEstado): string {
+  switch (value) {
+    case "EMITIDA":
+      return "🟢 Factura emitida";
+    case "EMITIENDO":
+    case "PENDIENTE_SIFEN":
+      return "🟡 Procesando factura";
+    case "ANULADA":
+      return "⚪ Anulada";
+    default:
+      return "🔴 Requiere revision";
   }
 }
 
