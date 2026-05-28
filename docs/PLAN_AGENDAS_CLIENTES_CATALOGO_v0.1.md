@@ -90,3 +90,49 @@ Validaciones esperadas:
 - tests de alta manual que actualiza identidad global y agenda propia;
 - tests de edicion que no modifica agendas ajenas;
 - tests de catalogo que impiden listar, buscar, editar o reutilizar items de otro facturador.
+
+## 7. Plan UX Clientes (Sin Cambios Backend)
+
+### 7.1 Objetivo Operativo
+
+Reducir friccion para seleccionar cliente al facturar, minimizando scroll y separando claramente:
+
+- seleccion rapida;
+- edicion inmediata;
+- creacion bajo demanda.
+
+### 7.2 Diseno De Interaccion
+
+1. Reemplazar listado plano por tarjetas de cliente con acciones:
+   - primaria: `Usar cliente`;
+   - secundaria: `Editar`.
+2. Remover formulario persistente al final.
+3. Incorporar accion principal `+ Nuevo cliente` que abre modal/bottom sheet.
+4. Implementar busqueda instantanea al escribir, sin boton `Buscar`.
+5. Agregar estado vacio con CTA de creacion.
+
+### 7.3 Reuso Tecnico
+
+- Reutilizar hooks/servicios/frontend state ya existentes para:
+  - busqueda de clientes;
+  - autocompletado por documento;
+  - normalizacion de `RUC/CI`;
+  - señales de estado de RUC ya disponibles en UI principal cuando correspondan.
+- Mantener APIs y payloads actuales sin cambios de contrato.
+
+### 7.4 Criterios De No Regresion
+
+- No romper alta/edicion de agenda existente.
+- No romper flujo de `Nueva factura` que consume cliente seleccionado.
+- No introducir nuevas reglas fiscales ni mover logica SIFEN al frontend.
+
+### 7.5 Validacion UX/UI
+
+- `npm run typecheck --workspace @facturacion-simple/web-operacion`
+- `npm run build --workspace @facturacion-simple/web-operacion`
+- Playwright mobile-first sobre contenedores desplegados (`bash scripts/deploy.sh`) cubriendo:
+  - buscar cliente mientras escribe;
+  - usar cliente desde tarjeta;
+  - editar cliente desde tarjeta;
+  - crear cliente desde CTA principal;
+  - estado vacio con CTA.

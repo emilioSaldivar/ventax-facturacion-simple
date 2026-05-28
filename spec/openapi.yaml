@@ -605,7 +605,7 @@ paths:
   /facturas/{documentoId}/eventos:
     get:
       tags: [Facturas]
-      summary: Consultar historial del documento
+      summary: Consultar historial del documento (soporte interno)
       parameters:
         - $ref: "#/components/parameters/DocumentoId"
       responses:
@@ -617,6 +617,12 @@ paths:
                 $ref: "#/components/schemas/DocumentoEventosListResponse"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Disponible solo para soporte interno
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         "404":
           $ref: "#/components/responses/NotFound"
         "409":
@@ -625,6 +631,42 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: Backend fiscal no disponible o rechazo la consulta
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "504":
+          description: Timeout al consultar backend fiscal
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /facturas/{documentoId}/gestion/decision:
+    get:
+      tags: [Facturas]
+      summary: Consultar decision operativa de autogestion (soporte interno)
+      parameters:
+        - $ref: "#/components/parameters/DocumentoId"
+      responses:
+        "200":
+          description: Diagnostico y accion recomendada para regularizacion
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DocumentoDecisionResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Disponible solo para soporte interno
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
         "502":
           description: Backend fiscal no disponible o rechazo la consulta
           content:
@@ -1867,6 +1909,62 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/DocumentoEventoResponse"
+
+    DocumentoDecisionResponse:
+      type: object
+      required:
+        - documento_id
+        - emisor_id
+        - env
+        - status
+        - transmission_evidence
+        - number_state
+        - decision_confidence
+        - reason_codes
+        - recommended_action
+        - escalation_required
+        - allowed_actions
+      properties:
+        documento_id:
+          type: string
+        emisor_id:
+          type: string
+        env:
+          type: string
+          enum: [test, prod]
+        cdc:
+          type: string
+          nullable: true
+        nro_factura:
+          type: string
+          nullable: true
+        status:
+          type: string
+        transmission_evidence:
+          type: string
+          enum: [YES, NO, UNKNOWN]
+        number_state:
+          type: string
+          enum: [CONSUMED, REUSABLE, REQUIRES_VOID, UNCERTAIN]
+        decision_confidence:
+          type: string
+          enum: [HIGH, MEDIUM, LOW]
+        reason_codes:
+          type: array
+          items:
+            type: string
+        recommended_action:
+          type: string
+          enum: [RETRY, CANCEL_SEND, CANCEL_FISCAL, VOID_NUMBER, WAIT_SYNC, NO_ACTION]
+        next_step_hint:
+          type: string
+          nullable: true
+        escalation_required:
+          type: boolean
+        allowed_actions:
+          type: object
+          additionalProperties:
+            type: boolean
 
     BatchPendientesGestionResponse:
       type: object

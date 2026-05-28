@@ -68,3 +68,46 @@ Reglas:
 - Un alta manual de cliente crea o actualiza identidad global y crea/actualiza agenda del facturador.
 - Una edicion de agenda no modifica agendas de otros facturadores.
 - El catalogo no comparte datos entre facturadores.
+
+## 7. UX Operativa De Clientes (Seleccion Rapida Y Edicion Inmediata)
+
+La pantalla de clientes debe priorizar el flujo operativo de facturacion:
+
+- accion principal: seleccionar/usar cliente;
+- accion secundaria: editar cliente;
+- administracion completa como accion contextual, no como formulario fijo siempre visible.
+
+### 7.1 Estructura Visual
+
+- La lista de clientes debe renderizarse como tarjetas interactivas con jerarquia clara:
+  - nombre/razon social con mayor peso visual;
+  - documento en segundo nivel;
+  - acciones rapidas visibles (`Usar`, `Editar`).
+- El formulario fijo al final de la pantalla debe eliminarse.
+- La creacion de cliente debe abrirse mediante accion principal (`+ Nuevo cliente`) en modal, bottom sheet o vista dedicada corta.
+
+### 7.2 Edicion
+
+- La edicion debe abrirse de forma inmediata desde cada tarjeta (modal o bottom sheet), sin obligar a desplazarse hasta el final.
+- Campos de edicion esperados: documento, nombre/razon social, telefono, correo y direccion.
+
+### 7.3 Busqueda Y Autocompletado
+
+- La busqueda debe ser instantanea mientras el usuario escribe.
+- Placeholder recomendado: `Buscar cliente...`.
+- Debe reutilizarse la logica de autocompletado ya existente en el producto para:
+  - sugerir cliente existente;
+  - completar nombre/razon social;
+  - inferir tipo de documento;
+  - exponer estado de RUC cuando aplique al flujo actual.
+- La UX debe evitar duplicados cuando el cliente ya exista.
+
+### 7.4 Estados Vacios Y Mobile
+
+- Sin resultados: mostrar estado vacio con mensaje amigable y CTA de creacion.
+- Las tarjetas y acciones deben ser tactiles, de una sola mano y sin requerir precision extrema.
+
+### 7.5 Restriccion Tecnica
+
+- Esta iniciativa no modifica contratos HTTP, backend, modelos de datos ni validaciones fiscales.
+- Alcance exclusivo: UX/UI frontend operativa, accesibilidad tactil y reorganizacion visual del flujo.

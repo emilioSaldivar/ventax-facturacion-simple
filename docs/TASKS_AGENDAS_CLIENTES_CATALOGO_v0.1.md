@@ -23,6 +23,10 @@
 | ACC-007 | Catalogo aislamiento | Verificar catalogo exclusivo por facturador | DONE | Busqueda, alta, edicion y listado de catalogo siempre filtran por `facturador_id` y no usan base global |
 | ACC-008 | Indices | Revisar indices de agenda y catalogo | DONE | Existen indices o constraints adecuados para busqueda por facturador/documento y codigo por facturador |
 | ACC-009 | QA | Agregar pruebas de aislamiento y fallback | DONE | Tests cubren agendas con mismo documento, fallback global, edicion sin propagacion y catalogo aislado |
+| CLX-A1 | UX/UI clientes | Redisenar gestion de clientes para seleccion rapida y edicion inmediata | PENDING | Lista en tarjetas con `Usar`/`Editar`, busqueda instantanea, sin formulario fijo al final, y CTA `+ Nuevo cliente` en modal/sheet |
+| CLX-A2 | UX/UI clientes | Integrar reuso de autocompletado actual en flujo clientes | PENDING | Al escribir documento (`RUC/CI`) se reutiliza autocompletado existente para sugerir existentes, completar nombre/tipo doc y evitar duplicados |
+| CLX-A3 | UX/UI clientes | Optimizar experiencia mobile y estados vacios | PENDING | Tarjetas tactiles de una mano, estado vacio amigable con `+ Crear cliente`, y jerarquia visual nombre/documento/acciones consistente |
+| CLX-A4 | QA UX clientes | Validar flujo clientes en contenedores con Playwright mobile-first | PENDING | Evidencia de buscar, usar, editar y crear cliente sin scroll excesivo ni perdida de contexto, sobre stack desplegado |
 
 ## Evidencia
 
@@ -32,3 +36,4 @@
 - 2026-05-21: agregadas pruebas de fallback global de clientes, no creacion implicita de agenda, y validacion de unicidad de catalogo por `facturador_id`.
 - 2026-05-21: validaciones ejecutadas: `npm run test -w @facturacion-simple/api -- clientes.service.test.ts catalogo.service.test.ts`, `npm run typecheck -w @facturacion-simple/web-operacion`, `npm run typecheck -w @facturacion-simple/api`, `npm run build -w @facturacion-simple/web-operacion`, `npm run qa:no-secrets`, `rg -n "Identidad compartida|identidad compartida|cliente compartido|cliente compartida|base compartida|compartido|compartida" apps/web-operacion/src`.
 - 2026-05-21: validacion final de repo ejecutada: `npm run test`, `npm run lint`, `npm run build`.
+- 2026-05-27: se agrega bloque de trabajo UX clientes (`CLX-A1`..`CLX-A4`) para redisenar seleccion/edicion en agenda sin cambios de API/backend. Se documenta reuso de autocompletado actual de documento (`RUC/CI`) y foco mobile-first con busqueda instantanea y estado vacio accionable.

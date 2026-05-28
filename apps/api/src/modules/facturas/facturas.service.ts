@@ -16,6 +16,7 @@ import type {
   DocumentoListResponse,
   DocumentoEstado,
   DocumentoEventosListResponse,
+  DocumentoDecisionResponse,
   DocumentoResponse,
   FacturaItemPreview,
   FacturaPreviewInput,
@@ -329,6 +330,10 @@ export async function getDocumentoEventos(
   repository: FacturaRepository,
   gateway: FiscalGateway
 ): Promise<DocumentoEventosListResponse> {
+  if (context.user.role === "OPERADOR_FACTURACION") {
+    throw new HttpError(403, "FORBIDDEN", "Historial fiscal avanzado disponible solo para soporte interno.");
+  }
+
   const documento = await getDocumentoById(context, documentoId, repository);
   if (!documento.cdc) {
     throw new HttpError(409, "CONFLICT", "Documento sin CDC fiscal para consultar historial.");
@@ -347,6 +352,56 @@ export async function getDocumentoEventos(
         error.code === "TIMEOUT" ? 504 : 502,
         "INTERNAL_ERROR",
         error.code === "TIMEOUT" ? "Timeout al consultar historial fiscal." : "No se pudo consultar historial fiscal.",
+        {
+          gateway_code: error.code,
+          details: error.details ?? null
+        }
+      );
+    }
+    throw error;
+  }
+}
+
+export async function getDocumentoDecision(
+  context: OperationalContextResponse,
+  documentoId: string,
+  repository: FacturaRepository,
+  gateway: FiscalGateway
+): Promise<DocumentoDecisionResponse> {
+  if (context.user.role === "OPERADOR_FACTURACION") {
+    throw new HttpError(403, "FORBIDDEN", "Autogestion avanzada disponible solo para soporte interno.");
+  }
+
+  const documento = await getDocumentoById(context, documentoId, repository);
+
+  try {
+    const response = await gateway.getDocumentoDecisionByDocumentId({
+      emisorId: context.facturador.emisor_id,
+      documentId: documento.fiscal_document_id ?? documento.id
+    });
+
+    return {
+      documento_id: documento.id,
+      emisor_id: response.emisor_id,
+      env: response.env,
+      cdc: response.cdc,
+      nro_factura: response.nro_factura,
+      status: response.status,
+      transmission_evidence: response.transmission_evidence,
+      number_state: response.number_state,
+      decision_confidence: response.decision_confidence,
+      reason_codes: response.reason_codes,
+      recommended_action: response.recommended_action,
+      next_step_hint: response.next_step_hint,
+      escalation_required: response.escalation_required,
+      allowed_actions: response.allowed_actions
+    };
+  } catch (error) {
+    if (error instanceof FiscalGatewayError) {
+      throw new HttpError(
+        error.code === "TIMEOUT" ? 504 : 502,
+        "INTERNAL_ERROR",
+        error.code === "TIMEOUT" ? "Timeout al consultar decision operativa." : "No se pudo consultar decision operativa.",
         {
           gateway_code: error.code,
           details: error.details ?? null

@@ -12,6 +12,7 @@ import {
   type FiscalCancelFacturaRequest,
   type FiscalCancelFacturaResponse,
   type FiscalBatchPendientesResponse,
+  type FiscalDocumentoDecisionResponse,
   type FiscalDocumentoEventosResponse,
   type FiscalGateway,
   type FiscalGatewayConfig,
@@ -137,6 +138,39 @@ export class MockFiscalGateway implements FiscalGateway {
         mode: "mock",
         cdc: _cdc,
         events: []
+      }
+    };
+  }
+
+  async getDocumentoDecisionByDocumentId(input: {
+    emisorId: string;
+    documentId: string;
+  }): Promise<FiscalDocumentoDecisionResponse> {
+    return {
+      document_id: input.documentId,
+      emisor_id: input.emisorId,
+      env: this.config.environment,
+      cdc: null,
+      nro_factura: null,
+      status: "UNKNOWN",
+      transmission_evidence: "UNKNOWN",
+      number_state: "UNCERTAIN",
+      decision_confidence: "LOW",
+      reason_codes: ["MOCK_GATEWAY"],
+      recommended_action: "WAIT_SYNC",
+      next_step_hint: "Decision no disponible en modo mock.",
+      escalation_required: false,
+      allowed_actions: {
+        retry_same_cdc: false,
+        cancel_send: false,
+        cancel_fiscal: false,
+        void_number: false,
+        create_derived: false
+      },
+      raw: {
+        mode: "mock",
+        emisor_id: input.emisorId,
+        document_id: input.documentId
       }
     };
   }
@@ -335,6 +369,31 @@ export class RealFiscalGateway implements FiscalGateway {
     }
 
     return mapFiscalDocumentoEventosResponse(body);
+  }
+
+  async getDocumentoDecisionByDocumentId(input: {
+    emisorId: string;
+    documentId: string;
+  }): Promise<FiscalDocumentoDecisionResponse> {
+    const endpoint = `${this.config.baseUrl}/admin/emisores/${encodeURIComponent(input.emisorId)}/facturas/${encodeURIComponent(input.documentId)}/decision`;
+    const url = new URL(endpoint);
+    url.searchParams.set("env", this.config.environment);
+
+    const response = await this.fetchWithTimeout(url.toString(), {
+      method: "GET",
+      headers: this.buildHeaders()
+    });
+
+    const body = await readJson(response);
+    if (!response.ok) {
+      throw new FiscalGatewayError(
+        response.status === 408 || response.status === 504 ? "TIMEOUT" : "UPSTREAM_ERROR",
+        "Backend fiscal rechazo la consulta de decision.",
+        { status: response.status, body }
+      );
+    }
+
+    return mapFiscalDocumentoDecisionResponse(body);
   }
 
   async getBatchPendientesByEmisor(input: {
@@ -901,6 +960,51 @@ function mapFiscalDocumentoEventosResponse(body: unknown): FiscalDocumentoEvento
         response: row.response && typeof row.response === "object" ? (row.response as Record<string, unknown>) : null
       };
     }),
+    raw: data
+  };
+}
+
+function mapFiscalDocumentoDecisionResponse(body: unknown): FiscalDocumentoDecisionResponse {
+  if (!body || typeof body !== "object") {
+    throw new FiscalGatewayError("INVALID_RESPONSE", "Respuesta fiscal invalida.", body);
+  }
+
+  const data = body as Record<string, unknown>;
+  const allowedActions = data.allowed_actions && typeof data.allowed_actions === "object"
+    ? Object.entries(data.allowed_actions as Record<string, unknown>).reduce<Record<string, boolean>>((acc, [key, value]) => {
+      acc[key] = Boolean(value);
+      return acc;
+    }, {})
+    : {};
+
+  return {
+    document_id: String(data.document_id ?? ""),
+    emisor_id: String(data.emisor_id ?? ""),
+    env: data.env === "prod" ? "prod" : "test",
+    cdc: stringOrNull(data.cdc),
+    nro_factura: stringOrNull(data.nro_factura),
+    status: stringOrNull(data.status) ?? "UNKNOWN",
+    transmission_evidence: data.transmission_evidence === "YES" || data.transmission_evidence === "NO" ? data.transmission_evidence : "UNKNOWN",
+    number_state:
+      data.number_state === "CONSUMED" || data.number_state === "REUSABLE" || data.number_state === "REQUIRES_VOID"
+        ? data.number_state
+        : "UNCERTAIN",
+    decision_confidence:
+      data.decision_confidence === "HIGH" || data.decision_confidence === "MEDIUM" ? data.decision_confidence : "LOW",
+    reason_codes: Array.isArray(data.reason_codes)
+      ? data.reason_codes.filter((value): value is string => typeof value === "string")
+      : [],
+    recommended_action:
+      data.recommended_action === "RETRY" ||
+      data.recommended_action === "CANCEL_SEND" ||
+      data.recommended_action === "CANCEL_FISCAL" ||
+      data.recommended_action === "VOID_NUMBER" ||
+      data.recommended_action === "NO_ACTION"
+        ? data.recommended_action
+        : "WAIT_SYNC",
+    next_step_hint: stringOrNull(data.next_step_hint),
+    escalation_required: Boolean(data.escalation_required),
+    allowed_actions: allowedActions,
     raw: data
   };
 }

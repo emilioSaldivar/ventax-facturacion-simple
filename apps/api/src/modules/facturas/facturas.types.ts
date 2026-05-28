@@ -142,6 +142,23 @@ export interface DocumentoEventosListResponse {
   events: DocumentoEventoResponse[];
 }
 
+export interface DocumentoDecisionResponse {
+  documento_id: string;
+  emisor_id: string;
+  env: "test" | "prod";
+  cdc: string | null;
+  nro_factura: string | null;
+  status: string;
+  transmission_evidence: "YES" | "NO" | "UNKNOWN";
+  number_state: "CONSUMED" | "REUSABLE" | "REQUIRES_VOID" | "UNCERTAIN";
+  decision_confidence: "HIGH" | "MEDIUM" | "LOW";
+  reason_codes: string[];
+  recommended_action: "RETRY" | "CANCEL_SEND" | "CANCEL_FISCAL" | "VOID_NUMBER" | "WAIT_SYNC" | "NO_ACTION";
+  next_step_hint: string | null;
+  escalation_required: boolean;
+  allowed_actions: Record<string, boolean>;
+}
+
 export interface BatchPendientesGestionResponse {
   documents_pending: number;
   batches_pending: number;

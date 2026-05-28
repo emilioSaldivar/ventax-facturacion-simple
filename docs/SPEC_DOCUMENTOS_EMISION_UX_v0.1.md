@@ -218,3 +218,60 @@ Nota de alcance: el termino tecnico original puede mantenerse en tooltip/ayuda s
 - El popup de productos usa alto completo util y evita espacios muertos al abrir teclado.
 - Luego de emitir, el resultado queda visible automaticamente en pantalla.
 - La experiencia debe validarse primero en mobile y luego en desktop/tablet.
+
+## UX-009 Detalle Emitidas (Acciones Rapidas + Fiscal Avanzado)
+
+La vista de detalle de facturas emitidas debe unificar el patron UX ya usado en emision:
+
+- acciones rapidas visibles arriba;
+- opciones avanzadas colapsadas abajo;
+- separacion explicita entre uso diario y acciones fiscales sensibles.
+
+### Niveles De Accion Obligatorios
+
+1. `Acciones frecuentes` (siempre visibles, tactiles, ancho completo en mobile):
+   - `Ver factura PDF`
+   - `Enviar por WhatsApp`
+   - `Compartir factura`
+   - `Copiar enlace`
+2. `Gestion comercial` (visibles, con confirmacion obligatoria):
+   - `Crear nota de credito`
+   - `Anular factura`
+3. `Opciones avanzadas` (colapsadas por defecto):
+   - `Verificar estado fiscal`
+   - `Volver a verificar`
+   - `Crear nuevo enlace`
+   - `Descargar documento electronico`
+
+### Primera Etapa Operativa (Minimo Esencial)
+
+Para operador comercial en primera etapa, solo se expone lo esencial para autogestion diaria sin saturacion tecnica:
+
+- verificar estado;
+- volver a verificar estado;
+- compartir/copiar/crear nuevo enlace;
+- descargar documento electronico.
+
+Acciones sensibles de regularizacion (`invalidar numeracion`, `retry-same-cdc`, `create-derived`, `cancel-send`, `validate-cdc-impact`, `decision`, `eventos` admin) quedan reservadas por rol interno (`SOPORTE_INTERNO`/`ADMIN_INTERNO`) y contexto de alerta operativa, alineado con `OPERACION_RECHAZOS_Y_AUTOGESTION_v0.1.md`.
+
+### Lenguaje Comercial Obligatorio
+
+Reemplazos visibles al operador:
+
+- `CDC` -> `Codigo fiscal`
+- `XML` -> `Documento electronico`
+- `Consultar SIFEN` -> `Verificar estado fiscal`
+- `Reintentar validacion` -> `Volver a verificar`
+- `Inutilizar numeracion` -> `Invalidar numeracion` (solo cuando aplique por rol/alerta)
+- `KUDE/PDF` -> `Factura PDF`
+
+### Informacion Fiscal Expandible
+
+La informacion tecnica debe permanecer disponible, pero colapsada por defecto en `Informacion fiscal`:
+
+- codigo fiscal (CDC);
+- estado fiscal/SIFEN;
+- respuesta fiscal resumida;
+- fecha de validacion;
+- id de evento;
+- estado de email.

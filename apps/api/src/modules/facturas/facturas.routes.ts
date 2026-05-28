@@ -13,6 +13,7 @@ import {
   enqueueFacturaEmission,
   emitNotaCreditoTotal,
   getBatchPendientesGestion,
+  getDocumentoDecision,
   getDocumentoById,
   getDocumentoEventos,
   getReconciliacionFiscal,
@@ -138,6 +139,21 @@ facturasRouter.get("/facturas/:documentoId", requireAuth, validateRequest("param
     next(error);
   }
 });
+
+facturasRouter.get(
+  "/facturas/:documentoId/gestion/decision",
+  requireAuth,
+  validateRequest("params", documentoParamsSchema),
+  async (req, res, next) => {
+    try {
+      const context = await getOperationalContext(req.user!.id, operationalContextRepository);
+      const result = await getDocumentoDecision(context, String(req.params.documentoId), facturasRepository, fiscalGateway);
+      res.json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
 
 facturasRouter.get(
   "/facturas/:documentoId/eventos",

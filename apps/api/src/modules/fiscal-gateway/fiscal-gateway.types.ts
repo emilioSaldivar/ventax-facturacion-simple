@@ -111,6 +111,24 @@ export interface FiscalDocumentoEventosResponse {
   raw: Record<string, unknown>;
 }
 
+export interface FiscalDocumentoDecisionResponse {
+  document_id: string;
+  emisor_id: string;
+  env: "test" | "prod";
+  cdc: string | null;
+  nro_factura: string | null;
+  status: string;
+  transmission_evidence: "YES" | "NO" | "UNKNOWN";
+  number_state: "CONSUMED" | "REUSABLE" | "REQUIRES_VOID" | "UNCERTAIN";
+  decision_confidence: "HIGH" | "MEDIUM" | "LOW";
+  reason_codes: string[];
+  recommended_action: "RETRY" | "CANCEL_SEND" | "CANCEL_FISCAL" | "VOID_NUMBER" | "WAIT_SYNC" | "NO_ACTION";
+  next_step_hint: string | null;
+  escalation_required: boolean;
+  allowed_actions: Record<string, boolean>;
+  raw: Record<string, unknown>;
+}
+
 export interface FiscalBatchPendienteDocumento {
   document_id: string | null;
   cdc: string | null;
@@ -166,6 +184,7 @@ export interface FiscalGateway {
   refreshFacturaStatus(request: FiscalRefreshStatusRequest): Promise<FiscalRefreshStatusResponse>;
   cancelFactura(request: FiscalCancelFacturaRequest): Promise<FiscalCancelFacturaResponse>;
   getDocumentoEventos(cdc: string): Promise<FiscalDocumentoEventosResponse>;
+  getDocumentoDecisionByDocumentId(input: { emisorId: string; documentId: string }): Promise<FiscalDocumentoDecisionResponse>;
   getBatchPendientesByEmisor(input: { emisorId: string; limit: number; offset: number }): Promise<FiscalBatchPendientesResponse>;
   getFacturalistaByEmisor(input: { emisorId: string; offset: number; limit: number; q?: string }): Promise<FiscalFacturalistaResponse>;
   getXml(cdc: string): Promise<FiscalArtifactResponse>;

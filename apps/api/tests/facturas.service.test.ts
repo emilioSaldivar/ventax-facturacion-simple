@@ -6,6 +6,7 @@ import {
   type FiscalCancelFacturaRequest,
   type FiscalCancelFacturaResponse,
   type FiscalBatchPendientesResponse,
+  type FiscalDocumentoDecisionResponse,
   type FiscalDocumentoEventosResponse,
   type FiscalEmitFacturaRequest,
   type FiscalEmitFacturaResponse,
@@ -20,6 +21,7 @@ import {
   cancelDocumento,
   emitNotaCreditoTotal,
   getBatchPendientesGestion,
+  getDocumentoDecision,
   getDocumentoById,
   getDocumentoEventos,
   getReconciliacionFiscal,
@@ -331,6 +333,23 @@ class FakeFiscalGateway implements FiscalGateway {
       items: [],
       next: null,
       raw: { items: [], next: null }
+    },
+    private readonly decisionResponse: FiscalDocumentoDecisionResponse = {
+      document_id: "doc-1",
+      emisor_id: "80136968-1",
+      env: "test",
+      cdc: null,
+      nro_factura: null,
+      status: "REJECTED",
+      transmission_evidence: "UNKNOWN",
+      number_state: "UNCERTAIN",
+      decision_confidence: "LOW",
+      reason_codes: ["MOCK"],
+      recommended_action: "WAIT_SYNC",
+      next_step_hint: null,
+      escalation_required: false,
+      allowed_actions: {},
+      raw: {}
     }
   ) {}
 
@@ -388,6 +407,10 @@ class FakeFiscalGateway implements FiscalGateway {
 
   async getDocumentoEventos(): Promise<FiscalDocumentoEventosResponse> {
     return this.eventosResponse;
+  }
+
+  async getDocumentoDecisionByDocumentId(): Promise<FiscalDocumentoDecisionResponse> {
+    return this.decisionResponse;
   }
 
   async getBatchPendientesByEmisor(): Promise<FiscalBatchPendientesResponse> {
@@ -1534,7 +1557,18 @@ describe("facturas service", () => {
       }
     );
 
-    const result = await getDocumentoEventos(context, repo.findByIdResponse.id, repo, gateway);
+    const result = await getDocumentoEventos(
+      {
+        ...context,
+        user: {
+          ...context.user,
+          role: "SOPORTE_INTERNO"
+        }
+      },
+      repo.findByIdResponse.id,
+      repo,
+      gateway
+    );
 
     expect(result).toEqual({
       documento_id: repo.findByIdResponse.id,
@@ -1548,6 +1582,39 @@ describe("facturas service", () => {
           response: null
         }
       ]
+    });
+  });
+
+  it("returns support decision by documento id", async () => {
+    const repo = new FakeFacturaRepository();
+    repo.findByIdResponse = buildDocumento();
+    const gateway = new FakeFiscalGateway(new FiscalGatewayError("UPSTREAM_ERROR", "unused"));
+
+    const result = await getDocumentoDecision(
+      {
+        ...context,
+        user: {
+          ...context.user,
+          role: "SOPORTE_INTERNO"
+        }
+      },
+      repo.findByIdResponse.id,
+      repo,
+      gateway
+    );
+
+    expect(result.documento_id).toBe(repo.findByIdResponse.id);
+    expect(result.emisor_id).toBe("80136968-1");
+    expect(result.recommended_action).toBe("WAIT_SYNC");
+  });
+
+  it("restricts decision endpoint for operator role", async () => {
+    const repo = new FakeFacturaRepository();
+    repo.findByIdResponse = buildDocumento();
+    const gateway = new FakeFiscalGateway(new FiscalGatewayError("UPSTREAM_ERROR", "unused"));
+
+    await expect(getDocumentoDecision(context, repo.findByIdResponse.id, repo, gateway)).rejects.toMatchObject({
+      statusCode: 403
     });
   });
 
