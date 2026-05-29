@@ -1537,6 +1537,27 @@ dd {
   background: #fafcfd;
 }
 
+.action-group-internal {
+  border-color: #ffd7a8;
+  background: #fff9f2;
+}
+
+.support-decision-box {
+  display: grid;
+  gap: 6px;
+  border: 1px dashed #e8b778;
+  border-radius: 8px;
+  background: #fffefb;
+  padding: 10px 11px;
+}
+
+.support-decision-box p {
+  margin: 0;
+  font-size: 12px;
+  color: #5a4630;
+  font-weight: 700;
+}
+
 .group-title {
   margin: 0;
   color: #304047;

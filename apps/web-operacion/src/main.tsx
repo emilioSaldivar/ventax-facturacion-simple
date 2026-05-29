@@ -211,6 +211,65 @@ interface DocumentoEventosListResponse {
   events: DocumentoEventoResponse[];
 }
 
+interface DocumentoDecisionResponse {
+  documento_id: string;
+  emisor_id: string;
+  env: "test" | "prod";
+  cdc: string | null;
+  nro_factura: string | null;
+  status: string;
+  transmission_evidence: "YES" | "NO" | "UNKNOWN";
+  number_state: "CONSUMED" | "REUSABLE" | "REQUIRES_VOID" | "UNCERTAIN";
+  decision_confidence: "HIGH" | "MEDIUM" | "LOW";
+  reason_codes: string[];
+  recommended_action: "RETRY" | "CANCEL_SEND" | "CANCEL_FISCAL" | "VOID_NUMBER" | "WAIT_SYNC" | "NO_ACTION";
+  next_step_hint: string | null;
+  escalation_required: boolean;
+  allowed_actions: Record<string, boolean>;
+}
+
+interface DocumentoValidateCdcImpactResponse {
+  documento_id: string;
+  current_cdc: string | null;
+  candidate_cdc: string | null;
+  cdc_impact: "CDC_NO_CHANGE" | "CDC_CHANGE";
+  reason: string | null;
+  allowed_actions: Record<string, boolean>;
+}
+
+interface DocumentoGestionResendResponse {
+  documento_id: string;
+  status: string;
+  revision_number: number;
+  accepted_by_sifen: boolean;
+  cdc: string | null;
+  queued_for_batch: boolean | null;
+}
+
+interface DocumentoGestionCreateDerivedResponse {
+  source_document_id: string;
+  derived_document_id: string;
+  status: string;
+  accepted_by_sifen: boolean;
+  cdc: string | null;
+  nro_factura: string | null;
+}
+
+interface DocumentoGestionCancelSendResponse {
+  documento_id: string;
+  previous_status: string;
+  status: string;
+  action_result: string;
+  reason_codes: string[];
+  recommended_next_action: string;
+}
+
+interface DocumentoGestionVoidResponse {
+  documento_id: string;
+  event_id: string | null;
+  status: string;
+}
+
 interface BatchPendientesGestionResponse {
   documents_pending: number;
   batches_pending: number;
@@ -887,6 +946,9 @@ function DocumentsView({
   const [reconciliacion, setReconciliacion] = useState<ReconciliacionFiscalResponse | null>(null);
   const [gestionTab, setGestionTab] = useState<"STATUS" | "EVENTOS" | "PENDIENTES" | "RECONCILIACION">("STATUS");
   const [gestionLoading, setGestionLoading] = useState(false);
+  const [decision, setDecision] = useState<DocumentoDecisionResponse | null>(null);
+  const [cdcImpact, setCdcImpact] = useState<DocumentoValidateCdcImpactResponse | null>(null);
+  const isInternalSupport = role !== "OPERADOR_FACTURACION";
 
   useEffect(() => {
     void loadDocuments();
@@ -935,8 +997,118 @@ function DocumentsView({
       const detail = await api.get<DocumentoResponse>(`/facturas/${documentoId}`);
       setSelected(detail);
       await loadDeliveryFor(detail);
+      if (isInternalSupport) {
+        try {
+          const detailDecision = await api.get<DocumentoDecisionResponse>(`/facturas/${documentoId}/gestion/decision`);
+          setDecision(detailDecision);
+        } catch {
+          setDecision(null);
+        }
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo abrir el detalle.");
+    } finally {
+      setActionLoading(false);
+    }
+  }
+
+  async function validateSelectedCdcImpact() {
+    if (!selected || !isInternalSupport) {
+      return;
+    }
+    setActionLoading(true);
+    try {
+      const result = await api.post<DocumentoValidateCdcImpactResponse>(`/facturas/${selected.id}/gestion/validate-cdc-impact`, {});
+      setCdcImpact(result);
+      setMessage(`Impacto CDC: ${result.cdc_impact}.`);
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "No se pudo validar impacto CDC.");
+    } finally {
+      setActionLoading(false);
+    }
+  }
+
+  async function retrySameCdcAction() {
+    if (!selected || !isInternalSupport) {
+      return;
+    }
+    const comment = window.prompt("Comentario de soporte (opcional)", "") ?? "";
+    setActionLoading(true);
+    try {
+      const result = await api.post<DocumentoGestionResendResponse>(`/facturas/${selected.id}/gestion/retry-same-cdc`, {
+        mode: "BATCH",
+        send_now: false,
+        comment: comment.trim() || undefined
+      });
+      setMessage(`Reintento enviado. Revision ${result.revision_number}.`);
+      await openDetail(selected.id);
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "No se pudo reintentar con mismo CDC.");
+    } finally {
+      setActionLoading(false);
+    }
+  }
+
+  async function createDerivedAction() {
+    if (!selected || !isInternalSupport) {
+      return;
+    }
+    const comment = window.prompt("Motivo/Comentario de derivación", "");
+    if (!comment?.trim()) {
+      return;
+    }
+    setActionLoading(true);
+    try {
+      const result = await api.post<DocumentoGestionCreateDerivedResponse>(`/facturas/${selected.id}/gestion/create-derived`, {
+        mode: "BATCH",
+        send_now: false,
+        comment: comment.trim()
+      });
+      setMessage(`DE derivado creado: ${result.derived_document_id}.`);
+      await loadDocuments();
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "No se pudo crear DE derivado.");
+    } finally {
+      setActionLoading(false);
+    }
+  }
+
+  async function cancelSendAction() {
+    if (!selected || !isInternalSupport) {
+      return;
+    }
+    if (!window.confirm("Cancelar envío local del documento en cola batch?")) {
+      return;
+    }
+    setActionLoading(true);
+    try {
+      const result = await api.post<DocumentoGestionCancelSendResponse>(`/facturas/${selected.id}/gestion/cancel-send`, {});
+      setMessage(`Envio cancelado. Resultado: ${result.action_result}.`);
+      await openDetail(selected.id);
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "No se pudo cancelar envío local.");
+    } finally {
+      setActionLoading(false);
+    }
+  }
+
+  async function voidNumberAction() {
+    if (!selected || !isInternalSupport) {
+      return;
+    }
+    const motivo = window.prompt("Motivo de inutilización", "");
+    if (!motivo?.trim()) {
+      return;
+    }
+    setActionLoading(true);
+    try {
+      const result = await api.post<DocumentoGestionVoidResponse>(`/facturas/${selected.id}/gestion/void-number`, {
+        motivo: motivo.trim()
+      });
+      setMessage(`Inutilización solicitada. Evento: ${result.event_id ?? "sin id"}.`);
+      await loadEventosDocumento();
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "No se pudo solicitar inutilización.");
     } finally {
       setActionLoading(false);
     }
@@ -1396,6 +1568,43 @@ function DocumentsView({
                   </a>
                 </div>
               </details>
+              {isInternalSupport ? (
+                <section className="action-group action-group-internal" aria-label="Autogestion soporte">
+                  <h4 className="group-title">Autogestion soporte interno</h4>
+                  <p className="muted">Flujo sugerido: decision → validar impacto CDC → ejecutar acción.</p>
+                  {decision ? (
+                    <div className="support-decision-box">
+                      <p><strong>Accion recomendada:</strong> {decision.recommended_action}</p>
+                      <p><strong>Confianza:</strong> {decision.decision_confidence}</p>
+                      <p><strong>Motivos:</strong> {decision.reason_codes.join(", ") || "sin codigos"}</p>
+                    </div>
+                  ) : (
+                    <p className="muted">Sin decision disponible para este documento.</p>
+                  )}
+                  {cdcImpact ? (
+                    <p className="muted">
+                      Impacto CDC: <strong>{cdcImpact.cdc_impact}</strong> {cdcImpact.reason ? `· ${cdcImpact.reason}` : ""}
+                    </p>
+                  ) : null}
+                  <div className="result-actions">
+                    <button className="secondary-action" disabled={actionLoading} onClick={() => void validateSelectedCdcImpact()} type="button">
+                      Validar impacto CDC
+                    </button>
+                    <button className="secondary-action" disabled={actionLoading} onClick={() => void retrySameCdcAction()} type="button">
+                      Reintentar mismo CDC
+                    </button>
+                    <button className="secondary-action" disabled={actionLoading} onClick={() => void createDerivedAction()} type="button">
+                      Crear DE derivado
+                    </button>
+                    <button className="secondary-action" disabled={actionLoading} onClick={() => void cancelSendAction()} type="button">
+                      Cancelar envío local
+                    </button>
+                    <button className="secondary-action" disabled={actionLoading} onClick={() => void voidNumberAction()} type="button">
+                      Inutilizar numeración
+                    </button>
+                  </div>
+                </section>
+              ) : null}
               {message ? <p className="inline-message">{message}</p> : null}
             </>
           ) : (

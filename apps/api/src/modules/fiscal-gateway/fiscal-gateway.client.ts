@@ -12,8 +12,13 @@ import {
   type FiscalCancelFacturaRequest,
   type FiscalCancelFacturaResponse,
   type FiscalBatchPendientesResponse,
+  type FiscalDocumentoCancelSendResponse,
+  type FiscalDocumentoCreateDerivedResponse,
   type FiscalDocumentoDecisionResponse,
   type FiscalDocumentoEventosResponse,
+  type FiscalDocumentoResendResponse,
+  type FiscalDocumentoValidateCdcImpactResponse,
+  type FiscalDocumentoVoidResponse,
   type FiscalGateway,
   type FiscalGatewayConfig,
   type FiscalGatewayHealth,
@@ -208,6 +213,89 @@ export class MockFiscalGateway implements FiscalGateway {
         limit: input.limit,
         q: input.q ?? null
       }
+    };
+  }
+
+  async validateDocumentoCdcImpactByDocumentId(input: {
+    emisorId: string;
+    documentId: string;
+    json_input?: Record<string, unknown>;
+  }): Promise<FiscalDocumentoValidateCdcImpactResponse> {
+    return {
+      document_id: input.documentId,
+      current_cdc: null,
+      candidate_cdc: null,
+      cdc_impact: "CDC_NO_CHANGE",
+      reason: "Operacion no disponible en modo mock.",
+      allowed_actions: { retry_same_cdc: false, create_derived: false, void_number: false },
+      raw: { mode: "mock", emisor_id: input.emisorId, document_id: input.documentId }
+    };
+  }
+
+  async retryDocumentoSameCdcByDocumentId(input: {
+    emisorId: string;
+    documentId: string;
+    mode?: "SYNC" | "BATCH" | "AUTO";
+    send_now?: boolean;
+    comment?: string;
+    json_input?: Record<string, unknown>;
+  }): Promise<FiscalDocumentoResendResponse> {
+    return {
+      document_id: input.documentId,
+      status: "PENDING",
+      revision_number: 0,
+      accepted_by_sifen: false,
+      cdc: null,
+      queued_for_batch: true,
+      raw: { mode: "mock", emisor_id: input.emisorId, document_id: input.documentId }
+    };
+  }
+
+  async createDocumentoDerivedByDocumentId(input: {
+    emisorId: string;
+    documentId: string;
+    mode?: "SYNC" | "BATCH" | "AUTO";
+    send_now?: boolean;
+    comment?: string;
+    json_input?: Record<string, unknown>;
+  }): Promise<FiscalDocumentoCreateDerivedResponse> {
+    return {
+      source_document_id: input.documentId,
+      derived_document_id: `mock-derived-${input.documentId}`,
+      status: "PENDING",
+      accepted_by_sifen: false,
+      cdc: null,
+      nro_factura: null,
+      raw: { mode: "mock", emisor_id: input.emisorId, document_id: input.documentId }
+    };
+  }
+
+  async cancelDocumentoSendByDocumentId(input: {
+    emisorId: string;
+    documentId: string;
+    comment?: string;
+  }): Promise<FiscalDocumentoCancelSendResponse> {
+    return {
+      document_id: input.documentId,
+      previous_status: "QUEUED_BATCH",
+      status: "DRAFT",
+      action_result: "CANCELLED",
+      reason_codes: ["MOCK_GATEWAY"],
+      recommended_next_action: "REVIEW_AND_RETRY",
+      raw: { mode: "mock", emisor_id: input.emisorId, document_id: input.documentId, comment: input.comment ?? null }
+    };
+  }
+
+  async voidDocumentoNumberByDocumentId(input: {
+    emisorId: string;
+    documentId: string;
+    motivo: string;
+  }): Promise<FiscalDocumentoVoidResponse> {
+    return {
+      document_id: input.documentId,
+      event_id: `mock-void-${crypto.createHash("sha256").update(input.motivo).digest("hex").slice(0, 12)}`,
+      status: "SENT",
+      raw: { mode: "mock", emisor_id: input.emisorId, document_id: input.documentId }
     };
   }
 }
@@ -451,6 +539,112 @@ export class RealFiscalGateway implements FiscalGateway {
     }
 
     return mapFiscalFacturalistaResponse(body);
+  }
+
+  async validateDocumentoCdcImpactByDocumentId(input: {
+    emisorId: string;
+    documentId: string;
+    json_input?: Record<string, unknown>;
+  }): Promise<FiscalDocumentoValidateCdcImpactResponse> {
+    const endpoint = `${this.config.baseUrl}/admin/emisores/${encodeURIComponent(input.emisorId)}/facturas/${encodeURIComponent(input.documentId)}/validate-cdc-impact`;
+    const response = await this.fetchWithTimeout(endpoint, {
+      method: "POST",
+      headers: { ...this.buildHeaders(), "content-type": "application/json" },
+      body: JSON.stringify(input.json_input ? { json_input: input.json_input } : {})
+    });
+    const body = await readJson(response);
+    if (!response.ok) {
+      throw new FiscalGatewayError(response.status === 408 || response.status === 504 ? "TIMEOUT" : "UPSTREAM_ERROR", "Backend fiscal rechazo la prevalidacion CDC.", { status: response.status, body });
+    }
+    return mapFiscalDocumentoValidateCdcImpactResponse(body);
+  }
+
+  async retryDocumentoSameCdcByDocumentId(input: {
+    emisorId: string;
+    documentId: string;
+    mode?: "SYNC" | "BATCH" | "AUTO";
+    send_now?: boolean;
+    comment?: string;
+    json_input?: Record<string, unknown>;
+  }): Promise<FiscalDocumentoResendResponse> {
+    const endpoint = `${this.config.baseUrl}/admin/emisores/${encodeURIComponent(input.emisorId)}/facturas/${encodeURIComponent(input.documentId)}/retry-same-cdc`;
+    const response = await this.fetchWithTimeout(endpoint, {
+      method: "POST",
+      headers: { ...this.buildHeaders(), "content-type": "application/json" },
+      body: JSON.stringify({
+        ...(input.mode ? { mode: input.mode } : {}),
+        ...(typeof input.send_now === "boolean" ? { send_now: input.send_now } : {}),
+        ...(input.comment ? { comment: input.comment } : {}),
+        ...(input.json_input ? { json_input: input.json_input } : {})
+      })
+    });
+    const body = await readJson(response);
+    if (!response.ok) {
+      throw new FiscalGatewayError(response.status === 408 || response.status === 504 ? "TIMEOUT" : "UPSTREAM_ERROR", "Backend fiscal rechazo el reintento con mismo CDC.", { status: response.status, body });
+    }
+    return mapFiscalDocumentoResendResponse(body);
+  }
+
+  async createDocumentoDerivedByDocumentId(input: {
+    emisorId: string;
+    documentId: string;
+    mode?: "SYNC" | "BATCH" | "AUTO";
+    send_now?: boolean;
+    comment?: string;
+    json_input?: Record<string, unknown>;
+  }): Promise<FiscalDocumentoCreateDerivedResponse> {
+    const endpoint = `${this.config.baseUrl}/admin/emisores/${encodeURIComponent(input.emisorId)}/facturas/${encodeURIComponent(input.documentId)}/create-derived`;
+    const response = await this.fetchWithTimeout(endpoint, {
+      method: "POST",
+      headers: { ...this.buildHeaders(), "content-type": "application/json" },
+      body: JSON.stringify({
+        ...(input.mode ? { mode: input.mode } : {}),
+        ...(typeof input.send_now === "boolean" ? { send_now: input.send_now } : {}),
+        ...(input.comment ? { comment: input.comment } : {}),
+        ...(input.json_input ? { json_input: input.json_input } : {})
+      })
+    });
+    const body = await readJson(response);
+    if (!response.ok) {
+      throw new FiscalGatewayError(response.status === 408 || response.status === 504 ? "TIMEOUT" : "UPSTREAM_ERROR", "Backend fiscal rechazo crear DE derivado.", { status: response.status, body });
+    }
+    return mapFiscalDocumentoCreateDerivedResponse(body);
+  }
+
+  async cancelDocumentoSendByDocumentId(input: {
+    emisorId: string;
+    documentId: string;
+    comment?: string;
+  }): Promise<FiscalDocumentoCancelSendResponse> {
+    const endpoint = `${this.config.baseUrl}/admin/emisores/${encodeURIComponent(input.emisorId)}/facturas/${encodeURIComponent(input.documentId)}/cancel-send`;
+    const response = await this.fetchWithTimeout(endpoint, {
+      method: "POST",
+      headers: { ...this.buildHeaders(), "content-type": "application/json" },
+      body: JSON.stringify(input.comment ? { comment: input.comment } : {})
+    });
+    const body = await readJson(response);
+    if (!response.ok) {
+      throw new FiscalGatewayError(response.status === 408 || response.status === 504 ? "TIMEOUT" : "UPSTREAM_ERROR", "Backend fiscal rechazo cancelar envio local.", { status: response.status, body });
+    }
+    return mapFiscalDocumentoCancelSendResponse(body);
+  }
+
+  async voidDocumentoNumberByDocumentId(input: {
+    emisorId: string;
+    documentId: string;
+    motivo: string;
+  }): Promise<FiscalDocumentoVoidResponse> {
+    const endpoint = `${this.config.baseUrl}/admin/emisores/${encodeURIComponent(input.emisorId)}/facturas/${encodeURIComponent(input.documentId)}/void-number`;
+    const response = await this.fetchWithTimeout(endpoint, {
+      method: "POST",
+      headers: { ...this.buildHeaders(), "content-type": "application/json" },
+      body: JSON.stringify({ motivo: input.motivo })
+    });
+    const body = await readJson(response);
+    if (!response.ok) {
+      throw new FiscalGatewayError(response.status === 408 || response.status === 504 ? "TIMEOUT" : "UPSTREAM_ERROR", "Backend fiscal rechazo inutilizacion de numeracion.", { status: response.status, body });
+    }
+    return mapFiscalDocumentoVoidResponse(body);
   }
 
   private async fetchWithTimeout(url: string, init: RequestInit): Promise<Response> {
@@ -1005,6 +1199,89 @@ function mapFiscalDocumentoDecisionResponse(body: unknown): FiscalDocumentoDecis
     next_step_hint: stringOrNull(data.next_step_hint),
     escalation_required: Boolean(data.escalation_required),
     allowed_actions: allowedActions,
+    raw: data
+  };
+}
+
+function mapFiscalDocumentoValidateCdcImpactResponse(body: unknown): FiscalDocumentoValidateCdcImpactResponse {
+  if (!body || typeof body !== "object") {
+    throw new FiscalGatewayError("INVALID_RESPONSE", "Respuesta fiscal invalida.", body);
+  }
+  const data = body as Record<string, unknown>;
+  const allowedActions = data.allowed_actions && typeof data.allowed_actions === "object"
+    ? Object.entries(data.allowed_actions as Record<string, unknown>).reduce<Record<string, boolean>>((acc, [key, value]) => {
+      acc[key] = Boolean(value);
+      return acc;
+    }, {})
+    : {};
+  return {
+    document_id: String(data.document_id ?? ""),
+    current_cdc: stringOrNull(data.current_cdc),
+    candidate_cdc: stringOrNull(data.candidate_cdc),
+    cdc_impact: data.cdc_impact === "CDC_CHANGE" ? "CDC_CHANGE" : "CDC_NO_CHANGE",
+    reason: stringOrNull(data.reason),
+    allowed_actions: allowedActions,
+    raw: data
+  };
+}
+
+function mapFiscalDocumentoResendResponse(body: unknown): FiscalDocumentoResendResponse {
+  if (!body || typeof body !== "object") {
+    throw new FiscalGatewayError("INVALID_RESPONSE", "Respuesta fiscal invalida.", body);
+  }
+  const data = body as Record<string, unknown>;
+  return {
+    document_id: String(data.document_id ?? ""),
+    status: stringOrNull(data.status) ?? "UNKNOWN",
+    revision_number: numberOrNull(data.revision_number) ?? 0,
+    accepted_by_sifen: Boolean(data.accepted_by_sifen),
+    cdc: stringOrNull(data.cdc),
+    queued_for_batch: typeof data.queued_for_batch === "boolean" ? data.queued_for_batch : null,
+    raw: data
+  };
+}
+
+function mapFiscalDocumentoCreateDerivedResponse(body: unknown): FiscalDocumentoCreateDerivedResponse {
+  if (!body || typeof body !== "object") {
+    throw new FiscalGatewayError("INVALID_RESPONSE", "Respuesta fiscal invalida.", body);
+  }
+  const data = body as Record<string, unknown>;
+  return {
+    source_document_id: String(data.source_document_id ?? ""),
+    derived_document_id: String(data.derived_document_id ?? ""),
+    status: stringOrNull(data.status) ?? "UNKNOWN",
+    accepted_by_sifen: Boolean(data.accepted_by_sifen),
+    cdc: stringOrNull(data.cdc),
+    nro_factura: stringOrNull(data.nro_factura),
+    raw: data
+  };
+}
+
+function mapFiscalDocumentoCancelSendResponse(body: unknown): FiscalDocumentoCancelSendResponse {
+  if (!body || typeof body !== "object") {
+    throw new FiscalGatewayError("INVALID_RESPONSE", "Respuesta fiscal invalida.", body);
+  }
+  const data = body as Record<string, unknown>;
+  return {
+    document_id: String(data.document_id ?? ""),
+    previous_status: stringOrNull(data.previous_status) ?? "UNKNOWN",
+    status: stringOrNull(data.status) ?? "UNKNOWN",
+    action_result: stringOrNull(data.action_result) ?? "UNKNOWN",
+    reason_codes: Array.isArray(data.reason_codes) ? data.reason_codes.filter((v): v is string => typeof v === "string") : [],
+    recommended_next_action: stringOrNull(data.recommended_next_action) ?? "UNKNOWN",
+    raw: data
+  };
+}
+
+function mapFiscalDocumentoVoidResponse(body: unknown): FiscalDocumentoVoidResponse {
+  if (!body || typeof body !== "object") {
+    throw new FiscalGatewayError("INVALID_RESPONSE", "Respuesta fiscal invalida.", body);
+  }
+  const data = body as Record<string, unknown>;
+  return {
+    document_id: String(data.document_id ?? ""),
+    event_id: stringOrNull(data.event_id),
+    status: stringOrNull(data.status) ?? "UNKNOWN",
     raw: data
   };
 }

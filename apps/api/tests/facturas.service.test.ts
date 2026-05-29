@@ -8,6 +8,11 @@ import {
   type FiscalBatchPendientesResponse,
   type FiscalDocumentoDecisionResponse,
   type FiscalDocumentoEventosResponse,
+  type FiscalDocumentoCancelSendResponse,
+  type FiscalDocumentoCreateDerivedResponse,
+  type FiscalDocumentoResendResponse,
+  type FiscalDocumentoValidateCdcImpactResponse,
+  type FiscalDocumentoVoidResponse,
   type FiscalEmitFacturaRequest,
   type FiscalEmitFacturaResponse,
   type FiscalEmitNotaCreditoRequest,
@@ -22,6 +27,11 @@ import {
   emitNotaCreditoTotal,
   getBatchPendientesGestion,
   getDocumentoDecision,
+  validateDocumentoCdcImpact,
+  retryDocumentoSameCdc,
+  createDocumentoDerived,
+  cancelDocumentoSend,
+  voidDocumentoNumber,
   getDocumentoById,
   getDocumentoEventos,
   getReconciliacionFiscal,
@@ -104,6 +114,13 @@ class FakeFacturaRepository implements FacturaRepository {
   public lastRetryInput: Parameters<FacturaRepository["retryPendingEmission"]>[0] | null = null;
   public lastCancelInput: Parameters<FacturaRepository["cancelDocumento"]>[0] | null = null;
   public lastNotaCreditoInput: NotaCreditoPersistInput | null = null;
+  public auditEvents: Array<{
+    facturadorId: string;
+    documentoId: string;
+    requestedBy: string;
+    eventType: string;
+    metadata: Record<string, unknown>;
+  }> = [];
 
   async findByIdempotencyKey(input: { facturadorId: string; idempotencyKey: string }): Promise<DocumentoResponse | null> {
     this.lastFindByIdempotencyInput = input;
@@ -164,7 +181,7 @@ class FakeFacturaRepository implements FacturaRepository {
           xml: { available: Boolean(input.fiscalResponse?.cdc), url: null }
         }
       },
-      created_at: "2026-05-18T00:00:00.000Z"
+      created_at: "2026-05-28T00:00:00.000Z"
     };
   }
 
@@ -194,7 +211,7 @@ class FakeFacturaRepository implements FacturaRepository {
           xml: { available: false, url: null }
         }
       },
-      created_at: "2026-05-18T00:00:00.000Z"
+      created_at: "2026-05-28T00:00:00.000Z"
     };
   }
 
@@ -266,6 +283,16 @@ class FakeFacturaRepository implements FacturaRepository {
       estado: input.estado,
       fiscal_status: input.fiscalStatus
     };
+  }
+
+  async appendAuditEvent(input: {
+    facturadorId: string;
+    documentoId: string;
+    requestedBy: string;
+    eventType: string;
+    metadata: Record<string, unknown>;
+  }): Promise<void> {
+    this.auditEvents.push(input);
   }
 }
 
@@ -350,6 +377,48 @@ class FakeFiscalGateway implements FiscalGateway {
       escalation_required: false,
       allowed_actions: {},
       raw: {}
+    },
+    private readonly validateCdcResponse: FiscalDocumentoValidateCdcImpactResponse = {
+      document_id: "doc-1",
+      current_cdc: "A".repeat(44),
+      candidate_cdc: "A".repeat(44),
+      cdc_impact: "CDC_NO_CHANGE",
+      reason: "Sin impacto",
+      allowed_actions: { retry_same_cdc: true },
+      raw: {}
+    },
+    private readonly resendResponse: FiscalDocumentoResendResponse = {
+      document_id: "doc-1",
+      status: "PENDING",
+      revision_number: 2,
+      accepted_by_sifen: false,
+      cdc: "A".repeat(44),
+      queued_for_batch: true,
+      raw: {}
+    },
+    private readonly createDerivedResponse: FiscalDocumentoCreateDerivedResponse = {
+      source_document_id: "doc-1",
+      derived_document_id: "doc-2",
+      status: "PENDING",
+      accepted_by_sifen: false,
+      cdc: null,
+      nro_factura: null,
+      raw: {}
+    },
+    private readonly cancelSendResponse: FiscalDocumentoCancelSendResponse = {
+      document_id: "doc-1",
+      previous_status: "QUEUED_BATCH",
+      status: "DRAFT",
+      action_result: "CANCELLED",
+      reason_codes: ["MANUAL_CANCEL"],
+      recommended_next_action: "REVIEW_AND_RETRY",
+      raw: {}
+    },
+    private readonly voidResponse: FiscalDocumentoVoidResponse = {
+      document_id: "doc-1",
+      event_id: "evt-void-1",
+      status: "SENT",
+      raw: {}
     }
   ) {}
 
@@ -420,6 +489,26 @@ class FakeFiscalGateway implements FiscalGateway {
   async getFacturalistaByEmisor(): Promise<FiscalFacturalistaResponse> {
     return this.facturalistaResponse;
   }
+
+  async validateDocumentoCdcImpactByDocumentId(): Promise<FiscalDocumentoValidateCdcImpactResponse> {
+    return this.validateCdcResponse;
+  }
+
+  async retryDocumentoSameCdcByDocumentId(): Promise<FiscalDocumentoResendResponse> {
+    return this.resendResponse;
+  }
+
+  async createDocumentoDerivedByDocumentId(): Promise<FiscalDocumentoCreateDerivedResponse> {
+    return this.createDerivedResponse;
+  }
+
+  async cancelDocumentoSendByDocumentId(): Promise<FiscalDocumentoCancelSendResponse> {
+    return this.cancelSendResponse;
+  }
+
+  async voidDocumentoNumberByDocumentId(): Promise<FiscalDocumentoVoidResponse> {
+    return this.voidResponse;
+  }
 }
 
 const emitInput = {
@@ -474,7 +563,7 @@ function buildDocumento(overrides: Partial<DocumentoResponse> = {}): DocumentoRe
         xml: { available: true, url: null }
       }
     },
-    created_at: "2026-05-18T00:00:00.000Z",
+    created_at: "2026-05-28T00:00:00.000Z",
     ...overrides
   };
 }
@@ -590,7 +679,7 @@ describe("facturas service", () => {
               xml: { available: true, url: null }
             }
           },
-          created_at: "2026-05-18T00:00:00.000Z"
+          created_at: "2026-05-28T00:00:00.000Z"
         }
       ]
     };
@@ -755,7 +844,7 @@ describe("facturas service", () => {
           xml: { available: true, url: null }
         }
       },
-      created_at: "2026-05-18T00:00:00.000Z"
+      created_at: "2026-05-28T00:00:00.000Z"
     };
 
     const result = await getDocumentoById(context, "66666666-6666-4666-8666-666666666666", repo);
@@ -1495,7 +1584,7 @@ describe("facturas service", () => {
           xml: { available: true, url: null }
         }
       },
-      created_at: "2026-05-18T00:00:00.000Z"
+      created_at: "2026-05-28T00:00:00.000Z"
     };
     const gateway = new FakeFiscalGateway(new FiscalGatewayError("UPSTREAM_ERROR", "Should not emit"));
 
@@ -1615,6 +1704,68 @@ describe("facturas service", () => {
 
     await expect(getDocumentoDecision(context, repo.findByIdResponse.id, repo, gateway)).rejects.toMatchObject({
       statusCode: 403
+    });
+  });
+
+  it("returns CDC impact validation for support role", async () => {
+    const repo = new FakeFacturaRepository();
+    repo.findByIdResponse = buildDocumento();
+    const gateway = new FakeFiscalGateway(new FiscalGatewayError("UPSTREAM_ERROR", "unused"));
+
+    const result = await validateDocumentoCdcImpact(
+      { ...context, user: { ...context.user, role: "SOPORTE_INTERNO" } },
+      repo.findByIdResponse.id,
+      { json_input: { receptor: { docNro: "492019" } } },
+      repo,
+      gateway
+    );
+
+    expect(result.documento_id).toBe(repo.findByIdResponse.id);
+    expect(result.cdc_impact).toBe("CDC_NO_CHANGE");
+  });
+
+  it("executes advanced retry/create/cancel-send/void flows for support role", async () => {
+    const repo = new FakeFacturaRepository();
+    repo.findByIdResponse = buildDocumento();
+    const gateway = new FakeFiscalGateway(new FiscalGatewayError("UPSTREAM_ERROR", "unused"));
+    const support = { ...context, user: { ...context.user, role: "SOPORTE_INTERNO" as const } };
+
+    const retry = await retryDocumentoSameCdc(support, repo.findByIdResponse.id, { mode: "BATCH", send_now: false }, repo, gateway);
+    const derived = await createDocumentoDerived(support, repo.findByIdResponse.id, { mode: "BATCH" }, repo, gateway);
+    const canceled = await cancelDocumentoSend(support, repo.findByIdResponse.id, { comment: "cancel local queue" }, repo, gateway);
+    const voided = await voidDocumentoNumber(support, repo.findByIdResponse.id, { motivo: "Error operacional" }, repo, gateway);
+
+    expect(retry.revision_number).toBe(2);
+    expect(derived.derived_document_id).toBe("doc-2");
+    expect(canceled.action_result).toBe("CANCELLED");
+    expect(voided.event_id).toBe("evt-void-1");
+    expect(repo.auditEvents.map((event) => event.eventType)).toEqual([
+      "FACTURA_GESTION_RETRY_SAME_CDC",
+      "FACTURA_GESTION_CREATE_DERIVED",
+      "FACTURA_GESTION_CANCEL_SEND",
+      "FACTURA_GESTION_VOID_NUMBER"
+    ]);
+  });
+
+  it("blocks advanced management actions outside operational window", async () => {
+    const repo = new FakeFacturaRepository();
+    repo.findByIdResponse = buildDocumento({
+      created_at: "2026-05-01T00:00:00.000Z"
+    });
+    const gateway = new FakeFiscalGateway(new FiscalGatewayError("UPSTREAM_ERROR", "unused"));
+    const support = { ...context, user: { ...context.user, role: "SOPORTE_INTERNO" as const } };
+
+    await expect(retryDocumentoSameCdc(support, repo.findByIdResponse.id, { mode: "BATCH" }, repo, gateway)).rejects.toMatchObject({
+      statusCode: 409
+    });
+    await expect(createDocumentoDerived(support, repo.findByIdResponse.id, { mode: "BATCH" }, repo, gateway)).rejects.toMatchObject({
+      statusCode: 409
+    });
+    await expect(cancelDocumentoSend(support, repo.findByIdResponse.id, { comment: "x" }, repo, gateway)).rejects.toMatchObject({
+      statusCode: 409
+    });
+    await expect(voidDocumentoNumber(support, repo.findByIdResponse.id, { motivo: "x" }, repo, gateway)).rejects.toMatchObject({
+      statusCode: 409
     });
   });
 

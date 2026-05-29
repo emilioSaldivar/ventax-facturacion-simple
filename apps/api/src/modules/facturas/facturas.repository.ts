@@ -1111,6 +1111,40 @@ export class PgFacturaRepository implements FacturaRepository {
     }
   }
 
+  async appendAuditEvent(input: {
+    facturadorId: string;
+    documentoId: string;
+    requestedBy: string;
+    eventType: string;
+    metadata: Record<string, unknown>;
+  }): Promise<void> {
+    await pool.query(
+      `
+        insert into audit_events (
+          tenant_id,
+          facturador_id,
+          usuario_id,
+          entity_type,
+          entity_id,
+          event_type,
+          metadata
+        )
+        select
+          tenant_id,
+          facturador_id,
+          $3,
+          'factura_operativa',
+          id,
+          $4,
+          $5::jsonb
+        from facturas_operativas
+        where facturador_id = $1
+          and id = $2
+      `,
+      [input.facturadorId, input.documentoId, input.requestedBy, input.eventType, JSON.stringify(input.metadata)]
+    );
+  }
+
   private async findItems(facturaId: string): Promise<FacturaItemPreview[]> {
     const result = await pool.query<FacturaItemRow>(
       `

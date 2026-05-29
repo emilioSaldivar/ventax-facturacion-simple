@@ -129,6 +129,53 @@ export interface FiscalDocumentoDecisionResponse {
   raw: Record<string, unknown>;
 }
 
+export interface FiscalDocumentoValidateCdcImpactResponse {
+  document_id: string;
+  current_cdc: string | null;
+  candidate_cdc: string | null;
+  cdc_impact: "CDC_NO_CHANGE" | "CDC_CHANGE";
+  reason: string | null;
+  allowed_actions: Record<string, boolean>;
+  raw: Record<string, unknown>;
+}
+
+export interface FiscalDocumentoResendResponse {
+  document_id: string;
+  status: string;
+  revision_number: number;
+  accepted_by_sifen: boolean;
+  cdc: string | null;
+  queued_for_batch: boolean | null;
+  raw: Record<string, unknown>;
+}
+
+export interface FiscalDocumentoCreateDerivedResponse {
+  source_document_id: string;
+  derived_document_id: string;
+  status: string;
+  accepted_by_sifen: boolean;
+  cdc: string | null;
+  nro_factura: string | null;
+  raw: Record<string, unknown>;
+}
+
+export interface FiscalDocumentoCancelSendResponse {
+  document_id: string;
+  previous_status: string;
+  status: string;
+  action_result: string;
+  reason_codes: string[];
+  recommended_next_action: string;
+  raw: Record<string, unknown>;
+}
+
+export interface FiscalDocumentoVoidResponse {
+  document_id: string;
+  event_id: string | null;
+  status: string;
+  raw: Record<string, unknown>;
+}
+
 export interface FiscalBatchPendienteDocumento {
   document_id: string | null;
   cdc: string | null;
@@ -185,6 +232,37 @@ export interface FiscalGateway {
   cancelFactura(request: FiscalCancelFacturaRequest): Promise<FiscalCancelFacturaResponse>;
   getDocumentoEventos(cdc: string): Promise<FiscalDocumentoEventosResponse>;
   getDocumentoDecisionByDocumentId(input: { emisorId: string; documentId: string }): Promise<FiscalDocumentoDecisionResponse>;
+  validateDocumentoCdcImpactByDocumentId(input: {
+    emisorId: string;
+    documentId: string;
+    json_input?: Record<string, unknown>;
+  }): Promise<FiscalDocumentoValidateCdcImpactResponse>;
+  retryDocumentoSameCdcByDocumentId(input: {
+    emisorId: string;
+    documentId: string;
+    mode?: "SYNC" | "BATCH" | "AUTO";
+    send_now?: boolean;
+    comment?: string;
+    json_input?: Record<string, unknown>;
+  }): Promise<FiscalDocumentoResendResponse>;
+  createDocumentoDerivedByDocumentId(input: {
+    emisorId: string;
+    documentId: string;
+    mode?: "SYNC" | "BATCH" | "AUTO";
+    send_now?: boolean;
+    comment?: string;
+    json_input?: Record<string, unknown>;
+  }): Promise<FiscalDocumentoCreateDerivedResponse>;
+  cancelDocumentoSendByDocumentId(input: {
+    emisorId: string;
+    documentId: string;
+    comment?: string;
+  }): Promise<FiscalDocumentoCancelSendResponse>;
+  voidDocumentoNumberByDocumentId(input: {
+    emisorId: string;
+    documentId: string;
+    motivo: string;
+  }): Promise<FiscalDocumentoVoidResponse>;
   getBatchPendientesByEmisor(input: { emisorId: string; limit: number; offset: number }): Promise<FiscalBatchPendientesResponse>;
   getFacturalistaByEmisor(input: { emisorId: string; offset: number; limit: number; q?: string }): Promise<FiscalFacturalistaResponse>;
   getXml(cdc: string): Promise<FiscalArtifactResponse>;

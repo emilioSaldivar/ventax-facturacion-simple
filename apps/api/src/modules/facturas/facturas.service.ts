@@ -12,17 +12,22 @@ import {
   type FiscalEmitNotaCreditoResponse
 } from "../fiscal-gateway/fiscal-gateway.types";
 import type {
-  DocumentoListFilters,
-  DocumentoListResponse,
+  BatchPendientesGestionResponse,
+  DocumentoDecisionResponse,
   DocumentoEstado,
   DocumentoEventosListResponse,
-  DocumentoDecisionResponse,
+  DocumentoGestionCancelSendResponse,
+  DocumentoGestionCreateDerivedResponse,
+  DocumentoGestionResendResponse,
+  DocumentoGestionVoidResponse,
+  DocumentoListFilters,
+  DocumentoListResponse,
   DocumentoResponse,
+  DocumentoValidateCdcImpactResponse,
   FacturaItemPreview,
   FacturaPreviewInput,
   FacturaPreviewResponse,
   FacturaRepository,
-  BatchPendientesGestionResponse,
   NotaCreditoCandidateListResponse,
   ReconciliacionFiscalResponse
 } from "./facturas.types";
@@ -480,6 +485,258 @@ export async function getReconciliacionFiscal(
           details: error.details ?? null
         }
       );
+    }
+    throw error;
+  }
+}
+
+function assertInternalSupportRole(context: OperationalContextResponse, message: string): void {
+  if (context.user.role === "OPERADOR_FACTURACION") {
+    throw new HttpError(403, "FORBIDDEN", message);
+  }
+}
+
+function assertWithinWindowOrThrow(documento: DocumentoResponse, maxHours: number, actionLabel: string): void {
+  if (!documento.created_at) {
+    throw new HttpError(409, "CONFLICT", `${actionLabel} requiere fecha operativa del documento para validar ventana.`);
+  }
+  const createdAt = new Date(documento.created_at);
+  if (Number.isNaN(createdAt.getTime())) {
+    throw new HttpError(409, "CONFLICT", `${actionLabel} requiere fecha operativa valida del documento para validar ventana.`);
+  }
+  const elapsedHours = (Date.now() - createdAt.getTime()) / (1000 * 60 * 60);
+  if (elapsedHours > maxHours) {
+    throw new HttpError(409, "CONFLICT", `${actionLabel} fuera de ventana operativa (${maxHours}h).`);
+  }
+}
+
+export async function validateDocumentoCdcImpact(
+  context: OperationalContextResponse,
+  documentoId: string,
+  input: { json_input?: Record<string, unknown> } | undefined,
+  repository: FacturaRepository,
+  gateway: FiscalGateway
+): Promise<DocumentoValidateCdcImpactResponse> {
+  assertInternalSupportRole(context, "Autogestion avanzada disponible solo para soporte interno.");
+  const documento = await getDocumentoById(context, documentoId, repository);
+  assertWithinWindowOrThrow(documento, 72, "Prevalidacion CDC");
+  try {
+    const response = await gateway.validateDocumentoCdcImpactByDocumentId({
+      emisorId: context.facturador.emisor_id,
+      documentId: documento.fiscal_document_id ?? documento.id,
+      json_input: input?.json_input
+    });
+    return {
+      documento_id: documento.id,
+      current_cdc: response.current_cdc,
+      candidate_cdc: response.candidate_cdc,
+      cdc_impact: response.cdc_impact,
+      reason: response.reason,
+      allowed_actions: response.allowed_actions
+    };
+  } catch (error) {
+    if (error instanceof FiscalGatewayError) {
+      throw new HttpError(error.code === "TIMEOUT" ? 504 : 502, "INTERNAL_ERROR", "No se pudo prevalidar impacto CDC.", {
+        gateway_code: error.code,
+        details: error.details ?? null
+      });
+    }
+    throw error;
+  }
+}
+
+type GestionActionInput = {
+  mode?: "SYNC" | "BATCH" | "AUTO";
+  send_now?: boolean;
+  comment?: string;
+  json_input?: Record<string, unknown>;
+};
+
+export async function retryDocumentoSameCdc(
+  context: OperationalContextResponse,
+  documentoId: string,
+  input: GestionActionInput | undefined,
+  repository: FacturaRepository,
+  gateway: FiscalGateway
+): Promise<DocumentoGestionResendResponse> {
+  assertInternalSupportRole(context, "Autogestion avanzada disponible solo para soporte interno.");
+  const documento = await getDocumentoById(context, documentoId, repository);
+  assertWithinWindowOrThrow(documento, 72, "Reintento con mismo CDC");
+  try {
+    const response = await gateway.retryDocumentoSameCdcByDocumentId({
+      emisorId: context.facturador.emisor_id,
+      documentId: documento.fiscal_document_id ?? documento.id,
+      ...input
+    });
+    await repository.appendAuditEvent({
+      facturadorId: context.facturador.id,
+      documentoId: documento.id,
+      requestedBy: context.user.id,
+      eventType: "FACTURA_GESTION_RETRY_SAME_CDC",
+      metadata: {
+        mode: input?.mode ?? null,
+        send_now: typeof input?.send_now === "boolean" ? input.send_now : null,
+        comment: input?.comment ?? null,
+        accepted_by_sifen: response.accepted_by_sifen,
+        status: response.status,
+        revision_number: response.revision_number,
+        queued_for_batch: response.queued_for_batch
+      }
+    });
+    return {
+      documento_id: documento.id,
+      status: response.status,
+      revision_number: response.revision_number,
+      accepted_by_sifen: response.accepted_by_sifen,
+      cdc: response.cdc,
+      queued_for_batch: response.queued_for_batch
+    };
+  } catch (error) {
+    if (error instanceof FiscalGatewayError) {
+      throw new HttpError(error.code === "TIMEOUT" ? 504 : 502, "INTERNAL_ERROR", "No se pudo reintentar el documento con el mismo CDC.", {
+        gateway_code: error.code,
+        details: error.details ?? null
+      });
+    }
+    throw error;
+  }
+}
+
+export async function createDocumentoDerived(
+  context: OperationalContextResponse,
+  documentoId: string,
+  input: GestionActionInput | undefined,
+  repository: FacturaRepository,
+  gateway: FiscalGateway
+): Promise<DocumentoGestionCreateDerivedResponse> {
+  assertInternalSupportRole(context, "Autogestion avanzada disponible solo para soporte interno.");
+  const documento = await getDocumentoById(context, documentoId, repository);
+  assertWithinWindowOrThrow(documento, 72, "Creacion de DE derivado");
+  try {
+    const response = await gateway.createDocumentoDerivedByDocumentId({
+      emisorId: context.facturador.emisor_id,
+      documentId: documento.fiscal_document_id ?? documento.id,
+      ...input
+    });
+    await repository.appendAuditEvent({
+      facturadorId: context.facturador.id,
+      documentoId: documento.id,
+      requestedBy: context.user.id,
+      eventType: "FACTURA_GESTION_CREATE_DERIVED",
+      metadata: {
+        mode: input?.mode ?? null,
+        send_now: typeof input?.send_now === "boolean" ? input.send_now : null,
+        comment: input?.comment ?? null,
+        accepted_by_sifen: response.accepted_by_sifen,
+        status: response.status,
+        derived_document_id: response.derived_document_id
+      }
+    });
+    return {
+      source_document_id: documento.id,
+      derived_document_id: response.derived_document_id,
+      status: response.status,
+      accepted_by_sifen: response.accepted_by_sifen,
+      cdc: response.cdc,
+      nro_factura: response.nro_factura
+    };
+  } catch (error) {
+    if (error instanceof FiscalGatewayError) {
+      throw new HttpError(error.code === "TIMEOUT" ? 504 : 502, "INTERNAL_ERROR", "No se pudo crear DE derivado.", {
+        gateway_code: error.code,
+        details: error.details ?? null
+      });
+    }
+    throw error;
+  }
+}
+
+export async function cancelDocumentoSend(
+  context: OperationalContextResponse,
+  documentoId: string,
+  input: { comment?: string } | undefined,
+  repository: FacturaRepository,
+  gateway: FiscalGateway
+): Promise<DocumentoGestionCancelSendResponse> {
+  assertInternalSupportRole(context, "Autogestion avanzada disponible solo para soporte interno.");
+  const documento = await getDocumentoById(context, documentoId, repository);
+  assertWithinWindowOrThrow(documento, 72, "Cancelacion de envio local");
+  try {
+    const response = await gateway.cancelDocumentoSendByDocumentId({
+      emisorId: context.facturador.emisor_id,
+      documentId: documento.fiscal_document_id ?? documento.id,
+      comment: input?.comment
+    });
+    await repository.appendAuditEvent({
+      facturadorId: context.facturador.id,
+      documentoId: documento.id,
+      requestedBy: context.user.id,
+      eventType: "FACTURA_GESTION_CANCEL_SEND",
+      metadata: {
+        comment: input?.comment ?? null,
+        previous_status: response.previous_status,
+        status: response.status,
+        action_result: response.action_result,
+        reason_codes: response.reason_codes
+      }
+    });
+    return {
+      documento_id: documento.id,
+      previous_status: response.previous_status,
+      status: response.status,
+      action_result: response.action_result,
+      reason_codes: response.reason_codes,
+      recommended_next_action: response.recommended_next_action
+    };
+  } catch (error) {
+    if (error instanceof FiscalGatewayError) {
+      throw new HttpError(error.code === "TIMEOUT" ? 504 : 502, "INTERNAL_ERROR", "No se pudo cancelar el envio local.", {
+        gateway_code: error.code,
+        details: error.details ?? null
+      });
+    }
+    throw error;
+  }
+}
+
+export async function voidDocumentoNumber(
+  context: OperationalContextResponse,
+  documentoId: string,
+  input: { motivo: string },
+  repository: FacturaRepository,
+  gateway: FiscalGateway
+): Promise<DocumentoGestionVoidResponse> {
+  assertInternalSupportRole(context, "Autogestion avanzada disponible solo para soporte interno.");
+  const documento = await getDocumentoById(context, documentoId, repository);
+  assertWithinWindowOrThrow(documento, 360, "Inutilizacion de numeracion");
+  try {
+    const response = await gateway.voidDocumentoNumberByDocumentId({
+      emisorId: context.facturador.emisor_id,
+      documentId: documento.fiscal_document_id ?? documento.id,
+      motivo: input.motivo
+    });
+    await repository.appendAuditEvent({
+      facturadorId: context.facturador.id,
+      documentoId: documento.id,
+      requestedBy: context.user.id,
+      eventType: "FACTURA_GESTION_VOID_NUMBER",
+      metadata: {
+        motivo: input.motivo,
+        event_id: response.event_id,
+        status: response.status
+      }
+    });
+    return {
+      documento_id: documento.id,
+      event_id: response.event_id,
+      status: response.status
+    };
+  } catch (error) {
+    if (error instanceof FiscalGatewayError) {
+      throw new HttpError(error.code === "TIMEOUT" ? 504 : 502, "INTERNAL_ERROR", "No se pudo inutilizar la numeracion.", {
+        gateway_code: error.code,
+        details: error.details ?? null
+      });
     }
     throw error;
   }

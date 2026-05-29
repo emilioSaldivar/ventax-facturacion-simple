@@ -159,6 +159,48 @@ export interface DocumentoDecisionResponse {
   allowed_actions: Record<string, boolean>;
 }
 
+export interface DocumentoValidateCdcImpactResponse {
+  documento_id: string;
+  current_cdc: string | null;
+  candidate_cdc: string | null;
+  cdc_impact: "CDC_NO_CHANGE" | "CDC_CHANGE";
+  reason: string | null;
+  allowed_actions: Record<string, boolean>;
+}
+
+export interface DocumentoGestionResendResponse {
+  documento_id: string;
+  status: string;
+  revision_number: number;
+  accepted_by_sifen: boolean;
+  cdc: string | null;
+  queued_for_batch: boolean | null;
+}
+
+export interface DocumentoGestionCreateDerivedResponse {
+  source_document_id: string;
+  derived_document_id: string;
+  status: string;
+  accepted_by_sifen: boolean;
+  cdc: string | null;
+  nro_factura: string | null;
+}
+
+export interface DocumentoGestionCancelSendResponse {
+  documento_id: string;
+  previous_status: string;
+  status: string;
+  action_result: string;
+  reason_codes: string[];
+  recommended_next_action: string;
+}
+
+export interface DocumentoGestionVoidResponse {
+  documento_id: string;
+  event_id: string | null;
+  status: string;
+}
+
 export interface BatchPendientesGestionResponse {
   documents_pending: number;
   batches_pending: number;
@@ -280,4 +322,11 @@ export interface FacturaRepository {
     estado: "ANULADA" | "PENDIENTE_SIFEN";
     fiscalStatus: Record<string, unknown>;
   }): Promise<DocumentoResponse | null>;
+  appendAuditEvent(input: {
+    facturadorId: string;
+    documentoId: string;
+    requestedBy: string;
+    eventType: string;
+    metadata: Record<string, unknown>;
+  }): Promise<void>;
 }

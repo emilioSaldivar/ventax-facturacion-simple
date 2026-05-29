@@ -10,6 +10,8 @@ import { fiscalGateway } from "../fiscal-gateway/fiscal-gateway.client";
 import { facturasRepository } from "./facturas.repository";
 import {
   cancelDocumento,
+  cancelDocumentoSend,
+  createDocumentoDerived,
   enqueueFacturaEmission,
   emitNotaCreditoTotal,
   getBatchPendientesGestion,
@@ -21,7 +23,10 @@ import {
   listDocumentos,
   previewFactura,
   refreshDocumentoStatus,
-  retryDocumentoEmission
+  retryDocumentoEmission,
+  retryDocumentoSameCdc,
+  validateDocumentoCdcImpact,
+  voidDocumentoNumber
 } from "./facturas.service";
 import { condicionesVenta, type DocumentoListFilters } from "./facturas.types";
 import { HttpError } from "../../shared/errors/http-error";
@@ -98,6 +103,21 @@ const reconciliacionQuerySchema = z.object({
 const cancelacionSchema = z.object({
   motivo: z.string().trim().min(1).max(150)
 });
+const gestionActionSchema = z.object({
+  mode: z.enum(["SYNC", "BATCH", "AUTO"]).optional(),
+  send_now: z.boolean().optional(),
+  comment: z.string().trim().max(500).optional(),
+  json_input: z.record(z.string(), z.unknown()).optional()
+});
+const cancelSendSchema = z.object({
+  comment: z.string().trim().max(500).optional()
+});
+const validateCdcSchema = z.object({
+  json_input: z.record(z.string(), z.unknown()).optional()
+});
+const voidNumberSchema = z.object({
+  motivo: z.string().trim().min(1).max(150)
+});
 
 const notaCreditoSchema = z.object({
   motivo: z.string().trim().min(1).max(300)
@@ -123,6 +143,116 @@ facturasRouter.get(
     try {
       const context = await getOperationalContext(req.user!.id, operationalContextRepository);
       const result = await listNotaCreditoCandidates(context, req.query as unknown as { q?: string; limit: number; offset: number }, facturasRepository);
+      res.json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+facturasRouter.post(
+  "/facturas/:documentoId/gestion/validate-cdc-impact",
+  requireAuth,
+  validateRequest("params", documentoParamsSchema),
+  validateRequest("body", validateCdcSchema),
+  async (req, res, next) => {
+    try {
+      const context = await getOperationalContext(req.user!.id, operationalContextRepository);
+      const result = await validateDocumentoCdcImpact(
+        context,
+        String(req.params.documentoId),
+        req.body as { json_input?: Record<string, unknown> },
+        facturasRepository,
+        fiscalGateway
+      );
+      res.json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+facturasRouter.post(
+  "/facturas/:documentoId/gestion/retry-same-cdc",
+  requireAuth,
+  validateRequest("params", documentoParamsSchema),
+  validateRequest("body", gestionActionSchema),
+  async (req, res, next) => {
+    try {
+      const context = await getOperationalContext(req.user!.id, operationalContextRepository);
+      const result = await retryDocumentoSameCdc(
+        context,
+        String(req.params.documentoId),
+        req.body as { mode?: "SYNC" | "BATCH" | "AUTO"; send_now?: boolean; comment?: string; json_input?: Record<string, unknown> },
+        facturasRepository,
+        fiscalGateway
+      );
+      res.json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+facturasRouter.post(
+  "/facturas/:documentoId/gestion/create-derived",
+  requireAuth,
+  validateRequest("params", documentoParamsSchema),
+  validateRequest("body", gestionActionSchema),
+  async (req, res, next) => {
+    try {
+      const context = await getOperationalContext(req.user!.id, operationalContextRepository);
+      const result = await createDocumentoDerived(
+        context,
+        String(req.params.documentoId),
+        req.body as { mode?: "SYNC" | "BATCH" | "AUTO"; send_now?: boolean; comment?: string; json_input?: Record<string, unknown> },
+        facturasRepository,
+        fiscalGateway
+      );
+      res.status(201).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+facturasRouter.post(
+  "/facturas/:documentoId/gestion/cancel-send",
+  requireAuth,
+  validateRequest("params", documentoParamsSchema),
+  validateRequest("body", cancelSendSchema),
+  async (req, res, next) => {
+    try {
+      const context = await getOperationalContext(req.user!.id, operationalContextRepository);
+      const result = await cancelDocumentoSend(
+        context,
+        String(req.params.documentoId),
+        req.body as { comment?: string },
+        facturasRepository,
+        fiscalGateway
+      );
+      res.json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+facturasRouter.post(
+  "/facturas/:documentoId/gestion/void-number",
+  requireAuth,
+  validateRequest("params", documentoParamsSchema),
+  validateRequest("body", voidNumberSchema),
+  async (req, res, next) => {
+    try {
+      const context = await getOperationalContext(req.user!.id, operationalContextRepository);
+      const result = await voidDocumentoNumber(
+        context,
+        String(req.params.documentoId),
+        req.body as { motivo: string },
+        facturasRepository,
+        fiscalGateway
+      );
       res.json(result);
     } catch (error) {
       next(error);
