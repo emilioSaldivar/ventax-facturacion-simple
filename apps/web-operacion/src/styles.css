@@ -663,6 +663,18 @@ dd {
   gap: 11px;
 }
 
+.documents-advanced-filters {
+  display: grid;
+  gap: 10px;
+}
+
+.documents-group-title {
+  margin: 4px 0 0;
+  color: #35525d;
+  font-size: 13px;
+  font-weight: 900;
+}
+
 .filter-tabs {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -772,6 +784,39 @@ dd {
   color: var(--color-ink);
   padding: 10px 12px;
   text-align: left;
+}
+
+.document-row-rich {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  min-height: 60px;
+  padding: 8px 10px;
+}
+
+.document-row-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  width: 100%;
+  border: none;
+  background: transparent;
+  color: inherit;
+  padding: 0;
+  text-align: left;
+}
+
+.document-row-main span {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.document-row-main span:last-child {
+  justify-items: end;
+}
+
+.document-row-menu-wrapper {
+  position: relative;
 }
 
 .document-row.active,

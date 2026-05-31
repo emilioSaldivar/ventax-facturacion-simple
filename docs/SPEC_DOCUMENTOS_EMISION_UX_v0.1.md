@@ -258,6 +258,33 @@ Acciones sensibles de regularizacion (`invalidar numeracion`, `retry-same-cdc`, 
 
 Reemplazos visibles al operador:
 
+## UX-010 Documentos Recientes Mobile-First (3 Niveles)
+
+La pantalla `Facturas y notas` debe priorizar contexto reciente y accion rapida, no historico completo por defecto.
+
+### Nivel 1: Documentos Recientes
+
+- Vista inicial orientada a `hoy` y `ultimos 7 dias`.
+- El historico completo no debe ocupar la primera vista.
+- Busqueda principal visible: un solo campo `Buscar factura...`.
+- Filtros avanzados en segundo nivel (`Mas filtros` / `Buscar mas documentos`).
+
+### Nivel 2: Detalle De Factura
+
+- Acciones comerciales prioritarias:
+  - ver PDF;
+  - compartir;
+  - WhatsApp;
+  - copiar enlace;
+  - nota de credito;
+  - anular.
+- El estado del documento debe tener mayor jerarquia visual que el numero fiscal.
+
+### Nivel 3: Administracion Fiscal
+
+- Eventos, diagnostico y acciones de regularizacion tecnica deben vivir en bloque aislado `Administracion fiscal`.
+- Usuario operador comun no debe saturarse con esta capa en la primera vista de documentos.
+
 - `CDC` -> `Codigo fiscal`
 - `XML` -> `Documento electronico`
 - `Consultar SIFEN` -> `Verificar estado fiscal`

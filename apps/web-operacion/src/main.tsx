@@ -959,13 +959,22 @@ function DocumentsView({
   role: UserSummary["role"];
 }) {
   const api = useMemo(() => createApiClient(accessToken, setAccessToken), [accessToken, setAccessToken]);
+  const todayYmd = useMemo(() => formatYmdFromDate(new Date()), []);
+  const last7DaysYmd = useMemo(() => {
+    const date = new Date();
+    date.setDate(date.getDate() - 6);
+    return formatYmdFromDate(date);
+  }, []);
   const [documents, setDocuments] = useState<DocumentoResponse[]>([]);
   const [selected, setSelected] = useState<DocumentoResponse | null>(null);
   const [estadoFilter, setEstadoFilter] = useState<DocumentoEstado | "">("");
-  const [tipoOperativoFilter, setTipoOperativoFilter] = useState<"TODOS" | "CONTADO" | "CREDITO" | "NOTA_CREDITO">("TODOS");
+  const [docKindTab, setDocKindTab] = useState<"FACTURAS" | "NOTAS_CREDITO">("FACTURAS");
+  const [tipoOperativoFilter, setTipoOperativoFilter] = useState<"TODOS" | "CONTADO" | "CREDITO">("TODOS");
   const [query, setQuery] = useState("");
-  const [desde, setDesde] = useState("");
-  const [hasta, setHasta] = useState("");
+  const [desde, setDesde] = useState(last7DaysYmd);
+  const [hasta, setHasta] = useState(todayYmd);
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  const [quickMenuDocId, setQuickMenuDocId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -984,17 +993,18 @@ function DocumentsView({
 
   useEffect(() => {
     void loadDocuments();
-  }, [estadoFilter, tipoOperativoFilter, desde, hasta]);
+  }, [estadoFilter, tipoOperativoFilter, desde, hasta, docKindTab]);
 
   async function loadDocuments(nextQuery = query) {
     setLoading(true);
     setError(null);
 
     const params = new URLSearchParams({ limit: "30", offset: "0" });
+    params.set("tipo", docKindTab === "NOTAS_CREDITO" ? "NOTA_CREDITO" : "FACTURA");
     if (estadoFilter) {
       params.set("estado", estadoFilter);
     }
-    if (tipoOperativoFilter !== "TODOS") {
+    if (docKindTab === "FACTURAS" && tipoOperativoFilter !== "TODOS") {
       params.set("tipo_operativo", tipoOperativoFilter);
     }
     if (nextQuery.trim()) {
@@ -1258,6 +1268,66 @@ function DocumentsView({
     }
   }
 
+  async function emitNotaCreditoFromList(documentoId: string) {
+    const motivo = window.prompt("Motivo de nota de credito", "");
+    if (!motivo?.trim()) {
+      return;
+    }
+
+    setActionLoading(true);
+    setMessage(null);
+    try {
+      const notaCredito = await api.request<DocumentoResponse>(`/facturas/${documentoId}/nota-credito`, {
+        method: "POST",
+        headers: {
+          "Idempotency-Key": createIdempotencyKey()
+        },
+        body: JSON.stringify({ motivo: motivo.trim() })
+      });
+      setDocuments((current) => [notaCredito, ...current.filter((item) => item.id !== notaCredito.id)]);
+      setMessage("Nota de credito emitida.");
+      await loadDocuments();
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "No se pudo emitir la nota de credito.");
+    } finally {
+      setActionLoading(false);
+    }
+  }
+
+  async function cancelDocumentoFromList(documentoId: string) {
+    const motivo = window.prompt("Motivo de anulacion", "");
+    if (!motivo?.trim()) {
+      return;
+    }
+
+    setActionLoading(true);
+    setMessage(null);
+    try {
+      await api.post<DocumentoResponse>(`/facturas/${documentoId}/cancelar`, { motivo: motivo.trim() });
+      setMessage("Documento anulado.");
+      await loadDocuments();
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "No se pudo anular el documento.");
+    } finally {
+      setActionLoading(false);
+    }
+  }
+
+  async function openQuickShare(documento: DocumentoResponse, mode: "public" | "whatsapp") {
+    setActionLoading(true);
+    setMessage(null);
+    try {
+      const link = await api.post<DeliveryLinkResponse>(`/facturas/${documento.id}/delivery-link`, {});
+      const targetUrl = mode === "whatsapp" ? link.whatsapp_url : link.public_url;
+      window.open(targetUrl, "_blank", "noopener,noreferrer");
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "No se pudo abrir accion rapida.");
+    } finally {
+      setActionLoading(false);
+      setQuickMenuDocId(null);
+    }
+  }
+
   async function copyDetailLink() {
     if (!deliveryLink?.public_url) {
       return;
@@ -1318,6 +1388,29 @@ function DocumentsView({
   const selectedSifenSummary = selected ? getSifenSummary(selected) : null;
   const selectedKudeUrl = selected && deliveryLink && selected.delivery.artifacts.kude_pdf.available ? `${deliveryLink.public_url}/kude.pdf` : null;
   const selectedXmlUrl = selected && deliveryLink && selected.delivery.artifacts.xml.available ? `${deliveryLink.public_url}/xml` : null;
+  const hasRecentWindow = Boolean(desde || hasta);
+  const [todayDocs, weekDocs] = useMemo(() => {
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const tomorrowStart = todayStart + 24 * 60 * 60 * 1000;
+    const currentWeekDocs: DocumentoResponse[] = [];
+    const currentTodayDocs: DocumentoResponse[] = [];
+
+    for (const documento of documents) {
+      const rawDate = documento.created_at ? Date.parse(documento.created_at) : NaN;
+      if (Number.isNaN(rawDate)) {
+        currentWeekDocs.push(documento);
+        continue;
+      }
+      if (rawDate >= todayStart && rawDate < tomorrowStart) {
+        currentTodayDocs.push(documento);
+      } else {
+        currentWeekDocs.push(documento);
+      }
+    }
+
+    return [currentTodayDocs, currentWeekDocs];
+  }, [documents]);
 
   return (
     <section className="documents-view" aria-labelledby="documents-title">
@@ -1334,14 +1427,14 @@ function DocumentsView({
       {!selected ? (
       <section className="documents-filters">
         <div className="filter-tabs" role="group" aria-label="Tipo de documento">
-          {(["TODOS", "CONTADO", "CREDITO", "NOTA_CREDITO"] as const).map((value) => (
+          {(["FACTURAS", "NOTAS_CREDITO"] as const).map((value) => (
             <button
-              className={tipoOperativoFilter === value ? "active" : ""}
+              className={docKindTab === value ? "active" : ""}
               key={value}
-              onClick={() => setTipoOperativoFilter(value)}
+              onClick={() => setDocKindTab(value)}
               type="button"
             >
-              {value === "TODOS" ? "Todos" : value === "NOTA_CREDITO" ? "Nota credito" : value === "CONTADO" ? "Contado" : "Credito"}
+              {value === "FACTURAS" ? "Facturas" : "Notas de credito"}
             </button>
           ))}
         </div>
@@ -1354,34 +1447,66 @@ function DocumentsView({
                 void loadDocuments();
               }
             }}
-            placeholder="Cliente, RUC, CDC o numero"
+            placeholder="Buscar factura..."
             value={query}
           />
         </label>
-        <label>
-          Estado
-          <select onChange={(event) => setEstadoFilter(event.target.value as DocumentoEstado | "")} value={estadoFilter}>
-            <option value="">Todos</option>
-            <option value="EMITIENDO">Emitiendo</option>
-            <option value="EMITIDA">Emitida</option>
-            <option value="PENDIENTE_SIFEN">Pendiente SIFEN</option>
-            <option value="RECHAZADA">Rechazada</option>
-            <option value="ERROR_TEMPORAL">Error temporal</option>
-            <option value="ERROR_OPERATIVO">Error operativo</option>
-            <option value="ANULADA">Anulada</option>
-          </select>
-        </label>
-        <label>
-          Desde
-          <input onChange={(event) => setDesde(event.target.value)} type="date" value={desde} />
-        </label>
-        <label>
-          Hasta
-          <input onChange={(event) => setHasta(event.target.value)} type="date" value={hasta} />
-        </label>
-        <button className="secondary-action" disabled={loading} onClick={() => void loadDocuments()} type="button">
-          {loading ? "Cargando..." : "Aplicar"}
-        </button>
+        <div className="quick-actions-row compact">
+          <button className="secondary-action" disabled={loading} onClick={() => void loadDocuments()} type="button">
+            {loading ? "Cargando..." : "Buscar"}
+          </button>
+          <button className="secondary-action" onClick={() => setShowAdvancedFilters((current) => !current)} type="button">
+            {showAdvancedFilters ? "Ocultar filtros" : "Mas filtros"}
+          </button>
+          {!showAdvancedFilters ? (
+            <button
+              className="secondary-action"
+              onClick={() => {
+                setShowAdvancedFilters(true);
+                setDesde("");
+                setHasta("");
+              }}
+              type="button"
+            >
+              Buscar mas documentos
+            </button>
+          ) : null}
+        </div>
+        {showAdvancedFilters ? (
+          <div className="documents-advanced-filters">
+            <label>
+              Estado
+              <select onChange={(event) => setEstadoFilter(event.target.value as DocumentoEstado | "")} value={estadoFilter}>
+                <option value="">Todos</option>
+                <option value="EMITIENDO">Emitiendo</option>
+                <option value="EMITIDA">Emitida</option>
+                <option value="PENDIENTE_SIFEN">Pendiente SIFEN</option>
+                <option value="RECHAZADA">Rechazada</option>
+                <option value="ERROR_TEMPORAL">Error temporal</option>
+                <option value="ERROR_OPERATIVO">Error operativo</option>
+                <option value="ANULADA">Anulada</option>
+              </select>
+            </label>
+            {docKindTab === "FACTURAS" ? (
+              <label>
+                Tipo factura
+                <select onChange={(event) => setTipoOperativoFilter(event.target.value as "TODOS" | "CONTADO" | "CREDITO")} value={tipoOperativoFilter}>
+                  <option value="TODOS">Todas</option>
+                  <option value="CONTADO">Contado</option>
+                  <option value="CREDITO">Credito</option>
+                </select>
+              </label>
+            ) : null}
+            <label>
+              Desde
+              <input onChange={(event) => setDesde(event.target.value)} type="date" value={desde} />
+            </label>
+            <label>
+              Hasta
+              <input onChange={(event) => setHasta(event.target.value)} type="date" value={hasta} />
+            </label>
+          </div>
+        ) : null}
       </section>
       ) : null}
 
@@ -1461,7 +1586,35 @@ function DocumentsView({
       <section className="documents-layout">
         <div className="documents-list">
           {documents.length === 0 && !loading ? <p className="muted empty-state">Sin documentos para los filtros actuales.</p> : null}
-          {documents.map((documento) => (
+          {hasRecentWindow ? <h3 className="documents-group-title">Hoy</h3> : null}
+          {todayDocs.map((documento) => (
+            <article className="document-row document-row-rich" key={documento.id}>
+              <button className="document-row-main" onClick={() => void openDetail(documento.id)} type="button">
+                <span>
+                  <strong>{`${getDocumentoStatusIcon(documento.estado)} ${formatDocumentoTipo(documento.tipo)} ${documento.numero_fiscal ?? "pendiente"}`}</strong>
+                  <small>{documento.cliente.razon_social}</small>
+                </span>
+                <span>
+                  <strong>{formatGuaranies(documento.totals.total)}</strong>
+                  <small>{formatShortDate(documento.created_at)}</small>
+                </span>
+              </button>
+              <div className="document-row-menu-wrapper">
+                <button className="icon-menu-action" onClick={() => setQuickMenuDocId((current) => current === documento.id ? null : documento.id)} type="button">⋮</button>
+                {quickMenuDocId === documento.id ? (
+                  <div className="client-row-menu" role="menu" aria-label="Acciones del documento">
+                    <button onClick={() => void openDetail(documento.id)} role="menuitem" type="button">Ver detalle</button>
+                    <button onClick={() => void openQuickShare(documento, "public")} role="menuitem" type="button">Compartir</button>
+                    <button onClick={() => void openQuickShare(documento, "whatsapp")} role="menuitem" type="button">WhatsApp</button>
+                    <button onClick={() => void emitNotaCreditoFromList(documento.id)} role="menuitem" type="button">Nota de credito</button>
+                    <button className="destructive-item" onClick={() => void cancelDocumentoFromList(documento.id)} role="menuitem" type="button">Anular</button>
+                  </div>
+                ) : null}
+              </div>
+            </article>
+          ))}
+          {hasRecentWindow ? <h3 className="documents-group-title">Ultimos 7 dias</h3> : null}
+          {(hasRecentWindow ? weekDocs : documents).map((documento) => (
             <button
               className="document-row"
               key={documento.id}
@@ -1469,12 +1622,12 @@ function DocumentsView({
               type="button"
             >
               <span>
-                <strong>{documento.numero_fiscal ?? "Numero pendiente"}</strong>
-                <small>{formatDocumentoTipo(documento.tipo)} · {documento.cliente.razon_social}</small>
+                <strong>{`${getDocumentoStatusIcon(documento.estado)} ${documento.numero_fiscal ?? "Numero pendiente"}`}</strong>
+                <small>{documento.cliente.razon_social}</small>
               </span>
               <span>
                 <strong>{formatGuaranies(documento.totals.total)}</strong>
-                <small>{formatDocumentoEstado(documento.estado)}</small>
+                <small>{formatShortDate(documento.created_at)}</small>
               </span>
             </button>
           ))}
@@ -1558,7 +1711,7 @@ function DocumentsView({
               </div>
 
               <div className="action-group action-group-secondary">
-                <h4 className="group-title">Gestion comercial</h4>
+                <h4 className="group-title">Acciones sobre esta factura</h4>
                 <button className="secondary-action" disabled={actionLoading || !canEmitNotaCredito(selected, documents)} onClick={() => void emitSelectedNotaCredito()} type="button">
                   ↩ Crear nota de credito
                 </button>
@@ -1601,8 +1754,10 @@ function DocumentsView({
                 </div>
               </details>
               {isInternalSupport ? (
+                <details className="tech-block">
+                  <summary>Administracion fiscal</summary>
                 <section className="action-group action-group-internal" aria-label="Autogestion soporte">
-                  <h4 className="group-title">Autogestion soporte interno</h4>
+                  <h4 className="group-title">Eventos y regularizacion fiscal</h4>
                   <p className="muted">Flujo sugerido: decision → validar impacto CDC → ejecutar acción.</p>
                   {decision ? (
                     <div className="support-decision-box">
@@ -1636,6 +1791,7 @@ function DocumentsView({
                     </button>
                   </div>
                 </section>
+                </details>
               ) : null}
               {message ? <p className="inline-message">{message}</p> : null}
             </>
@@ -4011,6 +4167,34 @@ function formatGuaranies(value: number): string {
     currency: "PYG",
     maximumFractionDigits: 0
   }).format(value);
+}
+
+function formatYmdFromDate(date: Date): string {
+  const year = String(date.getFullYear());
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function formatShortDate(value: string | null): string {
+  if (!value) {
+    return "-";
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "-";
+  }
+  return date.toLocaleDateString("es-PY");
+}
+
+function getDocumentoStatusIcon(value: DocumentoEstado): string {
+  if (value === "EMITIDA") {
+    return "🟢";
+  }
+  if (value === "RECHAZADA" || value === "ERROR_OPERATIVO" || value === "ERROR_TEMPORAL" || value === "ANULADA") {
+    return "🔴";
+  }
+  return "🟡";
 }
 
 function formatIva(value: TipoIva): string {
