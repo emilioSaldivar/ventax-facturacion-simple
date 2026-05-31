@@ -459,6 +459,25 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "404":
           $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [Catalogo]
+      summary: Eliminar permanentemente producto o servicio
+      description: Borra fisicamente el item del catalogo del facturador actual.
+      parameters:
+        - $ref: "#/components/parameters/ItemId"
+      responses:
+        "204":
+          description: Item eliminado
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Usuario sin configuracion operativa completa
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /facturas/preview:
     post:

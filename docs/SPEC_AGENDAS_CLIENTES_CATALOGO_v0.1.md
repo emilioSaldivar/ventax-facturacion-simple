@@ -191,3 +191,33 @@ Objetivo: reducir pasos entre seleccion de cliente y emision de factura.
 - Desde `Agenda/Clientes`, `Usar` abre `Nueva factura` en la misma sesion.
 - En `Nueva factura`, campos de cliente quedan poblados (`documento_tipo`, `documento`, `razon_social`, contacto si existe).
 - No se rompe alta/edicion de cliente ni el flujo manual existente de carga de cliente en factura.
+
+## 10. UX Catalogo Operativo (Lista Compacta + Edicion Separada)
+
+Objetivo: mantener consistencia con `Clientes` y reducir friccion mobile en `Catalogo`.
+
+### 10.1 Estructura
+
+- La pantalla de catalogo debe priorizar:
+  - buscador;
+  - filtro simple por estado (`Todos`, `Activos`, `Archivados`);
+  - boton `+ Nuevo`;
+  - listado compacto.
+- Alta y edicion deben ejecutarse en vista/modal separada del listado principal.
+
+### 10.2 Jerarquia Visual Del Item
+
+- Dato principal: `descripcion`.
+- Dato secundario: `precio`.
+- Dato fiscal operativo: `IVA`.
+- `codigo` como dato avanzado/no principal.
+
+### 10.3 Acciones
+
+- Acciones por menu contextual `⋮`:
+  - `Editar`;
+  - `Duplicar`;
+  - `Archivar` (soft delete: `activo=false`);
+  - `Eliminar permanentemente` (hard delete del catalogo actual, sin historico en esta etapa).
+- Estado por defecto al crear: `activo=true`.
+- No se incorpora campo `tipo` (`Producto/Servicio`) en esta iteracion para evitar complejidad innecesaria.

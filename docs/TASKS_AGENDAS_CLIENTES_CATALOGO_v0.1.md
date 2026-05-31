@@ -34,6 +34,13 @@
 | CLX-C1 | UX/UI continuidad | Conectar `Usar cliente` desde agenda con navegacion a `Nueva factura` | DONE | Al tocar `Usar` o `Usar cliente` la app navega a `Nueva factura` y mantiene sesion/flujo operativo |
 | CLX-C2 | UX/UI continuidad | Precargar cliente en formulario de factura | DONE | `InvoiceEditor` recibe cliente seleccionado y completa campos operativos (`documento_tipo`, `documento`, `razon_social`, contacto) |
 | CLX-C3 | QA continuidad | Validar flujo agenda -> usar -> nueva factura con Playwright | DONE | Playwright mobile+desktop confirma navegacion y prefill del cliente sin romper el flujo manual |
+| CLX-E1 | UX/UI catalogo | Separar listado de alta/edicion en catalogo | DONE | Catalogo muestra lista compacta y `+ Nuevo`; alta/edicion ocurre en modal separado |
+| CLX-E2 | UX/UI catalogo | Reordenar jerarquia de datos y acciones en items | DONE | Item prioriza `descripcion`, `precio`, `IVA`; `codigo` queda secundario y acciones pasan a menu `⋮` |
+| CLX-E3 | UX/UI catalogo | Agregar menu contextual con `Editar`, `Duplicar`, `Archivar` | DONE | Cada item expone acciones en `⋮`; se evita sobrecarga de botones fijos en cada fila |
+| CLX-E4 | QA catalogo | Validar compilacion y no regresion de catalogo | DONE | `typecheck` y `build` de `web-operacion` pasan tras refactor de catalogo |
+| CLX-E5 | API catalogo | Habilitar hard delete para catalogo por facturador | DONE | Se agrega `DELETE /catalogo/items/{itemId}` con `404` si no existe y scope por `facturador_id` |
+| CLX-E6 | UX/UI catalogo | Habilitar `Eliminar permanentemente` con confirmacion | DONE | Menu `⋮` y editor permiten borrado permanente con modal de confirmacion mobile-first |
+| CLX-E7 | Contrato/QA catalogo | Actualizar OpenAPI y validar API/Web tras soft+hard delete | DONE | `spec/openapi.yaml` documenta `DELETE` y pasan pruebas de API + typecheck/build Web |
 
 ## Evidencia
 
@@ -52,3 +59,7 @@
 - 2026-05-31: validacion sobre contenedores (`CLX-A4` y `CLX-B4`): `FE_DOCKER_NETWORK=facturacion-electronica_default DATABASE_URL=postgres://facturacion_simple:facturacion_simple@nuevo_repo-postgres-1:5432/facturacion_simple bash scripts/deploy.sh`, healthchecks `GET /api/v1/health` y `GET /healthz`, Playwright mobile+desktop con `/tmp/clx-b4-agenda-playwright.cjs` (`search/use/menu/edit/whatsapp/delete-cancel` OK en Pixel 7 y 1280x800), y flujo destructivo confirmado con cliente temporal `/tmp/clx-b4-delete-confirm.cjs` (`deleted: true`).
 - 2026-05-31: implementadas `CLX-C1` y `CLX-C2` en `apps/web-operacion/src/main.tsx` elevando estado de cliente seleccionado desde `ClientesAgendaView` hacia `InvoiceEditor` para navegar a `Nueva factura` y precargar formulario de cliente listo para emitir.
 - 2026-05-31: validaciones `CLX-C3`: `npm run typecheck --workspace @facturacion-simple/web-operacion`, `npm run build --workspace @facturacion-simple/web-operacion`, redeploy con `FE_DOCKER_NETWORK=facturacion-electronica_default DATABASE_URL=postgres://facturacion_simple:facturacion_simple@nuevo_repo-postgres-1:5432/facturacion_simple bash scripts/deploy.sh` y Playwright mobile+desktop (`/tmp/clx-c3-agenda-to-invoice.cjs`) confirmando `Agenda -> Usar -> Nueva factura` con prefill efectivo (`CLIENTE CONTRIBUYENTE SA`, `80000000-1`).
+- 2026-05-31: implementadas `CLX-E1`..`CLX-E3` en `apps/web-operacion/src/main.tsx`: catalogo pasa a lista compacta con buscador + chips de estado, editor separado en modal (`Nuevo/Editar`), menu `⋮` por item (`Editar`, `Duplicar`, `Archivar`) y opciones avanzadas colapsables (`codigo`, `estado`).
+- 2026-05-31: validaciones `CLX-E4`: `npm run typecheck --workspace @facturacion-simple/web-operacion` y `npm run build --workspace @facturacion-simple/web-operacion`.
+- 2026-05-31: implementadas `CLX-E5` y `CLX-E6` en `apps/api/src/modules/catalogo/*` + `apps/web-operacion/src/main.tsx`: coexisten `Archivar` (soft delete `activo=false`) y `Eliminar permanentemente` (hard delete real) con confirmacion; alta mantiene `activo=true` por defecto.
+- 2026-05-31: validaciones `CLX-E7`: `npm run test --workspace @facturacion-simple/api -- catalogo.service.test.ts`, `npm run typecheck --workspace @facturacion-simple/api`, `npm run lint --workspace @facturacion-simple/api`, `npm run typecheck --workspace @facturacion-simple/web-operacion`, `npm run build --workspace @facturacion-simple/web-operacion`.

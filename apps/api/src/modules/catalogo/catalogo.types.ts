@@ -46,5 +46,6 @@ export interface CatalogoRepository {
     userId: string;
     data: CatalogoItemPersistInput;
   }): Promise<CatalogoItem | null>;
+  hardDelete(input: { itemId: string; facturadorId: string }): Promise<boolean>;
   existsByCodigo(input: { facturadorId: string; codigoNormalizado: string; excludeItemId?: string }): Promise<boolean>;
 }

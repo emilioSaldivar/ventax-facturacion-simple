@@ -73,6 +73,21 @@ export async function updateCatalogoItem(
   return item;
 }
 
+export async function deleteCatalogoItem(
+  context: OperationalContextResponse,
+  itemId: string,
+  repository: Pick<CatalogoRepository, "hardDelete">
+): Promise<void> {
+  const deleted = await repository.hardDelete({
+    itemId,
+    facturadorId: context.facturador.id
+  });
+
+  if (!deleted) {
+    throw new HttpError(404, "NOT_FOUND", "Item de catalogo no encontrado.");
+  }
+}
+
 export async function normalizeCatalogoInput(
   facturadorId: string,
   data: CatalogoItemUpsertInput,

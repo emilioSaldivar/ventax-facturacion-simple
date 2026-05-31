@@ -212,3 +212,22 @@ Luego correr viewport adicional desktop/tablet para validar jerarquia visual y d
   2. tocar `Usar` en un cliente;
   3. confirmar navegacion a `Nueva factura`;
   4. confirmar prefill de cliente en formulario.
+
+## 10. Plan Catalogo UX Consistente
+
+### 10.1 Implementacion
+
+1. Lista compacta para catalogo con filtro instantaneo y chips de estado (`Todos/Activos/Archivados`).
+2. Reemplazar formulario embebido por editor separado (modal) para alta/edicion.
+3. Menu contextual `⋮` por item con acciones: `Editar`, `Duplicar`, `Archivar`, `Eliminar permanentemente` (con confirmacion).
+4. En editor, ordenar campos por uso real:
+   - `Descripcion`;
+   - `Precio`;
+   - `IVA`;
+   - `Opciones avanzadas` (`codigo`, `estado`).
+
+### 10.2 No Regresion
+
+- Extender contrato HTTP con `DELETE /catalogo/items/{itemId}` para hard delete.
+- Mantener inactivacion logica (`activo=false`) como opcion primaria de bajo riesgo.
+- No agregar `tipo` (`Producto/Servicio`) en API/UI durante esta iteracion.

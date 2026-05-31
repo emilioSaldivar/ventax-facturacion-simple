@@ -161,6 +161,21 @@ export class PgCatalogoRepository implements CatalogoRepository {
     return result.rows[0] ? mapRow(result.rows[0]) : null;
   }
 
+  async hardDelete(input: { itemId: string; facturadorId: string }): Promise<boolean> {
+    const result = await pool.query<{ id: string }>(
+      `
+        delete from catalogo_items
+        where id = $1
+          and facturador_id = $2
+          and deleted_at is null
+        returning id
+      `,
+      [input.itemId, input.facturadorId]
+    );
+
+    return (result.rowCount ?? 0) > 0;
+  }
+
   async existsByCodigo(input: {
     facturadorId: string;
     codigoNormalizado: string;

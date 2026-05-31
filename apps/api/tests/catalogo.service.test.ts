@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   createCatalogoItem,
+  deleteCatalogoItem,
   listCatalogoItems,
   normalizeCatalogoInput,
   searchCatalogoItems,
@@ -72,7 +73,9 @@ class FakeCatalogoRepository implements CatalogoRepository {
   public lastCreateInput: unknown;
   public lastUpdateInput: unknown;
   public lastExistsInput: Parameters<CatalogoRepository["existsByCodigo"]>[0] | null = null;
+  public lastHardDeleteInput: Parameters<CatalogoRepository["hardDelete"]>[0] | null = null;
   public updateResult: CatalogoItem | null = item;
+  public hardDeleteResult = true;
 
   async search(input: { facturadorId: string; q: string; limit: number }): Promise<CatalogoItem[]> {
     this.lastSearchInput = input;
@@ -114,6 +117,11 @@ class FakeCatalogoRepository implements CatalogoRepository {
   async existsByCodigo(input: Parameters<CatalogoRepository["existsByCodigo"]>[0]): Promise<boolean> {
     this.lastExistsInput = input;
     return this.existingCodes.has(input.codigoNormalizado);
+  }
+
+  async hardDelete(input: Parameters<CatalogoRepository["hardDelete"]>[0]): Promise<boolean> {
+    this.lastHardDeleteInput = input;
+    return this.hardDeleteResult;
   }
 }
 
@@ -214,6 +222,26 @@ describe("catalogo service", () => {
         repo
       )
     ).rejects.toMatchObject({
+      statusCode: 404
+    });
+  });
+
+  it("hard deletes item scoped to current facturador", async () => {
+    const repo = new FakeCatalogoRepository();
+
+    await deleteCatalogoItem(context, item.id, repo);
+
+    expect(repo.lastHardDeleteInput).toEqual({
+      itemId: item.id,
+      facturadorId: context.facturador.id
+    });
+  });
+
+  it("throws not found when deleting item outside facturador catalog", async () => {
+    const repo = new FakeCatalogoRepository();
+    repo.hardDeleteResult = false;
+
+    await expect(deleteCatalogoItem(context, item.id, repo)).rejects.toMatchObject({
       statusCode: 404
     });
   });

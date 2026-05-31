@@ -2444,18 +2444,26 @@ function CatalogView({
 }) {
   const api = useMemo(() => createApiClient(accessToken, setAccessToken), [accessToken, setAccessToken]);
   const [items, setItems] = useState<CatalogoItem[]>([]);
-  const [selected, setSelected] = useState<CatalogoItem | null>(null);
   const [query, setQuery] = useState("");
-  const [activoFilter, setActivoFilter] = useState<"true" | "false" | "">("true");
+  const [statusChip, setStatusChip] = useState<"ACTIVE" | "ARCHIVED" | "ALL">("ACTIVE");
   const [draft, setDraft] = useState<CatalogoDraft>(() => createCatalogoDraft());
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [editorMode, setEditorMode] = useState<"CREATE" | "EDIT">("CREATE");
+  const [selectedItem, setSelectedItem] = useState<CatalogoItem | null>(null);
+  const [menuItemId, setMenuItemId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<CatalogoItem | null>(null);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
 
   useEffect(() => {
-    void loadItems();
-  }, [activoFilter]);
+    const timeout = window.setTimeout(() => {
+      void loadItems(query);
+    }, 220);
+    return () => window.clearTimeout(timeout);
+  }, [query, statusChip]);
 
   async function loadItems(nextQuery = query) {
     setLoading(true);
@@ -2465,14 +2473,15 @@ function CatalogView({
     if (nextQuery.trim()) {
       params.set("q", nextQuery.trim());
     }
-    if (activoFilter) {
-      params.set("activo", activoFilter);
+    if (statusChip === "ACTIVE") {
+      params.set("activo", "true");
+    } else if (statusChip === "ARCHIVED") {
+      params.set("activo", "false");
     }
 
     try {
       const result = await api.get<CatalogoItemListResponse>(`/catalogo/items?${params.toString()}`);
       setItems(result.items);
-      setSelected((current) => (current ? result.items.find((item) => item.id === current.id) ?? current : current));
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo cargar el catalogo.");
     } finally {
@@ -2480,15 +2489,19 @@ function CatalogView({
     }
   }
 
-  function startCreate() {
-    setSelected(null);
+  function openCreate() {
+    setEditorMode("CREATE");
+    setSelectedItem(null);
     setDraft(createCatalogoDraft());
-    setMessage(null);
+    setAdvancedOpen(false);
+    setEditorOpen(true);
+    setMenuItemId(null);
     setError(null);
   }
 
-  function startEdit(item: CatalogoItem) {
-    setSelected(item);
+  function openEdit(item: CatalogoItem) {
+    setEditorMode("EDIT");
+    setSelectedItem(item);
     setDraft({
       codigo: item.codigo,
       descripcion: item.descripcion,
@@ -2496,8 +2509,81 @@ function CatalogView({
       iva_tipo: item.iva_tipo,
       activo: item.activo
     });
+    setAdvancedOpen(false);
+    setEditorOpen(true);
+    setMenuItemId(null);
+    setError(null);
+  }
+
+  function duplicateItem(item: CatalogoItem) {
+    setEditorMode("CREATE");
+    setSelectedItem(null);
+    setDraft({
+      codigo: "",
+      descripcion: `${item.descripcion} (copia)`,
+      precio_unitario: String(item.precio_unitario),
+      iva_tipo: item.iva_tipo,
+      activo: true
+    });
+    setAdvancedOpen(true);
+    setEditorOpen(true);
+    setMenuItemId(null);
+  }
+
+  async function archiveItem(item: CatalogoItem) {
+    setSaving(true);
     setMessage(null);
     setError(null);
+    try {
+      await api.request<CatalogoItem>(`/catalogo/items/${item.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          codigo: item.codigo || null,
+          descripcion: item.descripcion,
+          precio_unitario: item.precio_unitario,
+          iva_tipo: item.iva_tipo,
+          activo: false
+        })
+      });
+      setMenuItemId(null);
+      setMessage("Item archivado.");
+      await loadItems();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo archivar el item.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function openDeleteConfirm(item: CatalogoItem) {
+    setMenuItemId(null);
+    setDeleteTarget(item);
+    setError(null);
+    setMessage(null);
+  }
+
+  async function deleteItem() {
+    if (!deleteTarget) {
+      return;
+    }
+
+    setSaving(true);
+    setError(null);
+    setMessage(null);
+    try {
+      await api.request(`/catalogo/items/${deleteTarget.id}`, { method: "DELETE" });
+      setDeleteTarget(null);
+      if (selectedItem?.id === deleteTarget.id) {
+        setEditorOpen(false);
+        setSelectedItem(null);
+      }
+      setMessage("Item eliminado permanentemente.");
+      await loadItems();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo eliminar el item.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function saveItem(event: FormEvent<HTMLFormElement>) {
@@ -2521,22 +2607,14 @@ function CatalogView({
     }
 
     try {
-      const saved = selected
-        ? await api.request<CatalogoItem>(`/catalogo/items/${selected.id}`, {
+      await (editorMode === "EDIT" && selectedItem
+        ? api.request<CatalogoItem>(`/catalogo/items/${selectedItem.id}`, {
             method: "PATCH",
             body: JSON.stringify(payload)
           })
-        : await api.post<CatalogoItem>("/catalogo/items", payload);
-
-      setSelected(saved);
-      setDraft({
-        codigo: saved.codigo,
-        descripcion: saved.descripcion,
-        precio_unitario: String(saved.precio_unitario),
-        iva_tipo: saved.iva_tipo,
-        activo: saved.activo
-      });
-      setMessage(selected ? "Item actualizado." : "Item creado.");
+        : api.post<CatalogoItem>("/catalogo/items", payload));
+      setEditorOpen(false);
+      setMessage(editorMode === "EDIT" ? "Item actualizado." : "Item creado.");
       await loadItems();
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo guardar el item.");
@@ -2562,133 +2640,168 @@ function CatalogView({
           Buscar
           <input
             onChange={(event) => setQuery(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") {
-                void loadItems();
-              }
-            }}
-            placeholder="Codigo o descripcion"
+            placeholder="Buscar producto o servicio..."
             value={query}
           />
         </label>
-        <label>
-          Estado
-          <select onChange={(event) => setActivoFilter(event.target.value as "true" | "false" | "")} value={activoFilter}>
-            <option value="true">Activos</option>
-            <option value="">Todos</option>
-            <option value="false">Inactivos</option>
-          </select>
-        </label>
-        <button className="secondary-action" disabled={loading} onClick={() => void loadItems()} type="button">
-          {loading ? "Cargando..." : "Aplicar"}
-        </button>
+        <div className="filter-tabs" role="group" aria-label="Estado del catalogo">
+          <button className={statusChip === "ALL" ? "active" : ""} onClick={() => setStatusChip("ALL")} type="button">Todos</button>
+          <button className={statusChip === "ACTIVE" ? "active" : ""} onClick={() => setStatusChip("ACTIVE")} type="button">Activos</button>
+          <button className={statusChip === "ARCHIVED" ? "active" : ""} onClick={() => setStatusChip("ARCHIVED")} type="button">Archivados</button>
+        </div>
       </section>
 
       {error ? <p className="form-error">{error}</p> : null}
       {message ? <p className="editor-alert ready">{message}</p> : null}
 
-      <section className="documents-layout catalog-layout">
+      <section className="documents-layout">
         <div className="documents-list">
-          <button className={!selected ? "document-row active" : "document-row"} onClick={startCreate} type="button">
-            <span>
-              <strong>Nuevo item</strong>
-              <small>Crear producto o servicio</small>
-            </span>
-            <span>
-              <strong>+</strong>
-              <small>Alta</small>
-            </span>
-          </button>
-
           {items.length === 0 && !loading ? <p className="muted empty-state">Sin items para los filtros actuales.</p> : null}
           {items.map((item) => (
-            <button
-              className={selected?.id === item.id ? "document-row active" : "document-row"}
-              key={item.id}
-              onClick={() => startEdit(item)}
-              type="button"
-            >
-              <span>
-                <strong>{item.codigo || "Sin codigo"}</strong>
-                <small>{item.descripcion}</small>
-              </span>
-              <span>
-                <strong>{formatGuaranies(item.precio_unitario)}</strong>
-                <small>{item.activo ? "Activo" : "Inactivo"} · {formatIva(item.iva_tipo)}</small>
-              </span>
-            </button>
+            <article className="document-row document-row-rich" key={item.id}>
+              <button className="document-row-main" onClick={() => openEdit(item)} type="button">
+                <span>
+                  <strong>{item.descripcion}</strong>
+                  <small>{item.codigo || "Sin codigo"}</small>
+                </span>
+                <span>
+                  <strong>{formatGuaranies(item.precio_unitario)}</strong>
+                  <small>{formatIva(item.iva_tipo)}</small>
+                </span>
+              </button>
+              <div className="document-row-menu-wrapper">
+                <button className="icon-menu-action" onClick={() => setMenuItemId((current) => (current === item.id ? null : item.id))} type="button">⋮</button>
+                {menuItemId === item.id ? (
+                  <div className="client-row-menu" role="menu" aria-label="Acciones del item">
+                    <button onClick={() => openEdit(item)} role="menuitem" type="button">Editar</button>
+                    <button onClick={() => duplicateItem(item)} role="menuitem" type="button">Duplicar</button>
+                    {item.activo ? (
+                      <button onClick={() => void archiveItem(item)} role="menuitem" type="button">Archivar</button>
+                    ) : (
+                      <button disabled role="menuitem" type="button">Archivado</button>
+                    )}
+                    <hr />
+                    <button className="destructive-item" onClick={() => openDeleteConfirm(item)} role="menuitem" type="button">
+                      Eliminar permanentemente
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            </article>
           ))}
         </div>
-
-        <form className="document-detail catalog-form" onSubmit={(event) => void saveItem(event)}>
-          <div className="receipt-heading">
-            <div>
-              <p className="eyebrow">{selected ? "Edicion" : "Alta"}</p>
-              <h3>{selected ? selected.descripcion : "Nuevo item"}</h3>
-              <p className="muted">Se usa en la busqueda del editor de factura.</p>
-            </div>
-            <span className={draft.activo ? "status-pill ready" : "status-pill blocked"}>
-              {draft.activo ? "Activo" : "Inactivo"}
-            </span>
-          </div>
-
-          <div className="field-grid">
-            <label>
-              Codigo
-              <input
-                onChange={(event) => setDraft((current) => ({ ...current, codigo: event.target.value }))}
-                placeholder="SERV-001"
-                value={draft.codigo}
-              />
-            </label>
-            <label>
-              Precio unitario
-              <input
-                inputMode="numeric"
-                min="0"
-                onChange={(event) => setDraft((current) => ({ ...current, precio_unitario: event.target.value }))}
-                required
-                value={draft.precio_unitario}
-              />
-            </label>
-            <label className="span-2">
-              Descripcion
-              <input
-                onChange={(event) => setDraft((current) => ({ ...current, descripcion: event.target.value }))}
-                required
-                value={draft.descripcion}
-              />
-            </label>
-            <label>
-              IVA
-              <select onChange={(event) => setDraft((current) => ({ ...current, iva_tipo: event.target.value as TipoIva }))} value={draft.iva_tipo}>
-                <option value="IVA_10">10%</option>
-                <option value="IVA_5">5%</option>
-                <option value="EXENTA">Exenta</option>
-              </select>
-            </label>
-            <label>
-              Estado
-              <select
-                onChange={(event) => setDraft((current) => ({ ...current, activo: event.target.value === "true" }))}
-                value={draft.activo ? "true" : "false"}
-              >
-                <option value="true">Activo</option>
-                <option value="false">Inactivo</option>
-              </select>
-            </label>
-          </div>
-
-          <div className="result-actions">
-            <button className="primary-action" disabled={saving} type="submit">
-              {saving ? "Guardando..." : selected ? "Guardar cambios" : "Crear item"}
-            </button>
-            <button className="secondary-action" onClick={startCreate} type="button">
-              Limpiar
-            </button>
-          </div>
-        </form>
       </section>
+
+      <button className="primary-action wide floating-create-client" onClick={openCreate} type="button">
+        + Nuevo
+      </button>
+
+      {editorOpen ? (
+        <div className="modal-backdrop">
+          <section className="modal-panel" aria-labelledby="catalog-editor-title" role="dialog" aria-modal="true">
+            <header className="editor-heading">
+              <div>
+                <p className="eyebrow">Catalogo</p>
+                <h3 id="catalog-editor-title">{editorMode === "EDIT" ? "Editar producto o servicio" : "Nuevo producto o servicio"}</h3>
+              </div>
+              <button className="ghost-action" onClick={() => setEditorOpen(false)} type="button">
+                Cerrar
+              </button>
+            </header>
+
+            <form className="catalog-form" onSubmit={(event) => void saveItem(event)}>
+              <div className="documents-filters">
+                <label>
+                  Nombre o descripcion
+                  <input
+                    onChange={(event) => setDraft((current) => ({ ...current, descripcion: event.target.value }))}
+                    required
+                    value={draft.descripcion}
+                  />
+                </label>
+                <label>
+                  Precio
+                  <input
+                    inputMode="numeric"
+                    min="0"
+                    onChange={(event) => setDraft((current) => ({ ...current, precio_unitario: event.target.value }))}
+                    required
+                    value={draft.precio_unitario}
+                  />
+                </label>
+                <label>
+                  IVA
+                  <select onChange={(event) => setDraft((current) => ({ ...current, iva_tipo: event.target.value as TipoIva }))} value={draft.iva_tipo}>
+                    <option value="IVA_10">IVA 10%</option>
+                    <option value="IVA_5">IVA 5%</option>
+                    <option value="EXENTA">Exenta</option>
+                  </select>
+                </label>
+                <button className="secondary-action" onClick={() => setAdvancedOpen((current) => !current)} type="button">
+                  {advancedOpen ? "Ocultar opciones avanzadas" : "Opciones avanzadas"}
+                </button>
+                {advancedOpen ? (
+                  <>
+                    <label>
+                      Codigo
+                      <input
+                        onChange={(event) => setDraft((current) => ({ ...current, codigo: event.target.value }))}
+                        placeholder="SERV-001"
+                        value={draft.codigo}
+                      />
+                    </label>
+                    <label>
+                      Estado
+                      <select
+                        onChange={(event) => setDraft((current) => ({ ...current, activo: event.target.value === "true" }))}
+                        value={draft.activo ? "true" : "false"}
+                      >
+                        <option value="true">Activo</option>
+                        <option value="false">Archivado</option>
+                      </select>
+                    </label>
+                  </>
+                ) : null}
+              </div>
+              <div className="result-actions">
+                <button className="primary-action" disabled={saving} type="submit">
+                  {saving ? "Guardando..." : editorMode === "EDIT" ? "Guardar cambios" : "Guardar"}
+                </button>
+                {editorMode === "EDIT" && selectedItem?.activo ? (
+                  <button className="danger-action" disabled={saving} onClick={() => void archiveItem(selectedItem)} type="button">
+                    Archivar
+                  </button>
+                ) : null}
+                {editorMode === "EDIT" && selectedItem ? (
+                  <button className="danger-action" disabled={saving} onClick={() => openDeleteConfirm(selectedItem)} type="button">
+                    Eliminar permanentemente
+                  </button>
+                ) : null}
+              </div>
+            </form>
+          </section>
+        </div>
+      ) : null}
+      {deleteTarget ? (
+        <div className="modal-backdrop">
+          <section className="modal-panel" aria-labelledby="catalog-delete-title" role="dialog" aria-modal="true">
+            <header>
+              <h3 id="catalog-delete-title">¿Eliminar item del catalogo?</h3>
+              <p className="muted">
+                Esta accion eliminara permanentemente <strong>{deleteTarget.descripcion}</strong> de este facturador.
+              </p>
+            </header>
+            <div className="result-actions">
+              <button className="secondary-action" disabled={saving} onClick={() => setDeleteTarget(null)} type="button">
+                Cancelar
+              </button>
+              <button className="danger-action" disabled={saving} onClick={() => void deleteItem()} type="button">
+                {saving ? "Eliminando..." : "Eliminar"}
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
     </section>
   );
 }
