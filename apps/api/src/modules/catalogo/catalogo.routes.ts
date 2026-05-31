@@ -23,7 +23,10 @@ const searchQuerySchema = z.object({
 
 const listQuerySchema = z.object({
   q: z.string().trim().min(1).max(120).optional(),
-  activo: z.coerce.boolean().optional(),
+  activo: z
+    .enum(["true", "false"])
+    .transform((value) => value === "true")
+    .optional(),
   limit: z.coerce.number().int().min(1).max(100).default(30),
   offset: z.coerce.number().int().min(0).default(0)
 });
