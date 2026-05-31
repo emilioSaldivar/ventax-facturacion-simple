@@ -183,3 +183,32 @@ Ejecutar un flujo unico Playwright mobile-first contra contenedores (`bash scrip
 8. `Eliminar cliente` desde menu + confirmacion `Eliminar`.
 
 Luego correr viewport adicional desktop/tablet para validar jerarquia visual y densidad sin solapamientos.
+
+## 9. Plan Navegacion Agenda -> Factura (Prefill Cliente)
+
+### 9.1 Diseno Tecnico
+
+1. En `OperationHome`, introducir estado de solicitud de prefill de cliente para `InvoiceEditor`.
+2. En `ClientesAgendaView`, al ejecutar `Usar`:
+   - emitir callback con payload de cliente seleccionado;
+   - navegar a vista `invoice`.
+3. En `InvoiceEditor`, aplicar prefill al recibir solicitud nueva:
+   - setear `cliente_id`, `documento_tipo`, `documento`, `razon_social`, `direccion`, `telefono`, `email`;
+   - limpiar sugerencias abiertas y dejar mensaje operativo breve de cliente cargado.
+4. Marcar la solicitud como consumida para evitar reaplicaciones no intencionales.
+
+### 9.2 No Regresion
+
+- Mantener flujo manual actual de carga/autocompletado de cliente en factura.
+- Mantener comportamiento de `Agenda` para editar/WhatsApp/eliminar.
+- No alterar API de clientes ni contrato OpenAPI.
+
+### 9.3 Validacion
+
+- `npm run typecheck --workspace @facturacion-simple/web-operacion`
+- `npm run build --workspace @facturacion-simple/web-operacion`
+- Playwright en contenedores (mobile + desktop) validando:
+  1. abrir `Agenda/Clientes`;
+  2. tocar `Usar` en un cliente;
+  3. confirmar navegacion a `Nueva factura`;
+  4. confirmar prefill de cliente en formulario.

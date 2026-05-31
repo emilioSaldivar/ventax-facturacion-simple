@@ -375,6 +375,11 @@ interface CatalogoDraft {
   activo: boolean;
 }
 
+interface InvoiceClientePrefillRequest {
+  request_id: number;
+  cliente: FacturaClienteInput;
+}
+
 function App() {
   const [view, setView] = useState<ViewState>("checking-session");
   const [accessToken, setAccessToken] = useState<string | null>(() => localStorage.getItem(ACCESS_TOKEN_STORAGE_KEY));
@@ -595,6 +600,8 @@ function OperationHome({
   const canEmit = Boolean(readiness?.ready);
   const [operationView, setOperationView] = useState<OperationView>(() => (canEmit ? "invoice" : "status"));
   const [menuOpen, setMenuOpen] = useState(false);
+  const [invoiceClientePrefill, setInvoiceClientePrefill] = useState<InvoiceClientePrefillRequest | null>(null);
+  const invoiceClientePrefillSeqRef = useRef(0);
   const [installPromptEvent, setInstallPromptEvent] = useState<BeforeInstallPromptEvent | null>(null);
   const [showInstallHint, setShowInstallHint] = useState(false);
   const [installing, setInstalling] = useState(false);
@@ -678,6 +685,25 @@ function OperationHome({
   function goTo(view: OperationView) {
     setOperationView(view);
     setMenuOpen(false);
+  }
+
+  function useClienteFromAgenda(cliente: ClienteResponse) {
+    goTo("invoice");
+    window.setTimeout(() => {
+      invoiceClientePrefillSeqRef.current += 1;
+      setInvoiceClientePrefill({
+        request_id: invoiceClientePrefillSeqRef.current,
+        cliente: {
+          cliente_id: cliente.cliente_id,
+          documento_tipo: cliente.documento_tipo,
+          documento: cliente.documento,
+          razon_social: cliente.razon_social,
+          direccion: cliente.direccion ?? "",
+          telefono: cliente.telefono ?? "",
+          email: cliente.email ?? ""
+        }
+      });
+    }, 0);
   }
 
   const menuItems: Array<{
@@ -793,6 +819,7 @@ function OperationHome({
           accessToken={accessToken}
           canEmit={canEmit}
           context={context}
+          clientePrefillRequest={invoiceClientePrefill}
           readiness={readiness}
           setAccessToken={setAccessToken}
           onBack={() => goTo("status")}
@@ -811,7 +838,12 @@ function OperationHome({
           role={user?.role ?? "OPERADOR_FACTURACION"}
         />
       ) : operationView === "clients" ? (
-        <ClientesAgendaView accessToken={accessToken} setAccessToken={setAccessToken} onBack={() => goTo("invoice")} />
+        <ClientesAgendaView
+          accessToken={accessToken}
+          onBack={() => goTo("invoice")}
+          onUseCliente={useClienteFromAgenda}
+          setAccessToken={setAccessToken}
+        />
       ) : operationView === "catalog" ? (
         <CatalogView accessToken={accessToken} setAccessToken={setAccessToken} onBack={() => goTo("invoice")} />
       ) : (
@@ -1619,11 +1651,13 @@ function DocumentsView({
 function ClientesAgendaView({
   accessToken,
   setAccessToken,
-  onBack
+  onBack,
+  onUseCliente
 }: {
   accessToken: string | null;
   setAccessToken: (token: string | null) => void;
   onBack: () => void;
+  onUseCliente: (cliente: ClienteResponse) => void;
 }) {
   const api = useMemo(() => createApiClient(accessToken, setAccessToken), [accessToken, setAccessToken]);
   const [items, setItems] = useState<ClienteResponse[]>([]);
@@ -1732,7 +1766,7 @@ function ClientesAgendaView({
   function useCliente(cliente: ClienteResponse) {
     setSelected(cliente);
     setRowMenuClienteId(null);
-    setMessage(`Cliente listo para usar: ${cliente.razon_social}.`);
+    onUseCliente(cliente);
   }
 
   function openDeleteConfirm(cliente: ClienteResponse) {
@@ -2483,6 +2517,7 @@ function CatalogView({
 function InvoiceEditor({
   accessToken,
   canEmit,
+  clientePrefillRequest,
   context,
   readiness,
   setAccessToken,
@@ -2490,6 +2525,7 @@ function InvoiceEditor({
 }: {
   accessToken: string | null;
   canEmit: boolean;
+  clientePrefillRequest: InvoiceClientePrefillRequest | null;
   context: OperationalContextResponse | null;
   readiness: ReadinessResponse | null;
   setAccessToken: (token: string | null) => void;
@@ -2542,6 +2578,7 @@ function InvoiceEditor({
   const clientSectionRef = useRef<HTMLElement | null>(null);
   const productsSectionRef = useRef<HTMLElement | null>(null);
   const emissionResultRef = useRef<HTMLElement | null>(null);
+  const lastAppliedClientePrefillIdRef = useRef<number | null>(null);
 
   const api = useMemo(() => createApiClient(accessToken, setAccessToken), [accessToken, setAccessToken]);
   const today = useMemo(() => new Date().toLocaleDateString("es-PY"), []);
@@ -2586,6 +2623,29 @@ function InvoiceEditor({
     };
   }, [cliente, condicionVenta, creditoPlazoDias, lines, tipoTransaccion]);
   const requestFingerprint = useMemo(() => (request ? JSON.stringify(request) : null), [request]);
+
+  useEffect(() => {
+    if (!clientePrefillRequest) {
+      return;
+    }
+    if (lastAppliedClientePrefillIdRef.current === clientePrefillRequest.request_id) {
+      return;
+    }
+
+    setCliente({
+      cliente_id: clientePrefillRequest.cliente.cliente_id ?? null,
+      documento_tipo: clientePrefillRequest.cliente.documento_tipo,
+      documento: clientePrefillRequest.cliente.documento ?? "",
+      razon_social: clientePrefillRequest.cliente.razon_social ?? "",
+      direccion: clientePrefillRequest.cliente.direccion ?? "",
+      telefono: clientePrefillRequest.cliente.telefono ?? "",
+      email: clientePrefillRequest.cliente.email ?? ""
+    });
+    setClienteSuggestions([]);
+    setClienteMessage(`Cliente cargado desde agenda: ${clientePrefillRequest.cliente.razon_social}.`);
+    lastAppliedClientePrefillIdRef.current = clientePrefillRequest.request_id;
+    scrollSection(clientSectionRef);
+  }, [clientePrefillRequest]);
 
   useEffect(() => {
     if (!activeLineId && lines[0]) {

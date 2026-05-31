@@ -169,3 +169,25 @@ Objetivo: aumentar clientes visibles por pantalla sin degradar el flujo de selec
 
 - Para soportar `Eliminar cliente` desde menu contextual y formulario, el SaaS expone eliminacion de agenda por facturador (`DELETE /clientes/{clienteId}`).
 - Este endpoint elimina la relacion comercial de agenda del facturador (soft-delete), sin alterar responsabilidades fiscales ni mover logica SIFEN al frontend.
+
+## 9. Continuidad Operativa Agenda -> Nueva Factura
+
+Objetivo: reducir pasos entre seleccion de cliente y emision de factura.
+
+### 9.1 Comportamiento Esperado
+
+- Al tocar `Usar` (o `Usar cliente` en `⋮`) en la agenda:
+  1. la UI navega a `Nueva factura`;
+  2. el formulario de cliente en factura queda precargado con el cliente seleccionado;
+  3. el operador puede continuar emision sin volver a buscar cliente.
+
+### 9.2 Alcance
+
+- Alcance frontend UX/UI y manejo de estado entre vistas operativas.
+- No requiere cambios de contrato HTTP ni de backend para seleccionar cliente.
+
+### 9.3 Criterios De Aceptacion
+
+- Desde `Agenda/Clientes`, `Usar` abre `Nueva factura` en la misma sesion.
+- En `Nueva factura`, campos de cliente quedan poblados (`documento_tipo`, `documento`, `razon_social`, contacto si existe).
+- No se rompe alta/edicion de cliente ni el flujo manual existente de carga de cliente en factura.
