@@ -276,6 +276,24 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "404":
           $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [Clientes]
+      summary: Eliminar cliente de la agenda del facturador
+      parameters:
+        - $ref: "#/components/parameters/ClienteId"
+      responses:
+        "204":
+          description: Cliente eliminado de la agenda
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          description: Usuario sin configuracion operativa completa
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
 
   /clientes/dnit/autocomplete:
     get:

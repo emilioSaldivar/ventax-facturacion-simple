@@ -136,3 +136,50 @@ Reducir friccion para seleccionar cliente al facturar, minimizando scroll y sepa
   - editar cliente desde tarjeta;
   - crear cliente desde CTA principal;
   - estado vacio con CTA.
+
+## 8. Plan UX Agenda Compacta (Incremental Sin Cambios Backend)
+
+### 8.1 Objetivo
+
+Incrementar densidad operativa de la agenda para que el operador vea mas clientes por pantalla y conserve una accion primaria simple (`Usar`), delegando acciones secundarias a menu contextual.
+
+### 8.2 Decisiones De Interaccion (Sin Ambiguedad)
+
+1. Reemplazar tarjeta alta por fila compacta con:
+   - bloque izquierdo: nombre + documento;
+   - bloque derecho: boton `Usar` + trigger `⋮`.
+2. Menu `⋮` por cliente con orden fijo:
+   - `Usar cliente`;
+   - `Editar`;
+   - `WhatsApp`;
+   - separador;
+   - `Eliminar cliente` (estilo destructivo).
+3. Eliminar boton visible de `WhatsApp` por fila.
+4. Eliminar boton visible de `Eliminar` por fila.
+5. En formulario de edicion:
+   - conservar campos operativos;
+   - remover bloque de informacion duplicada;
+   - mantener `Guardar`;
+   - agregar `Eliminar cliente de mi agenda` al final, con confirmacion.
+
+### 8.3 No Regresion
+
+- No romper seleccion de cliente en `Nueva factura`.
+- No romper alta/edicion de cliente existente.
+- Mantener payloads actuales de alta/edicion y agregar solo endpoint de baja operativa de agenda (`DELETE /clientes/{clienteId}`).
+- No mover ni duplicar logica fiscal fuera de `facturacion-electronica`.
+
+### 8.4 Validacion Por Lote (Cobertura Maxima)
+
+Ejecutar un flujo unico Playwright mobile-first contra contenedores (`bash scripts/deploy.sh`) para validar en una sola corrida:
+
+1. busqueda incremental de cliente;
+2. `Usar` desde fila compacta;
+3. apertura de `⋮` y ejecucion de `Editar`;
+4. verificacion de formulario sin bloque duplicado;
+5. `Guardar` cambios;
+6. `WhatsApp` desde menu contextual;
+7. `Eliminar cliente` desde menu + confirmacion `Cancelar`;
+8. `Eliminar cliente` desde menu + confirmacion `Eliminar`.
+
+Luego correr viewport adicional desktop/tablet para validar jerarquia visual y densidad sin solapamientos.

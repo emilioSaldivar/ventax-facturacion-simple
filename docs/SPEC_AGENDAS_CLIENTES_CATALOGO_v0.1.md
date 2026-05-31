@@ -111,3 +111,61 @@ La pantalla de clientes debe priorizar el flujo operativo de facturacion:
 
 - Esta iniciativa no modifica contratos HTTP, backend, modelos de datos ni validaciones fiscales.
 - Alcance exclusivo: UX/UI frontend operativa, accesibilidad tactil y reorganizacion visual del flujo.
+
+## 8. UX Densidad Operativa En Agenda (Lista Compacta + Acciones Contextuales)
+
+Objetivo: aumentar clientes visibles por pantalla sin degradar el flujo de seleccion para facturacion.
+
+### 8.1 Lista Compacta (Accion Principal Visible)
+
+- Cada cliente debe mostrarse en una fila compacta (no tarjeta alta), con:
+  - nombre/razon social;
+  - documento (`RUC/CI`);
+  - accion principal visible `Usar`.
+- La lista debe priorizar densidad visual moderada para reducir scroll operativo.
+- Se debe evitar renderizar multiples botones secundarios visibles por fila.
+
+### 8.2 Acciones Secundarias En Menu Contextual
+
+- Las acciones secundarias deben moverse a menu contextual `⋮` por fila.
+- Orden del menu:
+  1. `Usar cliente`
+  2. `Editar`
+  3. `WhatsApp`
+  4. separador visual
+  5. `Eliminar cliente` (accion destructiva en rojo)
+- `Eliminar cliente` no debe quedar visible de forma permanente en cada fila.
+
+### 8.3 Confirmacion Destructiva
+
+- Al elegir `Eliminar cliente`, el sistema debe abrir confirmacion explicita:
+  - titulo/pregunta: `¿Eliminar cliente de tu agenda?`
+  - acciones: `Cancelar` y `Eliminar`.
+- No debe ejecutarse eliminacion directa sin confirmacion.
+
+### 8.4 Formulario De Edicion Sin Duplicacion
+
+- El formulario de edicion debe incluir solo campos operativos necesarios:
+  - tipo documento;
+  - documento;
+  - nombre o razon social;
+  - telefono;
+  - correo;
+  - direccion.
+- Debe eliminarse cualquier bloque intermedio que replique informacion ya capturada en campos (documento/nombre duplicados).
+- Acciones del formulario:
+  - primaria: `Guardar`;
+  - secundaria destructiva dentro del formulario: `Eliminar cliente de mi agenda` (rojo, con confirmacion).
+
+### 8.5 Criterios De Aceptacion UX
+
+- La agenda muestra mas clientes por viewport que la version previa de tarjetas altas.
+- El flujo principal (`Usar cliente`) permanece inmediato y visible.
+- `WhatsApp` queda como accion ocasional en menu contextual.
+- El formulario de edicion reduce altura al remover duplicaciones.
+- Las responsabilidades fiscales permanecen sin cambios.
+
+### 8.6 Contrato HTTP Asociado
+
+- Para soportar `Eliminar cliente` desde menu contextual y formulario, el SaaS expone eliminacion de agenda por facturador (`DELETE /clientes/{clienteId}`).
+- Este endpoint elimina la relacion comercial de agenda del facturador (soft-delete), sin alterar responsabilidades fiscales ni mover logica SIFEN al frontend.

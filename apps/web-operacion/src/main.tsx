@@ -1635,6 +1635,9 @@ function ClientesAgendaView({
   const [editorOpen, setEditorOpen] = useState(false);
   const [searchSuggestions, setSearchSuggestions] = useState<ClienteSearchResult[]>([]);
   const [autocompleting, setAutocompleting] = useState(false);
+  const [rowMenuClienteId, setRowMenuClienteId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<ClienteResponse | null>(null);
+  const rowMenuRef = useRef<HTMLDivElement | null>(null);
   const [draft, setDraft] = useState<FacturaClienteInput>({
     documento_tipo: "CI",
     documento: "",
@@ -1669,6 +1672,19 @@ function ClientesAgendaView({
     }, 180);
     return () => clearTimeout(timeout);
   }, [draft.documento, editorOpen]);
+
+  useEffect(() => {
+    if (!rowMenuClienteId) {
+      return;
+    }
+    function handleClickOutside(event: MouseEvent) {
+      if (rowMenuRef.current && !rowMenuRef.current.contains(event.target as Node)) {
+        setRowMenuClienteId(null);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [rowMenuClienteId]);
 
   async function loadClientes(nextQuery = query) {
     setLoading(true);
@@ -1715,7 +1731,13 @@ function ClientesAgendaView({
 
   function useCliente(cliente: ClienteResponse) {
     setSelected(cliente);
+    setRowMenuClienteId(null);
     setMessage(`Cliente listo para usar: ${cliente.razon_social}.`);
+  }
+
+  function openDeleteConfirm(cliente: ClienteResponse) {
+    setDeleteTarget(cliente);
+    setRowMenuClienteId(null);
   }
 
   function applySuggestion(suggestion: ClienteSearchResult) {
@@ -1805,6 +1827,30 @@ function ClientesAgendaView({
     }
   }
 
+  async function deleteCliente() {
+    if (!deleteTarget) {
+      return;
+    }
+    setSaving(true);
+    setMessage(null);
+    try {
+      await api.request<void>(`/clientes/${deleteTarget.cliente_id}`, { method: "DELETE" });
+      setMessage("Cliente eliminado de la agenda.");
+      if (selected?.cliente_id === deleteTarget.cliente_id) {
+        setSelected(null);
+      }
+      if (draft.cliente_id === deleteTarget.cliente_id) {
+        setEditorOpen(false);
+      }
+      setDeleteTarget(null);
+      await loadClientes();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "No se pudo eliminar el cliente.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <section className="documents-view" aria-labelledby="clientes-title">
       <div className="editor-heading">
@@ -1838,22 +1884,47 @@ function ClientesAgendaView({
             </article>
           ) : null}
           {items.map((cliente) => (
-            <article className={selected?.cliente_id === cliente.cliente_id ? "document-row client-card active" : "document-row client-card"} key={cliente.cliente_id}>
+            <article className={selected?.cliente_id === cliente.cliente_id ? "document-row client-row active" : "document-row client-row"} key={cliente.cliente_id}>
               <span>
                 <strong>👤 {cliente.razon_social}</strong>
-                <small>{cliente.documento_tipo}: {cliente.documento}</small>
+                <small>{cliente.documento_tipo} {cliente.documento}</small>
               </span>
-              <div className="card-actions">
-                <button className="secondary-action" onClick={() => useCliente(cliente)} type="button">
+              <div className="client-row-actions" ref={rowMenuClienteId === cliente.cliente_id ? rowMenuRef : null}>
+                <button className="secondary-action compact" onClick={() => useCliente(cliente)} type="button">
                   Usar
                 </button>
-                <button className="secondary-action" onClick={() => openEditor(cliente)} type="button">
-                  Editar
+                <button
+                  aria-expanded={rowMenuClienteId === cliente.cliente_id}
+                  aria-label={`Abrir acciones de ${cliente.razon_social}`}
+                  className="icon-menu-action"
+                  onClick={() => setRowMenuClienteId((current) => current === cliente.cliente_id ? null : cliente.cliente_id)}
+                  type="button"
+                >
+                  ⋮
                 </button>
-                {cliente.telefono ? (
-                  <a className="secondary-link secondary-link-as-button" href={`https://wa.me/${cliente.telefono.replace(/\D/g, "")}`} rel="noreferrer" target="_blank">
-                    WhatsApp
-                  </a>
+                {rowMenuClienteId === cliente.cliente_id ? (
+                  <div className="client-row-menu" role="menu" aria-label={`Acciones para ${cliente.razon_social}`}>
+                    <button onClick={() => useCliente(cliente)} role="menuitem" type="button">Usar cliente</button>
+                    <button onClick={() => openEditor(cliente)} role="menuitem" type="button">Editar</button>
+                    <button
+                      disabled={!cliente.telefono}
+                      onClick={() => {
+                        if (!cliente.telefono) {
+                          return;
+                        }
+                        window.open(`https://wa.me/${cliente.telefono.replace(/\D/g, "")}`, "_blank", "noopener,noreferrer");
+                        setRowMenuClienteId(null);
+                      }}
+                      role="menuitem"
+                      type="button"
+                    >
+                      WhatsApp
+                    </button>
+                    <hr />
+                    <button className="destructive-item" onClick={() => openDeleteConfirm(cliente)} role="menuitem" type="button">
+                      Eliminar cliente
+                    </button>
+                  </div>
                 ) : null}
               </div>
             </article>
@@ -1931,6 +2002,29 @@ function ClientesAgendaView({
             <div className="result-actions">
               <button className="primary-action" disabled={saving || !draft.documento.trim() || !draft.razon_social.trim()} onClick={() => void saveCliente()} type="button">
                 {saving ? "Guardando..." : "Guardar"}
+              </button>
+              {selected ? (
+                <button className="danger-action" disabled={saving} onClick={() => openDeleteConfirm(selected)} type="button">
+                  Eliminar cliente de mi agenda
+                </button>
+              ) : null}
+            </div>
+          </section>
+        </div>
+      ) : null}
+      {deleteTarget ? (
+        <div className="modal-backdrop">
+          <section className="modal-panel" aria-labelledby="cliente-delete-title" role="dialog" aria-modal="true">
+            <header>
+              <h3 id="cliente-delete-title">¿Eliminar cliente de tu agenda?</h3>
+              <p className="muted">Esta accion quita a {deleteTarget.razon_social} de la agenda de este facturador.</p>
+            </header>
+            <div className="result-actions">
+              <button className="secondary-action" disabled={saving} onClick={() => setDeleteTarget(null)} type="button">
+                Cancelar
+              </button>
+              <button className="danger-action" disabled={saving} onClick={() => void deleteCliente()} type="button">
+                {saving ? "Eliminando..." : "Eliminar"}
               </button>
             </div>
           </section>

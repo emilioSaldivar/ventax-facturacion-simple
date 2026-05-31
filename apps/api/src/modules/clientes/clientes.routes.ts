@@ -5,7 +5,7 @@ import { getOperationalContext } from "../context/context.service";
 import { operationalContextRepository } from "../context/context.repository";
 import { validateRequest } from "../../shared/validation/validate-request";
 import { clienteRepository } from "./clientes.repository";
-import { autocompleteClienteFromDnit, createCliente, listClientes, searchClientes, updateCliente } from "./clientes.service";
+import { autocompleteClienteFromDnit, createCliente, deleteCliente, listClientes, searchClientes, updateCliente } from "./clientes.service";
 import { documentoIdentidadTipos } from "./clientes.types";
 
 const clienteUpsertSchema = z.object({
@@ -102,6 +102,22 @@ clientesRouter.patch(
       const params = req.params as unknown as z.infer<typeof clienteParamsSchema>;
       const result = await updateCliente(context, params.clienteId, req.body, clienteRepository);
       res.json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+clientesRouter.delete(
+  "/clientes/:clienteId",
+  requireAuth,
+  validateRequest("params", clienteParamsSchema),
+  async (req, res, next) => {
+    try {
+      const context = await getOperationalContext(req.user!.id, operationalContextRepository);
+      const params = req.params as unknown as z.infer<typeof clienteParamsSchema>;
+      await deleteCliente(context, params.clienteId, clienteRepository);
+      res.status(204).send();
     } catch (error) {
       next(error);
     }
