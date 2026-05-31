@@ -69,6 +69,7 @@
 | DUX-032 | UI listado | Mejorar jerarquia y acciones rapidas por documento | DONE | Estado gana jerarquia visual y cada fila ofrece menu `⋮` con `Ver detalle`, `Compartir`, `WhatsApp`, `Nota de credito`, `Anular` |
 | DUX-033 | UI detalle | Reetiquetar acciones y aislar capa fiscal interna | DONE | Seccion `Acciones sobre esta factura` reemplaza `Gestion comercial`; capa interna se agrupa en `Administracion fiscal` |
 | DUX-034 | QA UX documentos | Validar flujo mobile/desktop de UX-010 | PENDING_VALIDATION | Playwright confirma recientes, filtros progresivos y tabs negocio; queda pendiente evidenciar menu `⋮` + detalle en entorno con documentos visibles |
+| DUX-035 | UI modal motivos | Reemplazar prompts nativos por modal app mobile-first | DONE | Motivos de nota de credito, anulacion e inutilizacion se capturan en modal propio con validacion, sin `window.prompt` |
 
 ## Definiciones Cerradas Para Implementacion
 
@@ -103,3 +104,4 @@
 - 2026-05-31: implementadas `DUX-029`..`DUX-033` en `apps/web-operacion/src/main.tsx` y `apps/web-operacion/src/styles.css` con enfoque `Documentos recientes` + filtros progresivos + tabs negocio + acciones rapidas por fila + separacion de capa fiscal interna.
 - 2026-05-31: validaciones tecnicas de iteracion UX-010: `npm run typecheck --workspace @facturacion-simple/web-operacion`, `npm run build --workspace @facturacion-simple/web-operacion`.
 - 2026-05-31: validacion UX-010 en contenedores (`DUX-034`) con Playwright mobile/desktop sobre `http://127.0.0.1:8092/app/`, cubriendo recientes (`Hoy`/`Ultimos 7 dias`), buscador unico, apertura de `Mas filtros` y tabs `Facturas/Notas de credito`. En este entorno no habia filas de documentos visibles para cerrar evidencia de `menu ⋮ -> Ver detalle`; se mantiene `PENDING_VALIDATION` para ese tramo.
+- 2026-05-31: implementado `DUX-035` en `apps/web-operacion/src/main.tsx`: reemplazo de `window.prompt` por modal de motivo para `Crear nota de credito`, `Anular factura` e `Inutilizar numeracion`; incluye validacion de longitud minima y copy orientado a operador mobile. Validaciones: `npm run typecheck --workspace @facturacion-simple/web-operacion`, `npm run build --workspace @facturacion-simple/web-operacion`.

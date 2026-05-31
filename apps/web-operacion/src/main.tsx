@@ -989,6 +989,12 @@ function DocumentsView({
   const [gestionLoading, setGestionLoading] = useState(false);
   const [decision, setDecision] = useState<DocumentoDecisionResponse | null>(null);
   const [cdcImpact, setCdcImpact] = useState<DocumentoValidateCdcImpactResponse | null>(null);
+  const [reasonModal, setReasonModal] = useState<{
+    action: "CANCEL_DETAIL" | "CANCEL_LIST" | "CREDIT_NOTE_DETAIL" | "CREDIT_NOTE_LIST" | "VOID_NUMBER";
+    documentoId: string;
+  } | null>(null);
+  const [reasonDraft, setReasonDraft] = useState("");
+  const [reasonError, setReasonError] = useState<string | null>(null);
   const isInternalSupport = role !== "OPERADOR_FACTURACION";
 
   useEffect(() => {
@@ -1138,19 +1144,88 @@ function DocumentsView({
     if (!selected || !isInternalSupport) {
       return;
     }
-    const motivo = window.prompt("Motivo de inutilización", "");
-    if (!motivo?.trim()) {
+    openReasonModal("VOID_NUMBER", selected.id);
+  }
+
+  function openReasonModal(
+    action: "CANCEL_DETAIL" | "CANCEL_LIST" | "CREDIT_NOTE_DETAIL" | "CREDIT_NOTE_LIST" | "VOID_NUMBER",
+    documentoId: string
+  ) {
+    setReasonModal({ action, documentoId });
+    setReasonDraft("");
+    setReasonError(null);
+  }
+
+  function closeReasonModal() {
+    setReasonModal(null);
+    setReasonDraft("");
+    setReasonError(null);
+  }
+
+  async function submitReasonModal() {
+    if (!reasonModal) {
       return;
     }
+    const motivo = reasonDraft.trim();
+    if (!motivo) {
+      setReasonError("Ingrese un motivo para continuar.");
+      return;
+    }
+    if (motivo.length < 3) {
+      setReasonError("El motivo debe tener al menos 3 caracteres.");
+      return;
+    }
+
+    setReasonError(null);
     setActionLoading(true);
+    setMessage(null);
+
     try {
-      const result = await api.post<DocumentoGestionVoidResponse>(`/facturas/${selected.id}/gestion/void-number`, {
-        motivo: motivo.trim()
-      });
-      setMessage(`Inutilización solicitada. Evento: ${result.event_id ?? "sin id"}.`);
-      await loadEventosDocumento();
+      if (reasonModal.action === "CANCEL_DETAIL") {
+        const updated = await api.post<DocumentoResponse>(`/facturas/${reasonModal.documentoId}/cancelar`, { motivo });
+        setSelected(updated);
+        setDocuments((current) => current.map((item) => (item.id === updated.id ? updated : item)));
+        setMessage("Documento anulado.");
+        await loadDeliveryFor(updated);
+      } else if (reasonModal.action === "CANCEL_LIST") {
+        await api.post<DocumentoResponse>(`/facturas/${reasonModal.documentoId}/cancelar`, { motivo });
+        setMessage("Documento anulado.");
+        await loadDocuments();
+      } else if (reasonModal.action === "CREDIT_NOTE_DETAIL") {
+        const notaCredito = await api.request<DocumentoResponse>(`/facturas/${reasonModal.documentoId}/nota-credito`, {
+          method: "POST",
+          headers: {
+            "Idempotency-Key": createIdempotencyKey()
+          },
+          body: JSON.stringify({ motivo })
+        });
+        setSelected(notaCredito);
+        setDocuments((current) => [notaCredito, ...current.filter((item) => item.id !== notaCredito.id)]);
+        setDeliveryLink(null);
+        setEmailStatus(null);
+        setMessage("Nota de credito emitida.");
+        await loadDeliveryFor(notaCredito);
+      } else if (reasonModal.action === "CREDIT_NOTE_LIST") {
+        const notaCredito = await api.request<DocumentoResponse>(`/facturas/${reasonModal.documentoId}/nota-credito`, {
+          method: "POST",
+          headers: {
+            "Idempotency-Key": createIdempotencyKey()
+          },
+          body: JSON.stringify({ motivo })
+        });
+        setDocuments((current) => [notaCredito, ...current.filter((item) => item.id !== notaCredito.id)]);
+        setMessage("Nota de credito emitida.");
+        await loadDocuments();
+      } else {
+        const result = await api.post<DocumentoGestionVoidResponse>(`/facturas/${reasonModal.documentoId}/gestion/void-number`, {
+          motivo
+        });
+        setMessage(`Inutilización solicitada. Evento: ${result.event_id ?? "sin id"}.`);
+        await loadEventosDocumento();
+      }
+      closeReasonModal();
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "No se pudo solicitar inutilización.");
+      setReasonError(err instanceof Error ? err.message : "No se pudo procesar la acción.");
     } finally {
       setActionLoading(false);
     }
@@ -1212,105 +1287,22 @@ function DocumentsView({
     if (!selected) {
       return;
     }
-
-    const motivo = window.prompt("Motivo de anulacion", "");
-    if (!motivo?.trim()) {
-      return;
-    }
-
-    setActionLoading(true);
-    setMessage(null);
-
-    try {
-      const updated = await api.post<DocumentoResponse>(`/facturas/${selected.id}/cancelar`, { motivo: motivo.trim() });
-      setSelected(updated);
-      setDocuments((current) => current.map((item) => (item.id === updated.id ? updated : item)));
-      setMessage("Documento anulado.");
-      await loadDeliveryFor(updated);
-    } catch (err) {
-      setMessage(err instanceof Error ? err.message : "No se pudo anular el documento.");
-    } finally {
-      setActionLoading(false);
-    }
+    openReasonModal("CANCEL_DETAIL", selected.id);
   }
 
   async function emitSelectedNotaCredito() {
     if (!selected) {
       return;
     }
-
-    const motivo = window.prompt("Motivo de nota de credito", "");
-    if (!motivo?.trim()) {
-      return;
-    }
-
-    setActionLoading(true);
-    setMessage(null);
-
-    try {
-      const notaCredito = await api.request<DocumentoResponse>(`/facturas/${selected.id}/nota-credito`, {
-        method: "POST",
-        headers: {
-          "Idempotency-Key": createIdempotencyKey()
-        },
-        body: JSON.stringify({ motivo: motivo.trim() })
-      });
-      setSelected(notaCredito);
-      setDocuments((current) => [notaCredito, ...current.filter((item) => item.id !== notaCredito.id)]);
-      setDeliveryLink(null);
-      setEmailStatus(null);
-      setMessage("Nota de credito emitida.");
-      await loadDeliveryFor(notaCredito);
-    } catch (err) {
-      setMessage(err instanceof Error ? err.message : "No se pudo emitir la nota de credito.");
-    } finally {
-      setActionLoading(false);
-    }
+    openReasonModal("CREDIT_NOTE_DETAIL", selected.id);
   }
 
   async function emitNotaCreditoFromList(documentoId: string) {
-    const motivo = window.prompt("Motivo de nota de credito", "");
-    if (!motivo?.trim()) {
-      return;
-    }
-
-    setActionLoading(true);
-    setMessage(null);
-    try {
-      const notaCredito = await api.request<DocumentoResponse>(`/facturas/${documentoId}/nota-credito`, {
-        method: "POST",
-        headers: {
-          "Idempotency-Key": createIdempotencyKey()
-        },
-        body: JSON.stringify({ motivo: motivo.trim() })
-      });
-      setDocuments((current) => [notaCredito, ...current.filter((item) => item.id !== notaCredito.id)]);
-      setMessage("Nota de credito emitida.");
-      await loadDocuments();
-    } catch (err) {
-      setMessage(err instanceof Error ? err.message : "No se pudo emitir la nota de credito.");
-    } finally {
-      setActionLoading(false);
-    }
+    openReasonModal("CREDIT_NOTE_LIST", documentoId);
   }
 
   async function cancelDocumentoFromList(documentoId: string) {
-    const motivo = window.prompt("Motivo de anulacion", "");
-    if (!motivo?.trim()) {
-      return;
-    }
-
-    setActionLoading(true);
-    setMessage(null);
-    try {
-      await api.post<DocumentoResponse>(`/facturas/${documentoId}/cancelar`, { motivo: motivo.trim() });
-      setMessage("Documento anulado.");
-      await loadDocuments();
-    } catch (err) {
-      setMessage(err instanceof Error ? err.message : "No se pudo anular el documento.");
-    } finally {
-      setActionLoading(false);
-    }
+    openReasonModal("CANCEL_LIST", documentoId);
   }
 
   async function openQuickShare(documento: DocumentoResponse, mode: "public" | "whatsapp") {
@@ -1800,6 +1792,37 @@ function DocumentsView({
           )}
         </aside>
         ) : null}
+      {reasonModal ? (
+        <div className="modal-backdrop" role="presentation">
+          <section className="modal-panel" aria-labelledby="reason-modal-title" role="dialog" aria-modal="true">
+            <header>
+              <p className="eyebrow">Confirmacion</p>
+              <h3 id="reason-modal-title">{getReasonModalTitle(reasonModal.action)}</h3>
+              <p className="muted">Ingrese un motivo para continuar.</p>
+            </header>
+            <label className="credit-note-motivo">
+              Motivo
+              <textarea
+                autoFocus
+                maxLength={150}
+                onChange={(event) => setReasonDraft(event.target.value)}
+                placeholder={getReasonModalPlaceholder(reasonModal.action)}
+                rows={4}
+                value={reasonDraft}
+              />
+            </label>
+            {reasonError ? <p className="form-error">{reasonError}</p> : null}
+            <div className="result-actions">
+              <button className="secondary-action" disabled={actionLoading} onClick={closeReasonModal} type="button">
+                Cancelar
+              </button>
+              <button className="primary-action" disabled={actionLoading} onClick={() => void submitReasonModal()} type="button">
+                {actionLoading ? "Procesando..." : "Confirmar"}
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -4266,6 +4289,30 @@ function getOperationViewHint(value: OperationView): string {
     documents: "Facturas y notas emitidas"
   };
   return hints[value];
+}
+
+function getReasonModalTitle(
+  action: "CANCEL_DETAIL" | "CANCEL_LIST" | "CREDIT_NOTE_DETAIL" | "CREDIT_NOTE_LIST" | "VOID_NUMBER"
+): string {
+  if (action === "VOID_NUMBER") {
+    return "Inutilizar numeracion";
+  }
+  if (action === "CREDIT_NOTE_DETAIL" || action === "CREDIT_NOTE_LIST") {
+    return "Crear nota de credito";
+  }
+  return "Anular factura";
+}
+
+function getReasonModalPlaceholder(
+  action: "CANCEL_DETAIL" | "CANCEL_LIST" | "CREDIT_NOTE_DETAIL" | "CREDIT_NOTE_LIST" | "VOID_NUMBER"
+): string {
+  if (action === "VOID_NUMBER") {
+    return "Explique por que necesita inutilizar la numeracion.";
+  }
+  if (action === "CREDIT_NOTE_DETAIL" || action === "CREDIT_NOTE_LIST") {
+    return "Ej: devolucion de mercaderia, error en monto o cliente.";
+  }
+  return "Ej: error en datos del comprobante o anulacion solicitada por cliente.";
 }
 
 function getOperationalTitle(context: OperationalContextResponse | null): string {

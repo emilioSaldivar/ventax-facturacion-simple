@@ -279,6 +279,7 @@ La pantalla `Facturas y notas` debe priorizar contexto reciente y accion rapida,
   - nota de credito;
   - anular.
 - El estado del documento debe tener mayor jerarquia visual que el numero fiscal.
+- Los motivos para `nota de credito`, `anular` e `inutilizar` deben capturarse en modal propio de la app (no `alert/prompt` nativo del navegador), optimizado para mobile (Android/iOS/PWA).
 
 ### Nivel 3: Administracion Fiscal
 

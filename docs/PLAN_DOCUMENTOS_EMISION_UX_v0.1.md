@@ -299,6 +299,10 @@ Reducir carga cognitiva en mobile para `Documentos` con estrategia de descubrimi
 5. Detalle:
    - renombrar `Gestion comercial` a `Acciones sobre esta factura`;
    - encapsular herramientas internas en `Administracion fiscal`.
+6. Reemplazar `window.prompt` por modal propio para motivos de:
+   - nota de credito;
+   - anulacion;
+   - inutilizacion de numeracion.
 
 ### Validacion UX-010
 
