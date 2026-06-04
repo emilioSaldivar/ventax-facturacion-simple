@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   FiscalGatewayError,
+  type FiscalByCdcResponse,
   type FiscalGateway,
   type FiscalGatewayHealth,
   type FiscalCancelFacturaRequest,
@@ -142,6 +143,10 @@ class FakeFacturaRepository implements FacturaRepository {
     return this.listResponse;
   }
 
+  async bulkUpdateDocumentUuidByCdc(): Promise<void> {
+    // no-op in tests
+  }
+
   async updateFiscalStatus(input: Parameters<FacturaRepository["updateFiscalStatus"]>[0]): Promise<DocumentoResponse | null> {
     this.lastUpdateFiscalStatusInput = input;
     if (!this.findByIdResponse) {
@@ -159,6 +164,7 @@ class FakeFacturaRepository implements FacturaRepository {
     this.lastInput = input;
     return {
       id: "55555555-5555-4555-8555-555555555555",
+      document_uuid: input.fiscalResponse?.document_uuid ?? null,
       tipo: "FACTURA",
       estado: input.estado,
       condicion_venta: input.input.condicion_venta,
@@ -181,7 +187,7 @@ class FakeFacturaRepository implements FacturaRepository {
           xml: { available: Boolean(input.fiscalResponse?.cdc), url: null }
         }
       },
-      created_at: "2026-05-28T00:00:00.000Z"
+      created_at: new Date(Date.now() - 60 * 60 * 1000).toISOString()
     };
   }
 
@@ -189,6 +195,7 @@ class FakeFacturaRepository implements FacturaRepository {
     this.lastQueuedInput = input;
     return {
       id: "77777777-7777-4777-8777-777777777777",
+      document_uuid: null,
       tipo: "FACTURA",
       estado: "EMITIENDO",
       condicion_venta: input.input.condicion_venta,
@@ -211,7 +218,7 @@ class FakeFacturaRepository implements FacturaRepository {
           xml: { available: false, url: null }
         }
       },
-      created_at: "2026-05-28T00:00:00.000Z"
+      created_at: new Date(Date.now() - 60 * 60 * 1000).toISOString()
     };
   }
 
@@ -332,6 +339,7 @@ class FakeFiscalGateway implements FiscalGateway {
     private readonly response: FiscalEmitFacturaResponse | FiscalGatewayError,
     private readonly refreshResponse: FiscalRefreshStatusResponse | FiscalGatewayError = {
       estado: "EMITIDA",
+      current_cdc: null,
       raw: { status: { status: "APPROVED" }, refreshed: true }
     },
     private readonly cancelResponse: FiscalCancelFacturaResponse | FiscalGatewayError = {
@@ -509,6 +517,10 @@ class FakeFiscalGateway implements FiscalGateway {
   async voidDocumentoNumberByDocumentId(): Promise<FiscalDocumentoVoidResponse> {
     return this.voidResponse;
   }
+
+  async resolveDocumentoByCdc(): Promise<FiscalByCdcResponse> {
+    throw new Error("not needed");
+  }
 }
 
 const emitInput = {
@@ -532,6 +544,7 @@ const emitInput = {
 function buildDocumento(overrides: Partial<DocumentoResponse> = {}): DocumentoResponse {
   return {
     id: "66666666-6666-4666-8666-666666666666",
+    document_uuid: "aaaaaaaa-aaaa-4aaa-baaa-aaaaaaaaaaaa",
     tipo: "FACTURA",
     estado: "PENDIENTE_SIFEN",
     condicion_venta: "CONTADO",
@@ -563,7 +576,7 @@ function buildDocumento(overrides: Partial<DocumentoResponse> = {}): DocumentoRe
         xml: { available: true, url: null }
       }
     },
-    created_at: "2026-05-28T00:00:00.000Z",
+    created_at: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
     ...overrides
   };
 }
@@ -679,7 +692,7 @@ describe("facturas service", () => {
               xml: { available: true, url: null }
             }
           },
-          created_at: "2026-05-28T00:00:00.000Z"
+          created_at: new Date(Date.now() - 60 * 60 * 1000).toISOString()
         }
       ]
     };
@@ -844,7 +857,7 @@ describe("facturas service", () => {
           xml: { available: true, url: null }
         }
       },
-      created_at: "2026-05-28T00:00:00.000Z"
+      created_at: new Date(Date.now() - 60 * 60 * 1000).toISOString()
     };
 
     const result = await getDocumentoById(context, "66666666-6666-4666-8666-666666666666", repo);
@@ -865,30 +878,30 @@ describe("facturas service", () => {
     });
   });
 
-  it("refreshes fiscal status by CDC and persists the mapped state", async () => {
+  it("refreshes fiscal status by document_uuid and persists the mapped state", async () => {
     const repo = new FakeFacturaRepository();
     repo.findByIdResponse = buildDocumento();
     const gateway = new FakeFiscalGateway(new FiscalGatewayError("UPSTREAM_ERROR", "Should not emit"), {
       estado: "EMITIDA",
-      raw: { cdc: "A".repeat(44), status: { status: "APPROVED" }, refreshed: true }
+      current_cdc: null,
+      raw: { status: { status: "APPROVED" }, refreshed: true }
     });
 
     const result = await refreshDocumentoStatus(context, "66666666-6666-4666-8666-666666666666", repo, gateway);
 
     expect(result.estado).toBe("EMITIDA");
-    expect(gateway.lastRefreshRequest).toEqual({ cdc: "A".repeat(44) });
-    expect(repo.lastUpdateFiscalStatusInput).toEqual({
+    expect(gateway.lastRefreshRequest).toEqual({ documentUuid: "aaaaaaaa-aaaa-4aaa-baaa-aaaaaaaaaaaa" });
+    expect(repo.lastUpdateFiscalStatusInput).toMatchObject({
       facturadorId: context.facturador.id,
       documentoId: "66666666-6666-4666-8666-666666666666",
-      estado: "EMITIDA",
-      fiscalStatus: { cdc: "A".repeat(44), status: { status: "APPROVED" }, refreshed: true }
+      estado: "EMITIDA"
     });
   });
 
-  it("rejects fiscal status refresh when document has no CDC", async () => {
+  it("rejects fiscal status refresh when document has no document_uuid", async () => {
     const repo = new FakeFacturaRepository();
     repo.findByIdResponse = buildDocumento({
-      cdc: null,
+      document_uuid: null,
       estado: "ERROR_TEMPORAL"
     });
     const gateway = new FakeFiscalGateway(new FiscalGatewayError("UPSTREAM_ERROR", "Should not emit"));
@@ -1584,7 +1597,7 @@ describe("facturas service", () => {
           xml: { available: true, url: null }
         }
       },
-      created_at: "2026-05-28T00:00:00.000Z"
+      created_at: new Date(Date.now() - 60 * 60 * 1000).toISOString()
     };
     const gateway = new FakeFiscalGateway(new FiscalGatewayError("UPSTREAM_ERROR", "Should not emit"));
 

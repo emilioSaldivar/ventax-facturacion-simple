@@ -336,7 +336,8 @@ facturasRouter.get(
           limit: Number(req.query.limit),
           q: typeof req.query.q === "string" ? req.query.q : undefined
         },
-        fiscalGateway
+        fiscalGateway,
+        facturasRepository
       );
       res.json(result);
     } catch (error) {

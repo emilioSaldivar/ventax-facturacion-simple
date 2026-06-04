@@ -97,12 +97,14 @@ export async function getPublicArtifact(
 ): Promise<FiscalArtifactResponse> {
   const record = await repository.findPublicByToken(token);
 
-  if (!record || !record.documento.cdc) {
-    throw new HttpError(404, "NOT_FOUND", "Artefacto publico no encontrado.");
+  if (!record || !record.documento.document_uuid) {
+    throw new HttpError(404, "NOT_FOUND", "Artefacto publico no disponible.");
   }
 
   try {
-    return artifact === "kude_pdf" ? await gateway.getKudePdf(record.documento.cdc) : await gateway.getXml(record.documento.cdc);
+    return artifact === "kude_pdf"
+      ? await gateway.getKudePdf(record.documento.document_uuid)
+      : await gateway.getXml(record.documento.document_uuid);
   } catch (error) {
     if (error instanceof FiscalGatewayError) {
       logger.error(
@@ -112,7 +114,7 @@ export async function getPublicArtifact(
           occurred_at: new Date().toISOString(),
           endpoint: observability?.endpoint ?? null,
           artifact,
-          cdc: record.documento.cdc,
+          document_uuid: record.documento.document_uuid,
           numero_fiscal: record.documento.numero_fiscal,
           documento_estado: record.documento.estado,
           gateway_code: error.code,

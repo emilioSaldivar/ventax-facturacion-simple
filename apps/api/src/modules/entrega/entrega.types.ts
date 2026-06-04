@@ -44,6 +44,7 @@ export interface PublicDocumentRecord {
   facturador: FacturadorSummary;
   documento: {
     id: string;
+    document_uuid: string | null;
     estado: DocumentoEstado;
     numero_fiscal: string | null;
     cdc: string | null;

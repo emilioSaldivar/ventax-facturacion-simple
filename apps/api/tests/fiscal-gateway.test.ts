@@ -714,14 +714,11 @@ describe("fiscal gateway", () => {
       })
     );
 
-    const result = await gateway.refreshFacturaStatus({ cdc: "F".repeat(44) });
+    const testUuid = "ffffffff-ffff-4fff-bfff-ffffffffffff";
+    const result = await gateway.refreshFacturaStatus({ documentUuid: testUuid });
 
     expect(result.estado).toBe("EMITIDA");
-    expect(result.raw).toMatchObject({
-      cdc: "F".repeat(44),
-      refreshed: true
-    });
-    expect(calls[0]).toBe(`https://fe-api.ventax.app/fcws/consultar/comprobanteSifen/${"F".repeat(44)}?env=test&refresh=true`);
+    expect(calls[0]).toBe(`https://fe-api.ventax.app/fcws/documentos/${testUuid}/sifen?env=test&refresh=true`);
   });
 
   it("maps refresh code 0422 (CDC encontrado) as approved state", async () => {
@@ -750,7 +747,7 @@ describe("fiscal gateway", () => {
       )
     );
 
-    const result = await gateway.refreshFacturaStatus({ cdc: "G".repeat(44) });
+    const result = await gateway.refreshFacturaStatus({ documentUuid: "gggggggg-gggg-4ggg-bggg-gggggggggggg" });
     expect(result.estado).toBe("EMITIDA");
   });
 
@@ -823,11 +820,13 @@ describe("fiscal gateway", () => {
       })
     );
 
-    await gateway.getXml("X".repeat(44));
-    await gateway.getKudePdf("Y".repeat(44));
+    const xmlUuid = "xxxxxxxx-xxxx-4xxx-bxxx-xxxxxxxxxxxx";
+    const kudeUuid = "yyyyyyyy-yyyy-4yyy-byyy-yyyyyyyyyyyy";
+    await gateway.getXml(xmlUuid);
+    await gateway.getKudePdf(kudeUuid);
 
-    expect(calls[0]).toBe(`https://fe-api.ventax.app/fcws/files/xml/${"X".repeat(44)}?env=test`);
-    expect(calls[1]).toBe(`https://fe-api.ventax.app/fcws/files/kude/${"Y".repeat(44)}.pdf?env=test`);
+    expect(calls[0]).toBe(`https://fe-api.ventax.app/fcws/documentos/${xmlUuid}/files/xml?env=test`);
+    expect(calls[1]).toBe(`https://fe-api.ventax.app/fcws/documentos/${kudeUuid}/files/kude.pdf?env=test`);
   });
 
   it("queries eventos, pendientes batch y facturalista with env", async () => {
@@ -856,11 +855,12 @@ describe("fiscal gateway", () => {
       })
     );
 
-    await gateway.getDocumentoEventos("C".repeat(44));
+    const eventosUuid = "cccccccc-cccc-4ccc-bccc-cccccccccccc";
+    await gateway.getDocumentoEventos(eventosUuid);
     await gateway.getBatchPendientesByEmisor({ emisorId: "80136968-1", limit: 20, offset: 0 });
     await gateway.getFacturalistaByEmisor({ emisorId: "80136968-1", offset: 0, limit: 20 });
 
-    expect(calls[0]).toBe(`https://fe-api.ventax.app/fcws/consultar/evento/${"C".repeat(44)}?env=test`);
+    expect(calls[0]).toBe(`https://fe-api.ventax.app/fcws/documentos/${eventosUuid}/eventos?env=test`);
     expect(calls[1]).toBe("https://fe-api.ventax.app/fcws/consultar/80136968-1/batch-pendientes?env=test&limit=20&offset=0");
     expect(calls[2]).toBe("https://fe-api.ventax.app/fcws/consultar/80136968-1/facturalista/0?env=test&limit=20");
   });

@@ -81,6 +81,7 @@ export interface DeliverySummary {
 
 export interface DocumentoResponse {
   id: string;
+  document_uuid: string | null;
   tipo: DocumentoTipo;
   estado: DocumentoEstado;
   condicion_venta: CondicionVenta;
@@ -138,7 +139,7 @@ export interface DocumentoEventoResponse {
 
 export interface DocumentoEventosListResponse {
   documento_id: string;
-  cdc: string;
+  cdc: string | null;
   events: DocumentoEventoResponse[];
 }
 
@@ -293,7 +294,9 @@ export interface FacturaRepository {
     documentoId: string;
     estado: DocumentoEstado;
     fiscalStatus: Record<string, unknown>;
+    cdc?: string | null;
   }): Promise<DocumentoResponse | null>;
+  bulkUpdateDocumentUuidByCdc(items: Array<{ cdc: string; documentUuid: string }>): Promise<void>;
   createFromEmission(input: FacturaPersistInput): Promise<DocumentoResponse>;
   createQueuedEmission(input: FacturaQueuedPersistInput): Promise<DocumentoResponse>;
   createNotaCreditoFromFactura(input: NotaCreditoPersistInput): Promise<DocumentoResponse>;

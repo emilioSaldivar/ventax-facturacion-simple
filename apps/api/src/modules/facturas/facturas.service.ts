@@ -213,17 +213,25 @@ export async function refreshDocumentoStatus(
 ): Promise<DocumentoResponse> {
   const documento = await getDocumentoById(context, documentoId, repository);
 
-  if (!documento.cdc) {
-    throw new HttpError(409, "CONFLICT", "Documento sin CDC fiscal para refrescar estado.");
+  if (!documento.document_uuid) {
+    throw new HttpError(409, "CONFLICT", "Documento sin identidad fiscal canonica. Requiere sincronizacion.");
   }
 
   try {
-    const refreshed = await gateway.refreshFacturaStatus({ cdc: documento.cdc });
+    const refreshed = await gateway.refreshFacturaStatus({ documentUuid: documento.document_uuid });
+
+    // RN-03: actualizar cdc si el backend devuelve un current_cdc diferente al almacenado
+    const cdcActualizado =
+      refreshed.current_cdc && refreshed.current_cdc !== documento.cdc
+        ? refreshed.current_cdc
+        : undefined;
+
     const updated = await repository.updateFiscalStatus({
       facturadorId: context.facturador.id,
       documentoId,
       estado: refreshed.estado,
-      fiscalStatus: mergeFiscalStatus(documento.fiscal_status, refreshed.raw)
+      fiscalStatus: mergeFiscalStatus(documento.fiscal_status, refreshed.raw),
+      cdc: cdcActualizado
     });
 
     if (!updated) {
@@ -340,12 +348,12 @@ export async function getDocumentoEventos(
   }
 
   const documento = await getDocumentoById(context, documentoId, repository);
-  if (!documento.cdc) {
-    throw new HttpError(409, "CONFLICT", "Documento sin CDC fiscal para consultar historial.");
+  if (!documento.document_uuid) {
+    throw new HttpError(409, "CONFLICT", "Documento sin identidad fiscal canonica. Requiere sincronizacion.");
   }
 
   try {
-    const response = await gateway.getDocumentoEventos(documento.cdc);
+    const response = await gateway.getDocumentoEventos(documento.document_uuid);
     return {
       documento_id: documento.id,
       cdc: documento.cdc,
@@ -456,7 +464,8 @@ export async function getBatchPendientesGestion(
 export async function getReconciliacionFiscal(
   context: OperationalContextResponse,
   input: { offset: number; limit: number; q?: string },
-  gateway: FiscalGateway
+  gateway: FiscalGateway,
+  repository: FacturaRepository
 ): Promise<ReconciliacionFiscalResponse> {
   if (context.user.role === "OPERADOR_FACTURACION") {
     throw new HttpError(403, "FORBIDDEN", "Comparar con registro fiscal disponible solo para soporte interno.");
@@ -469,6 +478,21 @@ export async function getReconciliacionFiscal(
       limit: input.limit,
       q: input.q
     });
+
+    // RN-05: actualización oportunista de document_uuid para registros que aún no lo tienen
+    const itemsConUuid = response.items.filter(
+      (item): item is typeof item & { cdc: string; document_uuid: string } =>
+        Boolean(item.document_uuid) && Boolean(item.cdc)
+    );
+    if (itemsConUuid.length > 0) {
+      repository
+        .bulkUpdateDocumentUuidByCdc(
+          itemsConUuid.map((item) => ({ cdc: item.cdc, documentUuid: item.document_uuid }))
+        )
+        .catch(() => {
+          // fallo en actualización oportunista no bloquea la respuesta
+        });
+    }
 
     return {
       items: response.items,

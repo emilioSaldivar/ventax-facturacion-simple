@@ -14,6 +14,7 @@ interface PublicDocumentRow {
   razon_social: string;
   ruc: string;
   documento_id: string;
+  document_uuid: string | null;
   estado: PublicDocumentRecord["documento"]["estado"];
   numero_fiscal: string | null;
   cdc: string | null;
@@ -49,6 +50,7 @@ export class PgDeliveryLinkRepository implements DeliveryLinkRepository {
           f.razon_social,
           f.ruc,
           fo.id as documento_id,
+          fo.document_uuid,
           fo.estado,
           fo.numero_fiscal,
           fo.cdc,
@@ -151,6 +153,7 @@ function mapPublicRow(row: PublicDocumentRow | undefined): PublicDocumentRecord 
     },
     documento: {
       id: row.documento_id,
+      document_uuid: row.document_uuid,
       estado: row.estado,
       numero_fiscal: row.numero_fiscal,
       cdc: row.cdc,

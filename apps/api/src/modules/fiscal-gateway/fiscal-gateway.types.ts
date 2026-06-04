@@ -64,6 +64,7 @@ export interface FiscalEmitNotaCreditoRequest {
 
 export interface FiscalEmitFacturaResponse {
   fiscal_document_id: string | null;
+  document_uuid: string | null;
   cdc: string | null;
   numero_fiscal: string | null;
   estado: "EMITIDA" | "PENDIENTE_SIFEN" | "RECHAZADA";
@@ -78,12 +79,33 @@ export interface FiscalEmitFacturaResponse {
 export type FiscalEmitNotaCreditoResponse = FiscalEmitFacturaResponse;
 
 export interface FiscalRefreshStatusRequest {
-  cdc: string;
+  documentUuid: string;
 }
 
 export interface FiscalRefreshStatusResponse {
   estado: "EMITIDA" | "PENDIENTE_SIFEN" | "RECHAZADA" | "ANULADA";
+  current_cdc: string | null;
   raw: Record<string, unknown>;
+}
+
+export type FiscalLineageStatus = "ACTIVE" | "SUPERSEDED" | "INCONSISTENT";
+export type FiscalSifenResolution = "APPROVED" | "APPROVED_WITH_OBS" | "REJECTED_OR_MISSING" | "PENDING_CHECK";
+
+export interface FiscalByCdcResponse {
+  document_uuid: string;
+  document_id: string;
+  requested_cdc: string;
+  current_cdc: string | null;
+  is_current: boolean;
+  lineage_status: FiscalLineageStatus;
+  sifen_resolution: FiscalSifenResolution;
+  status: string;
+  accepted_by_sifen: boolean;
+  nro_factura: string | null;
+  tipo_documento: string;
+  emisor_id: string;
+  env: "test" | "prod";
+  resolution_note: string;
 }
 
 export interface FiscalCancelFacturaRequest {
@@ -204,7 +226,9 @@ export interface FiscalBatchPendientesResponse {
 
 export interface FiscalFacturalistaItem {
   document_id: string | null;
+  document_uuid: string | null;
   cdc: string | null;
+  current_cdc: string | null;
   nro_factura: string | null;
   status: string | null;
   fecha_emision: string | null;
@@ -230,7 +254,8 @@ export interface FiscalGateway {
   emitNotaCredito(request: FiscalEmitNotaCreditoRequest): Promise<FiscalEmitNotaCreditoResponse>;
   refreshFacturaStatus(request: FiscalRefreshStatusRequest): Promise<FiscalRefreshStatusResponse>;
   cancelFactura(request: FiscalCancelFacturaRequest): Promise<FiscalCancelFacturaResponse>;
-  getDocumentoEventos(cdc: string): Promise<FiscalDocumentoEventosResponse>;
+  getDocumentoEventos(documentUuid: string): Promise<FiscalDocumentoEventosResponse>;
+  resolveDocumentoByCdc(cdc: string): Promise<FiscalByCdcResponse>;
   getDocumentoDecisionByDocumentId(input: { emisorId: string; documentId: string }): Promise<FiscalDocumentoDecisionResponse>;
   validateDocumentoCdcImpactByDocumentId(input: {
     emisorId: string;
@@ -265,8 +290,8 @@ export interface FiscalGateway {
   }): Promise<FiscalDocumentoVoidResponse>;
   getBatchPendientesByEmisor(input: { emisorId: string; limit: number; offset: number }): Promise<FiscalBatchPendientesResponse>;
   getFacturalistaByEmisor(input: { emisorId: string; offset: number; limit: number; q?: string }): Promise<FiscalFacturalistaResponse>;
-  getXml(cdc: string): Promise<FiscalArtifactResponse>;
-  getKudePdf(cdc: string): Promise<FiscalArtifactResponse>;
+  getXml(documentUuid: string): Promise<FiscalArtifactResponse>;
+  getKudePdf(documentUuid: string): Promise<FiscalArtifactResponse>;
 }
 
 export class FiscalGatewayError extends Error {

@@ -3,6 +3,7 @@ import { env } from "../../config/env";
 import { buildFiscalGatewayConfig } from "./fiscal-gateway.config";
 import {
   FiscalGatewayError,
+  type FiscalByCdcResponse,
   type FiscalDeliveryMode,
   type FiscalEmitFacturaRequest,
   type FiscalEmitFacturaResponse,
@@ -45,11 +46,14 @@ export class MockFiscalGateway implements FiscalGateway {
 
   async emitFactura(request: FiscalEmitFacturaRequest): Promise<FiscalEmitFacturaResponse> {
     const digest = crypto.createHash("sha256").update(request.external_ref).digest("hex").toUpperCase();
+    const digestLower = digest.toLowerCase();
     const numeric = String(Number.parseInt(digest.slice(0, 8), 16) % 10_000_000).padStart(7, "0");
     const cdc = digest.padEnd(44, "0").slice(0, 44);
+    const document_uuid = `${digestLower.slice(0, 8)}-${digestLower.slice(8, 12)}-4${digestLower.slice(13, 16)}-${digestLower.slice(16, 20)}-${digestLower.slice(20, 32)}`;
 
     return {
       fiscal_document_id: `mock-${request.external_ref}`,
+      document_uuid,
       cdc,
       numero_fiscal: `${request.fiscal_context.establecimiento}-${request.fiscal_context.punto_expedicion}-${numeric}`,
       estado: "EMITIDA",
@@ -59,6 +63,7 @@ export class MockFiscalGateway implements FiscalGateway {
       email_status: request.cliente.email ? "DELEGATED" : "NOT_APPLICABLE",
       raw: {
         mode: "mock",
+        document_uuid,
         fiscal_envio_modo: resolveFiscalEnvioModo(request.fiscal_context.fiscal_envio_modo),
         delivery_mode: "BATCH",
         external_ref: request.external_ref,
@@ -69,11 +74,14 @@ export class MockFiscalGateway implements FiscalGateway {
 
   async emitNotaCredito(request: FiscalEmitNotaCreditoRequest): Promise<FiscalEmitNotaCreditoResponse> {
     const digest = crypto.createHash("sha256").update(request.external_ref).digest("hex").toUpperCase();
+    const digestLower = digest.toLowerCase();
     const numeric = String(Number.parseInt(digest.slice(0, 8), 16) % 10_000_000).padStart(7, "0");
     const cdc = digest.padEnd(44, "0").slice(0, 44);
+    const document_uuid = `${digestLower.slice(0, 8)}-${digestLower.slice(8, 12)}-4${digestLower.slice(13, 16)}-${digestLower.slice(16, 20)}-${digestLower.slice(20, 32)}`;
 
     return {
       fiscal_document_id: `mock-${request.external_ref}`,
+      document_uuid,
       cdc,
       numero_fiscal: `${request.fiscal_context.establecimiento}-${request.fiscal_context.punto_expedicion}-${numeric}`,
       estado: "EMITIDA",
@@ -83,6 +91,7 @@ export class MockFiscalGateway implements FiscalGateway {
       email_status: request.cliente.email ? "DELEGATED" : "NOT_APPLICABLE",
       raw: {
         mode: "mock",
+        document_uuid,
         fiscal_envio_modo: resolveFiscalEnvioModo(request.fiscal_context.fiscal_envio_modo),
         delivery_mode: "BATCH",
         document_type: "NCE",
@@ -96,9 +105,10 @@ export class MockFiscalGateway implements FiscalGateway {
   async refreshFacturaStatus(request: FiscalRefreshStatusRequest): Promise<FiscalRefreshStatusResponse> {
     return {
       estado: "EMITIDA",
+      current_cdc: null,
       raw: {
         mode: "mock",
-        cdc: request.cdc,
+        document_uuid: request.documentUuid,
         refreshed: true,
         status: "APPROVED"
       }
@@ -120,30 +130,51 @@ export class MockFiscalGateway implements FiscalGateway {
     };
   }
 
-  async getXml(cdc: string): Promise<FiscalArtifactResponse> {
+  async getXml(documentUuid: string): Promise<FiscalArtifactResponse> {
     return {
-      body: Buffer.from(`<?xml version="1.0" encoding="UTF-8"?><mockFiscalDocument cdc="${escapeXml(cdc)}"/>`, "utf8"),
+      body: Buffer.from(`<?xml version="1.0" encoding="UTF-8"?><mockFiscalDocument document_uuid="${escapeXml(documentUuid)}"/>`, "utf8"),
       content_type: "application/xml; charset=utf-8",
-      filename: `${cdc}.xml`
+      filename: `${documentUuid}.xml`
     };
   }
 
-  async getKudePdf(cdc: string): Promise<FiscalArtifactResponse> {
+  async getKudePdf(documentUuid: string): Promise<FiscalArtifactResponse> {
     return {
-      body: Buffer.from(`Mock KUDE/PDF ${cdc}`, "utf8"),
+      body: Buffer.from(`Mock KUDE/PDF ${documentUuid}`, "utf8"),
       content_type: "application/pdf",
-      filename: `${cdc}.pdf`
+      filename: `${documentUuid}.pdf`
     };
   }
 
-  async getDocumentoEventos(_cdc: string): Promise<FiscalDocumentoEventosResponse> {
+  async getDocumentoEventos(documentUuid: string): Promise<FiscalDocumentoEventosResponse> {
     return {
       events: [],
       raw: {
         mode: "mock",
-        cdc: _cdc,
+        document_uuid: documentUuid,
         events: []
       }
+    };
+  }
+
+  async resolveDocumentoByCdc(cdc: string): Promise<FiscalByCdcResponse> {
+    const digestLower = crypto.createHash("sha256").update(cdc).digest("hex");
+    const document_uuid = `${digestLower.slice(0, 8)}-${digestLower.slice(8, 12)}-4${digestLower.slice(13, 16)}-${digestLower.slice(16, 20)}-${digestLower.slice(20, 32)}`;
+    return {
+      document_uuid,
+      document_id: "0",
+      requested_cdc: cdc,
+      current_cdc: cdc,
+      is_current: true,
+      lineage_status: "ACTIVE",
+      sifen_resolution: "APPROVED",
+      status: "APPROVED",
+      accepted_by_sifen: true,
+      nro_factura: null,
+      tipo_documento: "FE",
+      emisor_id: "mock",
+      env: this.config.environment,
+      resolution_note: "CDC consultado es el vigente del documento."
     };
   }
 
@@ -377,7 +408,7 @@ export class RealFiscalGateway implements FiscalGateway {
   }
 
   async refreshFacturaStatus(request: FiscalRefreshStatusRequest): Promise<FiscalRefreshStatusResponse> {
-    const url = new URL(`${this.config.baseUrl}/consultar/comprobanteSifen/${encodeURIComponent(request.cdc)}`);
+    const url = new URL(`${this.config.baseUrl}/documentos/${encodeURIComponent(request.documentUuid)}/sifen`);
     url.searchParams.set("env", this.config.environment);
     url.searchParams.set("refresh", "true");
 
@@ -396,7 +427,7 @@ export class RealFiscalGateway implements FiscalGateway {
       );
     }
 
-    return mapFiscalRefreshStatusResponse(body);
+    return mapFiscalRefreshStatusCanonicoResponse(body);
   }
 
   async cancelFactura(request: FiscalCancelFacturaRequest): Promise<FiscalCancelFacturaResponse> {
@@ -426,20 +457,24 @@ export class RealFiscalGateway implements FiscalGateway {
     return mapFiscalCancelResponse(body);
   }
 
-  async getXml(cdc: string): Promise<FiscalArtifactResponse> {
-    return this.fetchArtifact(`${this.config.baseUrl}/files/xml/${encodeURIComponent(cdc)}`, "application/xml", `${cdc}.xml`);
-  }
-
-  async getKudePdf(cdc: string): Promise<FiscalArtifactResponse> {
+  async getXml(documentUuid: string): Promise<FiscalArtifactResponse> {
     return this.fetchArtifact(
-      `${this.config.baseUrl}/files/kude/${encodeURIComponent(cdc)}.pdf`,
-      "application/pdf",
-      `${cdc}.pdf`
+      `${this.config.baseUrl}/documentos/${encodeURIComponent(documentUuid)}/files/xml`,
+      "application/xml",
+      `${documentUuid}.xml`
     );
   }
 
-  async getDocumentoEventos(cdc: string): Promise<FiscalDocumentoEventosResponse> {
-    const url = new URL(`${this.config.baseUrl}/consultar/evento/${encodeURIComponent(cdc)}`);
+  async getKudePdf(documentUuid: string): Promise<FiscalArtifactResponse> {
+    return this.fetchArtifact(
+      `${this.config.baseUrl}/documentos/${encodeURIComponent(documentUuid)}/files/kude.pdf`,
+      "application/pdf",
+      `${documentUuid}.pdf`
+    );
+  }
+
+  async getDocumentoEventos(documentUuid: string): Promise<FiscalDocumentoEventosResponse> {
+    const url = new URL(`${this.config.baseUrl}/documentos/${encodeURIComponent(documentUuid)}/eventos`);
     url.searchParams.set("env", this.config.environment);
 
     const response = await this.fetchWithTimeout(url.toString(), {
@@ -457,6 +492,27 @@ export class RealFiscalGateway implements FiscalGateway {
     }
 
     return mapFiscalDocumentoEventosResponse(body);
+  }
+
+  async resolveDocumentoByCdc(cdc: string): Promise<FiscalByCdcResponse> {
+    const url = new URL(`${this.config.baseUrl}/documentos/by-cdc/${encodeURIComponent(cdc)}`);
+    url.searchParams.set("env", this.config.environment);
+
+    const response = await this.fetchWithTimeout(url.toString(), {
+      method: "GET",
+      headers: this.buildHeaders()
+    });
+
+    const body = await readJson(response);
+    if (!response.ok) {
+      throw new FiscalGatewayError(
+        response.status === 408 || response.status === 504 ? "TIMEOUT" : "UPSTREAM_ERROR",
+        "Backend fiscal no pudo resolver el CDC a documento canonico.",
+        { status: response.status, body }
+      );
+    }
+
+    return mapFiscalByCdcResponse(body);
   }
 
   async getDocumentoDecisionByDocumentId(input: {
@@ -906,6 +962,7 @@ function mapFiscalEmitResponse(body: unknown): FiscalEmitFacturaResponse {
 
   return {
     fiscal_document_id: stringOrNull(data.document_id),
+    document_uuid: stringOrNull(data.document_uuid),
     cdc: stringOrNull(data.cdc),
     numero_fiscal: stringOrNull(data.nro_factura) ?? buildNumeroFiscalFromTimbrado(timbrado),
     estado: mapDocumentStatusWithCode(status, fiscalCode),
@@ -928,6 +985,7 @@ function mapFiscalNotaCreditoResponse(body: unknown): FiscalEmitNotaCreditoRespo
 
   return {
     fiscal_document_id: stringOrNull(data.document_id),
+    document_uuid: stringOrNull(data.document_uuid),
     cdc: stringOrNull(data.cdc),
     numero_fiscal: stringOrNull(data.nro_documento) ?? stringOrNull(data.nro_factura),
     estado: mapDocumentStatusWithCode(stringOrNull(data.status), fiscalCode),
@@ -1008,7 +1066,7 @@ function booleanOrNull(value: unknown): boolean | null {
   return typeof value === "boolean" ? value : null;
 }
 
-function mapFiscalRefreshStatusResponse(body: unknown): FiscalRefreshStatusResponse {
+function mapFiscalRefreshStatusCanonicoResponse(body: unknown): FiscalRefreshStatusResponse {
   if (!body || typeof body !== "object") {
     throw new FiscalGatewayError("INVALID_RESPONSE", "Respuesta fiscal invalida.", body);
   }
@@ -1032,7 +1090,33 @@ function mapFiscalRefreshStatusResponse(body: unknown): FiscalRefreshStatusRespo
 
   return {
     estado: mapRefreshDocumentStatusWithCode(status, fiscalCode),
+    current_cdc: stringOrNull(data.current_cdc),
     raw: data
+  };
+}
+
+function mapFiscalByCdcResponse(body: unknown): FiscalByCdcResponse {
+  if (!body || typeof body !== "object") {
+    throw new FiscalGatewayError("INVALID_RESPONSE", "Respuesta fiscal invalida.", body);
+  }
+
+  const data = body as Record<string, unknown>;
+
+  return {
+    document_uuid: String(data.document_uuid ?? ""),
+    document_id: String(data.document_id ?? ""),
+    requested_cdc: String(data.requested_cdc ?? ""),
+    current_cdc: stringOrNull(data.current_cdc),
+    is_current: Boolean(data.is_current),
+    lineage_status: mapLineageStatus(data.lineage_status),
+    sifen_resolution: mapSifenResolution(data.sifen_resolution),
+    status: stringOrNull(data.status) ?? "UNKNOWN",
+    accepted_by_sifen: Boolean(data.accepted_by_sifen),
+    nro_factura: stringOrNull(data.nro_factura),
+    tipo_documento: stringOrNull(data.tipo_documento) ?? "FE",
+    emisor_id: stringOrNull(data.emisor_id) ?? "",
+    env: data.env === "prod" ? "prod" : "test",
+    resolution_note: stringOrNull(data.resolution_note) ?? ""
   };
 }
 
@@ -1337,7 +1421,9 @@ function mapFiscalFacturalistaResponse(body: unknown): FiscalFacturalistaRespons
       const row = item && typeof item === "object" ? (item as Record<string, unknown>) : {};
       return {
         document_id: stringOrNull(row.document_id),
+        document_uuid: stringOrNull(row.document_uuid),
         cdc: stringOrNull(row.cdc),
+        current_cdc: stringOrNull(row.current_cdc),
         nro_factura: stringOrNull(row.nro_factura),
         status: stringOrNull(row.status),
         fecha_emision: stringOrNull(row.fecha_emision),
@@ -1368,6 +1454,20 @@ function buildNumeroFiscalFromTimbrado(timbrado: Record<string, unknown> | null)
 
 function numberOrNull(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function mapLineageStatus(value: unknown): import("./fiscal-gateway.types").FiscalLineageStatus {
+  if (value === "ACTIVE" || value === "SUPERSEDED" || value === "INCONSISTENT") {
+    return value;
+  }
+  return "INCONSISTENT";
+}
+
+function mapSifenResolution(value: unknown): import("./fiscal-gateway.types").FiscalSifenResolution {
+  if (value === "APPROVED" || value === "APPROVED_WITH_OBS" || value === "REJECTED_OR_MISSING" || value === "PENDING_CHECK") {
+    return value;
+  }
+  return "PENDING_CHECK";
 }
 
 function mapFetchError(error: unknown): FiscalGatewayError {
