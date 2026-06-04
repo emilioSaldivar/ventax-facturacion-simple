@@ -376,6 +376,48 @@ facturasRouter.post(
   }
 );
 
+facturasRouter.get(
+  "/facturas/:documentoId/files/kude.pdf",
+  requireAuth,
+  validateRequest("params", documentoParamsSchema),
+  async (req, res, next) => {
+    try {
+      const context = await getOperationalContext(req.user!.id, operationalContextRepository);
+      const documento = await getDocumentoById(context, String(req.params.documentoId), facturasRepository);
+      if (!documento.document_uuid) {
+        throw new HttpError(404, "NOT_FOUND", "PDF no disponible para este documento.");
+      }
+      const artifact = await fiscalGateway.getKudePdf(documento.document_uuid);
+      res.type(artifact.content_type);
+      res.setHeader("content-disposition", `inline; filename="${artifact.filename}"`);
+      res.send(artifact.body);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+facturasRouter.get(
+  "/facturas/:documentoId/files/xml",
+  requireAuth,
+  validateRequest("params", documentoParamsSchema),
+  async (req, res, next) => {
+    try {
+      const context = await getOperationalContext(req.user!.id, operationalContextRepository);
+      const documento = await getDocumentoById(context, String(req.params.documentoId), facturasRepository);
+      if (!documento.document_uuid) {
+        throw new HttpError(404, "NOT_FOUND", "XML no disponible para este documento.");
+      }
+      const artifact = await fiscalGateway.getXml(documento.document_uuid);
+      res.type(artifact.content_type);
+      res.setHeader("content-disposition", `attachment; filename="${artifact.filename}"`);
+      res.send(artifact.body);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
 facturasRouter.post(
   "/facturas/:documentoId/cancelar",
   requireAuth,

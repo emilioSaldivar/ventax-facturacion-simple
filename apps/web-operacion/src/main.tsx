@@ -992,6 +992,7 @@ function DocumentsView({
   const [reasonModal, setReasonModal] = useState<{
     action: "CANCEL_DETAIL" | "CANCEL_LIST" | "CREDIT_NOTE_DETAIL" | "CREDIT_NOTE_LIST" | "VOID_NUMBER";
     documentoId: string;
+    tipo?: DocumentoResponse["tipo"];
   } | null>(null);
   const [reasonDraft, setReasonDraft] = useState("");
   const [reasonError, setReasonError] = useState<string | null>(null);
@@ -1149,9 +1150,10 @@ function DocumentsView({
 
   function openReasonModal(
     action: "CANCEL_DETAIL" | "CANCEL_LIST" | "CREDIT_NOTE_DETAIL" | "CREDIT_NOTE_LIST" | "VOID_NUMBER",
-    documentoId: string
+    documentoId: string,
+    tipo?: DocumentoResponse["tipo"]
   ) {
-    setReasonModal({ action, documentoId });
+    setReasonModal({ action, documentoId, tipo });
     setReasonDraft("");
     setReasonError(null);
   }
@@ -1287,7 +1289,7 @@ function DocumentsView({
     if (!selected) {
       return;
     }
-    openReasonModal("CANCEL_DETAIL", selected.id);
+    openReasonModal("CANCEL_DETAIL", selected.id, selected.tipo);
   }
 
   async function emitSelectedNotaCredito() {
@@ -1301,8 +1303,8 @@ function DocumentsView({
     openReasonModal("CREDIT_NOTE_LIST", documentoId);
   }
 
-  async function cancelDocumentoFromList(documentoId: string) {
-    openReasonModal("CANCEL_LIST", documentoId);
+  async function cancelDocumentoFromList(documentoId: string, tipo?: DocumentoResponse["tipo"]) {
+    openReasonModal("CANCEL_LIST", documentoId, tipo);
   }
 
   async function openQuickShare(documento: DocumentoResponse, mode: "public" | "whatsapp") {
@@ -1599,7 +1601,7 @@ function DocumentsView({
                     <button onClick={() => void openQuickShare(documento, "public")} role="menuitem" type="button">Compartir</button>
                     <button onClick={() => void openQuickShare(documento, "whatsapp")} role="menuitem" type="button">WhatsApp</button>
                     <button onClick={() => void emitNotaCreditoFromList(documento.id)} role="menuitem" type="button">Nota de credito</button>
-                    <button className="destructive-item" onClick={() => void cancelDocumentoFromList(documento.id)} role="menuitem" type="button">Anular</button>
+                    <button className="destructive-item" onClick={() => void cancelDocumentoFromList(documento.id, documento.tipo)} role="menuitem" type="button">Anular</button>
                   </div>
                 ) : null}
               </div>
@@ -1634,11 +1636,11 @@ function DocumentsView({
               <div className="receipt-heading">
                 <div>
                   <p className="eyebrow">Documento</p>
-                  <h3>{formatDocumentoEstadoSimple(selected.estado)}</h3>
+                  <h3>{formatDocumentoEstadoSimple(selected.estado, selected.tipo)}</h3>
                   <p className="muted">{formatDocumentoTipo(selected.tipo)} · Numero {selected.numero_fiscal ?? "pendiente"}</p>
                 </div>
                 <span className={selected.estado === "EMITIDA" ? "status-pill ready" : "status-pill blocked"}>
-                  {formatDocumentoEstadoSimple(selected.estado)}
+                  {formatDocumentoEstadoSimple(selected.estado, selected.tipo)}
                 </span>
               </div>
               <button className="ghost-action" onClick={() => setSelected(null)} type="button">
@@ -1688,13 +1690,13 @@ function DocumentsView({
                 <div className="action-group action-group-primary">
                   <h4 className="group-title">Acciones frecuentes</h4>
                   <a className={selectedKudeUrl ? "secondary-link" : "secondary-link disabled"} href={selectedKudeUrl ?? "#"} rel="noreferrer" target="_blank">
-                    📄 Ver factura PDF
+                    📄 Ver {getDocumentoNombreLower(selected.tipo)} PDF
                   </a>
                   <a className={deliveryLink ? "secondary-link" : "secondary-link disabled"} href={deliveryLink?.whatsapp_url ?? "#"} rel="noreferrer" target="_blank">
                     📱 Enviar por WhatsApp
                   </a>
                   <a className={deliveryLink ? "secondary-link" : "secondary-link disabled"} href={deliveryLink?.public_url ?? "#"} rel="noreferrer" target="_blank">
-                    🔗 Compartir factura
+                    🔗 Compartir {getDocumentoNombreLower(selected.tipo)}
                   </a>
                   <button className="secondary-action" disabled={!deliveryLink} onClick={() => void copyDetailLink()} type="button">
                     📋 Copiar enlace
@@ -1703,12 +1705,12 @@ function DocumentsView({
               </div>
 
               <div className="action-group action-group-secondary">
-                <h4 className="group-title">Acciones sobre esta factura</h4>
+                <h4 className="group-title">Acciones sobre esta {getDocumentoNombreLower(selected.tipo)}</h4>
                 <button className="secondary-action" disabled={actionLoading || !canEmitNotaCredito(selected, documents)} onClick={() => void emitSelectedNotaCredito()} type="button">
                   ↩ Crear nota de credito
                 </button>
                 <button className="secondary-action" disabled={actionLoading || !canCancelDocumento(selected)} onClick={() => void cancelSelectedDocumento()} type="button">
-                  ⚠ Anular factura
+                  ⚠ Anular {getDocumentoNombreLower(selected.tipo)}
                 </button>
               </div>
               <details className="tech-block">
@@ -1797,7 +1799,7 @@ function DocumentsView({
           <section className="modal-panel" aria-labelledby="reason-modal-title" role="dialog" aria-modal="true">
             <header>
               <p className="eyebrow">Confirmacion</p>
-              <h3 id="reason-modal-title">{getReasonModalTitle(reasonModal.action)}</h3>
+              <h3 id="reason-modal-title">{getReasonModalTitle(reasonModal.action, reasonModal.tipo)}</h3>
               <p className="muted">Ingrese un motivo para continuar.</p>
             </header>
             <label className="credit-note-motivo">
@@ -4010,12 +4012,12 @@ function InvoiceEditor({
         <section className="emission-result" aria-live="polite" ref={emissionResultRef}>
           <div className="receipt-heading">
             <div>
-              <p className="eyebrow">Factura</p>
-              <h3>{getSimpleDocumentoEstado(emittedDocumento.estado)}</h3>
+              <p className="eyebrow">{formatDocumentoTipo(emittedDocumento.tipo)}</p>
+              <h3>{getSimpleDocumentoEstado(emittedDocumento.estado, emittedDocumento.tipo)}</h3>
               <p className="muted">Numero {emittedDocumento.numero_fiscal ?? "pendiente"}</p>
             </div>
             <span className={emittedDocumento.estado === "EMITIDA" ? "status-pill ready" : "status-pill blocked"}>
-              {getSimpleDocumentoEstado(emittedDocumento.estado)}
+              {getSimpleDocumentoEstado(emittedDocumento.estado, emittedDocumento.tipo)}
             </span>
           </div>
 
@@ -4038,7 +4040,7 @@ function InvoiceEditor({
             </div>
           </div>
 
-          <p className="editor-alert blocked">{getSimpleDocumentoHint(emittedDocumento.estado)}</p>
+          <p className="editor-alert blocked">{getSimpleDocumentoHint(emittedDocumento.estado, emittedDocumento.tipo)}</p>
           {emailStatus?.message ? <p className="editor-alert ready">{emailStatus.message}</p> : null}
 
           <div className="action-group">
@@ -4059,7 +4061,7 @@ function InvoiceEditor({
             </a>
             <div className="delivery-actions">
               <button className="secondary-action" disabled={!deliveryLink} onClick={() => void sharePublicLink()} type="button">
-                Compartir factura
+                Compartir {getDocumentoNombreLower(emittedDocumento.tipo)}
               </button>
               <button className="secondary-action" disabled={!deliveryLink} onClick={() => void copyPublicLink()} type="button">
                 Copiar enlace
@@ -4343,10 +4345,11 @@ function formatIva(value: TipoIva): string {
   return "Exenta";
 }
 
-function formatDocumentoEstado(value: DocumentoEstado): string {
+function formatDocumentoEstado(value: DocumentoEstado, tipo?: DocumentoResponse["tipo"]): string {
+  const nombre = formatDocumentoTipo(tipo ?? "FACTURA");
   const labels: Record<DocumentoEstado, string> = {
     EMITIENDO: "Emision en proceso",
-    EMITIDA: "Factura emitida",
+    EMITIDA: `${nombre} emitida`,
     PENDIENTE_SIFEN: "Pendiente SIFEN",
     RECHAZADA: "Rechazada",
     ERROR_OPERATIVO: "Error operativo",
@@ -4356,28 +4359,34 @@ function formatDocumentoEstado(value: DocumentoEstado): string {
   return labels[value];
 }
 
-function getSimpleDocumentoEstado(value: DocumentoEstado): string {
+function getSimpleDocumentoEstado(value: DocumentoEstado, tipo?: DocumentoResponse["tipo"]): string {
+  const nombre = formatDocumentoTipo(tipo ?? "FACTURA");
   if (value === "EMITIDA") {
-    return "🟢 Factura emitida";
+    return `🟢 ${nombre} emitida`;
   }
   if (value === "RECHAZADA" || value === "ERROR_OPERATIVO" || value === "ERROR_TEMPORAL" || value === "ANULADA") {
     return "🔴 Requiere revision";
   }
-  return "🟡 Procesando factura";
+  return `🟡 Procesando ${nombre.toLowerCase()}`;
 }
 
-function getSimpleDocumentoHint(value: DocumentoEstado): string {
+function getSimpleDocumentoHint(value: DocumentoEstado, tipo?: DocumentoResponse["tipo"]): string {
+  const nombre = formatDocumentoTipo(tipo ?? "FACTURA");
   if (value === "EMITIDA") {
-    return "Factura lista para enviar por WhatsApp, compartir enlace o abrir PDF.";
+    return `${nombre} lista para enviar por WhatsApp, compartir enlace o abrir PDF.`;
   }
   if (value === "RECHAZADA" || value === "ERROR_OPERATIVO" || value === "ERROR_TEMPORAL" || value === "ANULADA") {
     return "El documento requiere revision antes de continuar.";
   }
-  return "Estamos procesando la factura. Puede compartir el enlace al cliente.";
+  return `Estamos procesando la ${nombre.toLowerCase()}. Puede compartir el enlace al cliente.`;
 }
 
 function formatDocumentoTipo(value: DocumentoResponse["tipo"]): string {
   return value === "NOTA_CREDITO" ? "Nota credito" : "Factura";
+}
+
+function getDocumentoNombreLower(tipo: DocumentoResponse["tipo"]): string {
+  return tipo === "NOTA_CREDITO" ? "nota de credito" : "factura";
 }
 
 function formatOperationViewTitle(value: OperationView): string {
@@ -4405,7 +4414,8 @@ function getOperationViewHint(value: OperationView): string {
 }
 
 function getReasonModalTitle(
-  action: "CANCEL_DETAIL" | "CANCEL_LIST" | "CREDIT_NOTE_DETAIL" | "CREDIT_NOTE_LIST" | "VOID_NUMBER"
+  action: "CANCEL_DETAIL" | "CANCEL_LIST" | "CREDIT_NOTE_DETAIL" | "CREDIT_NOTE_LIST" | "VOID_NUMBER",
+  tipo?: DocumentoResponse["tipo"]
 ): string {
   if (action === "VOID_NUMBER") {
     return "Inutilizar numeracion";
@@ -4413,7 +4423,7 @@ function getReasonModalTitle(
   if (action === "CREDIT_NOTE_DETAIL" || action === "CREDIT_NOTE_LIST") {
     return "Crear nota de credito";
   }
-  return "Anular factura";
+  return `Anular ${getDocumentoNombreLower(tipo ?? "FACTURA")}`;
 }
 
 function getReasonModalPlaceholder(
@@ -4680,13 +4690,14 @@ async function readApiError(response: Response): Promise<string> {
   }
 }
 
-function formatDocumentoEstadoSimple(value: DocumentoEstado): string {
+function formatDocumentoEstadoSimple(value: DocumentoEstado, tipo?: DocumentoResponse["tipo"]): string {
+  const nombre = formatDocumentoTipo(tipo ?? "FACTURA");
   switch (value) {
     case "EMITIDA":
-      return "🟢 Factura emitida";
+      return `🟢 ${nombre} emitida`;
     case "EMITIENDO":
     case "PENDIENTE_SIFEN":
-      return "🟡 Procesando factura";
+      return `🟡 Procesando ${nombre.toLowerCase()}`;
     case "ANULADA":
       return "⚪ Anulada";
     default:

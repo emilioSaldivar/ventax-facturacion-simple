@@ -89,6 +89,7 @@ export async function getPublicArtifact(
   token: string,
   artifact: "kude_pdf" | "xml",
   repository: DeliveryLinkRepository,
+  facturasRepository: FacturaRepository,
   gateway: FiscalGateway,
   observability?: {
     requestId?: string;
@@ -97,14 +98,54 @@ export async function getPublicArtifact(
 ): Promise<FiscalArtifactResponse> {
   const record = await repository.findPublicByToken(token);
 
-  if (!record || !record.documento.document_uuid) {
+  if (!record) {
     throw new HttpError(404, "NOT_FOUND", "Artefacto publico no disponible.");
+  }
+
+  let documentUuid = record.documento.document_uuid;
+
+  if (!documentUuid) {
+    const cdc = record.documento.cdc;
+    if (!cdc) {
+      throw new HttpError(404, "NOT_FOUND", "Artefacto publico no disponible. Emision pendiente.");
+    }
+
+    // El documento fue emitido pero el UUID no está sincronizado localmente.
+    // Resolverlo via CDC y persistirlo para no repetir la resolucion.
+    let resolved: string;
+    try {
+      const byCdc = await gateway.resolveDocumentoByCdc(cdc);
+      resolved = byCdc.document_uuid;
+    } catch (error) {
+      if (error instanceof FiscalGatewayError) {
+        logger.warn(
+          {
+            event: "document_uuid_resolution_failed",
+            requestId: observability?.requestId ?? null,
+            occurred_at: new Date().toISOString(),
+            cdc,
+            gateway_code: error.code
+          },
+          "Could not resolve document_uuid from CDC"
+        );
+        throw new HttpError(404, "NOT_FOUND", "Artefacto publico no disponible. UUID fiscal no resuelto.");
+      }
+      throw error;
+    }
+
+    facturasRepository
+      .bulkUpdateDocumentUuidByCdc([{ cdc, documentUuid: resolved }])
+      .catch(() => {
+        // fallo en persistencia no bloquea la respuesta
+      });
+
+    documentUuid = resolved;
   }
 
   try {
     return artifact === "kude_pdf"
-      ? await gateway.getKudePdf(record.documento.document_uuid)
-      : await gateway.getXml(record.documento.document_uuid);
+      ? await gateway.getKudePdf(documentUuid)
+      : await gateway.getXml(documentUuid);
   } catch (error) {
     if (error instanceof FiscalGatewayError) {
       logger.error(
@@ -114,7 +155,7 @@ export async function getPublicArtifact(
           occurred_at: new Date().toISOString(),
           endpoint: observability?.endpoint ?? null,
           artifact,
-          document_uuid: record.documento.document_uuid,
+          document_uuid: documentUuid,
           numero_fiscal: record.documento.numero_fiscal,
           documento_estado: record.documento.estado,
           gateway_code: error.code,

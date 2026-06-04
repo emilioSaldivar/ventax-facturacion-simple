@@ -213,12 +213,35 @@ export async function refreshDocumentoStatus(
 ): Promise<DocumentoResponse> {
   const documento = await getDocumentoById(context, documentoId, repository);
 
-  if (!documento.document_uuid) {
-    throw new HttpError(409, "CONFLICT", "Documento sin identidad fiscal canonica. Requiere sincronizacion.");
+  let documentUuid = documento.document_uuid;
+
+  if (!documentUuid) {
+    const cdc = documento.cdc;
+    if (!cdc) {
+      throw new HttpError(409, "CONFLICT", "Documento sin identidad fiscal canonica. Requiere sincronizacion.");
+    }
+
+    // Documento emitido con cdc pero sin document_uuid local — resolverlo via CDC
+    // y persistirlo antes de continuar con el refresh.
+    try {
+      const byCdc = await gateway.resolveDocumentoByCdc(cdc);
+      documentUuid = byCdc.document_uuid;
+      await repository.bulkUpdateDocumentUuidByCdc([{ cdc, documentUuid }]);
+    } catch (error) {
+      if (error instanceof FiscalGatewayError) {
+        throw new HttpError(
+          error.code === "TIMEOUT" ? 504 : 502,
+          "INTERNAL_ERROR",
+          "No se pudo resolver la identidad fiscal del documento.",
+          { gateway_code: error.code }
+        );
+      }
+      throw error;
+    }
   }
 
   try {
-    const refreshed = await gateway.refreshFacturaStatus({ documentUuid: documento.document_uuid });
+    const refreshed = await gateway.refreshFacturaStatus({ documentUuid });
 
     // RN-03: actualizar cdc si el backend devuelve un current_cdc diferente al almacenado
     const cdcActualizado =
