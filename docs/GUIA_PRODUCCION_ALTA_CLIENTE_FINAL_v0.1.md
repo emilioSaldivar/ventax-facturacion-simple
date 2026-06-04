@@ -101,7 +101,7 @@ Relevar antes de ejecutar SQL:
 - `timbrado`, `timbrado_inicio` y `documento_nro`.
 - `credito_plazo_dias`, normalmente `30`.
 
-`documento_nro` debe existir aunque `FE_SERVICE_NUMBERING=true`; para factura FE puede ignorarlo, pero readiness local lo exige y NCE lo usa como string. Usar un valor de 7 digitos alineado con la configuracion fiscal disponible.
+`documento_nro` debe existir aunque `FE_SERVICE_NUMBERING=true`; readiness local lo exige como referencia operativa. Cuando `FE_SERVICE_NUMBERING=true`, facturas y NCE deben delegar la numeracion final a `facturacion-electronica` y no enviar ese valor como numero solicitado.
 
 ## Formato De Carga FE
 

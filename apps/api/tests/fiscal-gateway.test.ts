@@ -652,6 +652,64 @@ describe("fiscal gateway", () => {
     expect(calls[0]?.payload.envio).not.toHaveProperty("sendNow");
   });
 
+  it("lets FE service assign NCE numbering when service numbering is enabled", async () => {
+    const calls: Array<{ payload: Record<string, unknown> }> = [];
+    const gateway = new RealFiscalGateway({
+      mode: "real",
+      baseUrl: "https://fe-api.ventax.app/fcws",
+      apiKey: "secret",
+      timeoutMs: 20000,
+      environment: "test",
+      serviceNumbering: true
+    });
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init: RequestInit) => {
+        calls.push({ payload: JSON.parse(String(init.body)) as Record<string, unknown> });
+
+        return new Response(
+          JSON.stringify({
+            document_id: "nce-doc-service-numbering",
+            cdc: "N".repeat(44),
+            nro_documento: "001-002-0000001",
+            status: "APPROVED"
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        );
+      })
+    );
+
+    await gateway.emitNotaCredito({
+      external_ref: "nce_service_numbering",
+      facturador: request.facturador,
+      fiscal_context: {
+        ...request.fiscal_context,
+        documento_nro: "0000019"
+      },
+      cliente: request.cliente,
+      items: request.items,
+      totals: request.totals,
+      motivo: "Devolucion total",
+      factura_referencia: {
+        documento_id: "66666666-6666-4666-8666-666666666666",
+        cdc: "F".repeat(44),
+        numero_fiscal: "001-002-0000014"
+      }
+    });
+
+    expect(calls[0]?.payload).toMatchObject({
+      timbrado: {
+        documentoNro: null
+      },
+      numbering: {
+        mode: "ONLINE",
+        authority: "SERVICE",
+        requested_document_number: null
+      }
+    });
+  });
+
   it("derives fiscal number from resolved timbrado when nro_factura is omitted", async () => {
     const gateway = new RealFiscalGateway({
       mode: "real",

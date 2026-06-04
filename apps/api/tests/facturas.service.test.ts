@@ -1141,6 +1141,55 @@ describe("facturas service", () => {
     });
   });
 
+  it("does not persist credit notes rejected by the fiscal backend", async () => {
+    const repo = new FakeFacturaRepository();
+    repo.findByIdResponse = buildDocumento({
+      estado: "EMITIDA",
+      cdc: "A".repeat(44)
+    });
+    const gateway = new FakeFiscalGateway(
+      new FiscalGatewayError("UPSTREAM_ERROR", "Should not emit"),
+      {
+        estado: "EMITIDA",
+        raw: {}
+      },
+      {
+        event_id: "evt-1",
+        estado: "ANULADA",
+        raw: {}
+      },
+      new FiscalGatewayError("UPSTREAM_ERROR", "Backend fiscal rechazo la nota de credito.", {
+        status: 409,
+        body: {
+          error: "NUMERATION_MISMATCH",
+          message: "Numeracion invalida para 001-002",
+          details: {
+            expected_document_number: "0000001",
+            requested_document_number: "0000019",
+            tipo_documento: 5
+          }
+        }
+      })
+    );
+
+    await expect(
+      emitNotaCreditoTotal(
+        context,
+        "66666666-6666-4666-8666-666666666666",
+        { motivo: "Devolucion total" },
+        repo,
+        gateway,
+        { idempotencyKey: "nce-idem-5" }
+      )
+    ).rejects.toMatchObject({
+      statusCode: 502,
+      code: "INTERNAL_ERROR",
+      message: "Backend fiscal rechazo la nota de credito."
+    });
+
+    expect(repo.lastNotaCreditoInput).toBeNull();
+  });
+
   it("retries recoverable queued fiscal emissions", async () => {
     const repo = new FakeFacturaRepository();
     repo.findByIdResponse = buildDocumento({

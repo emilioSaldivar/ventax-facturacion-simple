@@ -76,6 +76,8 @@ Despues de una factura aprobada, validar:
 
 Probar NCE total contra la factura aprobada mas reciente del smoke, con idempotencia propia y evidencia separada.
 
+Si FE rechaza la NCE antes de confirmar identidad fiscal o estado recuperable, el API SaaS debe propagar el rechazo como error fiscal (`502`) y no persistir una NCE operativa en `ERROR_TEMPORAL`, porque no existe outbox recuperable para ese documento.
+
 ### 5.4 Catalogo Operativo
 
 Agregar una vista de catalogo para que el operador pueda:

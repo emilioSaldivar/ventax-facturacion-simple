@@ -814,13 +814,20 @@ export async function emitNotaCreditoTotal(
     estado = fiscalResponse.estado;
   } catch (error) {
     if (error instanceof FiscalGatewayError) {
-      estado = error.code === "TIMEOUT" ? "PENDIENTE_SIFEN" : "ERROR_TEMPORAL";
+      if (error.code !== "TIMEOUT") {
+        throw new HttpError(502, "INTERNAL_ERROR", "Backend fiscal rechazo la nota de credito.", {
+          gateway_code: error.code,
+          details: error.details ?? null
+        });
+      }
+
+      estado = "PENDIENTE_SIFEN";
       fiscalError = {
         code: error.code,
         message: error.message,
         details: error.details ?? null,
         recoverable: true,
-        suggested_action: error.code === "TIMEOUT" ? "REFRESH_OR_CONTACT_SUPPORT" : "RETRY_NCE"
+        suggested_action: "REFRESH_OR_CONTACT_SUPPORT"
       };
     } else {
       throw error;
