@@ -996,6 +996,7 @@ function DocumentsView({
   } | null>(null);
   const [reasonDraft, setReasonDraft] = useState("");
   const [reasonError, setReasonError] = useState<string | null>(null);
+  const [notaCreditoPopup, setNotaCreditoPopup] = useState<DocumentoResponse | null>(null);
   const isInternalSupport = role !== "OPERADOR_FACTURACION";
 
   useEffect(() => {
@@ -1205,7 +1206,7 @@ function DocumentsView({
         setDocuments((current) => [notaCredito, ...current.filter((item) => item.id !== notaCredito.id)]);
         setDeliveryLink(null);
         setEmailStatus(null);
-        setMessage("Nota de credito emitida.");
+        setNotaCreditoPopup(notaCredito);
         await loadDeliveryFor(notaCredito);
       } else if (reasonModal.action === "CREDIT_NOTE_LIST") {
         const notaCredito = await api.request<DocumentoResponse>(`/facturas/${reasonModal.documentoId}/nota-credito`, {
@@ -1215,9 +1216,12 @@ function DocumentsView({
           },
           body: JSON.stringify({ motivo })
         });
+        setSelected(notaCredito);
         setDocuments((current) => [notaCredito, ...current.filter((item) => item.id !== notaCredito.id)]);
-        setMessage("Nota de credito emitida.");
-        await loadDocuments();
+        setDeliveryLink(null);
+        setEmailStatus(null);
+        setNotaCreditoPopup(notaCredito);
+        await loadDeliveryFor(notaCredito);
       } else {
         const result = await api.post<DocumentoGestionVoidResponse>(`/facturas/${reasonModal.documentoId}/gestion/void-number`, {
           motivo
@@ -1820,6 +1824,28 @@ function DocumentsView({
               </button>
               <button className="primary-action" disabled={actionLoading} onClick={() => void submitReasonModal()} type="button">
                 {actionLoading ? "Procesando..." : "Confirmar"}
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
+      {notaCreditoPopup ? (
+        <div className="modal-backdrop" role="presentation">
+          <section className="modal-panel" aria-labelledby="nc-success-title" role="dialog" aria-modal="true">
+            <header>
+              <p className="eyebrow">Nota de credito</p>
+              <h3 id="nc-success-title">{getSimpleDocumentoEstado(notaCreditoPopup.estado, notaCreditoPopup.tipo)}</h3>
+              <p className="muted">
+                {notaCreditoPopup.numero_fiscal ? `Numero ${notaCreditoPopup.numero_fiscal}` : "Numero pendiente"}
+                {" · "}{notaCreditoPopup.cliente.razon_social}
+              </p>
+            </header>
+            <p className={notaCreditoPopup.estado === "EMITIDA" ? "editor-alert ready" : "editor-alert blocked"}>
+              {getNotaCreditoSuccessMessage(notaCreditoPopup.estado)}
+            </p>
+            <div className="result-actions">
+              <button className="primary-action" onClick={() => setNotaCreditoPopup(null)} type="button">
+                Ver nota de credito
               </button>
             </div>
           </section>
@@ -4436,6 +4462,16 @@ function getReasonModalPlaceholder(
     return "Ej: devolucion de mercaderia, error en monto o cliente.";
   }
   return "Ej: error en datos del comprobante o anulacion solicitada por cliente.";
+}
+
+function getNotaCreditoSuccessMessage(estado: DocumentoEstado): string {
+  if (estado === "EMITIDA") {
+    return "La nota de credito fue aceptada por SIFEN. El PDF ya esta disponible para compartir.";
+  }
+  if (estado === "PENDIENTE_SIFEN" || estado === "EMITIENDO") {
+    return "La nota de credito fue enviada al sistema fiscal y esta pendiente de confirmacion SIFEN. Refrescar el estado es seguro — se usa la misma referencia idempotente.";
+  }
+  return "La nota de credito fue procesada. Verificar el estado fiscal para continuar.";
 }
 
 function getOperationalTitle(context: OperationalContextResponse | null): string {
