@@ -12,16 +12,22 @@ import {
   type FiscalEmitNotaCreditoResponse
 } from "../fiscal-gateway/fiscal-gateway.types";
 import type {
-  DocumentoListFilters,
-  DocumentoListResponse,
+  BatchPendientesGestionResponse,
+  DocumentoDecisionResponse,
   DocumentoEstado,
   DocumentoEventosListResponse,
+  DocumentoGestionCancelSendResponse,
+  DocumentoGestionCreateDerivedResponse,
+  DocumentoGestionResendResponse,
+  DocumentoGestionVoidResponse,
+  DocumentoListFilters,
+  DocumentoListResponse,
   DocumentoResponse,
+  DocumentoValidateCdcImpactResponse,
   FacturaItemPreview,
   FacturaPreviewInput,
   FacturaPreviewResponse,
   FacturaRepository,
-  BatchPendientesGestionResponse,
   NotaCreditoCandidateListResponse,
   ReconciliacionFiscalResponse
 } from "./facturas.types";
@@ -207,17 +213,48 @@ export async function refreshDocumentoStatus(
 ): Promise<DocumentoResponse> {
   const documento = await getDocumentoById(context, documentoId, repository);
 
-  if (!documento.cdc) {
-    throw new HttpError(409, "CONFLICT", "Documento sin CDC fiscal para refrescar estado.");
+  let documentUuid = documento.document_uuid;
+
+  if (!documentUuid) {
+    const cdc = documento.cdc;
+    if (!cdc) {
+      throw new HttpError(409, "CONFLICT", "Documento sin identidad fiscal canonica. Requiere sincronizacion.");
+    }
+
+    // Documento emitido con cdc pero sin document_uuid local — resolverlo via CDC
+    // y persistirlo antes de continuar con el refresh.
+    try {
+      const byCdc = await gateway.resolveDocumentoByCdc(cdc);
+      documentUuid = byCdc.document_uuid;
+      await repository.bulkUpdateDocumentUuidByCdc([{ cdc, documentUuid }]);
+    } catch (error) {
+      if (error instanceof FiscalGatewayError) {
+        throw new HttpError(
+          error.code === "TIMEOUT" ? 504 : 502,
+          "INTERNAL_ERROR",
+          "No se pudo resolver la identidad fiscal del documento.",
+          { gateway_code: error.code }
+        );
+      }
+      throw error;
+    }
   }
 
   try {
-    const refreshed = await gateway.refreshFacturaStatus({ cdc: documento.cdc });
+    const refreshed = await gateway.refreshFacturaStatus({ documentUuid });
+
+    // RN-03: actualizar cdc si el backend devuelve un current_cdc diferente al almacenado
+    const cdcActualizado =
+      refreshed.current_cdc && refreshed.current_cdc !== documento.cdc
+        ? refreshed.current_cdc
+        : undefined;
+
     const updated = await repository.updateFiscalStatus({
       facturadorId: context.facturador.id,
       documentoId,
       estado: refreshed.estado,
-      fiscalStatus: mergeFiscalStatus(documento.fiscal_status, refreshed.raw)
+      fiscalStatus: mergeFiscalStatus(documento.fiscal_status, refreshed.raw),
+      cdc: cdcActualizado
     });
 
     if (!updated) {
@@ -329,13 +366,17 @@ export async function getDocumentoEventos(
   repository: FacturaRepository,
   gateway: FiscalGateway
 ): Promise<DocumentoEventosListResponse> {
+  if (context.user.role === "OPERADOR_FACTURACION") {
+    throw new HttpError(403, "FORBIDDEN", "Historial fiscal avanzado disponible solo para soporte interno.");
+  }
+
   const documento = await getDocumentoById(context, documentoId, repository);
-  if (!documento.cdc) {
-    throw new HttpError(409, "CONFLICT", "Documento sin CDC fiscal para consultar historial.");
+  if (!documento.document_uuid) {
+    throw new HttpError(409, "CONFLICT", "Documento sin identidad fiscal canonica. Requiere sincronizacion.");
   }
 
   try {
-    const response = await gateway.getDocumentoEventos(documento.cdc);
+    const response = await gateway.getDocumentoEventos(documento.document_uuid);
     return {
       documento_id: documento.id,
       cdc: documento.cdc,
@@ -347,6 +388,56 @@ export async function getDocumentoEventos(
         error.code === "TIMEOUT" ? 504 : 502,
         "INTERNAL_ERROR",
         error.code === "TIMEOUT" ? "Timeout al consultar historial fiscal." : "No se pudo consultar historial fiscal.",
+        {
+          gateway_code: error.code,
+          details: error.details ?? null
+        }
+      );
+    }
+    throw error;
+  }
+}
+
+export async function getDocumentoDecision(
+  context: OperationalContextResponse,
+  documentoId: string,
+  repository: FacturaRepository,
+  gateway: FiscalGateway
+): Promise<DocumentoDecisionResponse> {
+  if (context.user.role === "OPERADOR_FACTURACION") {
+    throw new HttpError(403, "FORBIDDEN", "Autogestion avanzada disponible solo para soporte interno.");
+  }
+
+  const documento = await getDocumentoById(context, documentoId, repository);
+
+  try {
+    const response = await gateway.getDocumentoDecisionByDocumentId({
+      emisorId: context.facturador.emisor_id,
+      documentId: documento.fiscal_document_id ?? documento.id
+    });
+
+    return {
+      documento_id: documento.id,
+      emisor_id: response.emisor_id,
+      env: response.env,
+      cdc: response.cdc,
+      nro_factura: response.nro_factura,
+      status: response.status,
+      transmission_evidence: response.transmission_evidence,
+      number_state: response.number_state,
+      decision_confidence: response.decision_confidence,
+      reason_codes: response.reason_codes,
+      recommended_action: response.recommended_action,
+      next_step_hint: response.next_step_hint,
+      escalation_required: response.escalation_required,
+      allowed_actions: response.allowed_actions
+    };
+  } catch (error) {
+    if (error instanceof FiscalGatewayError) {
+      throw new HttpError(
+        error.code === "TIMEOUT" ? 504 : 502,
+        "INTERNAL_ERROR",
+        error.code === "TIMEOUT" ? "Timeout al consultar decision operativa." : "No se pudo consultar decision operativa.",
         {
           gateway_code: error.code,
           details: error.details ?? null
@@ -396,7 +487,8 @@ export async function getBatchPendientesGestion(
 export async function getReconciliacionFiscal(
   context: OperationalContextResponse,
   input: { offset: number; limit: number; q?: string },
-  gateway: FiscalGateway
+  gateway: FiscalGateway,
+  repository: FacturaRepository
 ): Promise<ReconciliacionFiscalResponse> {
   if (context.user.role === "OPERADOR_FACTURACION") {
     throw new HttpError(403, "FORBIDDEN", "Comparar con registro fiscal disponible solo para soporte interno.");
@@ -409,6 +501,21 @@ export async function getReconciliacionFiscal(
       limit: input.limit,
       q: input.q
     });
+
+    // RN-05: actualización oportunista de document_uuid para registros que aún no lo tienen
+    const itemsConUuid = response.items.filter(
+      (item): item is typeof item & { cdc: string; document_uuid: string } =>
+        Boolean(item.document_uuid) && Boolean(item.cdc)
+    );
+    if (itemsConUuid.length > 0) {
+      repository
+        .bulkUpdateDocumentUuidByCdc(
+          itemsConUuid.map((item) => ({ cdc: item.cdc, documentUuid: item.document_uuid }))
+        )
+        .catch(() => {
+          // fallo en actualización oportunista no bloquea la respuesta
+        });
+    }
 
     return {
       items: response.items,
@@ -425,6 +532,258 @@ export async function getReconciliacionFiscal(
           details: error.details ?? null
         }
       );
+    }
+    throw error;
+  }
+}
+
+function assertInternalSupportRole(context: OperationalContextResponse, message: string): void {
+  if (context.user.role === "OPERADOR_FACTURACION") {
+    throw new HttpError(403, "FORBIDDEN", message);
+  }
+}
+
+function assertWithinWindowOrThrow(documento: DocumentoResponse, maxHours: number, actionLabel: string): void {
+  if (!documento.created_at) {
+    throw new HttpError(409, "CONFLICT", `${actionLabel} requiere fecha operativa del documento para validar ventana.`);
+  }
+  const createdAt = new Date(documento.created_at);
+  if (Number.isNaN(createdAt.getTime())) {
+    throw new HttpError(409, "CONFLICT", `${actionLabel} requiere fecha operativa valida del documento para validar ventana.`);
+  }
+  const elapsedHours = (Date.now() - createdAt.getTime()) / (1000 * 60 * 60);
+  if (elapsedHours > maxHours) {
+    throw new HttpError(409, "CONFLICT", `${actionLabel} fuera de ventana operativa (${maxHours}h).`);
+  }
+}
+
+export async function validateDocumentoCdcImpact(
+  context: OperationalContextResponse,
+  documentoId: string,
+  input: { json_input?: Record<string, unknown> } | undefined,
+  repository: FacturaRepository,
+  gateway: FiscalGateway
+): Promise<DocumentoValidateCdcImpactResponse> {
+  assertInternalSupportRole(context, "Autogestion avanzada disponible solo para soporte interno.");
+  const documento = await getDocumentoById(context, documentoId, repository);
+  assertWithinWindowOrThrow(documento, 72, "Prevalidacion CDC");
+  try {
+    const response = await gateway.validateDocumentoCdcImpactByDocumentId({
+      emisorId: context.facturador.emisor_id,
+      documentId: documento.fiscal_document_id ?? documento.id,
+      json_input: input?.json_input
+    });
+    return {
+      documento_id: documento.id,
+      current_cdc: response.current_cdc,
+      candidate_cdc: response.candidate_cdc,
+      cdc_impact: response.cdc_impact,
+      reason: response.reason,
+      allowed_actions: response.allowed_actions
+    };
+  } catch (error) {
+    if (error instanceof FiscalGatewayError) {
+      throw new HttpError(error.code === "TIMEOUT" ? 504 : 502, "INTERNAL_ERROR", "No se pudo prevalidar impacto CDC.", {
+        gateway_code: error.code,
+        details: error.details ?? null
+      });
+    }
+    throw error;
+  }
+}
+
+type GestionActionInput = {
+  mode?: "SYNC" | "BATCH" | "AUTO";
+  send_now?: boolean;
+  comment?: string;
+  json_input?: Record<string, unknown>;
+};
+
+export async function retryDocumentoSameCdc(
+  context: OperationalContextResponse,
+  documentoId: string,
+  input: GestionActionInput | undefined,
+  repository: FacturaRepository,
+  gateway: FiscalGateway
+): Promise<DocumentoGestionResendResponse> {
+  assertInternalSupportRole(context, "Autogestion avanzada disponible solo para soporte interno.");
+  const documento = await getDocumentoById(context, documentoId, repository);
+  assertWithinWindowOrThrow(documento, 72, "Reintento con mismo CDC");
+  try {
+    const response = await gateway.retryDocumentoSameCdcByDocumentId({
+      emisorId: context.facturador.emisor_id,
+      documentId: documento.fiscal_document_id ?? documento.id,
+      ...input
+    });
+    await repository.appendAuditEvent({
+      facturadorId: context.facturador.id,
+      documentoId: documento.id,
+      requestedBy: context.user.id,
+      eventType: "FACTURA_GESTION_RETRY_SAME_CDC",
+      metadata: {
+        mode: input?.mode ?? null,
+        send_now: typeof input?.send_now === "boolean" ? input.send_now : null,
+        comment: input?.comment ?? null,
+        accepted_by_sifen: response.accepted_by_sifen,
+        status: response.status,
+        revision_number: response.revision_number,
+        queued_for_batch: response.queued_for_batch
+      }
+    });
+    return {
+      documento_id: documento.id,
+      status: response.status,
+      revision_number: response.revision_number,
+      accepted_by_sifen: response.accepted_by_sifen,
+      cdc: response.cdc,
+      queued_for_batch: response.queued_for_batch
+    };
+  } catch (error) {
+    if (error instanceof FiscalGatewayError) {
+      throw new HttpError(error.code === "TIMEOUT" ? 504 : 502, "INTERNAL_ERROR", "No se pudo reintentar el documento con el mismo CDC.", {
+        gateway_code: error.code,
+        details: error.details ?? null
+      });
+    }
+    throw error;
+  }
+}
+
+export async function createDocumentoDerived(
+  context: OperationalContextResponse,
+  documentoId: string,
+  input: GestionActionInput | undefined,
+  repository: FacturaRepository,
+  gateway: FiscalGateway
+): Promise<DocumentoGestionCreateDerivedResponse> {
+  assertInternalSupportRole(context, "Autogestion avanzada disponible solo para soporte interno.");
+  const documento = await getDocumentoById(context, documentoId, repository);
+  assertWithinWindowOrThrow(documento, 72, "Creacion de DE derivado");
+  try {
+    const response = await gateway.createDocumentoDerivedByDocumentId({
+      emisorId: context.facturador.emisor_id,
+      documentId: documento.fiscal_document_id ?? documento.id,
+      ...input
+    });
+    await repository.appendAuditEvent({
+      facturadorId: context.facturador.id,
+      documentoId: documento.id,
+      requestedBy: context.user.id,
+      eventType: "FACTURA_GESTION_CREATE_DERIVED",
+      metadata: {
+        mode: input?.mode ?? null,
+        send_now: typeof input?.send_now === "boolean" ? input.send_now : null,
+        comment: input?.comment ?? null,
+        accepted_by_sifen: response.accepted_by_sifen,
+        status: response.status,
+        derived_document_id: response.derived_document_id
+      }
+    });
+    return {
+      source_document_id: documento.id,
+      derived_document_id: response.derived_document_id,
+      status: response.status,
+      accepted_by_sifen: response.accepted_by_sifen,
+      cdc: response.cdc,
+      nro_factura: response.nro_factura
+    };
+  } catch (error) {
+    if (error instanceof FiscalGatewayError) {
+      throw new HttpError(error.code === "TIMEOUT" ? 504 : 502, "INTERNAL_ERROR", "No se pudo crear DE derivado.", {
+        gateway_code: error.code,
+        details: error.details ?? null
+      });
+    }
+    throw error;
+  }
+}
+
+export async function cancelDocumentoSend(
+  context: OperationalContextResponse,
+  documentoId: string,
+  input: { comment?: string } | undefined,
+  repository: FacturaRepository,
+  gateway: FiscalGateway
+): Promise<DocumentoGestionCancelSendResponse> {
+  assertInternalSupportRole(context, "Autogestion avanzada disponible solo para soporte interno.");
+  const documento = await getDocumentoById(context, documentoId, repository);
+  assertWithinWindowOrThrow(documento, 72, "Cancelacion de envio local");
+  try {
+    const response = await gateway.cancelDocumentoSendByDocumentId({
+      emisorId: context.facturador.emisor_id,
+      documentId: documento.fiscal_document_id ?? documento.id,
+      comment: input?.comment
+    });
+    await repository.appendAuditEvent({
+      facturadorId: context.facturador.id,
+      documentoId: documento.id,
+      requestedBy: context.user.id,
+      eventType: "FACTURA_GESTION_CANCEL_SEND",
+      metadata: {
+        comment: input?.comment ?? null,
+        previous_status: response.previous_status,
+        status: response.status,
+        action_result: response.action_result,
+        reason_codes: response.reason_codes
+      }
+    });
+    return {
+      documento_id: documento.id,
+      previous_status: response.previous_status,
+      status: response.status,
+      action_result: response.action_result,
+      reason_codes: response.reason_codes,
+      recommended_next_action: response.recommended_next_action
+    };
+  } catch (error) {
+    if (error instanceof FiscalGatewayError) {
+      throw new HttpError(error.code === "TIMEOUT" ? 504 : 502, "INTERNAL_ERROR", "No se pudo cancelar el envio local.", {
+        gateway_code: error.code,
+        details: error.details ?? null
+      });
+    }
+    throw error;
+  }
+}
+
+export async function voidDocumentoNumber(
+  context: OperationalContextResponse,
+  documentoId: string,
+  input: { motivo: string },
+  repository: FacturaRepository,
+  gateway: FiscalGateway
+): Promise<DocumentoGestionVoidResponse> {
+  assertInternalSupportRole(context, "Autogestion avanzada disponible solo para soporte interno.");
+  const documento = await getDocumentoById(context, documentoId, repository);
+  assertWithinWindowOrThrow(documento, 360, "Inutilizacion de numeracion");
+  try {
+    const response = await gateway.voidDocumentoNumberByDocumentId({
+      emisorId: context.facturador.emisor_id,
+      documentId: documento.fiscal_document_id ?? documento.id,
+      motivo: input.motivo
+    });
+    await repository.appendAuditEvent({
+      facturadorId: context.facturador.id,
+      documentoId: documento.id,
+      requestedBy: context.user.id,
+      eventType: "FACTURA_GESTION_VOID_NUMBER",
+      metadata: {
+        motivo: input.motivo,
+        event_id: response.event_id,
+        status: response.status
+      }
+    });
+    return {
+      documento_id: documento.id,
+      event_id: response.event_id,
+      status: response.status
+    };
+  } catch (error) {
+    if (error instanceof FiscalGatewayError) {
+      throw new HttpError(error.code === "TIMEOUT" ? 504 : 502, "INTERNAL_ERROR", "No se pudo inutilizar la numeracion.", {
+        gateway_code: error.code,
+        details: error.details ?? null
+      });
     }
     throw error;
   }
@@ -478,13 +837,20 @@ export async function emitNotaCreditoTotal(
     estado = fiscalResponse.estado;
   } catch (error) {
     if (error instanceof FiscalGatewayError) {
-      estado = error.code === "TIMEOUT" ? "PENDIENTE_SIFEN" : "ERROR_TEMPORAL";
+      if (error.code !== "TIMEOUT") {
+        throw new HttpError(502, "INTERNAL_ERROR", "Backend fiscal rechazo la nota de credito.", {
+          gateway_code: error.code,
+          details: error.details ?? null
+        });
+      }
+
+      estado = "PENDIENTE_SIFEN";
       fiscalError = {
         code: error.code,
         message: error.message,
         details: error.details ?? null,
         recoverable: true,
-        suggested_action: error.code === "TIMEOUT" ? "REFRESH_OR_CONTACT_SUPPORT" : "RETRY_NCE"
+        suggested_action: "REFRESH_OR_CONTACT_SUPPORT"
       };
     } else {
       throw error;

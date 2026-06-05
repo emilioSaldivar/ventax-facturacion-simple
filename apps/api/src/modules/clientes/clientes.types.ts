@@ -47,6 +47,7 @@ export interface ClienteRepository {
     userId: string;
     data: ClienteUpsertInput;
   }): Promise<ClienteResponse | null>;
+  deleteForFacturador(input: { clienteId: string; facturadorId: string; userId: string }): Promise<boolean>;
   findDnitByDocumento(input: {
     documentoTipo: "RUC" | "CI";
     rucSinDv: string;

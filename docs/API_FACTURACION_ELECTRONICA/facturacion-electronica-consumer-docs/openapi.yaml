@@ -1426,6 +1426,13 @@ paths:
     get:
       tags: [Admin]
       summary: Obtener decision operativa de autogestion por factura
+      description: |
+        Devuelve la decision operativa guiada del backoffice para una factura.
+
+        Taxonomia esperada:
+        - `CANCEL_SEND`: cancelacion local previa a transmision, sin evento fiscal SIFEN.
+        - `CANCEL_FISCAL`: anulacion fiscal por evento cuando el DTE sigue dentro de la ventana aplicable.
+        - `NCE_REQUIRED`: la anulacion fiscal ya no aplica y el sistema solo guia al usuario para emitir una Nota de Credito por flujo separado.
       parameters:
         - in: path
           name: id
@@ -1607,6 +1614,313 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AdminFacturaEstadoSyncJobResponse"
+
+  /admin/emisores/{id}/numeration-gaps:
+    get:
+      tags: [Admin]
+      summary: Listar huecos de numeracion por facturador
+      description: |
+        Devuelve huecos de numeracion detectados para el facturador, con estado y accion sugerida.
+        Estados posibles: PENDING_CHECK, RETRY_POSSIBLE, READY_TO_VOID, VOID_REQUESTED, VOIDED,
+        BLOCKED_APPROVED_EXISTS, EXPIRED_WINDOW.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: env
+          schema:
+            type: string
+            enum: [test, prod]
+        - in: query
+          name: gap_state
+          schema:
+            type: string
+            enum: [PENDING_CHECK, RETRY_POSSIBLE, READY_TO_VOID, VOID_REQUESTED, VOIDED, BLOCKED_APPROVED_EXISTS, EXPIRED_WINDOW]
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 50
+        - in: query
+          name: offset
+          schema:
+            type: integer
+            default: 0
+      responses:
+        "200":
+          description: Lista de huecos de numeracion
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/NumerationGapItem"
+                  next:
+                    type: integer
+                    nullable: true
+
+  /admin/emisores/{id}/numeration-gaps/{gapId}:
+    get:
+      tags: [Admin]
+      summary: Detalle de un hueco de numeracion
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: gapId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Detalle del hueco con elegibilidad de inutilizacion
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NumerationGapDetail"
+        "404":
+          description: Hueco no encontrado
+
+  /admin/emisores/{id}/numeration-gaps/{gapId}/void:
+    post:
+      tags: [Admin]
+      summary: Inutilizar numeracion de un hueco
+      description: |
+        Ejecuta la inutilizacion fiscal del rango del hueco via SIFEN.
+        Solo aplica cuando gap_state es PENDING_CHECK o READY_TO_VOID y la ventana de 15 dias esta vigente.
+        Codigos de motivo disponibles: NUM_GAP_SYSTEM_ERROR, TECHNICAL_FILLING_ERROR,
+        SIFEN_REJECT_CDC_CHANGE, MANUAL_BUSINESS_DECISION.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: gapId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                motivo_codigo:
+                  type: string
+                  enum: [NUM_GAP_SYSTEM_ERROR, TECHNICAL_FILLING_ERROR, SIFEN_REJECT_CDC_CHANGE, MANUAL_BUSINESS_DECISION]
+                  default: NUM_GAP_SYSTEM_ERROR
+                motivo_texto:
+                  type: string
+                  maxLength: 150
+                  description: Texto libre de motivo. Si se provee reemplaza la plantilla del codigo.
+      responses:
+        "200":
+          description: Inutilizacion ejecutada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NumerationGapVoidResult"
+        "409":
+          description: Hueco no elegible (ventana vencida, estado invalido o ya inutilizado)
+        "404":
+          description: Hueco no encontrado
+
+  # ─── Eventos admin — TEA001 ───────────────────────────────────────────────
+
+  /admin/emisores/{id}/eventos:
+    get:
+      tags: [Admin]
+      summary: Listar eventos fiscales del emisor
+      description: Listado paginado de eventos CANCEL y VOID_RANGE con filtros operativos.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: env
+          in: query
+          schema:
+            type: string
+        - name: type
+          in: query
+          schema:
+            type: string
+            enum: [CANCEL, VOID_RANGE]
+        - name: status
+          in: query
+          schema:
+            type: string
+        - name: created_after
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: created_before
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: q
+          in: query
+          description: Texto libre — busca en CDC, idempotency_key, range_from, range_to
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+            maximum: 200
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        "200":
+          description: Lista de eventos
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/EventoAdminItem"
+                  next:
+                    type: integer
+                    nullable: true
+        "401":
+          description: No autenticado
+        "403":
+          description: Sin acceso al emisor
+        "404":
+          description: Emisor no encontrado
+
+  /admin/emisores/{id}/eventos/refresh:
+    post:
+      tags: [Admin]
+      summary: Refresh masivo de eventos del emisor
+      description: Refresca hasta 50 eventos no concluyentes o sin refresh reciente.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                type:
+                  type: string
+                  enum: [CANCEL, VOID_RANGE]
+                status:
+                  type: string
+                limit:
+                  type: integer
+                  default: 50
+                  maximum: 50
+      responses:
+        "200":
+          description: Resultado del refresh masivo
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EventosRefreshMasivoResult"
+        "401":
+          description: No autenticado
+        "403":
+          description: Sin acceso al emisor
+        "404":
+          description: Emisor no encontrado
+
+  /admin/emisores/{id}/eventos/{eventId}:
+    get:
+      tags: [Admin]
+      summary: Detalle técnico de un evento fiscal
+      description: Expone metadata, payload enviado (sanitizado) y respuesta SIFEN.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: eventId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Detalle del evento
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EventoAdminDetail"
+        "401":
+          description: No autenticado
+        "403":
+          description: Sin acceso al emisor
+        "404":
+          description: Evento no encontrado
+
+  /admin/emisores/{id}/eventos/{eventId}/refresh:
+    post:
+      tags: [Admin]
+      summary: Refresh puntual de un evento
+      description: |
+        Para eventos CANCEL con CDC: consulta SIFEN vía consultCdc para inferir el estado actual.
+        Para VOID_RANGE: actualiza last_refreshed_at sin consulta SIFEN (sin endpoint disponible).
+        Eventos ACCEPTED refrescados hace menos de 1h son omitidos (cooldown).
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: eventId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Resultado del refresh puntual
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EventoRefreshResult"
+        "401":
+          description: No autenticado
+        "403":
+          description: Sin acceso al emisor
+        "404":
+          description: Evento no encontrado
 
   /admin/users:
     get:
@@ -1872,8 +2186,9 @@ paths:
       description: |
         Reglas MVP:
         - Solo si el DE está aprobado (APPROVED / APPROVED_WITH_OBS).
-        - Validar ventana operativa de cancelación (48h para FE).
+        - Validar ventana operativa de cancelación (48h desde aprobación en SIFEN para FE).
         Envía evento a SIFEN y persiste resultado.
+        En backoffice, esta acción debe diferenciarse de `cancel-send`, que solo retira un documento de la cola batch antes de transmitirlo.
       requestBody:
         required: true
         content:
@@ -2177,6 +2492,163 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/BatchPendientesResponse"
+
+  # ─── Batch Consulta MT150 — T002/T003 ────────────────────────────────────
+
+  /consultar/{id}/lotes:
+    get:
+      tags: [Consultas]
+      summary: Listar lotes de un facturador por rango de fechas
+      description: |
+        Listado paginado de lotes SIFEN de un facturador con filtros operativos.
+        No confundir `did` (identificador interno del sistema) con `sifen_protocol`
+        (`dProtConsLote` de SIFEN), que es el identificador de consulta real.
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: RUC completo del facturador (emisor_id)
+          schema:
+            type: string
+        - name: env
+          in: query
+          schema:
+            type: string
+            enum: [test, prod]
+        - name: from
+          in: query
+          description: Inicio del rango temporal (ISO 8601)
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          description: Fin del rango temporal (ISO 8601)
+          schema:
+            type: string
+            format: date-time
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [CREATED, SENT, RECEIVED, PROCESSING, DONE, ERROR]
+        - name: tipoDocumento
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+            maximum: 200
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        "200":
+          description: Lista de lotes
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BatchListResponse"
+        "401":
+          description: API key inválida
+        "422":
+          description: Parámetros de query inválidos
+
+  /consultar/{id}/lotes/{protocol}:
+    get:
+      tags: [Consultas]
+      summary: Consulta puntual de lote por protocolo SIFEN (dProtConsLote)
+      description: |
+        Consulta un lote identificado por su `dProtConsLote` (protocolo SIFEN real).
+        Con `refresh=true`, ejecuta `setapi.consultaLote` con el protocolo real y persiste
+        el resultado usando el mismo parser MT150 del worker de polling.
+        **Throttling**: refresh omitido para lotes ya concluyentes (DONE/ERROR).
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: RUC completo del facturador (emisor_id)
+          schema:
+            type: string
+        - name: protocol
+          in: path
+          required: true
+          description: Protocolo SIFEN del lote (dProtConsLote retornado en recepción)
+          schema:
+            type: string
+        - name: env
+          in: query
+          schema:
+            type: string
+            enum: [test, prod]
+        - name: refresh
+          in: query
+          description: |
+            Si true, consulta SIFEN en tiempo real y persiste resultado.
+            Omitido automáticamente para lotes DONE/ERROR.
+          schema:
+            type: string
+            enum: ["true", "false"]
+            default: "false"
+      responses:
+        "200":
+          description: Detalle del lote con estado actual
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BatchByProtocolResponse"
+        "401":
+          description: API key inválida
+        "404":
+          description: Protocolo no encontrado para el facturador
+        "422":
+          description: Parámetros inválidos
+
+  /consultar/ruc/{ruc}:
+    get:
+      tags: [Consultas]
+      summary: Consultar RUC en SIFEN y devolver datos normalizados
+      parameters:
+        - in: path
+          name: ruc
+          required: true
+          schema:
+            type: string
+          description: RUC base (5-8 dígitos) o formato numero-dv.
+        - in: query
+          name: emisor_id
+          required: true
+          schema:
+            type: string
+          description: RUC completo del emisor configurado en FE (se usa para resolver credenciales).
+        - in: query
+          name: env
+          required: false
+          schema:
+            type: string
+            enum: [test, prod]
+      responses:
+        "200":
+          description: Resultado normalizado de consulta RUC
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConsultaRucNormalizedResponse"
+        "422":
+          description: Validacion de parametros de entrada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         "422":
           description: Validación de datos
           content:
@@ -2369,6 +2841,487 @@ paths:
                   value:
                     error: raw_ticket_generation_failed
                     message: No se pudo generar el ticket crudo
+
+# ─────────────────────────────────────────────────────────────
+# Contrato Canónico — TCC022/TCC023/TCC024/TCC025/TCC026/TCC027
+# Identidad principal: document_uuid (estable e inmutable)
+# Reemplaza los endpoints legacy centrados en CDC.
+# Ver docs/GUIA_MIGRACION_CONTRATO_CANONICO_v0.1.md para tabla de homologación.
+# ─────────────────────────────────────────────────────────────
+
+  /documentos/by-cdc/{cdc}:
+    get:
+      summary: Resolver CDC a documento canónico (TCC023)
+      description: |
+        Resuelve un CDC vigente o histórico al documento canónico correspondiente.
+        Indica si el CDC consultado es el vigente (`is_current=true`) o fue reemplazado.
+
+        **Uso operativo:** usar este endpoint cuando el sistema cliente almacenó un CDC
+        y necesita obtener el `document_uuid` canónico para migrar sus referencias.
+        No usar este endpoint como identidad primaria — usar `/documentos/{uuid}` en su lugar.
+
+        **Homólogo legacy:** `GET /consultar/comprobante/{cdc}`
+      tags: [Contrato Canónico]
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: cdc
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 44
+            maxLength: 44
+          description: CDC de 44 caracteres (vigente o histórico)
+        - name: env
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [test, prod]
+      responses:
+        "200":
+          description: CDC resuelto exitosamente
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ByCdcResponse"
+              examples:
+                cdcVigente:
+                  summary: CDC vigente
+                  value:
+                    document_uuid: "9f5c0b3f-6a6a-4d4b-9a31-2a9d0b0c4a11"
+                    document_id: "59"
+                    requested_cdc: "01050570161001001000000312026060212337391944"
+                    current_cdc: "01050570161001001000000312026060212337391944"
+                    is_current: true
+                    lineage_status: "ACTIVE"
+                    sifen_resolution: "APPROVED"
+                    status: "APPROVED"
+                    accepted_by_sifen: true
+                    nro_factura: "0000003"
+                    tipo_documento: "FE"
+                    emisor_id: "80136968-1"
+                    env: "prod"
+                    resolution_note: "CDC consultado es el vigente del documento."
+                cdcHistorico:
+                  summary: CDC histórico reemplazado
+                  value:
+                    document_uuid: "9f5c0b3f-6a6a-4d4b-9a31-2a9d0b0c4a11"
+                    document_id: "59"
+                    requested_cdc: "01050570161001001000000312026060213355779291"
+                    current_cdc: "01050570161001001000000312026060212337391944"
+                    is_current: false
+                    lineage_status: "SUPERSEDED"
+                    sifen_resolution: "REJECTED_OR_MISSING"
+                    status: "APPROVED"
+                    accepted_by_sifen: true
+                    nro_factura: "0000003"
+                    tipo_documento: "FE"
+                    emisor_id: "80136968-1"
+                    env: "prod"
+                    resolution_note: "CDC consultado es histórico. El CDC vigente es: 01050570161001001000000312026060212337391944."
+        "404":
+          description: CDC no encontrado en el sistema
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /documentos/{uuid}:
+    get:
+      summary: Consulta principal del documento por identidad canónica (TCC022)
+      description: |
+        Devuelve el estado completo del documento usando su identidad canónica estable.
+        Incluye `lineage_summary` con el resumen del historial CDC del documento.
+
+        **Uso operativo:** consulta principal para cualquier sistema que necesite el
+        estado del documento. Usar `document_uuid` obtenido de la respuesta de emisión
+        (`POST /factura`) o del lookup `GET /documentos/by-cdc/{cdc}`.
+
+        **Homólogo legacy:** `GET /consultar/comprobante/{cdc}` (centrado en CDC)
+      tags: [Contrato Canónico]
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: uuid
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: document_uuid canónico del documento
+        - name: env
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [test, prod]
+      responses:
+        "200":
+          description: Documento encontrado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DocumentoCanonicoResponse"
+              examples:
+                aprobado:
+                  summary: Documento aprobado por SIFEN
+                  value:
+                    document_uuid: "9f5c0b3f-6a6a-4d4b-9a31-2a9d0b0c4a11"
+                    document_id: "59"
+                    current_cdc: "01050570161001001000000312026060212337391944"
+                    nro_factura: "0000003"
+                    tipo_documento: "FE"
+                    establecimiento: "001"
+                    punto_expedicion: "001"
+                    numero: "0000003"
+                    status: "APPROVED"
+                    accepted_by_sifen: true
+                    fecha_emision: "2026-06-02T03:00:00.000Z"
+                    condicion_operacion: "CONTADO"
+                    emisor_id: "80136968-1"
+                    env: "prod"
+                    lineage_summary:
+                      active_cdc: "01050570161001001000000312026060212337391944"
+                      active_lineage_status: "ACTIVE"
+                      active_sifen_resolution: "APPROVED"
+                      total_cdc_entries: 2
+                      has_superseded: true
+                    sifen_last_checked_at: "2026-06-02T04:00:00.000Z"
+                    approved_at: "2026-06-02T03:05:00.000Z"
+                    created_at: "2026-06-02T03:00:00.000Z"
+                    updated_at: "2026-06-02T04:00:00.000Z"
+        "404":
+          description: Documento no encontrado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /documentos/{uuid}/xml:
+    get:
+      summary: XML estructurado del documento vigente (TCC024)
+      description: |
+        Devuelve el XML del documento vigente en formato estructurado JSON.
+        El XML corresponde al `current_cdc` del documento.
+
+        **Homólogo legacy:** `GET /consultar/comprobantexml/{cdc}`
+      tags: [Contrato Canónico]
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: uuid
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: env
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [test, prod]
+      responses:
+        "200":
+          description: XML del documento vigente
+          content:
+            application/json:
+              schema:
+                type: object
+                description: Respuesta de GetComprobanteXml (misma estructura que /consultar/comprobantexml/{cdc})
+        "404":
+          description: Documento no encontrado o sin CDC
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /documentos/{uuid}/sifen:
+    get:
+      summary: Estado SIFEN del documento vigente (TCC024)
+      description: |
+        Consulta el estado fiscal del documento ante SIFEN usando el `current_cdc`.
+        Admite `?refresh=true` para forzar consulta fresca contra SIFEN.
+
+        **Homólogo legacy:** `GET /consultar/comprobanteSifen/{cdc}`
+      tags: [Contrato Canónico]
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: uuid
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: env
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [test, prod]
+        - name: refresh
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [true, false]
+          description: "true para forzar consulta fresca contra SIFEN"
+      responses:
+        "200":
+          description: Estado SIFEN del documento
+          content:
+            application/json:
+              schema:
+                type: object
+                description: Respuesta de ConsultComprobanteSifen (misma estructura que /consultar/comprobanteSifen/{cdc})
+        "404":
+          description: Documento no encontrado o sin CDC
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /documentos/{uuid}/eventos:
+    get:
+      summary: Eventos del documento (cancelaciones, inutilizaciones) (TCC024)
+      description: |
+        Lista los eventos fiscales asociados al documento por su `current_cdc`.
+
+        **Homólogo legacy:** `GET /consultar/evento/{cdc}`
+      tags: [Contrato Canónico]
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: uuid
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: env
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [test, prod]
+      responses:
+        "200":
+          description: Eventos del documento
+          content:
+            application/json:
+              schema:
+                type: object
+                description: Respuesta de GetEventos (misma estructura que /consultar/evento/{cdc})
+        "404":
+          description: Documento no encontrado o sin CDC
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /documentos/{uuid}/lineage:
+    get:
+      summary: Linaje CDC del documento — trazabilidad completa (TCC026)
+      description: |
+        Expone el historial completo de CDC asociados al documento:
+        activo, históricos, aprobados, rechazados y su resolución SIFEN.
+
+        **Uso operativo:** usar para diagnóstico, auditoría y soporte cuando un
+        documento tuvo múltiples CDC (por revisión manual o reenvío).
+        Permite explicar incidentes tipo `document_id=59` donde el CDC aprobado
+        no era el CDC original.
+
+        **Sin homólogo en el contrato legacy** — capacidad nueva.
+      tags: [Contrato Canónico]
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: uuid
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: env
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [test, prod]
+      responses:
+        "200":
+          description: Linaje CDC del documento
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DocumentoLineageResponse"
+              examples:
+                conLinaje:
+                  summary: Documento con 2 CDC históricos
+                  value:
+                    document_uuid: "9f5c0b3f-6a6a-4d4b-9a31-2a9d0b0c4a11"
+                    document_id: "59"
+                    current_cdc: "01050570161001001000000312026060212337391944"
+                    status: "APPROVED"
+                    env: "prod"
+                    emisor_id: "80136968-1"
+                    lineage:
+                      - id: "1"
+                        cdc: "01050570161001001000000312026060213355779291"
+                        source_type: "INITIAL"
+                        lineage_status: "SUPERSEDED"
+                        sifen_resolution: "REJECTED_OR_MISSING"
+                        is_active: false
+                        sifen_code: "0420"
+                        sifen_message: "Documento no encontrado"
+                        revision_number: null
+                        approved_at: null
+                        last_checked_at: "2026-06-02T03:30:00.000Z"
+                        created_at: "2026-06-02T03:00:00.000Z"
+                      - id: "2"
+                        cdc: "01050570161001001000000312026060212337391944"
+                        source_type: "RESEND"
+                        lineage_status: "ACTIVE"
+                        sifen_resolution: "APPROVED"
+                        is_active: true
+                        sifen_code: "0260"
+                        sifen_message: "Aprobado"
+                        revision_number: 1
+                        approved_at: "2026-06-02T03:35:00.000Z"
+                        last_checked_at: "2026-06-02T04:00:00.000Z"
+                        created_at: "2026-06-02T03:10:00.000Z"
+        "404":
+          description: Documento no encontrado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /documentos/{uuid}/files/xml:
+    get:
+      summary: Descarga de XML binario por document_uuid (TCC025)
+      description: |
+        Descarga el XML firmado del documento vigente.
+
+        **Homólogo legacy:** `GET /files/xml/{cdc}`
+      tags: [Contrato Canónico]
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: uuid
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: env
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [test, prod]
+      responses:
+        "200":
+          description: XML firmado del documento
+          content:
+            application/xml:
+              schema:
+                type: string
+        "404":
+          description: XML no encontrado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /documentos/{uuid}/files/kude.pdf:
+    get:
+      summary: Descarga del KUDE PDF por document_uuid (TCC025)
+      description: |
+        Genera y descarga el KUDE en formato PDF del documento vigente.
+
+        **Homólogo legacy:** `GET /files/kude/{cdc}.pdf`
+      tags: [Contrato Canónico]
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: uuid
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: env
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [test, prod]
+      responses:
+        "200":
+          description: PDF del KUDE
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        "404":
+          description: XML no encontrado para generar KUDE
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /documentos/{uuid}/files/ticket/raw:
+    get:
+      summary: Ticket raw por document_uuid (TCC025)
+      description: |
+        Genera el ticket crudo (text/plain o escpos) del documento vigente.
+
+        **Homólogo legacy:** `GET /files/ticket/{cdc}/raw`
+      tags: [Contrato Canónico]
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: uuid
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: env
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [test, prod]
+        - name: format
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [escpos]
+          description: "Formato del ticket: sin valor = texto plano, escpos = bytes ESC/POS"
+      responses:
+        "200":
+          description: Ticket crudo generado
+          content:
+            text/plain:
+              schema:
+                type: string
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        "404":
+          description: Documento no encontrado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
 components:
   securitySchemes:
@@ -3026,6 +3979,17 @@ components:
           type: object
           nullable: true
           additionalProperties: true
+        notification:
+          type: object
+          nullable: true
+          properties:
+            attempted:
+              type: boolean
+            sent:
+              type: boolean
+            reason:
+              type: string
+              nullable: true
 
     ComprobanteResponse:
       type: object
@@ -3162,6 +4126,63 @@ components:
           type: boolean
           default: false
 
+    ConsultaRucNormalizedResponse:
+      type: object
+      required: [query, sifen, contribuyente]
+      properties:
+        query:
+          type: object
+          required: [ruc_input]
+          properties:
+            ruc_input:
+              type: string
+            ruc_consultado:
+              type: string
+              nullable: true
+        sifen:
+          type: object
+          required: [success]
+          properties:
+            result_code:
+              type: string
+              nullable: true
+            result_message:
+              type: string
+              nullable: true
+            success:
+              type: boolean
+            raw:
+              type: object
+              nullable: true
+              additionalProperties: true
+        contribuyente:
+          type: object
+          properties:
+            ruc:
+              type: string
+              nullable: true
+            dv:
+              type: string
+              nullable: true
+            ruc_completo:
+              type: string
+              nullable: true
+            razon_social:
+              type: string
+              nullable: true
+            estado_codigo:
+              type: string
+              nullable: true
+            estado_descripcion:
+              type: string
+              nullable: true
+            estado_normalizado:
+              type: string
+              nullable: true
+            es_facturador_electronico:
+              type: boolean
+              nullable: true
+
     ListaFacturasResponse:
       type: object
       required: [items]
@@ -3285,6 +4306,10 @@ components:
         nombre_fantasia:
           type: string
           nullable: true
+        kude_formato:
+          type: string
+          enum: [NORMAL, TICKET]
+          default: NORMAL
         principal:
           type: boolean
           default: false
@@ -4101,6 +5126,11 @@ components:
       properties:
         document_id:
           type: string
+        document_uuid:
+          type: string
+          format: uuid
+          nullable: true
+          description: Identidad canónica del documento. Mientras la migración de `document_uuid` no esté persistida en el core, este campo puede venir en `null`.
         emisor_id:
           type: string
         env:
@@ -4120,6 +5150,11 @@ components:
         cdc:
           type: string
           nullable: true
+          description: Alias legado del CDC fiscal vigente. Se mantiene por compatibilidad hacia atrás.
+        current_cdc:
+          type: string
+          nullable: true
+          description: CDC fiscal vigente del documento dentro del contrato canónico transicional.
         nro_factura:
           type: string
           nullable: true
@@ -4298,6 +5333,11 @@ components:
       properties:
         document_id:
           type: string
+        document_uuid:
+          type: string
+          format: uuid
+          nullable: true
+          description: Identidad canónica del documento. Puede venir en `null` hasta que la migración de `document_uuid` esté implementada físicamente.
         emisor_id:
           type: string
         env:
@@ -4313,6 +5353,11 @@ components:
         cdc:
           type: string
           nullable: true
+          description: Alias legado del CDC fiscal vigente. Se mantiene por compatibilidad hacia atrás.
+        current_cdc:
+          type: string
+          nullable: true
+          description: CDC fiscal vigente del documento.
         nro_factura:
           type: string
           nullable: true
@@ -4430,6 +5475,15 @@ components:
       properties:
         document_id:
           type: string
+        document_uuid:
+          type: string
+          format: uuid
+          nullable: true
+          description: Identidad canónica del documento, nullable hasta completar la migración canónica.
+        current_cdc:
+          type: string
+          nullable: true
+          description: CDC fiscal vigente o último CDC conocido del documento cancelado localmente.
         previous_status:
           type: string
         status:
@@ -4457,6 +5511,15 @@ components:
       properties:
         document_id:
           type: string
+        document_uuid:
+          type: string
+          format: uuid
+          nullable: true
+          description: Identidad canónica del documento, nullable hasta completar la migración canónica.
+        current_cdc:
+          type: string
+          nullable: true
+          description: CDC fiscal vigente asociado al documento cuya numeración se inutiliza.
         event_id:
           type: string
         status:
@@ -4472,6 +5535,15 @@ components:
       properties:
         document_id:
           type: string
+        document_uuid:
+          type: string
+          format: uuid
+          nullable: true
+          description: Identidad canónica del documento, nullable hasta completar la migración canónica.
+        current_cdc:
+          type: string
+          nullable: true
+          description: CDC fiscal vigente del documento al momento de listar eventos.
         items:
           type: array
           items:
@@ -4525,6 +5597,11 @@ components:
       properties:
         document_id:
           type: string
+        document_uuid:
+          type: string
+          format: uuid
+          nullable: true
+          description: Identidad canónica del documento. Puede venir en `null` mientras el core siga en fase transicional.
         emisor_id:
           type: string
         env:
@@ -4533,6 +5610,11 @@ components:
         cdc:
           type: string
           nullable: true
+          description: Alias legado del CDC fiscal vigente. Se mantiene por compatibilidad hacia atrás.
+        current_cdc:
+          type: string
+          nullable: true
+          description: CDC fiscal vigente del documento.
         nro_factura:
           type: string
           nullable: true
@@ -4560,9 +5642,16 @@ components:
             type: string
         recommended_action:
           type: string
-          enum: [RETRY, CANCEL_SEND, CANCEL_FISCAL, VOID_NUMBER, WAIT_SYNC, NO_ACTION]
+          enum: [RETRY, CANCEL_SEND, CANCEL_FISCAL, NCE_REQUIRED, VOID_NUMBER, WAIT_SYNC, NO_ACTION]
+        cancel_window_status:
+          type: string
+          enum: [WITHIN_WINDOW, EXPIRED, NOT_APPLICABLE, UNKNOWN]
         next_step_hint:
           type: string
+        guided_message:
+          type: string
+          nullable: true
+          description: Mensaje corto para backoffice cuando la decision requiere guia operativa y no una accion automatica.
         escalation_required:
           type: boolean
         support_payload:
@@ -4584,6 +5673,11 @@ components:
       properties:
         document_id:
           type: string
+        document_uuid:
+          type: string
+          format: uuid
+          nullable: true
+          description: Identidad canónica del documento. Puede venir en `null` hasta completar la migración canónica.
         current_cdc:
           type: string
           nullable: true
@@ -4606,6 +5700,11 @@ components:
       properties:
         document_id:
           type: string
+        document_uuid:
+          type: string
+          format: uuid
+          nullable: true
+          description: Identidad canónica del documento. Puede venir en `null` mientras el core siga en fase transicional.
         status:
           $ref: "#/components/schemas/DocumentStatus"
         revision_number:
@@ -4615,6 +5714,11 @@ components:
         cdc:
           type: string
           nullable: true
+          description: Alias legado del CDC fiscal vigente. Se mantiene por compatibilidad hacia atrás.
+        current_cdc:
+          type: string
+          nullable: true
+          description: CDC fiscal vigente del documento luego del reenvío o reintento.
         sifen_status:
           type: object
           nullable: true
@@ -4629,13 +5733,28 @@ components:
       properties:
         source_document_id:
           type: string
+        source_document_uuid:
+          type: string
+          format: uuid
+          nullable: true
+          description: Identidad canónica del documento origen. Puede venir en `null` hasta completar la migración canónica.
         derived_document_id:
           type: string
+        derived_document_uuid:
+          type: string
+          format: uuid
+          nullable: true
+          description: Identidad canónica del documento derivado. Puede venir en `null` hasta completar la migración canónica.
         status:
           $ref: "#/components/schemas/DocumentStatus"
         cdc:
           type: string
           nullable: true
+          description: Alias legado del CDC fiscal vigente del documento derivado.
+        current_cdc:
+          type: string
+          nullable: true
+          description: CDC fiscal vigente del documento derivado.
         nro_factura:
           type: string
           nullable: true
@@ -4803,3 +5922,562 @@ components:
           type: object
           nullable: true
           additionalProperties: true
+
+
+    NumerationGapItem:
+      type: object
+      properties:
+        gap_id:
+          type: string
+        document_uuid:
+          type: string
+          nullable: true
+        emisor_id:
+          type: string
+        env:
+          type: string
+        tipo_documento:
+          type: string
+        establecimiento:
+          type: string
+        punto_expedicion:
+          type: string
+        serie_fiscal:
+          type: string
+        numero_desde:
+          type: integer
+        numero_hasta:
+          type: integer
+        gap_kind:
+          type: string
+          enum: [MISSING_LOCAL, DOCUMENT_RETRY_CANDIDATE]
+        gap_state:
+          type: string
+          enum: [PENDING_CHECK, RETRY_POSSIBLE, READY_TO_VOID, VOID_REQUESTED, VOIDED, BLOCKED_APPROVED_EXISTS, EXPIRED_WINDOW]
+        suggested_action:
+          type: string
+          enum: [retry, void, cancel, manual_check]
+        source_document_id:
+          type: string
+          nullable: true
+        source_status:
+          type: string
+          nullable: true
+        first_detected_at:
+          type: string
+          format: date-time
+        last_detected_at:
+          type: string
+          format: date-time
+
+    NumerationGapDetail:
+      allOf:
+        - $ref: "#/components/schemas/NumerationGapItem"
+        - type: object
+          properties:
+            void_eligibility:
+              type: object
+              properties:
+                eligible:
+                  type: boolean
+                reason:
+                  type: string
+                  nullable: true
+                  enum: [EXPIRED_WINDOW, TIMBRADO_EXPIRED]
+                detail:
+                  type: string
+                  nullable: true
+
+    NumerationGapVoidResult:
+      type: object
+      properties:
+        gap_id:
+          type: string
+        gap_state:
+          type: string
+        event_id:
+          type: string
+          nullable: true
+        sifen_status:
+          type: string
+        motivo_codigo:
+          type: string
+        motivo_texto:
+          type: string
+
+
+    EventoAdminItem:
+      type: object
+      properties:
+        event_id:
+          type: string
+        emisor_id:
+          type: string
+        env:
+          type: string
+        type:
+          type: string
+          enum: [CANCEL, VOID_RANGE]
+        cdc:
+          type: string
+          nullable: true
+        establecimiento:
+          type: string
+          nullable: true
+        punto_expedicion:
+          type: string
+          nullable: true
+        range_from:
+          type: string
+          nullable: true
+        range_to:
+          type: string
+          nullable: true
+        reason:
+          type: string
+        status:
+          type: string
+        idempotency_key:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+          nullable: true
+        last_refreshed_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    EventoAdminDetail:
+      allOf:
+        - $ref: "#/components/schemas/EventoAdminItem"
+        - type: object
+          properties:
+            request_payload:
+              type: object
+              nullable: true
+              description: Payload enviado a SIFEN (sanitizado — sin secretos)
+            response_payload:
+              type: object
+              nullable: true
+              description: Respuesta SIFEN recibida
+
+    EventoRefreshResult:
+      type: object
+      properties:
+        event_id:
+          type: string
+        previous_status:
+          type: string
+        current_status:
+          type: string
+        refreshed:
+          type: boolean
+        skip_reason:
+          type: string
+          nullable: true
+        last_refreshed_at:
+          type: string
+          format: date-time
+
+    EventosRefreshMasivoResult:
+      type: object
+      properties:
+        requested:
+          type: integer
+        refreshed:
+          type: integer
+        skipped:
+          type: integer
+        failed:
+          type: integer
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              event_id:
+                type: string
+              previous_status:
+                type: string
+              current_status:
+                type: string
+              refreshed:
+                type: boolean
+              skip_reason:
+                type: string
+                nullable: true
+
+    BatchItem:
+      type: object
+      description: Resumen de un lote SIFEN
+      properties:
+        batch_id:
+          type: string
+        emisor_id:
+          type: string
+        env:
+          type: string
+        tipo_documento:
+          type: string
+        did:
+          type: string
+          description: Identificador interno secuencial del lote (no el protocolo SIFEN)
+        doc_count:
+          type: integer
+        status:
+          type: string
+          enum: [CREATED, SENT, RECEIVED, PROCESSING, DONE, ERROR]
+        sifen_protocol:
+          type: string
+          nullable: true
+          description: dProtConsLote — protocolo SIFEN para consulta real
+        sifen_receive_code:
+          type: string
+          nullable: true
+        sifen_receive_message:
+          type: string
+          nullable: true
+        sifen_processing_time:
+          type: string
+          nullable: true
+        sifen_result_code:
+          type: string
+          nullable: true
+        sifen_result_message:
+          type: string
+          nullable: true
+        payload_size_bytes:
+          type: integer
+          nullable: true
+        poll_attempt_count:
+          type: integer
+        received_at:
+          type: string
+          format: date-time
+          nullable: true
+        last_polled_at:
+          type: string
+          format: date-time
+          nullable: true
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        document_uuid:
+          type: string
+          nullable: true
+          description: "Ola 0: siempre null. Populated en Ola 1 (TCC008+)."
+
+    BatchListResponse:
+      type: object
+      properties:
+        batches:
+          type: array
+          items:
+            $ref: "#/components/schemas/BatchItem"
+        next:
+          type: integer
+          nullable: true
+          description: Offset para la siguiente página, null si no hay más resultados
+
+    BatchDocumentResult:
+      type: object
+      properties:
+        cdc:
+          type: string
+          nullable: true
+        status:
+          type: string
+        sifen_code:
+          type: string
+          nullable: true
+        sifen_message:
+          type: string
+          nullable: true
+
+    BatchByProtocolResponse:
+      allOf:
+        - $ref: "#/components/schemas/BatchItem"
+        - type: object
+          properties:
+            refreshed:
+              type: boolean
+            skip_reason:
+              type: string
+              nullable: true
+            sifen_processing_summary:
+              nullable: true
+              type: object
+              properties:
+                code:
+                  type: string
+                  nullable: true
+                message:
+                  type: string
+                  nullable: true
+                status:
+                  type: string
+                  enum: [PROCESSING, DONE, ERROR]
+            document_results:
+              type: array
+              items:
+                $ref: "#/components/schemas/BatchDocumentResult"
+
+    # ── Contrato Canónico — TCC021/TCC022/TCC023/TCC026 ──────────────────
+
+    ByCdcResponse:
+      type: object
+      description: |
+        Respuesta del lookup `GET /documentos/by-cdc/{cdc}`.
+        Indica si el CDC consultado es vigente o histórico y provee la identidad canónica.
+      required:
+        - document_uuid
+        - document_id
+        - requested_cdc
+        - current_cdc
+        - is_current
+        - lineage_status
+        - sifen_resolution
+        - status
+        - accepted_by_sifen
+        - tipo_documento
+        - emisor_id
+        - env
+        - resolution_note
+      properties:
+        document_uuid:
+          type: string
+          format: uuid
+          description: Identidad canónica estable e inmutable del documento
+        document_id:
+          type: string
+          description: ID numérico interno del documento
+        requested_cdc:
+          type: string
+          description: CDC usado en la consulta
+        current_cdc:
+          type: string
+          nullable: true
+          description: CDC fiscal vigente del documento
+        is_current:
+          type: boolean
+          description: true si el CDC consultado es el vigente; false si fue reemplazado
+        lineage_status:
+          type: string
+          enum: [ACTIVE, SUPERSEDED, INCONSISTENT]
+          description: Condición del CDC consultado dentro del linaje del documento
+        sifen_resolution:
+          type: string
+          enum: [APPROVED, APPROVED_WITH_OBS, REJECTED_OR_MISSING, PENDING_CHECK]
+          description: Resolución fiscal conocida del CDC consultado
+        status:
+          type: string
+          description: Estado interno del documento
+        accepted_by_sifen:
+          type: boolean
+          description: true si el documento está aprobado por SIFEN
+        nro_factura:
+          type: string
+          nullable: true
+        tipo_documento:
+          type: string
+        emisor_id:
+          type: string
+        env:
+          type: string
+          enum: [test, prod]
+        resolution_note:
+          type: string
+          description: Texto explicativo del resultado de resolución
+
+    DocumentoCanonicoResponse:
+      type: object
+      description: |
+        Respuesta principal del contrato canónico (`GET /documentos/{uuid}`).
+        Incluye identidad canónica, estado fiscal vigente y resumen de linaje CDC.
+      required:
+        - document_uuid
+        - document_id
+        - tipo_documento
+        - establecimiento
+        - punto_expedicion
+        - numero
+        - status
+        - accepted_by_sifen
+        - emisor_id
+        - env
+        - lineage_summary
+        - created_at
+        - updated_at
+      properties:
+        document_uuid:
+          type: string
+          format: uuid
+          description: Identidad canónica estable e inmutable
+        document_id:
+          type: string
+        current_cdc:
+          type: string
+          nullable: true
+          description: CDC fiscal vigente (puede ser null si el documento aún no fue firmado)
+        nro_factura:
+          type: string
+          nullable: true
+        tipo_documento:
+          type: string
+        establecimiento:
+          type: string
+        punto_expedicion:
+          type: string
+        numero:
+          type: string
+        status:
+          $ref: "#/components/schemas/DocumentStatus"
+        accepted_by_sifen:
+          type: boolean
+        fecha_emision:
+          type: string
+          nullable: true
+        condicion_operacion:
+          type: string
+          nullable: true
+        emisor_id:
+          type: string
+        env:
+          type: string
+          enum: [test, prod]
+        lineage_summary:
+          $ref: "#/components/schemas/LineageSummary"
+        sifen_last_checked_at:
+          type: string
+          nullable: true
+        approved_at:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+        updated_at:
+          type: string
+
+    LineageSummary:
+      type: object
+      description: Resumen del linaje CDC del documento
+      properties:
+        active_cdc:
+          type: string
+          nullable: true
+        active_lineage_status:
+          type: string
+          nullable: true
+          enum: [ACTIVE, SUPERSEDED, INCONSISTENT]
+        active_sifen_resolution:
+          type: string
+          nullable: true
+          enum: [APPROVED, APPROVED_WITH_OBS, REJECTED_OR_MISSING, PENDING_CHECK]
+        total_cdc_entries:
+          type: integer
+          description: Total de entradas CDC en el linaje (incluye históricos)
+        has_superseded:
+          type: boolean
+          description: true si el documento tuvo al menos un CDC reemplazado
+
+    LineageEntryResponse:
+      type: object
+      description: Entrada individual del linaje CDC de un documento
+      required:
+        - id
+        - cdc
+        - source_type
+        - lineage_status
+        - sifen_resolution
+        - is_active
+        - created_at
+      properties:
+        id:
+          type: string
+        cdc:
+          type: string
+          description: CDC de 44 caracteres
+        source_type:
+          type: string
+          enum: [INITIAL, RESEND, RETRY_SAME_CDC, DERIVED, RECONCILED, BOOTSTRAP]
+          description: |
+            Origen del CDC en el linaje:
+            - INITIAL: primer CDC generado al emitir
+            - RESEND: nuevo CDC por reenvío con cambio de XML
+            - RETRY_SAME_CDC: reintento sin cambio de CDC
+            - DERIVED: documento derivado de otro
+            - RECONCILED: CDC promovido por reconciliación SIFEN
+            - BOOTSTRAP: entrada generada por migración histórica
+        lineage_status:
+          type: string
+          enum: [ACTIVE, SUPERSEDED, INCONSISTENT]
+          description: |
+            - ACTIVE: CDC vigente del documento
+            - SUPERSEDED: CDC reemplazado por uno posterior
+            - INCONSISTENT: no se pudo determinar el estado con evidencia suficiente
+        sifen_resolution:
+          type: string
+          enum: [APPROVED, APPROVED_WITH_OBS, REJECTED_OR_MISSING, PENDING_CHECK]
+        is_active:
+          type: boolean
+          description: true si es el CDC activo del documento
+        sifen_code:
+          type: string
+          nullable: true
+        sifen_message:
+          type: string
+          nullable: true
+        revision_number:
+          type: integer
+          nullable: true
+        approved_at:
+          type: string
+          nullable: true
+        last_checked_at:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+
+    DocumentoLineageResponse:
+      type: object
+      description: Trazabilidad completa de CDC de un documento
+      required:
+        - document_uuid
+        - document_id
+        - status
+        - env
+        - emisor_id
+        - lineage
+      properties:
+        document_uuid:
+          type: string
+          format: uuid
+        document_id:
+          type: string
+        current_cdc:
+          type: string
+          nullable: true
+        status:
+          type: string
+        env:
+          type: string
+          enum: [test, prod]
+        emisor_id:
+          type: string
+        lineage:
+          type: array
+          items:
+            $ref: "#/components/schemas/LineageEntryResponse"

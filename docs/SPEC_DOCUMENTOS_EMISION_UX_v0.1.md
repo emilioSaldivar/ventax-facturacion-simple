@@ -218,3 +218,88 @@ Nota de alcance: el termino tecnico original puede mantenerse en tooltip/ayuda s
 - El popup de productos usa alto completo util y evita espacios muertos al abrir teclado.
 - Luego de emitir, el resultado queda visible automaticamente en pantalla.
 - La experiencia debe validarse primero en mobile y luego en desktop/tablet.
+
+## UX-009 Detalle Emitidas (Acciones Rapidas + Fiscal Avanzado)
+
+La vista de detalle de facturas emitidas debe unificar el patron UX ya usado en emision:
+
+- acciones rapidas visibles arriba;
+- opciones avanzadas colapsadas abajo;
+- separacion explicita entre uso diario y acciones fiscales sensibles.
+
+### Niveles De Accion Obligatorios
+
+1. `Acciones frecuentes` (siempre visibles, tactiles, ancho completo en mobile):
+   - `Ver factura PDF`
+   - `Enviar por WhatsApp`
+   - `Compartir factura`
+   - `Copiar enlace`
+2. `Gestion comercial` (visibles, con confirmacion obligatoria):
+   - `Crear nota de credito`
+   - `Anular factura`
+3. `Opciones avanzadas` (colapsadas por defecto):
+   - `Verificar estado fiscal`
+   - `Volver a verificar`
+   - `Crear nuevo enlace`
+   - `Descargar documento electronico`
+
+### Primera Etapa Operativa (Minimo Esencial)
+
+Para operador comercial en primera etapa, solo se expone lo esencial para autogestion diaria sin saturacion tecnica:
+
+- verificar estado;
+- volver a verificar estado;
+- compartir/copiar/crear nuevo enlace;
+- descargar documento electronico.
+
+Acciones sensibles de regularizacion (`invalidar numeracion`, `retry-same-cdc`, `create-derived`, `cancel-send`, `validate-cdc-impact`, `decision`, `eventos` admin) quedan reservadas por rol interno (`SOPORTE_INTERNO`/`ADMIN_INTERNO`) y contexto de alerta operativa, alineado con `OPERACION_RECHAZOS_Y_AUTOGESTION_v0.1.md`.
+
+### Lenguaje Comercial Obligatorio
+
+Reemplazos visibles al operador:
+
+## UX-010 Documentos Recientes Mobile-First (3 Niveles)
+
+La pantalla `Facturas y notas` debe priorizar contexto reciente y accion rapida, no historico completo por defecto.
+
+### Nivel 1: Documentos Recientes
+
+- Vista inicial orientada a `hoy` y `ultimos 7 dias`.
+- El historico completo no debe ocupar la primera vista.
+- Busqueda principal visible: un solo campo `Buscar factura...`.
+- Filtros avanzados en segundo nivel (`Mas filtros` / `Buscar mas documentos`).
+
+### Nivel 2: Detalle De Factura
+
+- Acciones comerciales prioritarias:
+  - ver PDF;
+  - compartir;
+  - WhatsApp;
+  - copiar enlace;
+  - nota de credito;
+  - anular.
+- El estado del documento debe tener mayor jerarquia visual que el numero fiscal.
+- Los motivos para `nota de credito`, `anular` e `inutilizar` deben capturarse en modal propio de la app (no `alert/prompt` nativo del navegador), optimizado para mobile (Android/iOS/PWA).
+
+### Nivel 3: Administracion Fiscal
+
+- Eventos, diagnostico y acciones de regularizacion tecnica deben vivir en bloque aislado `Administracion fiscal`.
+- Usuario operador comun no debe saturarse con esta capa en la primera vista de documentos.
+
+- `CDC` -> `Codigo fiscal`
+- `XML` -> `Documento electronico`
+- `Consultar SIFEN` -> `Verificar estado fiscal`
+- `Reintentar validacion` -> `Volver a verificar`
+- `Inutilizar numeracion` -> `Invalidar numeracion` (solo cuando aplique por rol/alerta)
+- `KUDE/PDF` -> `Factura PDF`
+
+### Informacion Fiscal Expandible
+
+La informacion tecnica debe permanecer disponible, pero colapsada por defecto en `Informacion fiscal`:
+
+- codigo fiscal (CDC);
+- estado fiscal/SIFEN;
+- respuesta fiscal resumida;
+- fecha de validacion;
+- id de evento;
+- estado de email.

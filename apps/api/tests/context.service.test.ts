@@ -93,6 +93,10 @@ class FakeFiscalGateway implements FiscalGateway {
     throw new Error("not needed");
   }
 
+  async getDocumentoDecisionByDocumentId() {
+    throw new Error("not needed");
+  }
+
   async getBatchPendientesByEmisor() {
     throw new Error("not needed");
   }

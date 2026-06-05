@@ -211,6 +211,65 @@ interface DocumentoEventosListResponse {
   events: DocumentoEventoResponse[];
 }
 
+interface DocumentoDecisionResponse {
+  documento_id: string;
+  emisor_id: string;
+  env: "test" | "prod";
+  cdc: string | null;
+  nro_factura: string | null;
+  status: string;
+  transmission_evidence: "YES" | "NO" | "UNKNOWN";
+  number_state: "CONSUMED" | "REUSABLE" | "REQUIRES_VOID" | "UNCERTAIN";
+  decision_confidence: "HIGH" | "MEDIUM" | "LOW";
+  reason_codes: string[];
+  recommended_action: "RETRY" | "CANCEL_SEND" | "CANCEL_FISCAL" | "VOID_NUMBER" | "WAIT_SYNC" | "NO_ACTION";
+  next_step_hint: string | null;
+  escalation_required: boolean;
+  allowed_actions: Record<string, boolean>;
+}
+
+interface DocumentoValidateCdcImpactResponse {
+  documento_id: string;
+  current_cdc: string | null;
+  candidate_cdc: string | null;
+  cdc_impact: "CDC_NO_CHANGE" | "CDC_CHANGE";
+  reason: string | null;
+  allowed_actions: Record<string, boolean>;
+}
+
+interface DocumentoGestionResendResponse {
+  documento_id: string;
+  status: string;
+  revision_number: number;
+  accepted_by_sifen: boolean;
+  cdc: string | null;
+  queued_for_batch: boolean | null;
+}
+
+interface DocumentoGestionCreateDerivedResponse {
+  source_document_id: string;
+  derived_document_id: string;
+  status: string;
+  accepted_by_sifen: boolean;
+  cdc: string | null;
+  nro_factura: string | null;
+}
+
+interface DocumentoGestionCancelSendResponse {
+  documento_id: string;
+  previous_status: string;
+  status: string;
+  action_result: string;
+  reason_codes: string[];
+  recommended_next_action: string;
+}
+
+interface DocumentoGestionVoidResponse {
+  documento_id: string;
+  event_id: string | null;
+  status: string;
+}
+
 interface BatchPendientesGestionResponse {
   documents_pending: number;
   batches_pending: number;
@@ -314,6 +373,11 @@ interface CatalogoDraft {
   precio_unitario: string;
   iva_tipo: TipoIva;
   activo: boolean;
+}
+
+interface InvoiceClientePrefillRequest {
+  request_id: number;
+  cliente: FacturaClienteInput;
 }
 
 function App() {
@@ -536,6 +600,8 @@ function OperationHome({
   const canEmit = Boolean(readiness?.ready);
   const [operationView, setOperationView] = useState<OperationView>(() => (canEmit ? "invoice" : "status"));
   const [menuOpen, setMenuOpen] = useState(false);
+  const [invoiceClientePrefill, setInvoiceClientePrefill] = useState<InvoiceClientePrefillRequest | null>(null);
+  const invoiceClientePrefillSeqRef = useRef(0);
   const [installPromptEvent, setInstallPromptEvent] = useState<BeforeInstallPromptEvent | null>(null);
   const [showInstallHint, setShowInstallHint] = useState(false);
   const [installing, setInstalling] = useState(false);
@@ -619,6 +685,25 @@ function OperationHome({
   function goTo(view: OperationView) {
     setOperationView(view);
     setMenuOpen(false);
+  }
+
+  function useClienteFromAgenda(cliente: ClienteResponse) {
+    goTo("invoice");
+    window.setTimeout(() => {
+      invoiceClientePrefillSeqRef.current += 1;
+      setInvoiceClientePrefill({
+        request_id: invoiceClientePrefillSeqRef.current,
+        cliente: {
+          cliente_id: cliente.cliente_id,
+          documento_tipo: cliente.documento_tipo,
+          documento: cliente.documento,
+          razon_social: cliente.razon_social,
+          direccion: cliente.direccion ?? "",
+          telefono: cliente.telefono ?? "",
+          email: cliente.email ?? ""
+        }
+      });
+    }, 0);
   }
 
   const menuItems: Array<{
@@ -734,6 +819,7 @@ function OperationHome({
           accessToken={accessToken}
           canEmit={canEmit}
           context={context}
+          clientePrefillRequest={invoiceClientePrefill}
           readiness={readiness}
           setAccessToken={setAccessToken}
           onBack={() => goTo("status")}
@@ -752,7 +838,12 @@ function OperationHome({
           role={user?.role ?? "OPERADOR_FACTURACION"}
         />
       ) : operationView === "clients" ? (
-        <ClientesAgendaView accessToken={accessToken} setAccessToken={setAccessToken} onBack={() => goTo("invoice")} />
+        <ClientesAgendaView
+          accessToken={accessToken}
+          onBack={() => goTo("invoice")}
+          onUseCliente={useClienteFromAgenda}
+          setAccessToken={setAccessToken}
+        />
       ) : operationView === "catalog" ? (
         <CatalogView accessToken={accessToken} setAccessToken={setAccessToken} onBack={() => goTo("invoice")} />
       ) : (
@@ -868,13 +959,22 @@ function DocumentsView({
   role: UserSummary["role"];
 }) {
   const api = useMemo(() => createApiClient(accessToken, setAccessToken), [accessToken, setAccessToken]);
+  const todayYmd = useMemo(() => formatYmdFromDate(new Date()), []);
+  const last7DaysYmd = useMemo(() => {
+    const date = new Date();
+    date.setDate(date.getDate() - 6);
+    return formatYmdFromDate(date);
+  }, []);
   const [documents, setDocuments] = useState<DocumentoResponse[]>([]);
   const [selected, setSelected] = useState<DocumentoResponse | null>(null);
   const [estadoFilter, setEstadoFilter] = useState<DocumentoEstado | "">("");
-  const [tipoOperativoFilter, setTipoOperativoFilter] = useState<"TODOS" | "CONTADO" | "CREDITO" | "NOTA_CREDITO">("TODOS");
+  const [docKindTab, setDocKindTab] = useState<"FACTURAS" | "NOTAS_CREDITO">("FACTURAS");
+  const [tipoOperativoFilter, setTipoOperativoFilter] = useState<"TODOS" | "CONTADO" | "CREDITO">("TODOS");
   const [query, setQuery] = useState("");
-  const [desde, setDesde] = useState("");
-  const [hasta, setHasta] = useState("");
+  const [desde, setDesde] = useState(last7DaysYmd);
+  const [hasta, setHasta] = useState(todayYmd);
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  const [quickMenuDocId, setQuickMenuDocId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -887,20 +987,32 @@ function DocumentsView({
   const [reconciliacion, setReconciliacion] = useState<ReconciliacionFiscalResponse | null>(null);
   const [gestionTab, setGestionTab] = useState<"STATUS" | "EVENTOS" | "PENDIENTES" | "RECONCILIACION">("STATUS");
   const [gestionLoading, setGestionLoading] = useState(false);
+  const [decision, setDecision] = useState<DocumentoDecisionResponse | null>(null);
+  const [cdcImpact, setCdcImpact] = useState<DocumentoValidateCdcImpactResponse | null>(null);
+  const [reasonModal, setReasonModal] = useState<{
+    action: "CANCEL_DETAIL" | "CANCEL_LIST" | "CREDIT_NOTE_DETAIL" | "CREDIT_NOTE_LIST" | "VOID_NUMBER";
+    documentoId: string;
+    tipo?: DocumentoResponse["tipo"];
+  } | null>(null);
+  const [reasonDraft, setReasonDraft] = useState("");
+  const [reasonError, setReasonError] = useState<string | null>(null);
+  const [notaCreditoPopup, setNotaCreditoPopup] = useState<DocumentoResponse | null>(null);
+  const isInternalSupport = role !== "OPERADOR_FACTURACION";
 
   useEffect(() => {
     void loadDocuments();
-  }, [estadoFilter, tipoOperativoFilter, desde, hasta]);
+  }, [estadoFilter, tipoOperativoFilter, desde, hasta, docKindTab]);
 
   async function loadDocuments(nextQuery = query) {
     setLoading(true);
     setError(null);
 
     const params = new URLSearchParams({ limit: "30", offset: "0" });
+    params.set("tipo", docKindTab === "NOTAS_CREDITO" ? "NOTA_CREDITO" : "FACTURA");
     if (estadoFilter) {
       params.set("estado", estadoFilter);
     }
-    if (tipoOperativoFilter !== "TODOS") {
+    if (docKindTab === "FACTURAS" && tipoOperativoFilter !== "TODOS") {
       params.set("tipo_operativo", tipoOperativoFilter);
     }
     if (nextQuery.trim()) {
@@ -935,8 +1047,191 @@ function DocumentsView({
       const detail = await api.get<DocumentoResponse>(`/facturas/${documentoId}`);
       setSelected(detail);
       await loadDeliveryFor(detail);
+      if (isInternalSupport) {
+        try {
+          const detailDecision = await api.get<DocumentoDecisionResponse>(`/facturas/${documentoId}/gestion/decision`);
+          setDecision(detailDecision);
+        } catch {
+          setDecision(null);
+        }
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo abrir el detalle.");
+    } finally {
+      setActionLoading(false);
+    }
+  }
+
+  async function validateSelectedCdcImpact() {
+    if (!selected || !isInternalSupport) {
+      return;
+    }
+    setActionLoading(true);
+    try {
+      const result = await api.post<DocumentoValidateCdcImpactResponse>(`/facturas/${selected.id}/gestion/validate-cdc-impact`, {});
+      setCdcImpact(result);
+      setMessage(`Impacto CDC: ${result.cdc_impact}.`);
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "No se pudo validar impacto CDC.");
+    } finally {
+      setActionLoading(false);
+    }
+  }
+
+  async function retrySameCdcAction() {
+    if (!selected || !isInternalSupport) {
+      return;
+    }
+    const comment = window.prompt("Comentario de soporte (opcional)", "") ?? "";
+    setActionLoading(true);
+    try {
+      const result = await api.post<DocumentoGestionResendResponse>(`/facturas/${selected.id}/gestion/retry-same-cdc`, {
+        mode: "BATCH",
+        send_now: false,
+        comment: comment.trim() || undefined
+      });
+      setMessage(`Reintento enviado. Revision ${result.revision_number}.`);
+      await openDetail(selected.id);
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "No se pudo reintentar con mismo CDC.");
+    } finally {
+      setActionLoading(false);
+    }
+  }
+
+  async function createDerivedAction() {
+    if (!selected || !isInternalSupport) {
+      return;
+    }
+    const comment = window.prompt("Motivo/Comentario de derivación", "");
+    if (!comment?.trim()) {
+      return;
+    }
+    setActionLoading(true);
+    try {
+      const result = await api.post<DocumentoGestionCreateDerivedResponse>(`/facturas/${selected.id}/gestion/create-derived`, {
+        mode: "BATCH",
+        send_now: false,
+        comment: comment.trim()
+      });
+      setMessage(`DE derivado creado: ${result.derived_document_id}.`);
+      await loadDocuments();
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "No se pudo crear DE derivado.");
+    } finally {
+      setActionLoading(false);
+    }
+  }
+
+  async function cancelSendAction() {
+    if (!selected || !isInternalSupport) {
+      return;
+    }
+    if (!window.confirm("Cancelar envío local del documento en cola batch?")) {
+      return;
+    }
+    setActionLoading(true);
+    try {
+      const result = await api.post<DocumentoGestionCancelSendResponse>(`/facturas/${selected.id}/gestion/cancel-send`, {});
+      setMessage(`Envio cancelado. Resultado: ${result.action_result}.`);
+      await openDetail(selected.id);
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "No se pudo cancelar envío local.");
+    } finally {
+      setActionLoading(false);
+    }
+  }
+
+  async function voidNumberAction() {
+    if (!selected || !isInternalSupport) {
+      return;
+    }
+    openReasonModal("VOID_NUMBER", selected.id);
+  }
+
+  function openReasonModal(
+    action: "CANCEL_DETAIL" | "CANCEL_LIST" | "CREDIT_NOTE_DETAIL" | "CREDIT_NOTE_LIST" | "VOID_NUMBER",
+    documentoId: string,
+    tipo?: DocumentoResponse["tipo"]
+  ) {
+    setReasonModal({ action, documentoId, tipo });
+    setReasonDraft("");
+    setReasonError(null);
+  }
+
+  function closeReasonModal() {
+    setReasonModal(null);
+    setReasonDraft("");
+    setReasonError(null);
+  }
+
+  async function submitReasonModal() {
+    if (!reasonModal) {
+      return;
+    }
+    const motivo = reasonDraft.trim();
+    if (!motivo) {
+      setReasonError("Ingrese un motivo para continuar.");
+      return;
+    }
+    if (motivo.length < 3) {
+      setReasonError("El motivo debe tener al menos 3 caracteres.");
+      return;
+    }
+
+    setReasonError(null);
+    setActionLoading(true);
+    setMessage(null);
+
+    try {
+      if (reasonModal.action === "CANCEL_DETAIL") {
+        const updated = await api.post<DocumentoResponse>(`/facturas/${reasonModal.documentoId}/cancelar`, { motivo });
+        setSelected(updated);
+        setDocuments((current) => current.map((item) => (item.id === updated.id ? updated : item)));
+        setMessage("Documento anulado.");
+        await loadDeliveryFor(updated);
+      } else if (reasonModal.action === "CANCEL_LIST") {
+        await api.post<DocumentoResponse>(`/facturas/${reasonModal.documentoId}/cancelar`, { motivo });
+        setMessage("Documento anulado.");
+        await loadDocuments();
+      } else if (reasonModal.action === "CREDIT_NOTE_DETAIL") {
+        const notaCredito = await api.request<DocumentoResponse>(`/facturas/${reasonModal.documentoId}/nota-credito`, {
+          method: "POST",
+          headers: {
+            "Idempotency-Key": createIdempotencyKey()
+          },
+          body: JSON.stringify({ motivo })
+        });
+        setSelected(notaCredito);
+        setDocuments((current) => [notaCredito, ...current.filter((item) => item.id !== notaCredito.id)]);
+        setDeliveryLink(null);
+        setEmailStatus(null);
+        setNotaCreditoPopup(notaCredito);
+        await loadDeliveryFor(notaCredito);
+      } else if (reasonModal.action === "CREDIT_NOTE_LIST") {
+        const notaCredito = await api.request<DocumentoResponse>(`/facturas/${reasonModal.documentoId}/nota-credito`, {
+          method: "POST",
+          headers: {
+            "Idempotency-Key": createIdempotencyKey()
+          },
+          body: JSON.stringify({ motivo })
+        });
+        setSelected(notaCredito);
+        setDocuments((current) => [notaCredito, ...current.filter((item) => item.id !== notaCredito.id)]);
+        setDeliveryLink(null);
+        setEmailStatus(null);
+        setNotaCreditoPopup(notaCredito);
+        await loadDeliveryFor(notaCredito);
+      } else {
+        const result = await api.post<DocumentoGestionVoidResponse>(`/facturas/${reasonModal.documentoId}/gestion/void-number`, {
+          motivo
+        });
+        setMessage(`Inutilización solicitada. Evento: ${result.event_id ?? "sin id"}.`);
+        await loadEventosDocumento();
+      }
+      closeReasonModal();
+    } catch (err) {
+      setReasonError(err instanceof Error ? err.message : "No se pudo procesar la acción.");
     } finally {
       setActionLoading(false);
     }
@@ -998,59 +1293,36 @@ function DocumentsView({
     if (!selected) {
       return;
     }
-
-    const motivo = window.prompt("Motivo de anulacion", "");
-    if (!motivo?.trim()) {
-      return;
-    }
-
-    setActionLoading(true);
-    setMessage(null);
-
-    try {
-      const updated = await api.post<DocumentoResponse>(`/facturas/${selected.id}/cancelar`, { motivo: motivo.trim() });
-      setSelected(updated);
-      setDocuments((current) => current.map((item) => (item.id === updated.id ? updated : item)));
-      setMessage("Documento anulado.");
-      await loadDeliveryFor(updated);
-    } catch (err) {
-      setMessage(err instanceof Error ? err.message : "No se pudo anular el documento.");
-    } finally {
-      setActionLoading(false);
-    }
+    openReasonModal("CANCEL_DETAIL", selected.id, selected.tipo);
   }
 
   async function emitSelectedNotaCredito() {
     if (!selected) {
       return;
     }
+    openReasonModal("CREDIT_NOTE_DETAIL", selected.id);
+  }
 
-    const motivo = window.prompt("Motivo de nota de credito", "");
-    if (!motivo?.trim()) {
-      return;
-    }
+  async function emitNotaCreditoFromList(documentoId: string) {
+    openReasonModal("CREDIT_NOTE_LIST", documentoId);
+  }
 
+  async function cancelDocumentoFromList(documentoId: string, tipo?: DocumentoResponse["tipo"]) {
+    openReasonModal("CANCEL_LIST", documentoId, tipo);
+  }
+
+  async function openQuickShare(documento: DocumentoResponse, mode: "public" | "whatsapp") {
     setActionLoading(true);
     setMessage(null);
-
     try {
-      const notaCredito = await api.request<DocumentoResponse>(`/facturas/${selected.id}/nota-credito`, {
-        method: "POST",
-        headers: {
-          "Idempotency-Key": createIdempotencyKey()
-        },
-        body: JSON.stringify({ motivo: motivo.trim() })
-      });
-      setSelected(notaCredito);
-      setDocuments((current) => [notaCredito, ...current.filter((item) => item.id !== notaCredito.id)]);
-      setDeliveryLink(null);
-      setEmailStatus(null);
-      setMessage("Nota de credito emitida.");
-      await loadDeliveryFor(notaCredito);
+      const link = await api.post<DeliveryLinkResponse>(`/facturas/${documento.id}/delivery-link`, {});
+      const targetUrl = mode === "whatsapp" ? link.whatsapp_url : link.public_url;
+      window.open(targetUrl, "_blank", "noopener,noreferrer");
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "No se pudo emitir la nota de credito.");
+      setMessage(err instanceof Error ? err.message : "No se pudo abrir accion rapida.");
     } finally {
       setActionLoading(false);
+      setQuickMenuDocId(null);
     }
   }
 
@@ -1114,6 +1386,29 @@ function DocumentsView({
   const selectedSifenSummary = selected ? getSifenSummary(selected) : null;
   const selectedKudeUrl = selected && deliveryLink && selected.delivery.artifacts.kude_pdf.available ? `${deliveryLink.public_url}/kude.pdf` : null;
   const selectedXmlUrl = selected && deliveryLink && selected.delivery.artifacts.xml.available ? `${deliveryLink.public_url}/xml` : null;
+  const hasRecentWindow = Boolean(desde || hasta);
+  const [todayDocs, weekDocs] = useMemo(() => {
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const tomorrowStart = todayStart + 24 * 60 * 60 * 1000;
+    const currentWeekDocs: DocumentoResponse[] = [];
+    const currentTodayDocs: DocumentoResponse[] = [];
+
+    for (const documento of documents) {
+      const rawDate = documento.created_at ? Date.parse(documento.created_at) : NaN;
+      if (Number.isNaN(rawDate)) {
+        currentWeekDocs.push(documento);
+        continue;
+      }
+      if (rawDate >= todayStart && rawDate < tomorrowStart) {
+        currentTodayDocs.push(documento);
+      } else {
+        currentWeekDocs.push(documento);
+      }
+    }
+
+    return [currentTodayDocs, currentWeekDocs];
+  }, [documents]);
 
   return (
     <section className="documents-view" aria-labelledby="documents-title">
@@ -1130,14 +1425,14 @@ function DocumentsView({
       {!selected ? (
       <section className="documents-filters">
         <div className="filter-tabs" role="group" aria-label="Tipo de documento">
-          {(["TODOS", "CONTADO", "CREDITO", "NOTA_CREDITO"] as const).map((value) => (
+          {(["FACTURAS", "NOTAS_CREDITO"] as const).map((value) => (
             <button
-              className={tipoOperativoFilter === value ? "active" : ""}
+              className={docKindTab === value ? "active" : ""}
               key={value}
-              onClick={() => setTipoOperativoFilter(value)}
+              onClick={() => setDocKindTab(value)}
               type="button"
             >
-              {value === "TODOS" ? "Todos" : value === "NOTA_CREDITO" ? "Nota credito" : value === "CONTADO" ? "Contado" : "Credito"}
+              {value === "FACTURAS" ? "Facturas" : "Notas de credito"}
             </button>
           ))}
         </div>
@@ -1150,34 +1445,66 @@ function DocumentsView({
                 void loadDocuments();
               }
             }}
-            placeholder="Cliente, RUC, CDC o numero"
+            placeholder="Buscar factura..."
             value={query}
           />
         </label>
-        <label>
-          Estado
-          <select onChange={(event) => setEstadoFilter(event.target.value as DocumentoEstado | "")} value={estadoFilter}>
-            <option value="">Todos</option>
-            <option value="EMITIENDO">Emitiendo</option>
-            <option value="EMITIDA">Emitida</option>
-            <option value="PENDIENTE_SIFEN">Pendiente SIFEN</option>
-            <option value="RECHAZADA">Rechazada</option>
-            <option value="ERROR_TEMPORAL">Error temporal</option>
-            <option value="ERROR_OPERATIVO">Error operativo</option>
-            <option value="ANULADA">Anulada</option>
-          </select>
-        </label>
-        <label>
-          Desde
-          <input onChange={(event) => setDesde(event.target.value)} type="date" value={desde} />
-        </label>
-        <label>
-          Hasta
-          <input onChange={(event) => setHasta(event.target.value)} type="date" value={hasta} />
-        </label>
-        <button className="secondary-action" disabled={loading} onClick={() => void loadDocuments()} type="button">
-          {loading ? "Cargando..." : "Aplicar"}
-        </button>
+        <div className="quick-actions-row compact">
+          <button className="secondary-action" disabled={loading} onClick={() => void loadDocuments()} type="button">
+            {loading ? "Cargando..." : "Buscar"}
+          </button>
+          <button className="secondary-action" onClick={() => setShowAdvancedFilters((current) => !current)} type="button">
+            {showAdvancedFilters ? "Ocultar filtros" : "Mas filtros"}
+          </button>
+          {!showAdvancedFilters ? (
+            <button
+              className="secondary-action"
+              onClick={() => {
+                setShowAdvancedFilters(true);
+                setDesde("");
+                setHasta("");
+              }}
+              type="button"
+            >
+              Buscar mas documentos
+            </button>
+          ) : null}
+        </div>
+        {showAdvancedFilters ? (
+          <div className="documents-advanced-filters">
+            <label>
+              Estado
+              <select onChange={(event) => setEstadoFilter(event.target.value as DocumentoEstado | "")} value={estadoFilter}>
+                <option value="">Todos</option>
+                <option value="EMITIENDO">Emitiendo</option>
+                <option value="EMITIDA">Emitida</option>
+                <option value="PENDIENTE_SIFEN">Pendiente SIFEN</option>
+                <option value="RECHAZADA">Rechazada</option>
+                <option value="ERROR_TEMPORAL">Error temporal</option>
+                <option value="ERROR_OPERATIVO">Error operativo</option>
+                <option value="ANULADA">Anulada</option>
+              </select>
+            </label>
+            {docKindTab === "FACTURAS" ? (
+              <label>
+                Tipo factura
+                <select onChange={(event) => setTipoOperativoFilter(event.target.value as "TODOS" | "CONTADO" | "CREDITO")} value={tipoOperativoFilter}>
+                  <option value="TODOS">Todas</option>
+                  <option value="CONTADO">Contado</option>
+                  <option value="CREDITO">Credito</option>
+                </select>
+              </label>
+            ) : null}
+            <label>
+              Desde
+              <input onChange={(event) => setDesde(event.target.value)} type="date" value={desde} />
+            </label>
+            <label>
+              Hasta
+              <input onChange={(event) => setHasta(event.target.value)} type="date" value={hasta} />
+            </label>
+          </div>
+        ) : null}
       </section>
       ) : null}
 
@@ -1257,7 +1584,35 @@ function DocumentsView({
       <section className="documents-layout">
         <div className="documents-list">
           {documents.length === 0 && !loading ? <p className="muted empty-state">Sin documentos para los filtros actuales.</p> : null}
-          {documents.map((documento) => (
+          {hasRecentWindow ? <h3 className="documents-group-title">Hoy</h3> : null}
+          {todayDocs.map((documento) => (
+            <article className="document-row document-row-rich" key={documento.id}>
+              <button className="document-row-main" onClick={() => void openDetail(documento.id)} type="button">
+                <span>
+                  <strong>{`${getDocumentoStatusIcon(documento.estado)} ${formatDocumentoTipo(documento.tipo)} ${documento.numero_fiscal ?? "pendiente"}`}</strong>
+                  <small>{documento.cliente.razon_social}</small>
+                </span>
+                <span>
+                  <strong>{formatGuaranies(documento.totals.total)}</strong>
+                  <small>{formatShortDate(documento.created_at)}</small>
+                </span>
+              </button>
+              <div className="document-row-menu-wrapper">
+                <button className="icon-menu-action" onClick={() => setQuickMenuDocId((current) => current === documento.id ? null : documento.id)} type="button">⋮</button>
+                {quickMenuDocId === documento.id ? (
+                  <div className="client-row-menu" role="menu" aria-label="Acciones del documento">
+                    <button onClick={() => void openDetail(documento.id)} role="menuitem" type="button">Ver detalle</button>
+                    <button onClick={() => void openQuickShare(documento, "public")} role="menuitem" type="button">Compartir</button>
+                    <button onClick={() => void openQuickShare(documento, "whatsapp")} role="menuitem" type="button">WhatsApp</button>
+                    <button onClick={() => void emitNotaCreditoFromList(documento.id)} role="menuitem" type="button">Nota de credito</button>
+                    <button className="destructive-item" onClick={() => void cancelDocumentoFromList(documento.id, documento.tipo)} role="menuitem" type="button">Anular</button>
+                  </div>
+                ) : null}
+              </div>
+            </article>
+          ))}
+          {hasRecentWindow ? <h3 className="documents-group-title">Ultimos 7 dias</h3> : null}
+          {(hasRecentWindow ? weekDocs : documents).map((documento) => (
             <button
               className="document-row"
               key={documento.id}
@@ -1265,12 +1620,12 @@ function DocumentsView({
               type="button"
             >
               <span>
-                <strong>{documento.numero_fiscal ?? "Numero pendiente"}</strong>
-                <small>{formatDocumentoTipo(documento.tipo)} · {documento.cliente.razon_social}</small>
+                <strong>{`${getDocumentoStatusIcon(documento.estado)} ${documento.numero_fiscal ?? "Numero pendiente"}`}</strong>
+                <small>{documento.cliente.razon_social}</small>
               </span>
               <span>
                 <strong>{formatGuaranies(documento.totals.total)}</strong>
-                <small>{formatDocumentoEstado(documento.estado)}</small>
+                <small>{formatShortDate(documento.created_at)}</small>
               </span>
             </button>
           ))}
@@ -1285,11 +1640,11 @@ function DocumentsView({
               <div className="receipt-heading">
                 <div>
                   <p className="eyebrow">Documento</p>
-                  <h3>{formatDocumentoEstado(selected.estado)}</h3>
+                  <h3>{formatDocumentoEstadoSimple(selected.estado, selected.tipo)}</h3>
                   <p className="muted">{formatDocumentoTipo(selected.tipo)} · Numero {selected.numero_fiscal ?? "pendiente"}</p>
                 </div>
                 <span className={selected.estado === "EMITIDA" ? "status-pill ready" : "status-pill blocked"}>
-                  {formatDocumentoEstado(selected.estado)}
+                  {formatDocumentoEstadoSimple(selected.estado, selected.tipo)}
                 </span>
               </div>
               <button className="ghost-action" onClick={() => setSelected(null)} type="button">
@@ -1336,42 +1691,41 @@ function DocumentsView({
               {emailStatus?.message ? <p className="editor-alert ready">{emailStatus.message}</p> : null}
 
               <div className="delivery-actions">
-                <a className={selectedKudeUrl ? "secondary-link" : "secondary-link disabled"} href={selectedKudeUrl ?? "#"} rel="noreferrer" target="_blank">
-                  Ver factura PDF
-                </a>
-                <details className="share-block">
-                  <summary>Compartir factura</summary>
-                  <div className="result-actions">
-                    <a className={deliveryLink ? "secondary-link" : "secondary-link disabled"} href={deliveryLink?.whatsapp_url ?? "#"} rel="noreferrer" target="_blank">
-                      Enviar por WhatsApp
-                    </a>
-                    <button className="secondary-action" disabled={!deliveryLink} onClick={() => void copyDetailLink()} type="button">
-                      Copiar enlace
-                    </button>
-                    <a className={selectedXmlUrl ? "secondary-link" : "secondary-link disabled"} href={selectedXmlUrl ?? "#"} rel="noreferrer" target="_blank">
-                      Documento electronico (XML firmado)
-                    </a>
-                  </div>
-                </details>
+                <div className="action-group action-group-primary">
+                  <h4 className="group-title">Acciones frecuentes</h4>
+                  <a className={selectedKudeUrl ? "secondary-link" : "secondary-link disabled"} href={selectedKudeUrl ?? "#"} rel="noreferrer" target="_blank">
+                    📄 Ver {getDocumentoNombreLower(selected.tipo)} PDF
+                  </a>
+                  <a className={deliveryLink ? "secondary-link" : "secondary-link disabled"} href={deliveryLink?.whatsapp_url ?? "#"} rel="noreferrer" target="_blank">
+                    📱 Enviar por WhatsApp
+                  </a>
+                  <a className={deliveryLink ? "secondary-link" : "secondary-link disabled"} href={deliveryLink?.public_url ?? "#"} rel="noreferrer" target="_blank">
+                    🔗 Compartir {getDocumentoNombreLower(selected.tipo)}
+                  </a>
+                  <button className="secondary-action" disabled={!deliveryLink} onClick={() => void copyDetailLink()} type="button">
+                    📋 Copiar enlace
+                  </button>
+                </div>
               </div>
 
-              <div className="result-actions">
-                <button className="secondary-action" disabled={actionLoading || !canCancelDocumento(selected)} onClick={() => void cancelSelectedDocumento()} type="button">
-                  Anular factura
-                </button>
+              <div className="action-group action-group-secondary">
+                <h4 className="group-title">Acciones sobre esta {getDocumentoNombreLower(selected.tipo)}</h4>
                 <button className="secondary-action" disabled={actionLoading || !canEmitNotaCredito(selected, documents)} onClick={() => void emitSelectedNotaCredito()} type="button">
-                  Crear nota de credito
+                  ↩ Crear nota de credito
+                </button>
+                <button className="secondary-action" disabled={actionLoading || !canCancelDocumento(selected)} onClick={() => void cancelSelectedDocumento()} type="button">
+                  ⚠ Anular {getDocumentoNombreLower(selected.tipo)}
                 </button>
               </div>
               <details className="tech-block">
                 <summary>Informacion fiscal</summary>
                 <dl className="receipt-summary">
                   <div>
-                    <dt>CDC</dt>
+                    <dt>Codigo fiscal</dt>
                     <dd>{selected.cdc ?? "Pendiente"}</dd>
                   </div>
                   <div>
-                    <dt>SIFEN</dt>
+                    <dt>Estado fiscal</dt>
                     <dd>{formatSifenSummary(selectedSifenSummary)}</dd>
                   </div>
                   <div>
@@ -1380,20 +1734,61 @@ function DocumentsView({
                   </div>
                 </dl>
               </details>
-              {(role === "SOPORTE_INTERNO" || role === "ADMIN_INTERNO") ? (
+              <details className="tech-block">
+                <summary>Opciones avanzadas</summary>
+                <div className="result-actions">
+                  <button className="secondary-action" disabled={actionLoading || !selected.cdc} onClick={() => void refreshSelectedStatus()} type="button">
+                    Verificar estado fiscal
+                  </button>
+                  <button className="secondary-action" disabled={actionLoading || !["PENDIENTE_SIFEN", "ERROR_TEMPORAL"].includes(selected.estado)} onClick={() => void retrySelectedEmission()} type="button">
+                    Volver a verificar
+                  </button>
+                  <button className="secondary-action" disabled={actionLoading} onClick={() => void loadDeliveryFor(selected, true)} type="button">
+                    Crear nuevo enlace
+                  </button>
+                  <a className={selectedXmlUrl ? "secondary-link" : "secondary-link disabled"} href={selectedXmlUrl ?? "#"} rel="noreferrer" target="_blank">
+                    Descargar documento electronico
+                  </a>
+                </div>
+              </details>
+              {isInternalSupport ? (
                 <details className="tech-block">
-                  <summary>Opciones tecnicas</summary>
+                  <summary>Administracion fiscal</summary>
+                <section className="action-group action-group-internal" aria-label="Autogestion soporte">
+                  <h4 className="group-title">Eventos y regularizacion fiscal</h4>
+                  <p className="muted">Flujo sugerido: decision → validar impacto CDC → ejecutar acción.</p>
+                  {decision ? (
+                    <div className="support-decision-box">
+                      <p><strong>Accion recomendada:</strong> {decision.recommended_action}</p>
+                      <p><strong>Confianza:</strong> {decision.decision_confidence}</p>
+                      <p><strong>Motivos:</strong> {decision.reason_codes.join(", ") || "sin codigos"}</p>
+                    </div>
+                  ) : (
+                    <p className="muted">Sin decision disponible para este documento.</p>
+                  )}
+                  {cdcImpact ? (
+                    <p className="muted">
+                      Impacto CDC: <strong>{cdcImpact.cdc_impact}</strong> {cdcImpact.reason ? `· ${cdcImpact.reason}` : ""}
+                    </p>
+                  ) : null}
                   <div className="result-actions">
-                    <button className="secondary-action" disabled={actionLoading || !selected.cdc} onClick={() => void refreshSelectedStatus()} type="button">
-                      Consultar estado fiscal
+                    <button className="secondary-action" disabled={actionLoading} onClick={() => void validateSelectedCdcImpact()} type="button">
+                      Validar impacto CDC
                     </button>
-                    <button className="secondary-action" disabled={actionLoading || !["PENDIENTE_SIFEN", "ERROR_TEMPORAL"].includes(selected.estado)} onClick={() => void retrySelectedEmission()} type="button">
-                      Reintentar envio
+                    <button className="secondary-action" disabled={actionLoading} onClick={() => void retrySameCdcAction()} type="button">
+                      Reintentar mismo CDC
                     </button>
-                    <button className="secondary-action" disabled={actionLoading} onClick={() => void loadDeliveryFor(selected, true)} type="button">
-                      Crear nuevo enlace
+                    <button className="secondary-action" disabled={actionLoading} onClick={() => void createDerivedAction()} type="button">
+                      Crear DE derivado
+                    </button>
+                    <button className="secondary-action" disabled={actionLoading} onClick={() => void cancelSendAction()} type="button">
+                      Cancelar envío local
+                    </button>
+                    <button className="secondary-action" disabled={actionLoading} onClick={() => void voidNumberAction()} type="button">
+                      Inutilizar numeración
                     </button>
                   </div>
+                </section>
                 </details>
               ) : null}
               {message ? <p className="inline-message">{message}</p> : null}
@@ -1403,6 +1798,59 @@ function DocumentsView({
           )}
         </aside>
         ) : null}
+      {reasonModal ? (
+        <div className="modal-backdrop" role="presentation">
+          <section className="modal-panel" aria-labelledby="reason-modal-title" role="dialog" aria-modal="true">
+            <header>
+              <p className="eyebrow">Confirmacion</p>
+              <h3 id="reason-modal-title">{getReasonModalTitle(reasonModal.action, reasonModal.tipo)}</h3>
+              <p className="muted">Ingrese un motivo para continuar.</p>
+            </header>
+            <label className="credit-note-motivo">
+              Motivo
+              <textarea
+                autoFocus
+                maxLength={150}
+                onChange={(event) => setReasonDraft(event.target.value)}
+                placeholder={getReasonModalPlaceholder(reasonModal.action)}
+                rows={4}
+                value={reasonDraft}
+              />
+            </label>
+            {reasonError ? <p className="form-error">{reasonError}</p> : null}
+            <div className="result-actions">
+              <button className="secondary-action" disabled={actionLoading} onClick={closeReasonModal} type="button">
+                Cancelar
+              </button>
+              <button className="primary-action" disabled={actionLoading} onClick={() => void submitReasonModal()} type="button">
+                {actionLoading ? "Procesando..." : "Confirmar"}
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
+      {notaCreditoPopup ? (
+        <div className="modal-backdrop" role="presentation">
+          <section className="modal-panel" aria-labelledby="nc-success-title" role="dialog" aria-modal="true">
+            <header>
+              <p className="eyebrow">Nota de credito</p>
+              <h3 id="nc-success-title">{getSimpleDocumentoEstado(notaCreditoPopup.estado, notaCreditoPopup.tipo)}</h3>
+              <p className="muted">
+                {notaCreditoPopup.numero_fiscal ? `Numero ${notaCreditoPopup.numero_fiscal}` : "Numero pendiente"}
+                {" · "}{notaCreditoPopup.cliente.razon_social}
+              </p>
+            </header>
+            <p className={notaCreditoPopup.estado === "EMITIDA" ? "editor-alert ready" : "editor-alert blocked"}>
+              {getNotaCreditoSuccessMessage(notaCreditoPopup.estado)}
+            </p>
+            <div className="result-actions">
+              <button className="primary-action" onClick={() => setNotaCreditoPopup(null)} type="button">
+                Ver nota de credito
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -1410,11 +1858,13 @@ function DocumentsView({
 function ClientesAgendaView({
   accessToken,
   setAccessToken,
-  onBack
+  onBack,
+  onUseCliente
 }: {
   accessToken: string | null;
   setAccessToken: (token: string | null) => void;
   onBack: () => void;
+  onUseCliente: (cliente: ClienteResponse) => void;
 }) {
   const api = useMemo(() => createApiClient(accessToken, setAccessToken), [accessToken, setAccessToken]);
   const [items, setItems] = useState<ClienteResponse[]>([]);
@@ -1423,6 +1873,12 @@ function ClientesAgendaView({
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [searchSuggestions, setSearchSuggestions] = useState<ClienteSearchResult[]>([]);
+  const [autocompleting, setAutocompleting] = useState(false);
+  const [rowMenuClienteId, setRowMenuClienteId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<ClienteResponse | null>(null);
+  const rowMenuRef = useRef<HTMLDivElement | null>(null);
   const [draft, setDraft] = useState<FacturaClienteInput>({
     documento_tipo: "CI",
     documento: "",
@@ -1435,6 +1891,41 @@ function ClientesAgendaView({
   useEffect(() => {
     void loadClientes();
   }, []);
+
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      void loadClientes(query);
+    }, 220);
+    return () => clearTimeout(timeout);
+  }, [query]);
+
+  useEffect(() => {
+    if (!editorOpen) {
+      return;
+    }
+    const documento = draft.documento.trim();
+    if (!documento) {
+      setSearchSuggestions([]);
+      return;
+    }
+    const timeout = setTimeout(() => {
+      void findSuggestions(documento);
+    }, 180);
+    return () => clearTimeout(timeout);
+  }, [draft.documento, editorOpen]);
+
+  useEffect(() => {
+    if (!rowMenuClienteId) {
+      return;
+    }
+    function handleClickOutside(event: MouseEvent) {
+      if (rowMenuRef.current && !rowMenuRef.current.contains(event.target as Node)) {
+        setRowMenuClienteId(null);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [rowMenuClienteId]);
 
   async function loadClientes(nextQuery = query) {
     setLoading(true);
@@ -1453,17 +1944,101 @@ function ClientesAgendaView({
     }
   }
 
+  function openEditor(cliente?: ClienteResponse) {
+    if (cliente) {
+      setSelected(cliente);
+      setDraft({
+        cliente_id: cliente.cliente_id,
+        documento_tipo: cliente.documento_tipo,
+        documento: cliente.documento,
+        razon_social: cliente.razon_social,
+        direccion: cliente.direccion,
+        telefono: cliente.telefono,
+        email: cliente.email
+      });
+    } else {
+      setSelected(null);
+      setDraft({
+        documento_tipo: "CI",
+        documento: "",
+        razon_social: "",
+        direccion: "",
+        telefono: "",
+        email: ""
+      });
+    }
+    setEditorOpen(true);
+  }
+
   function useCliente(cliente: ClienteResponse) {
     setSelected(cliente);
-    setDraft({
-      cliente_id: cliente.cliente_id,
-      documento_tipo: cliente.documento_tipo,
-      documento: cliente.documento,
-      razon_social: cliente.razon_social,
-      direccion: cliente.direccion,
-      telefono: cliente.telefono,
-      email: cliente.email
-    });
+    setRowMenuClienteId(null);
+    onUseCliente(cliente);
+  }
+
+  function openDeleteConfirm(cliente: ClienteResponse) {
+    setDeleteTarget(cliente);
+    setRowMenuClienteId(null);
+  }
+
+  function applySuggestion(suggestion: ClienteSearchResult) {
+    setDraft((current) => ({
+      ...current,
+      cliente_id: suggestion.cliente_id ?? current.cliente_id ?? null,
+      documento_tipo: suggestion.documento_tipo,
+      documento: suggestion.documento,
+      razon_social: suggestion.razon_social,
+      direccion: suggestion.direccion ?? current.direccion ?? "",
+      telefono: suggestion.telefono ?? current.telefono ?? "",
+      email: suggestion.email ?? current.email ?? ""
+    }));
+    setSearchSuggestions([]);
+  }
+
+  async function findSuggestions(documento: string) {
+    setAutocompleting(true);
+    try {
+      const result = await api.get<{ items: ClienteSearchResult[] }>(`/clientes/search?q=${encodeURIComponent(documento)}&limit=5`);
+      setSearchSuggestions(result.items);
+    } catch {
+      setSearchSuggestions([]);
+    } finally {
+      setAutocompleting(false);
+    }
+  }
+
+  async function autocompleteFromDnit() {
+    if (!["RUC", "CI"].includes(draft.documento_tipo)) {
+      return;
+    }
+    const documento = draft.documento.trim();
+    if (!documento) {
+      return;
+    }
+    const alreadyExists = items.some((cliente) => normalizeDocKey(cliente.documento) === normalizeDocKey(documento));
+    if (alreadyExists) {
+      setMessage("Cliente encontrado en la agenda.");
+      return;
+    }
+    setAutocompleting(true);
+    try {
+      const result = await api.get<DnitAutocompleteResponse>(
+        `/clientes/dnit/autocomplete?documento_tipo=${draft.documento_tipo}&documento=${encodeURIComponent(documento)}`
+      );
+      if (!result.found || !result.cliente) {
+        return;
+      }
+      setDraft((current) => ({
+        ...current,
+        documento_tipo: result.cliente?.documento_tipo ?? current.documento_tipo,
+        documento: result.cliente?.documento ?? current.documento,
+        razon_social: result.cliente?.razon_social ?? current.razon_social
+      }));
+    } catch {
+      // No interrumpir carga manual cuando DNIT no esta disponible.
+    } finally {
+      setAutocompleting(false);
+    }
   }
 
   async function saveCliente() {
@@ -1483,18 +2058,35 @@ function ClientesAgendaView({
         : await api.post<ClienteResponse>("/clientes", payload);
       setMessage(selected ? "Cliente actualizado." : "Cliente agregado a la agenda.");
       setSelected(result);
-      setDraft({
-        cliente_id: result.cliente_id,
-        documento_tipo: result.documento_tipo,
-        documento: result.documento,
-        razon_social: result.razon_social,
-        direccion: result.direccion,
-        telefono: result.telefono,
-        email: result.email
-      });
+      setEditorOpen(false);
+      setSearchSuggestions([]);
       await loadClientes();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "No se pudo guardar el cliente.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function deleteCliente() {
+    if (!deleteTarget) {
+      return;
+    }
+    setSaving(true);
+    setMessage(null);
+    try {
+      await api.request<void>(`/clientes/${deleteTarget.cliente_id}`, { method: "DELETE" });
+      setMessage("Cliente eliminado de la agenda.");
+      if (selected?.cliente_id === deleteTarget.cliente_id) {
+        setSelected(null);
+      }
+      if (draft.cliente_id === deleteTarget.cliente_id) {
+        setEditorOpen(false);
+      }
+      setDeleteTarget(null);
+      await loadClientes();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "No se pudo eliminar el cliente.");
     } finally {
       setSaving(false);
     }
@@ -1516,93 +2108,169 @@ function ClientesAgendaView({
           Buscar cliente
           <input
             onChange={(event) => setQuery(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") {
-                void loadClientes();
-              }
-            }}
-            placeholder="RUC, CI o nombre"
+            placeholder="Buscar cliente..."
             value={query}
           />
         </label>
-        <button className="secondary-action" disabled={loading} onClick={() => void loadClientes()} type="button">
-          {loading ? "Buscando..." : "Buscar"}
-        </button>
       </section>
       <section className="documents-layout">
         <div className="documents-list">
+          {items.length === 0 && !loading ? (
+            <article className="empty-callout">
+              <strong>No encontramos clientes.</strong>
+              <p className="muted">Puede crear uno nuevo.</p>
+              <button className="primary-action wide" onClick={() => openEditor()} type="button">
+                + Crear cliente
+              </button>
+            </article>
+          ) : null}
           {items.map((cliente) => (
-            <button
-              className={selected?.cliente_id === cliente.cliente_id ? "document-row active" : "document-row"}
-              key={cliente.cliente_id}
-              onClick={() => useCliente(cliente)}
-              type="button"
-            >
+            <article className={selected?.cliente_id === cliente.cliente_id ? "document-row client-row active" : "document-row client-row"} key={cliente.cliente_id}>
               <span>
                 <strong>👤 {cliente.razon_social}</strong>
-                <small>{cliente.documento_tipo} · {cliente.documento}</small>
+                <small>{cliente.documento_tipo} {cliente.documento}</small>
               </span>
-            </button>
+              <div className="client-row-actions" ref={rowMenuClienteId === cliente.cliente_id ? rowMenuRef : null}>
+                <button className="secondary-action compact" onClick={() => useCliente(cliente)} type="button">
+                  Usar
+                </button>
+                <button
+                  aria-expanded={rowMenuClienteId === cliente.cliente_id}
+                  aria-label={`Abrir acciones de ${cliente.razon_social}`}
+                  className="icon-menu-action"
+                  onClick={() => setRowMenuClienteId((current) => current === cliente.cliente_id ? null : cliente.cliente_id)}
+                  type="button"
+                >
+                  ⋮
+                </button>
+                {rowMenuClienteId === cliente.cliente_id ? (
+                  <div className="client-row-menu" role="menu" aria-label={`Acciones para ${cliente.razon_social}`}>
+                    <button onClick={() => useCliente(cliente)} role="menuitem" type="button">Usar cliente</button>
+                    <button onClick={() => openEditor(cliente)} role="menuitem" type="button">Editar</button>
+                    <button
+                      disabled={!cliente.telefono}
+                      onClick={() => {
+                        if (!cliente.telefono) {
+                          return;
+                        }
+                        window.open(`https://wa.me/${cliente.telefono.replace(/\D/g, "")}`, "_blank", "noopener,noreferrer");
+                        setRowMenuClienteId(null);
+                      }}
+                      role="menuitem"
+                      type="button"
+                    >
+                      WhatsApp
+                    </button>
+                    <hr />
+                    <button className="destructive-item" onClick={() => openDeleteConfirm(cliente)} role="menuitem" type="button">
+                      Eliminar cliente
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            </article>
           ))}
         </div>
-        <aside className="document-detail">
-          <div className="receipt-heading">
-            <div>
-              <p className="eyebrow">Cliente</p>
-              <h3>{selected ? "Editar cliente" : "Nuevo cliente"}</h3>
-            </div>
-          </div>
-          <div className="documents-filters">
-            <label>
-              Tipo documento
-              <select value={draft.documento_tipo} onChange={(event) => setDraft((current) => ({ ...current, documento_tipo: event.target.value as DocumentoIdentidadTipo }))}>
-                <option value="CI">CI</option>
-                <option value="RUC">RUC</option>
-                <option value="PASAPORTE">Pasaporte</option>
-                <option value="CEDULA_EXTRANJERA">Cedula extranjera</option>
-                <option value="NO_ESPECIFICADO">No especificado</option>
-              </select>
-            </label>
-            <label>
-              Documento
-              <input value={draft.documento} onChange={(event) => setDraft((current) => ({ ...current, documento: event.target.value }))} />
-            </label>
-            <label>
-              Nombre o razon social
-              <input value={draft.razon_social} onChange={(event) => setDraft((current) => ({ ...current, razon_social: event.target.value }))} />
-            </label>
-            <label>
-              Telefono
-              <input value={draft.telefono ?? ""} onChange={(event) => setDraft((current) => ({ ...current, telefono: event.target.value }))} />
-            </label>
-          </div>
-          <div className="result-actions">
-            <button className="primary-action" disabled={saving} onClick={() => void saveCliente()} type="button">
-              {saving ? "Guardando..." : selected ? "Actualizar cliente" : "Agregar cliente"}
-            </button>
-            {selected ? (
-              <button
-                className="secondary-action"
-                onClick={() => {
-                  setSelected(null);
-                  setDraft({
-                    documento_tipo: "CI",
-                    documento: "",
-                    razon_social: "",
-                    direccion: "",
-                    telefono: "",
-                    email: ""
-                  });
-                }}
-                type="button"
-              >
-                Nuevo cliente
-              </button>
-            ) : null}
-          </div>
-          {message ? <p className="inline-message">{message}</p> : null}
-        </aside>
+        <button className="primary-action wide floating-create-client" onClick={() => openEditor()} type="button">
+          + Nuevo cliente
+        </button>
       </section>
+      {message ? <p className="inline-message">{message}</p> : null}
+      {editorOpen ? (
+        <div className="modal-backdrop">
+          <section className="modal-panel" aria-labelledby="cliente-editor-title" role="dialog" aria-modal="true">
+            <header className="editor-heading">
+              <div>
+                <p className="eyebrow">Cliente</p>
+                <h3 id="cliente-editor-title">{selected ? "Editar cliente" : "Nuevo cliente"}</h3>
+              </div>
+              <button className="ghost-action" onClick={() => setEditorOpen(false)} type="button">
+                Cerrar
+              </button>
+            </header>
+            <div className="documents-filters">
+              <label>
+                Tipo documento
+                <select value={draft.documento_tipo} onChange={(event) => setDraft((current) => ({ ...current, documento_tipo: event.target.value as DocumentoIdentidadTipo }))}>
+                  <option value="CI">CI</option>
+                  <option value="RUC">RUC</option>
+                  <option value="PASAPORTE">Pasaporte</option>
+                  <option value="CEDULA_EXTRANJERA">Cedula extranjera</option>
+                  <option value="NO_ESPECIFICADO">No especificado</option>
+                </select>
+              </label>
+              <label>
+                Documento
+                <input
+                  onBlur={() => void autocompleteFromDnit()}
+                  value={draft.documento}
+                  onChange={(event) => setDraft((current) => ({ ...current, documento: event.target.value }))}
+                />
+              </label>
+              {autocompleting ? <small className="muted">Autocompletando...</small> : null}
+              {searchSuggestions.length > 0 ? (
+                <div className="suggestion-list">
+                  {searchSuggestions.map((suggestion) => (
+                    <button
+                      key={`${suggestion.source}-${suggestion.cliente_id ?? suggestion.documento}`}
+                      onClick={() => applySuggestion(suggestion)}
+                      type="button"
+                    >
+                      <strong>{suggestion.documento}</strong>
+                      <span>{suggestion.razon_social}</span>
+                      <small>{suggestion.source === "AGENDA_FACTURADOR" ? "Agenda" : "Sugerencia"}</small>
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+              <label>
+                Nombre o razon social
+                <input value={draft.razon_social} onChange={(event) => setDraft((current) => ({ ...current, razon_social: event.target.value }))} />
+              </label>
+              <label>
+                Telefono
+                <input value={draft.telefono ?? ""} onChange={(event) => setDraft((current) => ({ ...current, telefono: event.target.value }))} />
+              </label>
+              <label>
+                Correo
+                <input value={draft.email ?? ""} onChange={(event) => setDraft((current) => ({ ...current, email: event.target.value }))} />
+              </label>
+              <label>
+                Direccion
+                <input value={draft.direccion ?? ""} onChange={(event) => setDraft((current) => ({ ...current, direccion: event.target.value }))} />
+              </label>
+            </div>
+            <div className="result-actions">
+              <button className="primary-action" disabled={saving || !draft.documento.trim() || !draft.razon_social.trim()} onClick={() => void saveCliente()} type="button">
+                {saving ? "Guardando..." : "Guardar"}
+              </button>
+              {selected ? (
+                <button className="danger-action" disabled={saving} onClick={() => openDeleteConfirm(selected)} type="button">
+                  Eliminar cliente de mi agenda
+                </button>
+              ) : null}
+            </div>
+          </section>
+        </div>
+      ) : null}
+      {deleteTarget ? (
+        <div className="modal-backdrop">
+          <section className="modal-panel" aria-labelledby="cliente-delete-title" role="dialog" aria-modal="true">
+            <header>
+              <h3 id="cliente-delete-title">¿Eliminar cliente de tu agenda?</h3>
+              <p className="muted">Esta accion quita a {deleteTarget.razon_social} de la agenda de este facturador.</p>
+            </header>
+            <div className="result-actions">
+              <button className="secondary-action" disabled={saving} onClick={() => setDeleteTarget(null)} type="button">
+                Cancelar
+              </button>
+              <button className="danger-action" disabled={saving} onClick={() => void deleteCliente()} type="button">
+                {saving ? "Eliminando..." : "Eliminar"}
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -1804,18 +2472,26 @@ function CatalogView({
 }) {
   const api = useMemo(() => createApiClient(accessToken, setAccessToken), [accessToken, setAccessToken]);
   const [items, setItems] = useState<CatalogoItem[]>([]);
-  const [selected, setSelected] = useState<CatalogoItem | null>(null);
   const [query, setQuery] = useState("");
-  const [activoFilter, setActivoFilter] = useState<"true" | "false" | "">("true");
+  const [statusChip, setStatusChip] = useState<"ACTIVE" | "ARCHIVED" | "ALL">("ACTIVE");
   const [draft, setDraft] = useState<CatalogoDraft>(() => createCatalogoDraft());
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [editorMode, setEditorMode] = useState<"CREATE" | "EDIT">("CREATE");
+  const [selectedItem, setSelectedItem] = useState<CatalogoItem | null>(null);
+  const [menuItemId, setMenuItemId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<CatalogoItem | null>(null);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
 
   useEffect(() => {
-    void loadItems();
-  }, [activoFilter]);
+    const timeout = window.setTimeout(() => {
+      void loadItems(query);
+    }, 220);
+    return () => window.clearTimeout(timeout);
+  }, [query, statusChip]);
 
   async function loadItems(nextQuery = query) {
     setLoading(true);
@@ -1825,14 +2501,15 @@ function CatalogView({
     if (nextQuery.trim()) {
       params.set("q", nextQuery.trim());
     }
-    if (activoFilter) {
-      params.set("activo", activoFilter);
+    if (statusChip === "ACTIVE") {
+      params.set("activo", "true");
+    } else if (statusChip === "ARCHIVED") {
+      params.set("activo", "false");
     }
 
     try {
       const result = await api.get<CatalogoItemListResponse>(`/catalogo/items?${params.toString()}`);
       setItems(result.items);
-      setSelected((current) => (current ? result.items.find((item) => item.id === current.id) ?? current : current));
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo cargar el catalogo.");
     } finally {
@@ -1840,15 +2517,19 @@ function CatalogView({
     }
   }
 
-  function startCreate() {
-    setSelected(null);
+  function openCreate() {
+    setEditorMode("CREATE");
+    setSelectedItem(null);
     setDraft(createCatalogoDraft());
-    setMessage(null);
+    setAdvancedOpen(false);
+    setEditorOpen(true);
+    setMenuItemId(null);
     setError(null);
   }
 
-  function startEdit(item: CatalogoItem) {
-    setSelected(item);
+  function openEdit(item: CatalogoItem) {
+    setEditorMode("EDIT");
+    setSelectedItem(item);
     setDraft({
       codigo: item.codigo,
       descripcion: item.descripcion,
@@ -1856,8 +2537,81 @@ function CatalogView({
       iva_tipo: item.iva_tipo,
       activo: item.activo
     });
+    setAdvancedOpen(false);
+    setEditorOpen(true);
+    setMenuItemId(null);
+    setError(null);
+  }
+
+  function duplicateItem(item: CatalogoItem) {
+    setEditorMode("CREATE");
+    setSelectedItem(null);
+    setDraft({
+      codigo: "",
+      descripcion: `${item.descripcion} (copia)`,
+      precio_unitario: String(item.precio_unitario),
+      iva_tipo: item.iva_tipo,
+      activo: true
+    });
+    setAdvancedOpen(true);
+    setEditorOpen(true);
+    setMenuItemId(null);
+  }
+
+  async function archiveItem(item: CatalogoItem) {
+    setSaving(true);
     setMessage(null);
     setError(null);
+    try {
+      await api.request<CatalogoItem>(`/catalogo/items/${item.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          codigo: item.codigo || null,
+          descripcion: item.descripcion,
+          precio_unitario: item.precio_unitario,
+          iva_tipo: item.iva_tipo,
+          activo: false
+        })
+      });
+      setMenuItemId(null);
+      setMessage("Item archivado.");
+      await loadItems();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo archivar el item.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function openDeleteConfirm(item: CatalogoItem) {
+    setMenuItemId(null);
+    setDeleteTarget(item);
+    setError(null);
+    setMessage(null);
+  }
+
+  async function deleteItem() {
+    if (!deleteTarget) {
+      return;
+    }
+
+    setSaving(true);
+    setError(null);
+    setMessage(null);
+    try {
+      await api.request(`/catalogo/items/${deleteTarget.id}`, { method: "DELETE" });
+      setDeleteTarget(null);
+      if (selectedItem?.id === deleteTarget.id) {
+        setEditorOpen(false);
+        setSelectedItem(null);
+      }
+      setMessage("Item eliminado permanentemente.");
+      await loadItems();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo eliminar el item.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function saveItem(event: FormEvent<HTMLFormElement>) {
@@ -1881,22 +2635,14 @@ function CatalogView({
     }
 
     try {
-      const saved = selected
-        ? await api.request<CatalogoItem>(`/catalogo/items/${selected.id}`, {
+      await (editorMode === "EDIT" && selectedItem
+        ? api.request<CatalogoItem>(`/catalogo/items/${selectedItem.id}`, {
             method: "PATCH",
             body: JSON.stringify(payload)
           })
-        : await api.post<CatalogoItem>("/catalogo/items", payload);
-
-      setSelected(saved);
-      setDraft({
-        codigo: saved.codigo,
-        descripcion: saved.descripcion,
-        precio_unitario: String(saved.precio_unitario),
-        iva_tipo: saved.iva_tipo,
-        activo: saved.activo
-      });
-      setMessage(selected ? "Item actualizado." : "Item creado.");
+        : api.post<CatalogoItem>("/catalogo/items", payload));
+      setEditorOpen(false);
+      setMessage(editorMode === "EDIT" ? "Item actualizado." : "Item creado.");
       await loadItems();
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo guardar el item.");
@@ -1922,133 +2668,168 @@ function CatalogView({
           Buscar
           <input
             onChange={(event) => setQuery(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") {
-                void loadItems();
-              }
-            }}
-            placeholder="Codigo o descripcion"
+            placeholder="Buscar producto o servicio..."
             value={query}
           />
         </label>
-        <label>
-          Estado
-          <select onChange={(event) => setActivoFilter(event.target.value as "true" | "false" | "")} value={activoFilter}>
-            <option value="true">Activos</option>
-            <option value="">Todos</option>
-            <option value="false">Inactivos</option>
-          </select>
-        </label>
-        <button className="secondary-action" disabled={loading} onClick={() => void loadItems()} type="button">
-          {loading ? "Cargando..." : "Aplicar"}
-        </button>
+        <div className="filter-tabs" role="group" aria-label="Estado del catalogo">
+          <button className={statusChip === "ALL" ? "active" : ""} onClick={() => setStatusChip("ALL")} type="button">Todos</button>
+          <button className={statusChip === "ACTIVE" ? "active" : ""} onClick={() => setStatusChip("ACTIVE")} type="button">Activos</button>
+          <button className={statusChip === "ARCHIVED" ? "active" : ""} onClick={() => setStatusChip("ARCHIVED")} type="button">Archivados</button>
+        </div>
       </section>
 
       {error ? <p className="form-error">{error}</p> : null}
       {message ? <p className="editor-alert ready">{message}</p> : null}
 
-      <section className="documents-layout catalog-layout">
+      <section className="documents-layout">
         <div className="documents-list">
-          <button className={!selected ? "document-row active" : "document-row"} onClick={startCreate} type="button">
-            <span>
-              <strong>Nuevo item</strong>
-              <small>Crear producto o servicio</small>
-            </span>
-            <span>
-              <strong>+</strong>
-              <small>Alta</small>
-            </span>
-          </button>
-
           {items.length === 0 && !loading ? <p className="muted empty-state">Sin items para los filtros actuales.</p> : null}
           {items.map((item) => (
-            <button
-              className={selected?.id === item.id ? "document-row active" : "document-row"}
-              key={item.id}
-              onClick={() => startEdit(item)}
-              type="button"
-            >
-              <span>
-                <strong>{item.codigo || "Sin codigo"}</strong>
-                <small>{item.descripcion}</small>
-              </span>
-              <span>
-                <strong>{formatGuaranies(item.precio_unitario)}</strong>
-                <small>{item.activo ? "Activo" : "Inactivo"} · {formatIva(item.iva_tipo)}</small>
-              </span>
-            </button>
+            <article className="document-row document-row-rich" key={item.id}>
+              <button className="document-row-main" onClick={() => openEdit(item)} type="button">
+                <span>
+                  <strong>{item.descripcion}</strong>
+                  <small>{item.codigo || "Sin codigo"}</small>
+                </span>
+                <span>
+                  <strong>{formatGuaranies(item.precio_unitario)}</strong>
+                  <small>{formatIva(item.iva_tipo)}</small>
+                </span>
+              </button>
+              <div className="document-row-menu-wrapper">
+                <button className="icon-menu-action" onClick={() => setMenuItemId((current) => (current === item.id ? null : item.id))} type="button">⋮</button>
+                {menuItemId === item.id ? (
+                  <div className="client-row-menu" role="menu" aria-label="Acciones del item">
+                    <button onClick={() => openEdit(item)} role="menuitem" type="button">Editar</button>
+                    <button onClick={() => duplicateItem(item)} role="menuitem" type="button">Duplicar</button>
+                    {item.activo ? (
+                      <button onClick={() => void archiveItem(item)} role="menuitem" type="button">Archivar</button>
+                    ) : (
+                      <button disabled role="menuitem" type="button">Archivado</button>
+                    )}
+                    <hr />
+                    <button className="destructive-item" onClick={() => openDeleteConfirm(item)} role="menuitem" type="button">
+                      Eliminar permanentemente
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            </article>
           ))}
         </div>
-
-        <form className="document-detail catalog-form" onSubmit={(event) => void saveItem(event)}>
-          <div className="receipt-heading">
-            <div>
-              <p className="eyebrow">{selected ? "Edicion" : "Alta"}</p>
-              <h3>{selected ? selected.descripcion : "Nuevo item"}</h3>
-              <p className="muted">Se usa en la busqueda del editor de factura.</p>
-            </div>
-            <span className={draft.activo ? "status-pill ready" : "status-pill blocked"}>
-              {draft.activo ? "Activo" : "Inactivo"}
-            </span>
-          </div>
-
-          <div className="field-grid">
-            <label>
-              Codigo
-              <input
-                onChange={(event) => setDraft((current) => ({ ...current, codigo: event.target.value }))}
-                placeholder="SERV-001"
-                value={draft.codigo}
-              />
-            </label>
-            <label>
-              Precio unitario
-              <input
-                inputMode="numeric"
-                min="0"
-                onChange={(event) => setDraft((current) => ({ ...current, precio_unitario: event.target.value }))}
-                required
-                value={draft.precio_unitario}
-              />
-            </label>
-            <label className="span-2">
-              Descripcion
-              <input
-                onChange={(event) => setDraft((current) => ({ ...current, descripcion: event.target.value }))}
-                required
-                value={draft.descripcion}
-              />
-            </label>
-            <label>
-              IVA
-              <select onChange={(event) => setDraft((current) => ({ ...current, iva_tipo: event.target.value as TipoIva }))} value={draft.iva_tipo}>
-                <option value="IVA_10">10%</option>
-                <option value="IVA_5">5%</option>
-                <option value="EXENTA">Exenta</option>
-              </select>
-            </label>
-            <label>
-              Estado
-              <select
-                onChange={(event) => setDraft((current) => ({ ...current, activo: event.target.value === "true" }))}
-                value={draft.activo ? "true" : "false"}
-              >
-                <option value="true">Activo</option>
-                <option value="false">Inactivo</option>
-              </select>
-            </label>
-          </div>
-
-          <div className="result-actions">
-            <button className="primary-action" disabled={saving} type="submit">
-              {saving ? "Guardando..." : selected ? "Guardar cambios" : "Crear item"}
-            </button>
-            <button className="secondary-action" onClick={startCreate} type="button">
-              Limpiar
-            </button>
-          </div>
-        </form>
       </section>
+
+      <button className="primary-action wide floating-create-client" onClick={openCreate} type="button">
+        + Nuevo
+      </button>
+
+      {editorOpen ? (
+        <div className="modal-backdrop">
+          <section className="modal-panel" aria-labelledby="catalog-editor-title" role="dialog" aria-modal="true">
+            <header className="editor-heading">
+              <div>
+                <p className="eyebrow">Catalogo</p>
+                <h3 id="catalog-editor-title">{editorMode === "EDIT" ? "Editar producto o servicio" : "Nuevo producto o servicio"}</h3>
+              </div>
+              <button className="ghost-action" onClick={() => setEditorOpen(false)} type="button">
+                Cerrar
+              </button>
+            </header>
+
+            <form className="catalog-form" onSubmit={(event) => void saveItem(event)}>
+              <div className="documents-filters">
+                <label>
+                  Nombre o descripcion
+                  <input
+                    onChange={(event) => setDraft((current) => ({ ...current, descripcion: event.target.value }))}
+                    required
+                    value={draft.descripcion}
+                  />
+                </label>
+                <label>
+                  Precio
+                  <input
+                    inputMode="numeric"
+                    min="0"
+                    onChange={(event) => setDraft((current) => ({ ...current, precio_unitario: event.target.value }))}
+                    required
+                    value={draft.precio_unitario}
+                  />
+                </label>
+                <label>
+                  IVA
+                  <select onChange={(event) => setDraft((current) => ({ ...current, iva_tipo: event.target.value as TipoIva }))} value={draft.iva_tipo}>
+                    <option value="IVA_10">IVA 10%</option>
+                    <option value="IVA_5">IVA 5%</option>
+                    <option value="EXENTA">Exenta</option>
+                  </select>
+                </label>
+                <button className="secondary-action" onClick={() => setAdvancedOpen((current) => !current)} type="button">
+                  {advancedOpen ? "Ocultar opciones avanzadas" : "Opciones avanzadas"}
+                </button>
+                {advancedOpen ? (
+                  <>
+                    <label>
+                      Codigo
+                      <input
+                        onChange={(event) => setDraft((current) => ({ ...current, codigo: event.target.value }))}
+                        placeholder="SERV-001"
+                        value={draft.codigo}
+                      />
+                    </label>
+                    <label>
+                      Estado
+                      <select
+                        onChange={(event) => setDraft((current) => ({ ...current, activo: event.target.value === "true" }))}
+                        value={draft.activo ? "true" : "false"}
+                      >
+                        <option value="true">Activo</option>
+                        <option value="false">Archivado</option>
+                      </select>
+                    </label>
+                  </>
+                ) : null}
+              </div>
+              <div className="result-actions">
+                <button className="primary-action" disabled={saving} type="submit">
+                  {saving ? "Guardando..." : editorMode === "EDIT" ? "Guardar cambios" : "Guardar"}
+                </button>
+                {editorMode === "EDIT" && selectedItem?.activo ? (
+                  <button className="danger-action" disabled={saving} onClick={() => void archiveItem(selectedItem)} type="button">
+                    Archivar
+                  </button>
+                ) : null}
+                {editorMode === "EDIT" && selectedItem ? (
+                  <button className="danger-action" disabled={saving} onClick={() => openDeleteConfirm(selectedItem)} type="button">
+                    Eliminar permanentemente
+                  </button>
+                ) : null}
+              </div>
+            </form>
+          </section>
+        </div>
+      ) : null}
+      {deleteTarget ? (
+        <div className="modal-backdrop">
+          <section className="modal-panel" aria-labelledby="catalog-delete-title" role="dialog" aria-modal="true">
+            <header>
+              <h3 id="catalog-delete-title">¿Eliminar item del catalogo?</h3>
+              <p className="muted">
+                Esta accion eliminara permanentemente <strong>{deleteTarget.descripcion}</strong> de este facturador.
+              </p>
+            </header>
+            <div className="result-actions">
+              <button className="secondary-action" disabled={saving} onClick={() => setDeleteTarget(null)} type="button">
+                Cancelar
+              </button>
+              <button className="danger-action" disabled={saving} onClick={() => void deleteItem()} type="button">
+                {saving ? "Eliminando..." : "Eliminar"}
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -2056,6 +2837,7 @@ function CatalogView({
 function InvoiceEditor({
   accessToken,
   canEmit,
+  clientePrefillRequest,
   context,
   readiness,
   setAccessToken,
@@ -2063,6 +2845,7 @@ function InvoiceEditor({
 }: {
   accessToken: string | null;
   canEmit: boolean;
+  clientePrefillRequest: InvoiceClientePrefillRequest | null;
   context: OperationalContextResponse | null;
   readiness: ReadinessResponse | null;
   setAccessToken: (token: string | null) => void;
@@ -2115,6 +2898,7 @@ function InvoiceEditor({
   const clientSectionRef = useRef<HTMLElement | null>(null);
   const productsSectionRef = useRef<HTMLElement | null>(null);
   const emissionResultRef = useRef<HTMLElement | null>(null);
+  const lastAppliedClientePrefillIdRef = useRef<number | null>(null);
 
   const api = useMemo(() => createApiClient(accessToken, setAccessToken), [accessToken, setAccessToken]);
   const today = useMemo(() => new Date().toLocaleDateString("es-PY"), []);
@@ -2159,6 +2943,29 @@ function InvoiceEditor({
     };
   }, [cliente, condicionVenta, creditoPlazoDias, lines, tipoTransaccion]);
   const requestFingerprint = useMemo(() => (request ? JSON.stringify(request) : null), [request]);
+
+  useEffect(() => {
+    if (!clientePrefillRequest) {
+      return;
+    }
+    if (lastAppliedClientePrefillIdRef.current === clientePrefillRequest.request_id) {
+      return;
+    }
+
+    setCliente({
+      cliente_id: clientePrefillRequest.cliente.cliente_id ?? null,
+      documento_tipo: clientePrefillRequest.cliente.documento_tipo,
+      documento: clientePrefillRequest.cliente.documento ?? "",
+      razon_social: clientePrefillRequest.cliente.razon_social ?? "",
+      direccion: clientePrefillRequest.cliente.direccion ?? "",
+      telefono: clientePrefillRequest.cliente.telefono ?? "",
+      email: clientePrefillRequest.cliente.email ?? ""
+    });
+    setClienteSuggestions([]);
+    setClienteMessage(`Cliente cargado desde agenda: ${clientePrefillRequest.cliente.razon_social}.`);
+    lastAppliedClientePrefillIdRef.current = clientePrefillRequest.request_id;
+    scrollSection(clientSectionRef);
+  }, [clientePrefillRequest]);
 
   useEffect(() => {
     if (!activeLineId && lines[0]) {
@@ -3231,12 +4038,12 @@ function InvoiceEditor({
         <section className="emission-result" aria-live="polite" ref={emissionResultRef}>
           <div className="receipt-heading">
             <div>
-              <p className="eyebrow">Factura</p>
-              <h3>{getSimpleDocumentoEstado(emittedDocumento.estado)}</h3>
+              <p className="eyebrow">{formatDocumentoTipo(emittedDocumento.tipo)}</p>
+              <h3>{getSimpleDocumentoEstado(emittedDocumento.estado, emittedDocumento.tipo)}</h3>
               <p className="muted">Numero {emittedDocumento.numero_fiscal ?? "pendiente"}</p>
             </div>
             <span className={emittedDocumento.estado === "EMITIDA" ? "status-pill ready" : "status-pill blocked"}>
-              {getSimpleDocumentoEstado(emittedDocumento.estado)}
+              {getSimpleDocumentoEstado(emittedDocumento.estado, emittedDocumento.tipo)}
             </span>
           </div>
 
@@ -3259,7 +4066,7 @@ function InvoiceEditor({
             </div>
           </div>
 
-          <p className="editor-alert blocked">{getSimpleDocumentoHint(emittedDocumento.estado)}</p>
+          <p className="editor-alert blocked">{getSimpleDocumentoHint(emittedDocumento.estado, emittedDocumento.tipo)}</p>
           {emailStatus?.message ? <p className="editor-alert ready">{emailStatus.message}</p> : null}
 
           <div className="action-group">
@@ -3280,7 +4087,7 @@ function InvoiceEditor({
             </a>
             <div className="delivery-actions">
               <button className="secondary-action" disabled={!deliveryLink} onClick={() => void sharePublicLink()} type="button">
-                Compartir factura
+                Compartir {getDocumentoNombreLower(emittedDocumento.tipo)}
               </button>
               <button className="secondary-action" disabled={!deliveryLink} onClick={() => void copyPublicLink()} type="button">
                 Copiar enlace
@@ -3526,6 +4333,34 @@ function formatGuaranies(value: number): string {
   }).format(value);
 }
 
+function formatYmdFromDate(date: Date): string {
+  const year = String(date.getFullYear());
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function formatShortDate(value: string | null): string {
+  if (!value) {
+    return "-";
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "-";
+  }
+  return date.toLocaleDateString("es-PY");
+}
+
+function getDocumentoStatusIcon(value: DocumentoEstado): string {
+  if (value === "EMITIDA") {
+    return "🟢";
+  }
+  if (value === "RECHAZADA" || value === "ERROR_OPERATIVO" || value === "ERROR_TEMPORAL" || value === "ANULADA") {
+    return "🔴";
+  }
+  return "🟡";
+}
+
 function formatIva(value: TipoIva): string {
   if (value === "IVA_10") {
     return "IVA 10%";
@@ -3536,10 +4371,11 @@ function formatIva(value: TipoIva): string {
   return "Exenta";
 }
 
-function formatDocumentoEstado(value: DocumentoEstado): string {
+function formatDocumentoEstado(value: DocumentoEstado, tipo?: DocumentoResponse["tipo"]): string {
+  const nombre = formatDocumentoTipo(tipo ?? "FACTURA");
   const labels: Record<DocumentoEstado, string> = {
     EMITIENDO: "Emision en proceso",
-    EMITIDA: "Factura emitida",
+    EMITIDA: `${nombre} emitida`,
     PENDIENTE_SIFEN: "Pendiente SIFEN",
     RECHAZADA: "Rechazada",
     ERROR_OPERATIVO: "Error operativo",
@@ -3549,28 +4385,34 @@ function formatDocumentoEstado(value: DocumentoEstado): string {
   return labels[value];
 }
 
-function getSimpleDocumentoEstado(value: DocumentoEstado): string {
+function getSimpleDocumentoEstado(value: DocumentoEstado, tipo?: DocumentoResponse["tipo"]): string {
+  const nombre = formatDocumentoTipo(tipo ?? "FACTURA");
   if (value === "EMITIDA") {
-    return "🟢 Factura emitida";
+    return `🟢 ${nombre} emitida`;
   }
   if (value === "RECHAZADA" || value === "ERROR_OPERATIVO" || value === "ERROR_TEMPORAL" || value === "ANULADA") {
     return "🔴 Requiere revision";
   }
-  return "🟡 Procesando factura";
+  return `🟡 Procesando ${nombre.toLowerCase()}`;
 }
 
-function getSimpleDocumentoHint(value: DocumentoEstado): string {
+function getSimpleDocumentoHint(value: DocumentoEstado, tipo?: DocumentoResponse["tipo"]): string {
+  const nombre = formatDocumentoTipo(tipo ?? "FACTURA");
   if (value === "EMITIDA") {
-    return "Factura lista para enviar por WhatsApp, compartir enlace o abrir PDF.";
+    return `${nombre} lista para enviar por WhatsApp, compartir enlace o abrir PDF.`;
   }
   if (value === "RECHAZADA" || value === "ERROR_OPERATIVO" || value === "ERROR_TEMPORAL" || value === "ANULADA") {
     return "El documento requiere revision antes de continuar.";
   }
-  return "Estamos procesando la factura. Puede compartir el enlace al cliente.";
+  return `Estamos procesando la ${nombre.toLowerCase()}. Puede compartir el enlace al cliente.`;
 }
 
 function formatDocumentoTipo(value: DocumentoResponse["tipo"]): string {
   return value === "NOTA_CREDITO" ? "Nota credito" : "Factura";
+}
+
+function getDocumentoNombreLower(tipo: DocumentoResponse["tipo"]): string {
+  return tipo === "NOTA_CREDITO" ? "nota de credito" : "factura";
 }
 
 function formatOperationViewTitle(value: OperationView): string {
@@ -3595,6 +4437,41 @@ function getOperationViewHint(value: OperationView): string {
     documents: "Facturas y notas emitidas"
   };
   return hints[value];
+}
+
+function getReasonModalTitle(
+  action: "CANCEL_DETAIL" | "CANCEL_LIST" | "CREDIT_NOTE_DETAIL" | "CREDIT_NOTE_LIST" | "VOID_NUMBER",
+  tipo?: DocumentoResponse["tipo"]
+): string {
+  if (action === "VOID_NUMBER") {
+    return "Inutilizar numeracion";
+  }
+  if (action === "CREDIT_NOTE_DETAIL" || action === "CREDIT_NOTE_LIST") {
+    return "Crear nota de credito";
+  }
+  return `Anular ${getDocumentoNombreLower(tipo ?? "FACTURA")}`;
+}
+
+function getReasonModalPlaceholder(
+  action: "CANCEL_DETAIL" | "CANCEL_LIST" | "CREDIT_NOTE_DETAIL" | "CREDIT_NOTE_LIST" | "VOID_NUMBER"
+): string {
+  if (action === "VOID_NUMBER") {
+    return "Explique por que necesita inutilizar la numeracion.";
+  }
+  if (action === "CREDIT_NOTE_DETAIL" || action === "CREDIT_NOTE_LIST") {
+    return "Ej: devolucion de mercaderia, error en monto o cliente.";
+  }
+  return "Ej: error en datos del comprobante o anulacion solicitada por cliente.";
+}
+
+function getNotaCreditoSuccessMessage(estado: DocumentoEstado): string {
+  if (estado === "EMITIDA") {
+    return "La nota de credito fue aceptada por SIFEN. El PDF ya esta disponible para compartir.";
+  }
+  if (estado === "PENDIENTE_SIFEN" || estado === "EMITIENDO") {
+    return "La nota de credito fue enviada al sistema fiscal y esta pendiente de confirmacion SIFEN. Refrescar el estado es seguro — se usa la misma referencia idempotente.";
+  }
+  return "La nota de credito fue procesada. Verificar el estado fiscal para continuar.";
 }
 
 function getOperationalTitle(context: OperationalContextResponse | null): string {
@@ -3846,6 +4723,21 @@ async function readApiError(response: Response): Promise<string> {
     return body.error?.message ?? body.message ?? "Solicitud rechazada.";
   } catch {
     return "No se pudo completar la solicitud.";
+  }
+}
+
+function formatDocumentoEstadoSimple(value: DocumentoEstado, tipo?: DocumentoResponse["tipo"]): string {
+  const nombre = formatDocumentoTipo(tipo ?? "FACTURA");
+  switch (value) {
+    case "EMITIDA":
+      return `🟢 ${nombre} emitida`;
+    case "EMITIENDO":
+    case "PENDIENTE_SIFEN":
+      return `🟡 Procesando ${nombre.toLowerCase()}`;
+    case "ANULADA":
+      return "⚪ Anulada";
+    default:
+      return "🔴 Requiere revision";
   }
 }
 

@@ -294,6 +294,122 @@
             "description": "Sube logo KUDE por actividad economica; tiene prioridad sobre el logo general del facturador."
           },
           "response": []
+        },
+        {
+          "name": "Autogestion Facturas",
+          "item": [
+            {
+              "name": "Validar Impacto CDC",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{base_url}}/fcws/admin/emisores/{{admin_emisor_id}}/facturas/{{admin_document_id}}/validate-cdc-impact",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "fcws",
+                    "admin",
+                    "emisores",
+                    "{{admin_emisor_id}}",
+                    "facturas",
+                    "{{admin_document_id}}",
+                    "validate-cdc-impact"
+                  ]
+                },
+                "description": "Prevalida si una corrección mantiene o cambia el CDC. La respuesta expone `document_id`, `document_uuid` (nullable en fase transicional), `current_cdc` y `candidate_cdc`."
+              }
+            },
+            {
+              "name": "Reintentar Same CDC",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"mode\": \"SYNC\",\n  \"send_now\": true,\n  \"comment\": \"retry same cdc\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{base_url}}/fcws/admin/emisores/{{admin_emisor_id}}/facturas/{{admin_document_id}}/retry-same-cdc",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "fcws",
+                    "admin",
+                    "emisores",
+                    "{{admin_emisor_id}}",
+                    "facturas",
+                    "{{admin_document_id}}",
+                    "retry-same-cdc"
+                  ]
+                },
+                "description": "Reintenta el documento manteniendo el mismo eje fiscal cuando `cdc_impact=CDC_NO_CHANGE`. La respuesta expone `document_id`, `document_uuid` (nullable en fase transicional) y `current_cdc` además del `cdc` legado."
+              }
+            },
+            {
+              "name": "Crear DE Derivado",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"mode\": \"SYNC\",\n  \"send_now\": true,\n  \"comment\": \"create derived\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{base_url}}/fcws/admin/emisores/{{admin_emisor_id}}/facturas/{{admin_document_id}}/create-derived",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "fcws",
+                    "admin",
+                    "emisores",
+                    "{{admin_emisor_id}}",
+                    "facturas",
+                    "{{admin_document_id}}",
+                    "create-derived"
+                  ]
+                },
+                "description": "Crea un documento derivado cuando la corrección cambia la base fiscal. La respuesta expone IDs técnicos y, en contrato transicional, `source_document_uuid`, `derived_document_uuid` y `current_cdc` del derivado."
+              }
+            }
+          ]
         }
       ]
     },
@@ -1402,6 +1518,358 @@
                 {
                   "key": "env",
                   "value": "{{query_env}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Consultar RUC SIFEN (Normalizado)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{x_api_key}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/fcws/consultar/ruc/{{ruc_consulta}}?emisor_id={{emisor_ruc}}&env={{query_env}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "fcws",
+                "consultar",
+                "ruc",
+                "{{ruc_consulta}}"
+              ],
+              "query": [
+                {
+                  "key": "emisor_id",
+                  "value": "{{emisor_ruc}}"
+                },
+                {
+                  "key": "env",
+                  "value": "{{query_env}}"
+                }
+              ]
+            },
+            "description": "Consulta siConsRUC en SIFEN y devuelve campos normalizados para integracion."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Contrato Canonico",
+      "description": "Endpoints del contrato canonico centrado en document_uuid. Reemplaza las consultas legacy por CDC.",
+      "item": [
+        {
+          "name": "Resolver CDC → document_uuid (by-cdc)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{api_key}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/fcws/documentos/by-cdc/{{last_cdc}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "fcws",
+                "fcws",
+                "documentos",
+                "by-cdc",
+                "{{last_cdc}}"
+              ],
+              "query": [
+                {
+                  "key": "env",
+                  "value": "{{query_env}}",
+                  "disabled": false
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Consulta canónica por document_uuid",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{api_key}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/fcws/documentos/{{document_uuid}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "fcws",
+                "fcws",
+                "documentos",
+                "{{document_uuid}}"
+              ],
+              "query": [
+                {
+                  "key": "env",
+                  "value": "{{query_env}}",
+                  "disabled": false
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "XML vigente por document_uuid",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{api_key}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/fcws/documentos/{{document_uuid}}/xml",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "fcws",
+                "fcws",
+                "documentos",
+                "{{document_uuid}}",
+                "xml"
+              ],
+              "query": [
+                {
+                  "key": "env",
+                  "value": "{{query_env}}",
+                  "disabled": false
+                },
+                {
+                  "key": "type",
+                  "value": "qr",
+                  "disabled": false
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Estado SIFEN por document_uuid",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{api_key}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/fcws/documentos/{{document_uuid}}/sifen",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "fcws",
+                "fcws",
+                "documentos",
+                "{{document_uuid}}",
+                "sifen"
+              ],
+              "query": [
+                {
+                  "key": "env",
+                  "value": "{{query_env}}",
+                  "disabled": false
+                },
+                {
+                  "key": "refresh",
+                  "value": "false",
+                  "disabled": false
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Eventos por document_uuid",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{api_key}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/fcws/documentos/{{document_uuid}}/eventos",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "fcws",
+                "fcws",
+                "documentos",
+                "{{document_uuid}}",
+                "eventos"
+              ],
+              "query": [
+                {
+                  "key": "env",
+                  "value": "{{query_env}}",
+                  "disabled": false
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Linaje CDC del documento",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{api_key}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/fcws/documentos/{{document_uuid}}/lineage",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "fcws",
+                "fcws",
+                "documentos",
+                "{{document_uuid}}",
+                "lineage"
+              ],
+              "query": [
+                {
+                  "key": "env",
+                  "value": "{{query_env}}",
+                  "disabled": false
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Descargar XML persistido",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{api_key}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/fcws/documentos/{{document_uuid}}/files/xml",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "fcws",
+                "fcws",
+                "documentos",
+                "{{document_uuid}}",
+                "files",
+                "xml"
+              ],
+              "query": [
+                {
+                  "key": "env",
+                  "value": "{{query_env}}",
+                  "disabled": false
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Descargar KUDE (PDF)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{api_key}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/fcws/documentos/{{document_uuid}}/files/kude.pdf",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "fcws",
+                "fcws",
+                "documentos",
+                "{{document_uuid}}",
+                "files",
+                "kude.pdf"
+              ],
+              "query": [
+                {
+                  "key": "env",
+                  "value": "{{query_env}}",
+                  "disabled": false
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Descargar ticket raw",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{api_key}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/fcws/documentos/{{document_uuid}}/files/ticket/raw",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "fcws",
+                "fcws",
+                "documentos",
+                "{{document_uuid}}",
+                "files",
+                "ticket",
+                "raw"
+              ],
+              "query": [
+                {
+                  "key": "env",
+                  "value": "{{query_env}}",
+                  "disabled": false
                 }
               ]
             }

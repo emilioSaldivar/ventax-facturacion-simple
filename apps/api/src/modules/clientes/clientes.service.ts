@@ -72,6 +72,22 @@ export async function updateCliente(
   return cliente;
 }
 
+export async function deleteCliente(
+  context: OperationalContextResponse,
+  clienteId: string,
+  repository: ClienteRepository
+): Promise<void> {
+  const deleted = await repository.deleteForFacturador({
+    clienteId,
+    facturadorId: context.facturador.id,
+    userId: context.user.id
+  });
+
+  if (!deleted) {
+    throw new HttpError(404, "NOT_FOUND", "Cliente no encontrado.");
+  }
+}
+
 export async function autocompleteClienteFromDnit(
   data: { documento_tipo: "RUC" | "CI"; documento: string },
   repository: ClienteRepository

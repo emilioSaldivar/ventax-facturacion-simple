@@ -81,6 +81,7 @@ export interface DeliverySummary {
 
 export interface DocumentoResponse {
   id: string;
+  document_uuid: string | null;
   tipo: DocumentoTipo;
   estado: DocumentoEstado;
   condicion_venta: CondicionVenta;
@@ -138,8 +139,67 @@ export interface DocumentoEventoResponse {
 
 export interface DocumentoEventosListResponse {
   documento_id: string;
-  cdc: string;
+  cdc: string | null;
   events: DocumentoEventoResponse[];
+}
+
+export interface DocumentoDecisionResponse {
+  documento_id: string;
+  emisor_id: string;
+  env: "test" | "prod";
+  cdc: string | null;
+  nro_factura: string | null;
+  status: string;
+  transmission_evidence: "YES" | "NO" | "UNKNOWN";
+  number_state: "CONSUMED" | "REUSABLE" | "REQUIRES_VOID" | "UNCERTAIN";
+  decision_confidence: "HIGH" | "MEDIUM" | "LOW";
+  reason_codes: string[];
+  recommended_action: "RETRY" | "CANCEL_SEND" | "CANCEL_FISCAL" | "VOID_NUMBER" | "WAIT_SYNC" | "NO_ACTION";
+  next_step_hint: string | null;
+  escalation_required: boolean;
+  allowed_actions: Record<string, boolean>;
+}
+
+export interface DocumentoValidateCdcImpactResponse {
+  documento_id: string;
+  current_cdc: string | null;
+  candidate_cdc: string | null;
+  cdc_impact: "CDC_NO_CHANGE" | "CDC_CHANGE";
+  reason: string | null;
+  allowed_actions: Record<string, boolean>;
+}
+
+export interface DocumentoGestionResendResponse {
+  documento_id: string;
+  status: string;
+  revision_number: number;
+  accepted_by_sifen: boolean;
+  cdc: string | null;
+  queued_for_batch: boolean | null;
+}
+
+export interface DocumentoGestionCreateDerivedResponse {
+  source_document_id: string;
+  derived_document_id: string;
+  status: string;
+  accepted_by_sifen: boolean;
+  cdc: string | null;
+  nro_factura: string | null;
+}
+
+export interface DocumentoGestionCancelSendResponse {
+  documento_id: string;
+  previous_status: string;
+  status: string;
+  action_result: string;
+  reason_codes: string[];
+  recommended_next_action: string;
+}
+
+export interface DocumentoGestionVoidResponse {
+  documento_id: string;
+  event_id: string | null;
+  status: string;
 }
 
 export interface BatchPendientesGestionResponse {
@@ -234,7 +294,9 @@ export interface FacturaRepository {
     documentoId: string;
     estado: DocumentoEstado;
     fiscalStatus: Record<string, unknown>;
+    cdc?: string | null;
   }): Promise<DocumentoResponse | null>;
+  bulkUpdateDocumentUuidByCdc(items: Array<{ cdc: string; documentUuid: string }>): Promise<void>;
   createFromEmission(input: FacturaPersistInput): Promise<DocumentoResponse>;
   createQueuedEmission(input: FacturaQueuedPersistInput): Promise<DocumentoResponse>;
   createNotaCreditoFromFactura(input: NotaCreditoPersistInput): Promise<DocumentoResponse>;
@@ -263,4 +325,11 @@ export interface FacturaRepository {
     estado: "ANULADA" | "PENDIENTE_SIFEN";
     fiscalStatus: Record<string, unknown>;
   }): Promise<DocumentoResponse | null>;
+  appendAuditEvent(input: {
+    facturadorId: string;
+    documentoId: string;
+    requestedBy: string;
+    eventType: string;
+    metadata: Record<string, unknown>;
+  }): Promise<void>;
 }

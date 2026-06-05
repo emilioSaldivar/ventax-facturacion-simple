@@ -442,6 +442,25 @@ export class PgClienteRepository implements ClienteRepository {
       client.release();
     }
   }
+
+  async deleteForFacturador(input: { clienteId: string; facturadorId: string; userId: string }): Promise<boolean> {
+    const result = await pool.query<{ cliente_id: string }>(
+      `
+        update facturador_clientes
+        set
+          activo = false,
+          deleted_at = now(),
+          updated_by = $3
+        where id = $1
+          and facturador_id = $2
+          and deleted_at is null
+        returning id as cliente_id
+      `,
+      [input.clienteId, input.facturadorId, input.userId]
+    );
+
+    return (result.rowCount ?? 0) > 0;
+  }
 }
 
 export const clienteRepository = new PgClienteRepository();

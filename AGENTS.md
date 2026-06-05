@@ -49,6 +49,12 @@ Todo cambio funcional, tecnico, visual, operativo o estructural debe seguir esta
 
 No se implementa primero y no se documenta despues.
 
+Para todo codigo nuevo o refactor relevante (incluyendo UX/UI), la implementacion debe iniciar solo cuando:
+
+- el `SPEC` del alcance este actualizado;
+- el `PLAN` este refinado sin ambiguedades para implementacion fina y sin riesgo de romper comportamiento existente;
+- `TASKS` tenga pasos verificables, sin alucinaciones ni definiciones ambiguas, alineados con reglas operativas y de uso declaradas en `SPEC` y `PLAN`.
+
 ## Regla De Validacion Por Tarea
 
 Cada tarea de la matriz tecnica debe declarar o dejar evidencia de validacion al cerrarse.
@@ -63,6 +69,20 @@ Validaciones minimas esperadas:
 - contratos HTTP: actualizar `spec/openapi.yaml` y validar que cliente/frontend consuman el contrato documentado;
 - integracion fiscal: cubrir mock local y, cuando aplique, smoke test opt-in contra FE test sin versionar secretos.
 
+Regla obligatoria de validacion visual:
+
+- toda validacion visual/UI debe ejecutarse con Playwright;
+- no se considera suficiente validacion visual solo manual;
+- la evidencia en `TASKS` debe incluir escenarios, viewport(s) ejecutados y resultado de Playwright.
+
+La ejecucion de validaciones debe planificarse por grupos de tareas abarcables en un solo flujo de pruebas, maximizando la cobertura de tareas pendientes en cada corrida completa.
+
+Si una validacion falla o no puede corregirse de inmediato, se debe:
+
+- documentar el bloqueo/falla y evidencia concreta en la matriz de `TASKS`;
+- registrar impacto, alcance y decision temporal;
+- refinar luego `SPEC`/`PLAN`/`TASKS` con el usuario antes de continuar cambios inciertos.
+
 La evidencia debe quedar en `docs/TASKS_IMPLEMENTACION_MVP_v0.1.md` al cerrar la tarea.
 
 ## Regla Para Agentes
@@ -74,6 +94,9 @@ Cualquier agente que trabaje en este repositorio debe:
 - actualizar primero la documentacion si el alcance no esta cubierto;
 - implementar solo cuando la cadena `SPEC -> PLAN -> TASKS` sea consistente;
 - preservar cambios existentes del usuario;
+- no alucinar soluciones ni ocultar incertidumbre tecnica; cuando no haya claridad suficiente, detener, documentar y escalar para refinamiento;
+- no realizar modificaciones al sistema operativo base ni depender de cambios fuera del repositorio para completar una tarea;
+- preferir validacion sobre stack containerizado (`bash scripts/deploy.sh`) cuando exista duda de paridad entre entorno local y contenedores;
 - no copiar logica fiscal SIFEN al frontend ni al backend SaaS si debe vivir en `facturacion-electronica`;
 - no exponer certificados, CSC, passwords ni secretos fiscales en UI, logs o respuestas no autorizadas.
 
@@ -131,4 +154,6 @@ Un cambio se considera cerrado solo cuando:
 - el `PLAN` refleja el diseno realmente adoptado;
 - `TASKS` refleja el estado real de la matriz;
 - la implementacion y pruebas estan alineadas con esos documentos;
+- luego de validar, se repasan `SPEC`, `PLAN` y `TASKS` para incorporar ajustes descubiertos durante implementacion/pruebas;
+- se actualiza `spec/openapi.yaml` cuando existan cambios de contrato HTTP;
 - las integraciones con `facturacion-electronica` respetan el limite de responsabilidad fiscal.

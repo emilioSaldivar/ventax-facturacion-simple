@@ -90,3 +90,144 @@ Validaciones esperadas:
 - tests de alta manual que actualiza identidad global y agenda propia;
 - tests de edicion que no modifica agendas ajenas;
 - tests de catalogo que impiden listar, buscar, editar o reutilizar items de otro facturador.
+
+## 7. Plan UX Clientes (Sin Cambios Backend)
+
+### 7.1 Objetivo Operativo
+
+Reducir friccion para seleccionar cliente al facturar, minimizando scroll y separando claramente:
+
+- seleccion rapida;
+- edicion inmediata;
+- creacion bajo demanda.
+
+### 7.2 Diseno De Interaccion
+
+1. Reemplazar listado plano por tarjetas de cliente con acciones:
+   - primaria: `Usar cliente`;
+   - secundaria: `Editar`.
+2. Remover formulario persistente al final.
+3. Incorporar accion principal `+ Nuevo cliente` que abre modal/bottom sheet.
+4. Implementar busqueda instantanea al escribir, sin boton `Buscar`.
+5. Agregar estado vacio con CTA de creacion.
+
+### 7.3 Reuso Tecnico
+
+- Reutilizar hooks/servicios/frontend state ya existentes para:
+  - busqueda de clientes;
+  - autocompletado por documento;
+  - normalizacion de `RUC/CI`;
+  - señales de estado de RUC ya disponibles en UI principal cuando correspondan.
+- Mantener APIs y payloads actuales sin cambios de contrato.
+
+### 7.4 Criterios De No Regresion
+
+- No romper alta/edicion de agenda existente.
+- No romper flujo de `Nueva factura` que consume cliente seleccionado.
+- No introducir nuevas reglas fiscales ni mover logica SIFEN al frontend.
+
+### 7.5 Validacion UX/UI
+
+- `npm run typecheck --workspace @facturacion-simple/web-operacion`
+- `npm run build --workspace @facturacion-simple/web-operacion`
+- Playwright mobile-first sobre contenedores desplegados (`bash scripts/deploy.sh`) cubriendo:
+  - buscar cliente mientras escribe;
+  - usar cliente desde tarjeta;
+  - editar cliente desde tarjeta;
+  - crear cliente desde CTA principal;
+  - estado vacio con CTA.
+
+## 8. Plan UX Agenda Compacta (Incremental Sin Cambios Backend)
+
+### 8.1 Objetivo
+
+Incrementar densidad operativa de la agenda para que el operador vea mas clientes por pantalla y conserve una accion primaria simple (`Usar`), delegando acciones secundarias a menu contextual.
+
+### 8.2 Decisiones De Interaccion (Sin Ambiguedad)
+
+1. Reemplazar tarjeta alta por fila compacta con:
+   - bloque izquierdo: nombre + documento;
+   - bloque derecho: boton `Usar` + trigger `⋮`.
+2. Menu `⋮` por cliente con orden fijo:
+   - `Usar cliente`;
+   - `Editar`;
+   - `WhatsApp`;
+   - separador;
+   - `Eliminar cliente` (estilo destructivo).
+3. Eliminar boton visible de `WhatsApp` por fila.
+4. Eliminar boton visible de `Eliminar` por fila.
+5. En formulario de edicion:
+   - conservar campos operativos;
+   - remover bloque de informacion duplicada;
+   - mantener `Guardar`;
+   - agregar `Eliminar cliente de mi agenda` al final, con confirmacion.
+
+### 8.3 No Regresion
+
+- No romper seleccion de cliente en `Nueva factura`.
+- No romper alta/edicion de cliente existente.
+- Mantener payloads actuales de alta/edicion y agregar solo endpoint de baja operativa de agenda (`DELETE /clientes/{clienteId}`).
+- No mover ni duplicar logica fiscal fuera de `facturacion-electronica`.
+
+### 8.4 Validacion Por Lote (Cobertura Maxima)
+
+Ejecutar un flujo unico Playwright mobile-first contra contenedores (`bash scripts/deploy.sh`) para validar en una sola corrida:
+
+1. busqueda incremental de cliente;
+2. `Usar` desde fila compacta;
+3. apertura de `⋮` y ejecucion de `Editar`;
+4. verificacion de formulario sin bloque duplicado;
+5. `Guardar` cambios;
+6. `WhatsApp` desde menu contextual;
+7. `Eliminar cliente` desde menu + confirmacion `Cancelar`;
+8. `Eliminar cliente` desde menu + confirmacion `Eliminar`.
+
+Luego correr viewport adicional desktop/tablet para validar jerarquia visual y densidad sin solapamientos.
+
+## 9. Plan Navegacion Agenda -> Factura (Prefill Cliente)
+
+### 9.1 Diseno Tecnico
+
+1. En `OperationHome`, introducir estado de solicitud de prefill de cliente para `InvoiceEditor`.
+2. En `ClientesAgendaView`, al ejecutar `Usar`:
+   - emitir callback con payload de cliente seleccionado;
+   - navegar a vista `invoice`.
+3. En `InvoiceEditor`, aplicar prefill al recibir solicitud nueva:
+   - setear `cliente_id`, `documento_tipo`, `documento`, `razon_social`, `direccion`, `telefono`, `email`;
+   - limpiar sugerencias abiertas y dejar mensaje operativo breve de cliente cargado.
+4. Marcar la solicitud como consumida para evitar reaplicaciones no intencionales.
+
+### 9.2 No Regresion
+
+- Mantener flujo manual actual de carga/autocompletado de cliente en factura.
+- Mantener comportamiento de `Agenda` para editar/WhatsApp/eliminar.
+- No alterar API de clientes ni contrato OpenAPI.
+
+### 9.3 Validacion
+
+- `npm run typecheck --workspace @facturacion-simple/web-operacion`
+- `npm run build --workspace @facturacion-simple/web-operacion`
+- Playwright en contenedores (mobile + desktop) validando:
+  1. abrir `Agenda/Clientes`;
+  2. tocar `Usar` en un cliente;
+  3. confirmar navegacion a `Nueva factura`;
+  4. confirmar prefill de cliente en formulario.
+
+## 10. Plan Catalogo UX Consistente
+
+### 10.1 Implementacion
+
+1. Lista compacta para catalogo con filtro instantaneo y chips de estado (`Todos/Activos/Archivados`).
+2. Reemplazar formulario embebido por editor separado (modal) para alta/edicion.
+3. Menu contextual `⋮` por item con acciones: `Editar`, `Duplicar`, `Archivar`, `Eliminar permanentemente` (con confirmacion).
+4. En editor, ordenar campos por uso real:
+   - `Descripcion`;
+   - `Precio`;
+   - `IVA`;
+   - `Opciones avanzadas` (`codigo`, `estado`).
+
+### 10.2 No Regresion
+
+- Extender contrato HTTP con `DELETE /catalogo/items/{itemId}` para hard delete.
+- Mantener inactivacion logica (`activo=false`) como opcion primaria de bajo riesgo.
+- No agregar `tipo` (`Producto/Servicio`) en API/UI durante esta iteracion.

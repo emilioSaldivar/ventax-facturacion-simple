@@ -62,12 +62,20 @@ class FakeFacturaRepository implements FacturaRepository {
     return null;
   }
 
+  async findNotaCreditoByOriginal(): Promise<DocumentoResponse | null> {
+    return null;
+  }
+
   async list() {
     return { items: [], total: 0 };
   }
 
   async updateFiscalStatus(): Promise<DocumentoResponse | null> {
     return this.documento;
+  }
+
+  async bulkUpdateDocumentUuidByCdc(): Promise<void> {
+    // no-op in tests
   }
 
   async createFromEmission(_input: FacturaPersistInput): Promise<DocumentoResponse> {
@@ -119,8 +127,8 @@ class FakeDeliveryLinkRepository implements DeliveryLinkRepository {
 }
 
 class FakeFiscalGateway implements FiscalGateway {
-  public lastXmlCdc: string | null = null;
-  public lastPdfCdc: string | null = null;
+  public lastXmlUuid: string | null = null;
+  public lastPdfUuid: string | null = null;
 
   async health() {
     return { ok: true, mode: "mock" as const };
@@ -146,6 +154,14 @@ class FakeFiscalGateway implements FiscalGateway {
     throw new Error("not needed");
   }
 
+  async resolveDocumentoByCdc() {
+    throw new Error("not needed");
+  }
+
+  async getDocumentoDecisionByDocumentId() {
+    throw new Error("not needed");
+  }
+
   async getBatchPendientesByEmisor() {
     throw new Error("not needed");
   }
@@ -154,21 +170,41 @@ class FakeFiscalGateway implements FiscalGateway {
     throw new Error("not needed");
   }
 
-  async getXml(cdc: string) {
-    this.lastXmlCdc = cdc;
+  async validateDocumentoCdcImpactByDocumentId() {
+    throw new Error("not needed");
+  }
+
+  async retryDocumentoSameCdcByDocumentId() {
+    throw new Error("not needed");
+  }
+
+  async createDocumentoDerivedByDocumentId() {
+    throw new Error("not needed");
+  }
+
+  async cancelDocumentoSendByDocumentId() {
+    throw new Error("not needed");
+  }
+
+  async voidDocumentoNumberByDocumentId() {
+    throw new Error("not needed");
+  }
+
+  async getXml(documentUuid: string) {
+    this.lastXmlUuid = documentUuid;
     return {
       body: Buffer.from("<xml/>"),
       content_type: "application/xml",
-      filename: `${cdc}.xml`
+      filename: `${documentUuid}.xml`
     };
   }
 
-  async getKudePdf(cdc: string) {
-    this.lastPdfCdc = cdc;
+  async getKudePdf(documentUuid: string) {
+    this.lastPdfUuid = documentUuid;
     return {
       body: Buffer.from("pdf"),
       content_type: "application/pdf",
-      filename: `${cdc}.pdf`
+      filename: `${documentUuid}.pdf`
     };
   }
 }
@@ -282,7 +318,7 @@ describe("entrega service", () => {
 
     const result = await getPublicArtifact("A".repeat(43), "xml", deliveryLinks, gateway);
 
-    expect(gateway.lastXmlCdc).toBe("A".repeat(44));
+    expect(gateway.lastXmlUuid).toBe("aaaaaaaa-aaaa-4aaa-baaa-aaaaaaaaaaaa");
     expect(result.content_type).toBe("application/xml");
   });
 
@@ -309,7 +345,7 @@ describe("entrega service", () => {
       available: true,
       url: `https://factura.ventax.app/public/d/${"A".repeat(43)}/xml`
     });
-    expect(gateway.lastPdfCdc).toBe("A".repeat(44));
+    expect(gateway.lastPdfUuid).toBe("aaaaaaaa-aaaa-4aaa-baaa-aaaaaaaaaaaa");
     expect(artifact.content_type).toBe("application/pdf");
   });
 
@@ -320,7 +356,7 @@ describe("entrega service", () => {
 
     expect(result).toEqual({
       status: "DELEGATED",
-      message: "Envio de email delegado a Ventax FE."
+      message: "El documento se enviara en el correo del cliente."
     });
   });
 });
@@ -328,6 +364,7 @@ describe("entrega service", () => {
 function buildDocumento(): DocumentoResponse {
   return {
     id: "66666666-6666-4666-8666-666666666666",
+    document_uuid: "aaaaaaaa-aaaa-4aaa-baaa-aaaaaaaaaaaa",
     tipo: "FACTURA",
     estado: "EMITIDA",
     condicion_venta: "CONTADO",
@@ -376,6 +413,7 @@ function buildPublicDocument(): PublicDocumentRecord {
     facturador: context.facturador,
     documento: {
       id: documento.id,
+      document_uuid: documento.document_uuid,
       estado: documento.estado,
       numero_fiscal: documento.numero_fiscal,
       cdc: documento.cdc,

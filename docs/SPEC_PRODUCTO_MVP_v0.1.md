@@ -359,6 +359,7 @@ Alcance minimo:
 - emitir NCE contra el documento relacionado usando `facturacion-electronica`;
 - guardar snapshot y estado;
 - mostrar, descargar y compartir artefactos igual que una factura.
+- si `facturacion-electronica` rechaza la NCE antes de devolver identidad fiscal o estado recuperable, el SaaS debe responder error fiscal y no crear una NCE operativa que bloquee la factura original.
 
 La UI de NCE debe vivir en una pantalla propia `Nueva nota de credito`, separada de `Nueva factura`. El listado/detalle de documentos puede conservar acciones rapidas para iniciar NCE desde una factura elegible, pero debe navegar a esa pantalla o reutilizar su flujo.
 

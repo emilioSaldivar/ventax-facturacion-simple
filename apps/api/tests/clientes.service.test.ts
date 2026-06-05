@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   autocompleteClienteFromDnit,
   createCliente,
+  deleteCliente,
   listClientes,
   normalizeClienteInput,
   searchClientes,
@@ -75,8 +76,10 @@ class FakeClienteRepository implements ClienteRepository {
   public lastUpsertInput: unknown;
   public lastUpdateInput: unknown;
   public lastDnitInput: unknown;
+  public lastDeleteInput: unknown;
   public searchResult: ClienteSearchResult[] = [clienteResponse];
   public updateResult: ClienteResponse | null = clienteResponse;
+  public deleteResult = true;
   public dnitResult:
     | {
         status: "FOUND" | "NOT_FOUND" | "AMBIGUOUS";
@@ -142,6 +145,11 @@ class FakeClienteRepository implements ClienteRepository {
   async findDnitByDocumento(input: { documentoTipo: "RUC" | "CI"; rucSinDv: string; dv?: string }) {
     this.lastDnitInput = input;
     return this.dnitResult;
+  }
+
+  async deleteForFacturador(input: { clienteId: string; facturadorId: string; userId: string }): Promise<boolean> {
+    this.lastDeleteInput = input;
+    return this.deleteResult;
   }
 }
 
@@ -303,6 +311,21 @@ describe("clientes service", () => {
         razon_social: "Cliente"
       })
     ).toThrow(/Documento invalido/);
+  });
+
+  it("deletes client within facturador scope and fails when not found", async () => {
+    const repo = new FakeClienteRepository();
+    await deleteCliente(context, clienteResponse.cliente_id, repo);
+    expect(repo.lastDeleteInput).toEqual({
+      clienteId: clienteResponse.cliente_id,
+      facturadorId: context.facturador.id,
+      userId: context.user.id
+    });
+
+    repo.deleteResult = false;
+    await expect(deleteCliente(context, clienteResponse.cliente_id, repo)).rejects.toMatchObject({
+      statusCode: 404
+    });
   });
 
   it("returns RUC with documento con DV for active fisica", async () => {

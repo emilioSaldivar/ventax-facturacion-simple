@@ -82,7 +82,7 @@ publicEntregaRouter.get(
   validateRequest("params", publicTokenParamsSchema),
   async (req, res, next) => {
     try {
-      const artifact = await getPublicArtifact(String(req.params.token), "kude_pdf", deliveryLinkRepository, fiscalGateway, {
+      const artifact = await getPublicArtifact(String(req.params.token), "kude_pdf", deliveryLinkRepository, facturasRepository, fiscalGateway, {
         requestId: String(req.id),
         endpoint: req.originalUrl
       });
@@ -100,7 +100,7 @@ publicEntregaRouter.get(
   validateRequest("params", publicTokenParamsSchema),
   async (req, res, next) => {
     try {
-      const artifact = await getPublicArtifact(String(req.params.token), "xml", deliveryLinkRepository, fiscalGateway, {
+      const artifact = await getPublicArtifact(String(req.params.token), "xml", deliveryLinkRepository, facturasRepository, fiscalGateway, {
         requestId: String(req.id),
         endpoint: req.originalUrl
       });

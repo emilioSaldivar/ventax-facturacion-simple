@@ -5,7 +5,7 @@ import { operationalContextRepository } from "../context/context.repository";
 import { getOperationalContext } from "../context/context.service";
 import { validateRequest } from "../../shared/validation/validate-request";
 import { catalogoRepository } from "./catalogo.repository";
-import { createCatalogoItem, listCatalogoItems, searchCatalogoItems, updateCatalogoItem } from "./catalogo.service";
+import { createCatalogoItem, deleteCatalogoItem, listCatalogoItems, searchCatalogoItems, updateCatalogoItem } from "./catalogo.service";
 import { ivaTipos } from "./catalogo.types";
 
 const catalogoItemSchema = z.object({
@@ -23,7 +23,10 @@ const searchQuerySchema = z.object({
 
 const listQuerySchema = z.object({
   q: z.string().trim().min(1).max(120).optional(),
-  activo: z.coerce.boolean().optional(),
+  activo: z
+    .enum(["true", "false"])
+    .transform((value) => value === "true")
+    .optional(),
   limit: z.coerce.number().int().min(1).max(100).default(30),
   offset: z.coerce.number().int().min(0).default(0)
 });
@@ -90,3 +93,18 @@ catalogoRouter.patch(
   }
 );
 
+catalogoRouter.delete(
+  "/catalogo/items/:itemId",
+  requireAuth,
+  validateRequest("params", itemParamsSchema),
+  async (req, res, next) => {
+    try {
+      const context = await getOperationalContext(req.user!.id, operationalContextRepository);
+      const params = req.params as unknown as z.infer<typeof itemParamsSchema>;
+      await deleteCatalogoItem(context, params.itemId, catalogoRepository);
+      res.status(204).send();
+    } catch (error) {
+      next(error);
+    }
+  }
+);

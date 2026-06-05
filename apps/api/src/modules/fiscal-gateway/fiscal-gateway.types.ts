@@ -64,6 +64,7 @@ export interface FiscalEmitNotaCreditoRequest {
 
 export interface FiscalEmitFacturaResponse {
   fiscal_document_id: string | null;
+  document_uuid: string | null;
   cdc: string | null;
   numero_fiscal: string | null;
   estado: "EMITIDA" | "PENDIENTE_SIFEN" | "RECHAZADA";
@@ -78,12 +79,33 @@ export interface FiscalEmitFacturaResponse {
 export type FiscalEmitNotaCreditoResponse = FiscalEmitFacturaResponse;
 
 export interface FiscalRefreshStatusRequest {
-  cdc: string;
+  documentUuid: string;
 }
 
 export interface FiscalRefreshStatusResponse {
   estado: "EMITIDA" | "PENDIENTE_SIFEN" | "RECHAZADA" | "ANULADA";
+  current_cdc: string | null;
   raw: Record<string, unknown>;
+}
+
+export type FiscalLineageStatus = "ACTIVE" | "SUPERSEDED" | "INCONSISTENT";
+export type FiscalSifenResolution = "APPROVED" | "APPROVED_WITH_OBS" | "REJECTED_OR_MISSING" | "PENDING_CHECK";
+
+export interface FiscalByCdcResponse {
+  document_uuid: string;
+  document_id: string;
+  requested_cdc: string;
+  current_cdc: string | null;
+  is_current: boolean;
+  lineage_status: FiscalLineageStatus;
+  sifen_resolution: FiscalSifenResolution;
+  status: string;
+  accepted_by_sifen: boolean;
+  nro_factura: string | null;
+  tipo_documento: string;
+  emisor_id: string;
+  env: "test" | "prod";
+  resolution_note: string;
 }
 
 export interface FiscalCancelFacturaRequest {
@@ -108,6 +130,71 @@ export interface FiscalDocumentoEvento {
 
 export interface FiscalDocumentoEventosResponse {
   events: FiscalDocumentoEvento[];
+  raw: Record<string, unknown>;
+}
+
+export interface FiscalDocumentoDecisionResponse {
+  document_id: string;
+  emisor_id: string;
+  env: "test" | "prod";
+  cdc: string | null;
+  nro_factura: string | null;
+  status: string;
+  transmission_evidence: "YES" | "NO" | "UNKNOWN";
+  number_state: "CONSUMED" | "REUSABLE" | "REQUIRES_VOID" | "UNCERTAIN";
+  decision_confidence: "HIGH" | "MEDIUM" | "LOW";
+  reason_codes: string[];
+  recommended_action: "RETRY" | "CANCEL_SEND" | "CANCEL_FISCAL" | "VOID_NUMBER" | "WAIT_SYNC" | "NO_ACTION";
+  next_step_hint: string | null;
+  escalation_required: boolean;
+  allowed_actions: Record<string, boolean>;
+  raw: Record<string, unknown>;
+}
+
+export interface FiscalDocumentoValidateCdcImpactResponse {
+  document_id: string;
+  current_cdc: string | null;
+  candidate_cdc: string | null;
+  cdc_impact: "CDC_NO_CHANGE" | "CDC_CHANGE";
+  reason: string | null;
+  allowed_actions: Record<string, boolean>;
+  raw: Record<string, unknown>;
+}
+
+export interface FiscalDocumentoResendResponse {
+  document_id: string;
+  status: string;
+  revision_number: number;
+  accepted_by_sifen: boolean;
+  cdc: string | null;
+  queued_for_batch: boolean | null;
+  raw: Record<string, unknown>;
+}
+
+export interface FiscalDocumentoCreateDerivedResponse {
+  source_document_id: string;
+  derived_document_id: string;
+  status: string;
+  accepted_by_sifen: boolean;
+  cdc: string | null;
+  nro_factura: string | null;
+  raw: Record<string, unknown>;
+}
+
+export interface FiscalDocumentoCancelSendResponse {
+  document_id: string;
+  previous_status: string;
+  status: string;
+  action_result: string;
+  reason_codes: string[];
+  recommended_next_action: string;
+  raw: Record<string, unknown>;
+}
+
+export interface FiscalDocumentoVoidResponse {
+  document_id: string;
+  event_id: string | null;
+  status: string;
   raw: Record<string, unknown>;
 }
 
@@ -139,7 +226,9 @@ export interface FiscalBatchPendientesResponse {
 
 export interface FiscalFacturalistaItem {
   document_id: string | null;
+  document_uuid: string | null;
   cdc: string | null;
+  current_cdc: string | null;
   nro_factura: string | null;
   status: string | null;
   fecha_emision: string | null;
@@ -165,11 +254,44 @@ export interface FiscalGateway {
   emitNotaCredito(request: FiscalEmitNotaCreditoRequest): Promise<FiscalEmitNotaCreditoResponse>;
   refreshFacturaStatus(request: FiscalRefreshStatusRequest): Promise<FiscalRefreshStatusResponse>;
   cancelFactura(request: FiscalCancelFacturaRequest): Promise<FiscalCancelFacturaResponse>;
-  getDocumentoEventos(cdc: string): Promise<FiscalDocumentoEventosResponse>;
+  getDocumentoEventos(documentUuid: string): Promise<FiscalDocumentoEventosResponse>;
+  resolveDocumentoByCdc(cdc: string): Promise<FiscalByCdcResponse>;
+  getDocumentoDecisionByDocumentId(input: { emisorId: string; documentId: string }): Promise<FiscalDocumentoDecisionResponse>;
+  validateDocumentoCdcImpactByDocumentId(input: {
+    emisorId: string;
+    documentId: string;
+    json_input?: Record<string, unknown>;
+  }): Promise<FiscalDocumentoValidateCdcImpactResponse>;
+  retryDocumentoSameCdcByDocumentId(input: {
+    emisorId: string;
+    documentId: string;
+    mode?: "SYNC" | "BATCH" | "AUTO";
+    send_now?: boolean;
+    comment?: string;
+    json_input?: Record<string, unknown>;
+  }): Promise<FiscalDocumentoResendResponse>;
+  createDocumentoDerivedByDocumentId(input: {
+    emisorId: string;
+    documentId: string;
+    mode?: "SYNC" | "BATCH" | "AUTO";
+    send_now?: boolean;
+    comment?: string;
+    json_input?: Record<string, unknown>;
+  }): Promise<FiscalDocumentoCreateDerivedResponse>;
+  cancelDocumentoSendByDocumentId(input: {
+    emisorId: string;
+    documentId: string;
+    comment?: string;
+  }): Promise<FiscalDocumentoCancelSendResponse>;
+  voidDocumentoNumberByDocumentId(input: {
+    emisorId: string;
+    documentId: string;
+    motivo: string;
+  }): Promise<FiscalDocumentoVoidResponse>;
   getBatchPendientesByEmisor(input: { emisorId: string; limit: number; offset: number }): Promise<FiscalBatchPendientesResponse>;
   getFacturalistaByEmisor(input: { emisorId: string; offset: number; limit: number; q?: string }): Promise<FiscalFacturalistaResponse>;
-  getXml(cdc: string): Promise<FiscalArtifactResponse>;
-  getKudePdf(cdc: string): Promise<FiscalArtifactResponse>;
+  getXml(documentUuid: string): Promise<FiscalArtifactResponse>;
+  getKudePdf(documentUuid: string): Promise<FiscalArtifactResponse>;
 }
 
 export class FiscalGatewayError extends Error {

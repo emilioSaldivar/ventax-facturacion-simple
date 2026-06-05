@@ -13,6 +13,7 @@ import type {
 
 interface FacturaRow {
   id: string;
+  document_uuid: string | null;
   tipo: DocumentoResponse["tipo"];
   estado: DocumentoResponse["estado"];
   condicion_venta: DocumentoResponse["condicion_venta"];
@@ -55,6 +56,7 @@ export class PgFacturaRepository implements FacturaRepository {
       `
         select
           id,
+          document_uuid,
           tipo,
           estado,
           condicion_venta,
@@ -91,6 +93,7 @@ export class PgFacturaRepository implements FacturaRepository {
       `
         select
           id,
+          document_uuid,
           tipo,
           estado,
           condicion_venta,
@@ -127,6 +130,7 @@ export class PgFacturaRepository implements FacturaRepository {
       `
         select
           id,
+          document_uuid,
           tipo,
           estado,
           condicion_venta,
@@ -168,6 +172,7 @@ export class PgFacturaRepository implements FacturaRepository {
       `
         select
           id,
+          document_uuid,
           tipo,
           estado,
           condicion_venta,
@@ -213,6 +218,7 @@ export class PgFacturaRepository implements FacturaRepository {
     documentoId: string;
     estado: DocumentoResponse["estado"];
     fiscalStatus: Record<string, unknown>;
+    cdc?: string | null;
   }): Promise<DocumentoResponse | null> {
     const result = await pool.query<FacturaRow>(
       `
@@ -220,12 +226,14 @@ export class PgFacturaRepository implements FacturaRepository {
         set
           estado = $3,
           fiscal_response_snapshot = $4::jsonb,
+          cdc = coalesce($5, cdc),
           updated_at = now()
         where facturador_id = $1
           and id = $2
           and deleted_at is null
         returning
           id,
+          document_uuid,
           tipo,
           estado,
           condicion_venta,
@@ -241,7 +249,7 @@ export class PgFacturaRepository implements FacturaRepository {
           nce_motivo,
           created_at
       `,
-      [input.facturadorId, input.documentoId, input.estado, JSON.stringify(input.fiscalStatus)]
+      [input.facturadorId, input.documentoId, input.estado, JSON.stringify(input.fiscalStatus), input.cdc ?? null]
     );
 
     const factura = result.rows[0];
@@ -274,6 +282,7 @@ export class PgFacturaRepository implements FacturaRepository {
             fiscal_request_snapshot,
             fiscal_response_snapshot,
             fiscal_document_id,
+            document_uuid,
             cdc,
             numero_fiscal,
             email_estado,
@@ -281,10 +290,11 @@ export class PgFacturaRepository implements FacturaRepository {
           )
           values (
             $1, $2, $3, 'FACTURA', $4, $5, $6, $7, $8::jsonb, $9::jsonb, $10::jsonb,
-            $11::jsonb, $12, $13, $14, $15, now()
+            $11::jsonb, $12, $13, $14, $15, $16, now()
           )
           returning
             id,
+            document_uuid,
             tipo,
             estado,
             condicion_venta,
@@ -313,6 +323,7 @@ export class PgFacturaRepository implements FacturaRepository {
           JSON.stringify(input.fiscalRequest),
           JSON.stringify(input.fiscalResponse?.raw ?? input.fiscalError ?? {}),
           input.fiscalResponse?.fiscal_document_id ?? null,
+          input.fiscalResponse?.document_uuid ?? null,
           input.fiscalResponse?.cdc ?? null,
           input.fiscalResponse?.numero_fiscal ?? null,
           input.fiscalResponse?.email_status === "NOT_APPLICABLE" ? null : input.fiscalResponse?.email_status ?? null
@@ -586,6 +597,7 @@ export class PgFacturaRepository implements FacturaRepository {
             fiscal_request_snapshot,
             fiscal_response_snapshot,
             fiscal_document_id,
+            document_uuid,
             cdc,
             numero_fiscal,
             email_estado,
@@ -593,10 +605,11 @@ export class PgFacturaRepository implements FacturaRepository {
           )
           values (
             $1, $2, $3, 'NOTA_CREDITO', $4, $5, $6, $7, $8, $9, $10::jsonb, $11::jsonb, $12::jsonb,
-            $13::jsonb, $14, $15, $16, $17, now()
+            $13::jsonb, $14, $15, $16, $17, $18, now()
           )
           returning
             id,
+            document_uuid,
             tipo,
             estado,
             condicion_venta,
@@ -627,6 +640,7 @@ export class PgFacturaRepository implements FacturaRepository {
           JSON.stringify(input.fiscalRequest),
           JSON.stringify(input.fiscalResponse?.raw ?? input.fiscalError ?? {}),
           input.fiscalResponse?.fiscal_document_id ?? null,
+          input.fiscalResponse?.document_uuid ?? null,
           input.fiscalResponse?.cdc ?? null,
           input.fiscalResponse?.numero_fiscal ?? null,
           input.fiscalResponse?.email_status === "NOT_APPLICABLE" ? null : input.fiscalResponse?.email_status ?? null
@@ -801,15 +815,17 @@ export class PgFacturaRepository implements FacturaRepository {
             estado = $2,
             fiscal_response_snapshot = $3::jsonb,
             fiscal_document_id = $4,
-            cdc = $5,
-            numero_fiscal = $6,
-            email_estado = $7,
+            document_uuid = coalesce(document_uuid, $5),
+            cdc = $6,
+            numero_fiscal = $7,
+            email_estado = $8,
             emitted_at = now(),
             updated_at = now()
           where id = $1
             and deleted_at is null
           returning
             id,
+            document_uuid,
             tipo,
             estado,
             condicion_venta,
@@ -830,6 +846,7 @@ export class PgFacturaRepository implements FacturaRepository {
           input.response.estado,
           JSON.stringify(input.response.raw),
           input.response.fiscal_document_id,
+          input.response.document_uuid ?? null,
           input.response.cdc,
           input.response.numero_fiscal,
           input.response.email_status === "NOT_APPLICABLE" ? null : input.response.email_status
@@ -1111,6 +1128,62 @@ export class PgFacturaRepository implements FacturaRepository {
     }
   }
 
+  async appendAuditEvent(input: {
+    facturadorId: string;
+    documentoId: string;
+    requestedBy: string;
+    eventType: string;
+    metadata: Record<string, unknown>;
+  }): Promise<void> {
+    await pool.query(
+      `
+        insert into audit_events (
+          tenant_id,
+          facturador_id,
+          usuario_id,
+          entity_type,
+          entity_id,
+          event_type,
+          metadata
+        )
+        select
+          tenant_id,
+          facturador_id,
+          $3,
+          'factura_operativa',
+          id,
+          $4,
+          $5::jsonb
+        from facturas_operativas
+        where facturador_id = $1
+          and id = $2
+      `,
+      [input.facturadorId, input.documentoId, input.requestedBy, input.eventType, JSON.stringify(input.metadata)]
+    );
+  }
+
+  async bulkUpdateDocumentUuidByCdc(items: Array<{ cdc: string; documentUuid: string }>): Promise<void> {
+    if (items.length === 0) return;
+
+    const values: unknown[] = [];
+    const placeholders = items.map((item, i) => {
+      values.push(item.cdc, item.documentUuid);
+      return `($${i * 2 + 1}, $${i * 2 + 2})`;
+    });
+
+    await pool.query(
+      `
+        update facturas_operativas fo
+        set document_uuid = v.document_uuid, updated_at = now()
+        from (values ${placeholders.join(", ")}) as v(cdc, document_uuid)
+        where fo.cdc = v.cdc
+          and fo.document_uuid is null
+          and fo.deleted_at is null
+      `,
+      values
+    );
+  }
+
   private async findItems(facturaId: string): Promise<FacturaItemPreview[]> {
     const result = await pool.query<FacturaItemRow>(
       `
@@ -1264,6 +1337,7 @@ function mapFacturaRow(row: FacturaRow, items: FacturaItemPreview[]): DocumentoR
 
   return {
     id: row.id,
+    document_uuid: row.document_uuid,
     tipo: row.tipo,
     estado: row.estado,
     condicion_venta: row.condicion_venta,

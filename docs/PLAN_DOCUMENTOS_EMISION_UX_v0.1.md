@@ -235,3 +235,82 @@ Minimo requerido al implementar:
 - validar que tras emitir se haga scroll automatico a `Resultado` (`Ver/Compartir comprobante`).
 - test de descubrimiento rapido: usuario nuevo ubica `Nueva factura` en <= 2 segundos.
 - test de comprension: usuario no tecnico entiende acciones principales sin capacitacion previa.
+
+## Plan UX-009 (Detalle De Facturas Emitidas)
+
+### Objetivo
+
+Unificar la pantalla de detalle emitida con el patron UX de emision: rapido arriba, avanzado abajo, tecnico colapsado.
+
+### Implementacion Frontend (Sin Cambios De Contrato)
+
+1. Reorganizar bloque de acciones del detalle en tres grupos visuales:
+   - frecuentes;
+   - gestion comercial;
+   - opciones avanzadas colapsables.
+2. Aplicar copy comercial consistente en botones, subtitulos y confirmaciones.
+3. Mantener `Informacion fiscal` expandible y cerrada por defecto.
+4. Ocultar URL completa y mostrar solo estado de comparticion (`Factura lista para compartir`).
+5. Garantizar ergonomia mobile:
+   - botones full-width;
+   - separacion tactil clara;
+   - acciones sensibles no adyacentes a compartir.
+
+### Guardrails De Primera Etapa
+
+- No modificar endpoints, payloads ni reglas fiscales.
+- Exponer para operador solo acciones avanzadas esenciales (verificar/volver a verificar/crear enlace/documento electronico).
+- Mantener acciones de regularizacion avanzada segun rol interno y alerta, en linea con:
+  - `docs/API_FACTURACION_ELECTRONICA/OPERACION_RECHAZOS_Y_AUTOGESTION_v0.1.md`
+  - cadena SDD separada `AUTOGESTION_AVANZADA_SOPORTE`.
+
+### Validacion UX-009
+
+- `npm run typecheck --workspace @facturacion-simple/web-operacion`
+- `npm run build --workspace @facturacion-simple/web-operacion`
+- Playwright mobile-first sobre contenedores desplegados:
+  - jerarquia de 3 grupos visible y comprensible;
+  - `Opciones avanzadas` colapsada al abrir detalle;
+  - `Informacion fiscal` colapsada al abrir detalle;
+  - confirmacion previa para `Anular` y `Crear nota de credito`;
+- URL completa no visible en primera vista.
+
+## Plan UX-010 (Recientes + Filtros Progresivos)
+
+### Objetivo
+
+Reducir carga cognitiva en mobile para `Documentos` con estrategia de descubrimiento progresivo.
+
+### Implementacion
+
+1. Lista inicial recent-first:
+   - aplicar rango por defecto `ultimos 7 dias` (incluye hoy);
+   - agrupar visualmente en `Hoy` y `Ultimos 7 dias`.
+2. Filtros:
+   - mantener un solo buscador visible;
+   - mover estado/fechas/tipo operativo a bloque colapsable `Mas filtros`.
+3. Tabs de nivel negocio:
+   - `Facturas`;
+   - `Notas de credito`;
+   - `Contado/Credito` queda como filtro avanzado.
+4. Lista:
+   - priorizar estado (icono/jerarquia) sobre numero fiscal;
+   - incluir acciones rapidas por menu contextual `⋮` (`Ver detalle`, `Compartir`, `WhatsApp`, `Nota de credito`, `Anular`).
+5. Detalle:
+   - renombrar `Gestion comercial` a `Acciones sobre esta factura`;
+   - encapsular herramientas internas en `Administracion fiscal`.
+6. Reemplazar `window.prompt` por modal propio para motivos de:
+   - nota de credito;
+   - anulacion;
+   - inutilizacion de numeracion.
+
+### Validacion UX-010
+
+- `npm run typecheck --workspace @facturacion-simple/web-operacion`
+- `npm run build --workspace @facturacion-simple/web-operacion`
+- Playwright mobile+desktop contra contenedores:
+  - vista inicial con recientes y buscador unico;
+  - despliegue de filtros avanzados;
+  - tabs `Facturas/Notas de credito`;
+  - menu `⋮` con acciones rapidas;
+  - detalle con `Acciones sobre esta factura` y `Administracion fiscal`.
