@@ -4,6 +4,38 @@ import "./styles.css";
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "/api/v1";
 const ACCESS_TOKEN_STORAGE_KEY = "ventax_factura_access_token";
+const BUILD_VERSION = (import.meta.env.VITE_APP_VERSION as string | undefined) ?? "dev";
+
+let _updatePending = false;
+const _updateListeners: Array<() => void> = [];
+
+function signalUpdatePending(): void {
+  if (_updatePending) return;
+  _updatePending = true;
+  for (const fn of _updateListeners) fn();
+}
+
+function useUpdatePending(): boolean {
+  const [pending, setPending] = useState(_updatePending);
+  useEffect(() => {
+    if (_updatePending) { setPending(true); return; }
+    const handler = () => setPending(true);
+    _updateListeners.push(handler);
+    return () => {
+      const idx = _updateListeners.indexOf(handler);
+      if (idx !== -1) _updateListeners.splice(idx, 1);
+    };
+  }, []);
+  return pending;
+}
+
+function checkVersionHeader(response: Response): void {
+  if (BUILD_VERSION === "dev") return;
+  const serverVersion = response.headers.get("X-App-Version");
+  if (serverVersion && serverVersion !== BUILD_VERSION) {
+    signalUpdatePending();
+  }
+}
 
 type ViewState = "checking-session" | "login" | "loading-context" | "operacion";
 type OperationView = "status" | "invoice" | "credit-note" | "documents" | "catalog" | "clients";
@@ -484,6 +516,10 @@ function App() {
       await api.post<void>("/auth/logout", {});
     } finally {
       clearSession(setAccessToken);
+      if (_updatePending) {
+        window.location.reload();
+        return;
+      }
       setUser(null);
       setContext(null);
       setReadiness(null);
@@ -600,6 +636,7 @@ function OperationHome({
   const canEmit = Boolean(readiness?.ready);
   const [operationView, setOperationView] = useState<OperationView>(() => (canEmit ? "invoice" : "status"));
   const [menuOpen, setMenuOpen] = useState(false);
+  const updatePending = useUpdatePending();
   const [invoiceClientePrefill, setInvoiceClientePrefill] = useState<InvoiceClientePrefillRequest | null>(null);
   const invoiceClientePrefillSeqRef = useRef(0);
   const [installPromptEvent, setInstallPromptEvent] = useState<BeforeInstallPromptEvent | null>(null);
@@ -683,6 +720,10 @@ function OperationHome({
   }
 
   function goTo(view: OperationView) {
+    if (updatePending) {
+      window.location.reload();
+      return;
+    }
     setOperationView(view);
     setMenuOpen(false);
   }
@@ -4668,6 +4709,8 @@ function createApiClient(accessToken: string | null, setAccessToken: (token: str
         ...init.headers
       }
     });
+
+    checkVersionHeader(response);
 
     if (response.status === 401 && retry) {
       const refreshed = await refreshSession();

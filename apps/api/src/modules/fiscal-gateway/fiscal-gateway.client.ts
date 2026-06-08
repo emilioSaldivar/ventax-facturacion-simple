@@ -24,6 +24,9 @@ import {
   type FiscalGatewayConfig,
   type FiscalGatewayHealth,
   type FiscalFacturalistaResponse,
+  type FiscalIdempotencyReconciliationItem,
+  type FiscalIdempotencyReconciliationItemResult,
+  type FiscalIdempotencyReconciliationResponse,
   type FiscalRefreshStatusRequest,
   type FiscalRefreshStatusResponse
 } from "./fiscal-gateway.types";
@@ -327,6 +330,33 @@ export class MockFiscalGateway implements FiscalGateway {
       event_id: `mock-void-${crypto.createHash("sha256").update(input.motivo).digest("hex").slice(0, 12)}`,
       status: "SENT",
       raw: { mode: "mock", emisor_id: input.emisorId, document_id: input.documentId }
+    };
+  }
+
+  async reconcileByIdempotencyKeys(input: {
+    emisorId: string;
+    env: "test" | "prod";
+    from: string;
+    to: string;
+    idempotencyKeys: string[];
+  }): Promise<FiscalIdempotencyReconciliationResponse> {
+    return {
+      emisor_id: input.emisorId,
+      env: input.env,
+      from: input.from,
+      to: input.to,
+      items: input.idempotencyKeys.map((key) => ({
+        idempotency_key: key,
+        result: "NOT_IMPACTED" as FiscalIdempotencyReconciliationItemResult,
+        document_uuid: null,
+        document_id: null,
+        current_cdc: null,
+        status: null,
+        nro_factura: null,
+        created_at: null,
+        message: "No existe transaccion registrada para esa idempotency_key en el rango consultado."
+      })),
+      raw: { mode: "mock", emisor_id: input.emisorId }
     };
   }
 }
@@ -680,6 +710,13 @@ export class RealFiscalGateway implements FiscalGateway {
     });
     const body = await readJson(response);
     if (!response.ok) {
+      if (response.status === 409) {
+        const data = body && typeof body === "object" ? (body as Record<string, unknown>) : {};
+        const errorCode = stringOrNull(data.error) ?? stringOrNull(data.code);
+        if (errorCode === "TRANSMISSION_EVIDENCE_DETECTED") {
+          throw new FiscalGatewayError("TRANSMISSION_EVIDENCE_DETECTED", "El documento ya fue transmitido a SIFEN.", { status: 409, body });
+        }
+      }
       throw new FiscalGatewayError(response.status === 408 || response.status === 504 ? "TIMEOUT" : "UPSTREAM_ERROR", "Backend fiscal rechazo cancelar envio local.", { status: response.status, body });
     }
     return mapFiscalDocumentoCancelSendResponse(body);
@@ -701,6 +738,35 @@ export class RealFiscalGateway implements FiscalGateway {
       throw new FiscalGatewayError(response.status === 408 || response.status === 504 ? "TIMEOUT" : "UPSTREAM_ERROR", "Backend fiscal rechazo inutilizacion de numeracion.", { status: response.status, body });
     }
     return mapFiscalDocumentoVoidResponse(body);
+  }
+
+  async reconcileByIdempotencyKeys(input: {
+    emisorId: string;
+    env: "test" | "prod";
+    from: string;
+    to: string;
+    idempotencyKeys: string[];
+  }): Promise<FiscalIdempotencyReconciliationResponse> {
+    const response = await this.fetchWithTimeout(`${this.config.baseUrl}/conciliacion/idempotency`, {
+      method: "POST",
+      headers: { ...this.buildHeaders(), "content-type": "application/json" },
+      body: JSON.stringify({
+        emisor_id: input.emisorId,
+        env: input.env,
+        from: input.from,
+        to: input.to,
+        idempotency_keys: input.idempotencyKeys
+      })
+    });
+    const body = await readJson(response);
+    if (!response.ok) {
+      throw new FiscalGatewayError(
+        response.status === 408 || response.status === 504 ? "TIMEOUT" : "UPSTREAM_ERROR",
+        "Backend fiscal rechazo la conciliacion por idempotency.",
+        { status: response.status, body }
+      );
+    }
+    return mapFiscalIdempotencyReconciliationResponse(body, input.emisorId, input.env);
   }
 
   private async fetchWithTimeout(url: string, init: RequestInit): Promise<Response> {
@@ -911,20 +977,15 @@ function buildReceptor(cliente: FiscalEmitFacturaRequest["cliente"]): Record<str
 
 function buildEnvio(mode: unknown): Record<string, unknown> {
   const resolvedMode = resolveFiscalEnvioModo(mode);
-  if (resolvedMode === "SYNC") {
-    return {
-      mode: resolvedMode,
-      sendNow: true
-    };
-  }
-
-  return {
-    mode: "BATCH"
-  };
+  if (resolvedMode === "SYNC") return { mode: "SYNC", sendNow: true };
+  if (resolvedMode === "AUTO") return { mode: "AUTO" };
+  return { mode: "BATCH" };
 }
 
-function resolveFiscalEnvioModo(mode: unknown): "BATCH" | "SYNC" {
-  return mode === "SYNC" ? "SYNC" : "BATCH";
+function resolveFiscalEnvioModo(mode: unknown): "BATCH" | "SYNC" | "AUTO" {
+  if (mode === "SYNC") return "SYNC";
+  if (mode === "AUTO") return "AUTO";
+  return "BATCH";
 }
 
 function mapIvaTipo(tipo: string): string {
@@ -1468,6 +1529,44 @@ function mapSifenResolution(value: unknown): import("./fiscal-gateway.types").Fi
     return value;
   }
   return "PENDING_CHECK";
+}
+
+function mapFiscalIdempotencyReconciliationResponse(
+  body: unknown,
+  emisorId: string,
+  env: "test" | "prod"
+): FiscalIdempotencyReconciliationResponse {
+  if (!body || typeof body !== "object") {
+    throw new FiscalGatewayError("INVALID_RESPONSE", "Respuesta fiscal invalida.", body);
+  }
+
+  const data = body as Record<string, unknown>;
+  const items = Array.isArray(data.items) ? data.items : [];
+
+  return {
+    emisor_id: stringOrNull(data.emisor_id) ?? emisorId,
+    env: data.env === "prod" ? "prod" : env,
+    from: stringOrNull(data.from) ?? "",
+    to: stringOrNull(data.to) ?? "",
+    items: items.map((item): FiscalIdempotencyReconciliationItem => {
+      const row = item && typeof item === "object" ? (item as Record<string, unknown>) : {};
+      const result = stringOrNull(row.result);
+      return {
+        idempotency_key: stringOrNull(row.idempotency_key) ?? "",
+        result: (result === "IMPACTED" || result === "NOT_IMPACTED" || result === "DUPLICATE_CONFLICT" || result === "INVALID_KEY"
+          ? result
+          : "NOT_IMPACTED") as FiscalIdempotencyReconciliationItemResult,
+        document_uuid: stringOrNull(row.document_uuid),
+        document_id: stringOrNull(row.document_id),
+        current_cdc: stringOrNull(row.current_cdc),
+        status: stringOrNull(row.status),
+        nro_factura: stringOrNull(row.nro_factura),
+        created_at: stringOrNull(row.created_at),
+        message: stringOrNull(row.message)
+      };
+    }),
+    raw: data
+  };
 }
 
 function mapFetchError(error: unknown): FiscalGatewayError {

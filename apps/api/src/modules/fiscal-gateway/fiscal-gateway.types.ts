@@ -3,8 +3,8 @@ import type { FiscalContext, FacturadorSummary } from "../context/context.types"
 import type { FacturaClienteInput, FacturaItemPreview } from "../facturas/facturas.types";
 
 export type FiscalGatewayMode = "mock" | "real";
-export type FiscalGatewayErrorCode = "TIMEOUT" | "UPSTREAM_ERROR" | "UNAVAILABLE" | "INVALID_RESPONSE";
-export type FiscalEnvioModo = "BATCH" | "SYNC";
+export type FiscalGatewayErrorCode = "TIMEOUT" | "UPSTREAM_ERROR" | "UNAVAILABLE" | "INVALID_RESPONSE" | "TRANSMISSION_EVIDENCE_DETECTED";
+export type FiscalEnvioModo = "BATCH" | "SYNC" | "AUTO";
 export type FiscalDeliveryMode = "SYNC" | "BATCH" | "AUTO_FALLBACK_BATCH";
 
 export interface FiscalBatchTransmissionInfo {
@@ -248,6 +248,33 @@ export interface FiscalArtifactResponse {
   filename: string;
 }
 
+export type FiscalIdempotencyReconciliationItemResult =
+  | "IMPACTED"
+  | "NOT_IMPACTED"
+  | "DUPLICATE_CONFLICT"
+  | "INVALID_KEY";
+
+export interface FiscalIdempotencyReconciliationItem {
+  idempotency_key: string;
+  result: FiscalIdempotencyReconciliationItemResult;
+  document_uuid: string | null;
+  document_id: string | null;
+  current_cdc: string | null;
+  status: string | null;
+  nro_factura: string | null;
+  created_at: string | null;
+  message: string | null;
+}
+
+export interface FiscalIdempotencyReconciliationResponse {
+  emisor_id: string;
+  env: "test" | "prod";
+  from: string;
+  to: string;
+  items: FiscalIdempotencyReconciliationItem[];
+  raw: Record<string, unknown>;
+}
+
 export interface FiscalGateway {
   health(): Promise<FiscalGatewayHealth>;
   emitFactura(request: FiscalEmitFacturaRequest): Promise<FiscalEmitFacturaResponse>;
@@ -292,6 +319,13 @@ export interface FiscalGateway {
   getFacturalistaByEmisor(input: { emisorId: string; offset: number; limit: number; q?: string }): Promise<FiscalFacturalistaResponse>;
   getXml(documentUuid: string): Promise<FiscalArtifactResponse>;
   getKudePdf(documentUuid: string): Promise<FiscalArtifactResponse>;
+  reconcileByIdempotencyKeys(input: {
+    emisorId: string;
+    env: "test" | "prod";
+    from: string;
+    to: string;
+    idempotencyKeys: string[];
+  }): Promise<FiscalIdempotencyReconciliationResponse>;
 }
 
 export class FiscalGatewayError extends Error {

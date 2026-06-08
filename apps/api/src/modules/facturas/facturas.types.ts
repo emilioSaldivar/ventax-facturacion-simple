@@ -56,7 +56,8 @@ export type DocumentoEstado =
   | "RECHAZADA"
   | "ERROR_OPERATIVO"
   | "ERROR_TEMPORAL"
-  | "ANULADA";
+  | "ANULADA"
+  | "CANCELADO_LOCAL";
 
 export type DocumentoTipo = "FACTURA" | "NOTA_CREDITO";
 export type DocumentoTipoOperativo = CondicionVenta | "NOTA_CREDITO";

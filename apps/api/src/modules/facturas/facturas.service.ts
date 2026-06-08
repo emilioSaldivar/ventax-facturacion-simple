@@ -16,7 +16,6 @@ import type {
   DocumentoDecisionResponse,
   DocumentoEstado,
   DocumentoEventosListResponse,
-  DocumentoGestionCancelSendResponse,
   DocumentoGestionCreateDerivedResponse,
   DocumentoGestionResendResponse,
   DocumentoGestionVoidResponse,
@@ -704,16 +703,20 @@ export async function cancelDocumentoSend(
   input: { comment?: string } | undefined,
   repository: FacturaRepository,
   gateway: FiscalGateway
-): Promise<DocumentoGestionCancelSendResponse> {
-  assertInternalSupportRole(context, "Autogestion avanzada disponible solo para soporte interno.");
+): Promise<DocumentoResponse> {
   const documento = await getDocumentoById(context, documentoId, repository);
-  assertWithinWindowOrThrow(documento, 72, "Cancelacion de envio local");
+
+  if (documento.estado !== "PENDIENTE_SIFEN" && documento.estado !== "EMITIENDO") {
+    throw new HttpError(409, "CONFLICT", "Solo documentos en espera de transmision pueden cancelarse antes del envio.");
+  }
+
   try {
     const response = await gateway.cancelDocumentoSendByDocumentId({
       emisorId: context.facturador.emisor_id,
       documentId: documento.fiscal_document_id ?? documento.id,
       comment: input?.comment
     });
+
     await repository.appendAuditEvent({
       facturadorId: context.facturador.id,
       documentoId: documento.id,
@@ -727,20 +730,35 @@ export async function cancelDocumentoSend(
         reason_codes: response.reason_codes
       }
     });
-    return {
-      documento_id: documento.id,
-      previous_status: response.previous_status,
-      status: response.status,
-      action_result: response.action_result,
-      reason_codes: response.reason_codes,
-      recommended_next_action: response.recommended_next_action
-    };
+
+    const updated = await repository.updateFiscalStatus({
+      facturadorId: context.facturador.id,
+      documentoId: documento.id,
+      estado: "CANCELADO_LOCAL",
+      fiscalStatus: {
+        ...response.raw,
+        action_result: response.action_result,
+        reason_codes: response.reason_codes,
+        cancel_send_comment: input?.comment ?? null
+      }
+    });
+
+    if (!updated) {
+      throw new HttpError(404, "NOT_FOUND", "Documento no encontrado al persistir cancelacion local.");
+    }
+
+    return updated;
   } catch (error) {
     if (error instanceof FiscalGatewayError) {
-      throw new HttpError(error.code === "TIMEOUT" ? 504 : 502, "INTERNAL_ERROR", "No se pudo cancelar el envio local.", {
-        gateway_code: error.code,
-        details: error.details ?? null
-      });
+      if (error.code === "TRANSMISSION_EVIDENCE_DETECTED") {
+        throw new HttpError(409, "CONFLICT", "El documento ya fue enviado a SIFEN. Si fue aprobado, use la opcion de anulacion fiscal.");
+      }
+      throw new HttpError(
+        error.code === "TIMEOUT" ? 504 : 502,
+        "INTERNAL_ERROR",
+        error.code === "TIMEOUT" ? "Timeout al cancelar envio local." : "No se pudo cancelar el envio local.",
+        { gateway_code: error.code, details: error.details ?? null }
+      );
     }
     throw error;
   }
@@ -809,6 +827,9 @@ export async function emitNotaCreditoTotal(
     });
 
     if (existing) {
+      if (existing.estado === "PENDIENTE_SIFEN") {
+        return tryRefreshSilently(context, existing, repository, gateway);
+      }
       return existing;
     }
   }
@@ -886,6 +907,9 @@ export async function emitFacturaAgainstFiscalGateway(
     });
 
     if (existing) {
+      if (existing.estado === "PENDIENTE_SIFEN") {
+        return tryRefreshSilently(context, existing, repository, gateway);
+      }
       return existing;
     }
   }
@@ -1063,6 +1087,20 @@ function mergeFiscalStatus(
     ...(current ?? {}),
     ...refreshed
   };
+}
+
+async function tryRefreshSilently(
+  context: OperationalContextResponse,
+  documento: DocumentoResponse,
+  repository: FacturaRepository,
+  gateway: FiscalGateway
+): Promise<DocumentoResponse> {
+  if (!documento.document_uuid && !documento.cdc) return documento;
+  try {
+    return await refreshDocumentoStatus(context, documento.id, repository, gateway);
+  } catch {
+    return documento;
+  }
 }
 
 function buildExternalRef(context: OperationalContextResponse, idempotencyKey?: string): string {

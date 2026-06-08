@@ -26,7 +26,7 @@ export interface FiscalContext {
   timbrado_inicio: string;
   documento_nro: string;
   credito_plazo_dias: number;
-  fiscal_envio_modo?: "BATCH" | "SYNC";
+  fiscal_envio_modo?: "BATCH" | "SYNC" | "AUTO";
   batch_enabled?: boolean | null;
 }
 

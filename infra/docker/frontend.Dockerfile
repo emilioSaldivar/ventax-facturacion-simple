@@ -8,6 +8,8 @@ COPY packages/shared/package.json packages/shared/package.json
 RUN npm ci
 
 FROM deps AS build
+ARG BUILD_COMMIT_SHA=dev
+ENV VITE_APP_VERSION=$BUILD_COMMIT_SHA
 COPY tsconfig.base.json ./
 COPY apps apps
 COPY packages packages

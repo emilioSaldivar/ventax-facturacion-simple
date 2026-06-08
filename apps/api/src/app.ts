@@ -34,9 +34,15 @@ export function createApp() {
   app.use(
     cors({
       credentials: true,
-      origin: [env.APP_ORIGIN, env.BACKOFFICE_ORIGIN]
+      origin: [env.APP_ORIGIN, env.BACKOFFICE_ORIGIN],
+      exposedHeaders: ["X-App-Version"]
     })
   );
+
+  app.use((_req, res, next) => {
+    res.setHeader("X-App-Version", env.APP_VERSION);
+    next();
+  });
   app.use(cookieParser());
   app.use(express.json({ limit: "1mb" }));
   app.use(

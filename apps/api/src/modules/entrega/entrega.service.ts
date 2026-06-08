@@ -388,7 +388,8 @@ function formatPublicEstado(estado: PublicDocumentResponse["estado"]): string {
     RECHAZADA: "Rechazada",
     ERROR_OPERATIVO: "Error operativo",
     ERROR_TEMPORAL: "Error temporal",
-    ANULADA: "Anulada"
+    ANULADA: "Anulada",
+    CANCELADO_LOCAL: "Cancelado"
   };
   return labels[estado];
 }

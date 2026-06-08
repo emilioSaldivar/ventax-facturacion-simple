@@ -12,13 +12,17 @@ servers:
 tags:
   - name: System
   - name: Admin
+  - name: ApiConsumers
+    description: Administracion de consumidores API (identidades maquina). Solo ADMIN_GLOBAL.
   - name: Emision
+  - name: Conciliacion
+    description: Conciliacion y cancelacion local por idempotency_key. Requiere API key de consumidor.
   - name: Eventos
   - name: Consultas
   - name: Archivos
 
 security:
-  - ApiKeyAuth: []
+  - ApiConsumerKeyAuth: []
 
 paths:
   /health:
@@ -2036,11 +2040,19 @@ paths:
       summary: Emitir Factura Electrónica (CONTADO o CREDITO)
       description: |
         Crea/obtiene un DE idempotente, genera XML v150, firma, inserta QR (AA002).
-        El servicio genera y conserva artefactos locales (XML firmado, XML con QR, KUDE y estado de correo)
-        aunque el despacho fiscal por lote quede pendiente o no llegue a enviarse en ese momento.
-        Si envio.mode=SYNC: intenta enviar inmediatamente a SIFEN.
-        Si envio.mode=BATCH: encola para envío por lote.
-        Si envio.mode=AUTO: intenta SYNC y ante falla técnica, o rechazo SIFEN 1264 por servicio síncrono no habilitado, pasa a cola BATCH.
+
+        **Autenticacion**: requiere API key de consumidor (`X-Api-Key`). La API key global queda retirada de este endpoint.
+
+        **Idempotencia**: `client_reference.idempotency_key` es **obligatorio**. Formato: `^[A-Za-z0-9_-]{8,80}$`.
+        La unicidad es compuesta: `consumer_id + emisor_id + env + idempotency_key`.
+        Si el consumidor reintenta con la misma clave, el sistema devuelve el documento existente con `idempotent: true` (HTTP 200) sin consumir nueva numeracion.
+
+        **Modos de envio**:
+        - `SYNC`: envio inmediato a SIFEN. Responde con estado fiscal final.
+        - `BATCH`: encola para envio por lote. HTTP 200 con `status: QUEUED_BATCH`.
+        - `AUTO`: intenta SYNC y ante falla tecnica o rechazo SIFEN 1264, cae a BATCH (HTTP 202).
+      security:
+        - ApiConsumerKeyAuth: []
       requestBody:
         required: true
         content:
@@ -2049,25 +2061,33 @@ paths:
               $ref: "#/components/schemas/EmitirFacturaRequest"
       responses:
         "200":
-          description: Emitida (o encolada) correctamente
+          description: |
+            Emitida/encolada correctamente (nueva emision), o retry idempotente recuperado.
+            Cuando `idempotent: true`, el documento ya existia y no se consumio nueva numeracion.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/EmitirFacturaResponse"
         "202":
-          description: Documento aceptado localmente y encolado por fallback AUTO técnico o por rechazo SIFEN 1264 del servicio síncrono.
+          description: Documento aceptado localmente y encolado por fallback AUTO tecnico o rechazo SIFEN 1264.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/EmitirFacturaResponse"
-        "409":
-          description: Documento ya existe (idempotencia)
+        "401":
+          description: API key ausente, invalida o consumidor inactivo.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Consumidor sin permiso FACTURA_EMIT o sin alcance sobre el emisor/env solicitado.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "422":
-          description: Validación de datos
+          description: Validacion de datos (incluye idempotency_key faltante o con formato invalido).
           content:
             application/json:
               schema:
@@ -3323,16 +3343,448 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  # ─────────────────────────────────────────────────────────
+  # API CONSUMERS — ADMIN
+  # ─────────────────────────────────────────────────────────
+
+  /admin/api-consumers:
+    get:
+      tags: [ApiConsumers]
+      summary: Listar consumidores API
+      security:
+        - AdminBearerAuth: []
+      responses:
+        "200":
+          description: Lista de consumidores (sin secretos)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ApiConsumerRecord"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+    post:
+      tags: [ApiConsumers]
+      summary: Crear consumidor API
+      description: |
+        Solo `ADMIN_GLOBAL`. La API key completa se devuelve **una sola vez** en la respuesta.
+        Persistir el valor inmediatamente — no es recuperable.
+      security:
+        - AdminBearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiConsumerCreateRequest"
+      responses:
+        "201":
+          description: Consumidor creado. La API key completa solo aparece aqui.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiConsumerCreateResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /admin/api-consumers/{consumerId}:
+    get:
+      tags: [ApiConsumers]
+      summary: Detalle de consumidor API
+      security:
+        - AdminBearerAuth: []
+      parameters:
+        - name: consumerId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Detalle con permisos y asignaciones (sin secreto)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiConsumerDetail"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    patch:
+      tags: [ApiConsumers]
+      summary: Actualizar nombre o estado del consumidor
+      security:
+        - AdminBearerAuth: []
+      parameters:
+        - name: consumerId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiConsumerUpdateRequest"
+      responses:
+        "200":
+          description: Consumidor actualizado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiConsumerRecord"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /admin/api-consumers/{consumerId}/rotate-key:
+    post:
+      tags: [ApiConsumers]
+      summary: Rotar API key del consumidor
+      description: |
+        Genera una nueva API key e invalida la anterior. La nueva key completa se devuelve
+        **una sola vez**. Persistir de inmediato.
+      security:
+        - AdminBearerAuth: []
+      parameters:
+        - name: consumerId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Key rotada. Nueva API key completa incluida.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiConsumerCreateResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /admin/api-consumers/{consumerId}/emisores:
+    put:
+      tags: [ApiConsumers]
+      summary: Reemplazar asignaciones emisor/env del consumidor
+      description: Reemplaza la lista completa de asignaciones. Pasar lista vacia para revocar todo acceso.
+      security:
+        - AdminBearerAuth: []
+      parameters:
+        - name: consumerId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReplaceEmisorAssignmentsRequest"
+      responses:
+        "200":
+          description: Asignaciones actualizadas
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /admin/api-consumers/{consumerId}/permissions:
+    put:
+      tags: [ApiConsumers]
+      summary: Reemplazar permisos funcionales del consumidor
+      security:
+        - AdminBearerAuth: []
+      parameters:
+        - name: consumerId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReplacePermissionsRequest"
+      responses:
+        "200":
+          description: Permisos actualizados
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /admin/api-consumers/{consumerId}/audit-logs:
+    get:
+      tags: [ApiConsumers]
+      summary: Consultar audit logs de un consumidor
+      description: |
+        Solo `ADMIN_GLOBAL`. Rango maximo: 30 dias. Resultados paginados ordenados por `created_at DESC`.
+        No expone secretos.
+      security:
+        - AdminBearerAuth: []
+      parameters:
+        - name: consumerId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: from
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date-time
+          example: "2026-06-01T00:00:00-04:00"
+        - name: to
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date-time
+          example: "2026-06-07T23:59:59-04:00"
+        - name: action
+          in: query
+          required: false
+          schema:
+            type: string
+          example: "FACTURA_EMIT"
+        - name: emisor_id
+          in: query
+          required: false
+          schema:
+            type: string
+          example: "80136968-1"
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+      responses:
+        "200":
+          description: Logs paginados
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuditLogsResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  # ─────────────────────────────────────────────────────────
+  # CONCILIACION POR IDEMPOTENCIA
+  # ─────────────────────────────────────────────────────────
+
+  /conciliacion/idempotency:
+    post:
+      tags: [Conciliacion]
+      summary: Conciliar batch de idempotency_keys
+      description: |
+        Permite al consumidor recuperar el `document_uuid` de transacciones cuya respuesta se perdio.
+        No ejecuta refresh SIFEN ni modifica documentos.
+
+        **Permiso requerido**: `IDEMPOTENCY_RECONCILE`.
+        **Rango maximo**: 7 dias. **Keys por request**: max 100.
+
+        Resultados posibles por item:
+        - `IMPACTED`: existe documento asociado. Incluye `document_uuid`.
+        - `NOT_IMPACTED`: no existe documento en el rango consultado.
+        - `DUPLICATE_CONFLICT`: multiples documentos para esa clave (requiere soporte).
+        - `INVALID_KEY`: el valor no cumple el formato.
+      security:
+        - ApiConsumerKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReconcileIdempotencyRequest"
+            example:
+              emisor_id: "80136968-1"
+              env: "prod"
+              from: "2026-06-01T00:00:00-04:00"
+              to: "2026-06-07T23:59:59-04:00"
+              idempotency_keys:
+                - "A1B2C3D4E5"
+                - "A1B2C3D4E6"
+      responses:
+        "200":
+          description: Resultado por clave
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReconcileIdempotencyResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /conciliacion/idempotency/cancel-send:
+    post:
+      tags: [Conciliacion]
+      summary: Cancelar envio local por idempotency_key
+      description: |
+        Cancela el envio local de un documento en estado `QUEUED_BATCH` identificado por `idempotency_key`,
+        siempre que no exista evidencia de transmision a SIFEN (`last_sent_at IS NULL`).
+
+        **No dispara evento fiscal SIFEN**. Solo revierte el documento a `DRAFT` localmente.
+        Use este endpoint cuando la respuesta original fue incierta y el consumidor necesita
+        cancelar antes de que el batch worker envie el documento.
+
+        **Permiso requerido**: `CANCEL_SEND`.
+
+        Resultados posibles:
+        - `CANCELLED_LOCAL`: documento revertido a DRAFT.
+        - `NOT_IMPACTED`: no existe documento para esa clave.
+        - HTTP 409 `INVALID_DOCUMENT_STATUS`: el documento no esta en `QUEUED_BATCH`.
+        - HTTP 409 `TRANSMISSION_EVIDENCE_DETECTED`: ya hay evidencia de transmision.
+        - HTTP 409 `DUPLICATE_CONFLICT`: multiples documentos (requiere soporte).
+      security:
+        - ApiConsumerKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CancelSendByIdempotencyRequest"
+            example:
+              emisor_id: "80136968-1"
+              env: "prod"
+              idempotency_key: "A1B2C3D4E5"
+              reason: "Consumidor cancelo la venta antes de confirmar recepcion."
+      responses:
+        "200":
+          description: Resultado de la operacion
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CancelSendByIdempotencyResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: Documento ineligible (estado invalido o evidencia de transmision)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
 components:
   securitySchemes:
+    ApiConsumerKeyAuth:
+      type: apiKey
+      in: header
+      name: X-Api-Key
+      description: |
+        API key de consumidor API. Solo consumidores registrados por ADMIN_GLOBAL.
+        Formato alternativo: `Authorization: Bearer <api_key>`.
+        La API key global del .env queda retirada de los endpoints publicos productivos.
     ApiKeyAuth:
       type: apiKey
       in: header
       name: X-API-Key
+      description: API key global (legado, retirada de endpoints publicos productivos).
     AdminBearerAuth:
       type: http
       scheme: bearer
       bearerFormat: HMAC
+
+  responses:
+    Unauthorized:
+      description: API key ausente, invalida o consumidor inactivo.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error: UNAUTHORIZED
+            message: API key invalida o consumidor inactivo
+    Forbidden:
+      description: Sin permiso funcional o sin alcance sobre el emisor/env.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error: FORBIDDEN
+            message: Permiso requerido - FACTURA_EMIT
+    NotFound:
+      description: Recurso no encontrado.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error: NOT_FOUND
+            message: Consumidor no encontrado
+    ValidationError:
+      description: Payload invalido o parametros faltantes.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error: VALIDATION_ERROR
+            message: idempotency_key es requerido
 
   parameters:
     EmisorIdPath:
@@ -3674,7 +4126,12 @@ components:
                 description: Precio unitario IVA incluido (según tu modelo actual)
               ivaTipo:
                 type: string
-                description: "Ej: IVA10, IVA5, EXENTO (mapear a MT v150 internamente)"
+                enum: [IVA10, IVA5, EXENTO]
+                description: |
+                  Tipo de IVA del item segun MT v150.
+                  - IVA10: gravado tasa 10%
+                  - IVA5: gravado tasa 5%
+                  - EXENTO: exento de IVA
         envio:
           type: object
           required: [mode]
@@ -3892,7 +4349,12 @@ components:
                 format: double
               ivaTipo:
                 type: string
-                description: "Ej: IVA10, IVA5, EXENTO"
+                enum: [IVA10, IVA5, EXENTO]
+                description: |
+                  Tipo de IVA del item segun MT v150.
+                  - IVA10: gravado tasa 10%
+                  - IVA5: gravado tasa 5%
+                  - EXENTO: exento de IVA
         envio:
           type: object
           required: [mode]
@@ -6481,3 +6943,334 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/LineageEntryResponse"
+
+    # ─── API CONSUMERS ────────────────────────────────────────
+
+    ApiConsumerPermission:
+      type: string
+      enum:
+        - FACTURA_EMIT
+        - DOCUMENTO_READ
+        - SIFEN_STATUS_READ
+        - IDEMPOTENCY_RECONCILE
+        - CANCEL_SEND
+      description: |
+        Permisos funcionales disponibles para consumidores API:
+        - `FACTURA_EMIT`: emitir FE por `POST /fcws/factura`.
+        - `DOCUMENTO_READ`: consultar documentos del emisor asignado.
+        - `SIFEN_STATUS_READ`: consultar estado SIFEN.
+        - `IDEMPOTENCY_RECONCILE`: conciliar por idempotency_key.
+        - `CANCEL_SEND`: cancelar envio local previo a transmision.
+
+    ApiConsumerEmisorAssignment:
+      type: object
+      required: [emisor_id, env]
+      properties:
+        emisor_id:
+          type: string
+          description: RUC completo del emisor (ej. `80136968-1`).
+          example: "80136968-1"
+        env:
+          type: string
+          enum: [test, prod]
+
+    ApiConsumerRecord:
+      type: object
+      description: Consumidor API sin secretos expuestos.
+      properties:
+        id:
+          type: string
+        code:
+          type: string
+          example: "pos-caja-1"
+        name:
+          type: string
+          example: "POS Caja 1"
+        api_key_prefix:
+          type: string
+          description: Primeros 12 caracteres de la API key. Util para soporte sin exponer secreto.
+          example: "R6FsM4iqG4Sv"
+        activo:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        rotated_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    ApiConsumerDetail:
+      allOf:
+        - $ref: "#/components/schemas/ApiConsumerRecord"
+        - type: object
+          properties:
+            permissions:
+              type: array
+              items:
+                $ref: "#/components/schemas/ApiConsumerPermission"
+            emisor_assignments:
+              type: array
+              items:
+                $ref: "#/components/schemas/ApiConsumerEmisorAssignment"
+
+    ApiConsumerCreateRequest:
+      type: object
+      required: [code, name, permissions, emisor_assignments]
+      properties:
+        code:
+          type: string
+          pattern: "^[a-z0-9_-]+$"
+          maxLength: 100
+          description: Identificador estable y legible. Ej. `pos-caja-1`, `erp-cliente-a`.
+          example: "pos-caja-1"
+        name:
+          type: string
+          maxLength: 255
+          example: "POS Caja 1 - Sucursal Norte"
+        permissions:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/ApiConsumerPermission"
+        emisor_assignments:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/ApiConsumerEmisorAssignment"
+
+    ApiConsumerCreateResponse:
+      allOf:
+        - $ref: "#/components/schemas/ApiConsumerRecord"
+        - type: object
+          properties:
+            api_key:
+              type: string
+              description: |
+                API key completa. Solo visible en esta respuesta (creacion o rotacion).
+                **Almacenar de forma segura de inmediato.** No es recuperable.
+              example: "R6FsM4iqG4SvueUjMhIf..."
+
+    ApiConsumerUpdateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 255
+        activo:
+          type: boolean
+          description: Desactivar bloquea todas las operaciones del consumidor (401).
+
+    ReplaceEmisorAssignmentsRequest:
+      type: object
+      required: [assignments]
+      properties:
+        assignments:
+          type: array
+          description: Lista completa que reemplaza las asignaciones actuales. Lista vacia revoca todo acceso.
+          items:
+            $ref: "#/components/schemas/ApiConsumerEmisorAssignment"
+
+    ReplacePermissionsRequest:
+      type: object
+      required: [permissions]
+      properties:
+        permissions:
+          type: array
+          items:
+            $ref: "#/components/schemas/ApiConsumerPermission"
+
+    AuditLogItem:
+      type: object
+      properties:
+        id:
+          type: string
+        actor_type:
+          type: string
+          enum: [API_CONSUMER, ADMIN_USER]
+        action:
+          type: string
+          example: "FACTURA_EMIT"
+        emisor_id:
+          type: string
+          nullable: true
+        env:
+          type: string
+          nullable: true
+        document_uuid:
+          type: string
+          format: uuid
+          nullable: true
+        document_id:
+          type: string
+          nullable: true
+        idempotency_key:
+          type: string
+          nullable: true
+        success:
+          type: boolean
+        error_code:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    AuditLogsResponse:
+      type: object
+      properties:
+        consumer_id:
+          type: string
+        from:
+          type: string
+          format: date-time
+        to:
+          type: string
+          format: date-time
+        page:
+          type: integer
+        limit:
+          type: integer
+        total:
+          type: integer
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/AuditLogItem"
+
+    # ─── CONCILIACION ─────────────────────────────────────────
+
+    ReconcileIdempotencyRequest:
+      type: object
+      required: [emisor_id, env, from, to, idempotency_keys]
+      properties:
+        emisor_id:
+          type: string
+          description: RUC completo del emisor.
+          example: "80136968-1"
+        env:
+          type: string
+          enum: [test, prod]
+        from:
+          type: string
+          format: date-time
+          description: Inicio del rango (ISO 8601 con offset). Requerido.
+          example: "2026-06-01T00:00:00-04:00"
+        to:
+          type: string
+          format: date-time
+          description: Fin del rango. Maximo 7 dias desde `from`.
+          example: "2026-06-07T23:59:59-04:00"
+        idempotency_keys:
+          type: array
+          minItems: 1
+          maxItems: 100
+          items:
+            type: string
+            pattern: "^[A-Za-z0-9_-]{8,80}$"
+
+    ReconcileIdempotencyItem:
+      type: object
+      required: [idempotency_key, result]
+      properties:
+        idempotency_key:
+          type: string
+        result:
+          type: string
+          enum: [IMPACTED, NOT_IMPACTED, DUPLICATE_CONFLICT, INVALID_KEY]
+        document_uuid:
+          type: string
+          format: uuid
+          nullable: true
+          description: Presente cuando `result=IMPACTED`.
+        document_id:
+          type: string
+          nullable: true
+        current_cdc:
+          type: string
+          nullable: true
+        status:
+          type: string
+          nullable: true
+        nro_factura:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+          nullable: true
+        message:
+          type: string
+          nullable: true
+          description: Presente cuando `result=NOT_IMPACTED`, `DUPLICATE_CONFLICT` o `INVALID_KEY`.
+
+    ReconcileIdempotencyResponse:
+      type: object
+      properties:
+        consumer:
+          type: object
+          properties:
+            id:
+              type: string
+            code:
+              type: string
+        emisor_id:
+          type: string
+        env:
+          type: string
+        from:
+          type: string
+          format: date-time
+        to:
+          type: string
+          format: date-time
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ReconcileIdempotencyItem"
+
+    CancelSendByIdempotencyRequest:
+      type: object
+      required: [emisor_id, env, idempotency_key, reason]
+      properties:
+        emisor_id:
+          type: string
+          example: "80136968-1"
+        env:
+          type: string
+          enum: [test, prod]
+        idempotency_key:
+          type: string
+          pattern: "^[A-Za-z0-9_-]{8,80}$"
+          example: "A1B2C3D4E5"
+        reason:
+          type: string
+          maxLength: 500
+          description: Motivo de la cancelacion local.
+          example: "Consumidor cancelo la venta antes de confirmar recepcion."
+
+    CancelSendByIdempotencyResponse:
+      type: object
+      properties:
+        result:
+          type: string
+          enum: [CANCELLED_LOCAL, NOT_IMPACTED, DUPLICATE_CONFLICT]
+        document_uuid:
+          type: string
+          format: uuid
+          nullable: true
+        document_id:
+          type: string
+          nullable: true
+        previous_status:
+          type: string
+          nullable: true
+        status:
+          type: string
+          nullable: true
+        message:
+          type: string
+          nullable: true

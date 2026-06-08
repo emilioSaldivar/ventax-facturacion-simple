@@ -19,6 +19,8 @@ RUN npm run build -w @facturacion-simple/api
 FROM node:22-alpine AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
+ARG BUILD_COMMIT_SHA=dev
+ENV APP_VERSION=$BUILD_COMMIT_SHA
 COPY package.json package-lock.json ./
 COPY apps/api/package.json apps/api/package.json
 COPY packages/shared/package.json packages/shared/package.json

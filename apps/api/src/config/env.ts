@@ -20,7 +20,8 @@ const envSchema = z.object({
   FE_SERVICE_NUMBERING: z.enum(["true", "false"]).default("false").transform((value) => value === "true"),
   FE_OUTBOX_WORKER_ENABLED: z.enum(["true", "false"]).default("true").transform((value) => value === "true"),
   FE_OUTBOX_WORKER_INTERVAL_MS: z.coerce.number().int().positive().default(5000),
-  PUBLIC_APP_BASE_URL: z.string().url().default("https://factura.ventax.app")
+  PUBLIC_APP_BASE_URL: z.string().url().default("https://factura.ventax.app"),
+  APP_VERSION: z.string().default("dev")
 });
 
 export type Env = z.infer<typeof envSchema>;

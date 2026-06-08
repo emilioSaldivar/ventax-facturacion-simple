@@ -32,7 +32,7 @@ services:
     environment:
       NODE_ENV: production
       PORT: 8080
-      DATABASE_URL: ${DATABASE_URL:-postgres://facturacion_simple:facturacion_simple@postgres:5432/facturacion_simple}
+      DATABASE_URL: ${DOCKER_DB_URL:-postgres://facturacion_simple:facturacion_simple@postgres:5432/facturacion_simple}
       APP_ORIGIN: ${APP_ORIGIN:-http://localhost:8092}
       BACKOFFICE_ORIGIN: ${BACKOFFICE_ORIGIN:-http://localhost:8092}
     depends_on:
@@ -60,7 +60,7 @@ services:
       - ${APP_ENV_FILE:-.env}
     environment:
       NODE_ENV: production
-      DATABASE_URL: ${DATABASE_URL:-postgres://facturacion_simple:facturacion_simple@postgres:5432/facturacion_simple}
+      DATABASE_URL: ${DOCKER_DB_URL:-postgres://facturacion_simple:facturacion_simple@postgres:5432/facturacion_simple}
     command: ["node", "apps/api/dist/db/migrate.js"]
     depends_on:
       postgres:
@@ -91,7 +91,7 @@ services:
       - ${APP_ENV_FILE:-.env}
     environment:
       DNIT_RUC_URL: ${DNIT_RUC_URL:-https://www.dnit.gov.py/en/web/portal-institucional/listado-de-ruc-con-sus-equivalencias}
-      DATABASE_URL: ${DATABASE_URL:-postgres://facturacion_simple:facturacion_simple@postgres:5432/facturacion_simple}
+      DATABASE_URL: ${DOCKER_DB_URL:-postgres://facturacion_simple:facturacion_simple@postgres:5432/facturacion_simple}
       DATA_DIR: /app/data
       IMPORT_BATCH_SIZE: ${DNIT_IMPORT_BATCH_SIZE:-5000}
       DNIT_CRON_DAY: ${DNIT_CRON_DAY:-05}
