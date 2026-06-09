@@ -10,6 +10,7 @@ import {
   createFacturador,
   updateFacturador,
   getFacturadorReadiness,
+  setFacturadorApiKey,
   type Facturador,
   type FacturadorReadiness,
 } from "./api/facturadores";
@@ -669,6 +670,9 @@ function FacturadorDetailView({
   const [nombreFantasia, setNombreFantasia] = useState("");
   const [activo, setActivo] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [apiKeyInput, setApiKeyInput] = useState("");
+  const [apiKeySaving, setApiKeySaving] = useState(false);
+  const [apiKeyOk, setApiKeyOk] = useState(false);
 
   useEffect(() => {
     void load();
@@ -730,6 +734,24 @@ function FacturadorDetailView({
       setError(err instanceof Error ? err.message : "Error actualizando facturador.");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function saveApiKey() {
+    if (!apiKeyInput.trim()) return;
+    setApiKeySaving(true);
+    setApiKeyOk(false);
+    setError(null);
+    try {
+      await setFacturadorApiKey(facturadorId, apiKeyInput.trim());
+      setFacturador((f) => f ? { ...f, has_api_key: true } : f);
+      setApiKeyInput("");
+      setApiKeyOk(true);
+      setTimeout(() => setApiKeyOk(false), 3000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error guardando API key.");
+    } finally {
+      setApiKeySaving(false);
     }
   }
 
@@ -805,6 +827,44 @@ function FacturadorDetailView({
               <div className="detail-item"><dt>ID</dt><dd className="monospace" style={{ fontSize: 11 }}>{facturador.id}</dd></div>
             </dl>
           )}
+
+          <div style={{ marginTop: 24, borderTop: "1px solid var(--border)", paddingTop: 20 }}>
+            <h3 style={{ margin: "0 0 12px", fontSize: 14, color: "var(--text-muted)" }}>API Key FE Consumer</h3>
+            <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
+              <span style={{
+                fontSize: 13,
+                padding: "4px 10px",
+                borderRadius: 4,
+                background: facturador.has_api_key ? "var(--success-bg, #e6f9f0)" : "var(--warn-bg, #fff8e1)",
+                color: facturador.has_api_key ? "var(--success, #1a7a4a)" : "var(--warn, #7a5200)"
+              }}>
+                {facturador.has_api_key ? "● Configurada" : "○ Sin API key"}
+              </span>
+              {apiKeyOk && <span style={{ fontSize: 13, color: "var(--success, #1a7a4a)" }}>Guardada correctamente</span>}
+            </div>
+            <div className="form-row" style={{ alignItems: "flex-end", gap: 8 }}>
+              <div style={{ flex: 1 }}>
+              <FormField label={facturador.has_api_key ? "Reemplazar API key" : "Cargar API key"}>
+                <input
+                  type="password"
+                  value={apiKeyInput}
+                  onChange={(e) => setApiKeyInput(e.target.value)}
+                  placeholder="Pegar la API key del FE consumer..."
+                  autoComplete="new-password"
+                />
+              </FormField>
+              </div>
+              <button
+                className="btn btn-primary"
+                disabled={apiKeySaving || !apiKeyInput.trim()}
+                onClick={() => void saveApiKey()}
+                type="button"
+                style={{ marginBottom: 0 }}
+              >
+                {apiKeySaving ? "Guardando..." : "Guardar"}
+              </button>
+            </div>
+          </div>
         </div>
       ) : tab === "establecimientos" ? (
         <EstablecimientosTab

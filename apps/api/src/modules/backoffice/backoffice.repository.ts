@@ -82,6 +82,7 @@ interface FacturadorRow {
   razon_social: string;
   nombre_fantasia: string | null;
   activo: boolean;
+  has_api_key: boolean;
 }
 
 interface EstablecimientoRow {
@@ -206,7 +207,8 @@ function mapFacturadorRow(row: FacturadorRow): BackofficeFacturadorResponse {
     ruc: row.ruc,
     razon_social: row.razon_social,
     nombre_fantasia: row.nombre_fantasia,
-    activo: row.activo
+    activo: row.activo,
+    has_api_key: row.has_api_key
   };
 }
 
@@ -560,7 +562,8 @@ export class PgBackofficeRepository implements BackofficeRepository {
     const result = await pool.query<FacturadorRow>(
       `insert into facturadores (tenant_id, emisor_id, razon_social, ruc, nombre_fantasia, activo)
        values ($1, $2, $3, $4, $5, true)
-       returning id, tenant_id, emisor_id, ruc, razon_social, nombre_fantasia, activo`,
+       returning id, tenant_id, emisor_id, ruc, razon_social, nombre_fantasia, activo,
+                 (fe_consumer_api_key is not null) as has_api_key`,
       [input.tenantId, input.emisor_id, input.razon_social, input.ruc, input.nombre_fantasia ?? null]
     );
     return mapFacturadorRow(result.rows[0]!);
@@ -568,7 +571,8 @@ export class PgBackofficeRepository implements BackofficeRepository {
 
   async listFacturadores(tenantId: string): Promise<BackofficeFacturadorResponse[]> {
     const result = await pool.query<FacturadorRow>(
-      `select id, tenant_id, emisor_id, ruc, razon_social, nombre_fantasia, activo
+      `select id, tenant_id, emisor_id, ruc, razon_social, nombre_fantasia, activo,
+              (fe_consumer_api_key is not null) as has_api_key
        from facturadores where tenant_id = $1 and deleted_at is null order by razon_social`,
       [tenantId]
     );
@@ -577,7 +581,8 @@ export class PgBackofficeRepository implements BackofficeRepository {
 
   async getFacturador(facturadorId: string): Promise<BackofficeFacturadorResponse | null> {
     const result = await pool.query<FacturadorRow>(
-      `select id, tenant_id, emisor_id, ruc, razon_social, nombre_fantasia, activo
+      `select id, tenant_id, emisor_id, ruc, razon_social, nombre_fantasia, activo,
+              (fe_consumer_api_key is not null) as has_api_key
        from facturadores where id = $1 and deleted_at is null`,
       [facturadorId]
     );
@@ -593,7 +598,8 @@ export class PgBackofficeRepository implements BackofficeRepository {
            activo = coalesce($6, activo),
            updated_at = now()
        where id = $1 and deleted_at is null
-       returning id, tenant_id, emisor_id, ruc, razon_social, nombre_fantasia, activo`,
+       returning id, tenant_id, emisor_id, ruc, razon_social, nombre_fantasia, activo,
+                 (fe_consumer_api_key is not null) as has_api_key`,
       [
         facturadorId,
         input.razon_social ?? null,
@@ -604,6 +610,14 @@ export class PgBackofficeRepository implements BackofficeRepository {
       ]
     );
     return result.rows[0] ? mapFacturadorRow(result.rows[0]) : null;
+  }
+
+  async setFacturadorApiKey(facturadorId: string, apiKey: string): Promise<void> {
+    await pool.query(
+      `update facturadores set fe_consumer_api_key = $2, updated_at = now()
+       where id = $1 and deleted_at is null`,
+      [facturadorId, apiKey]
+    );
   }
 
   async getReadinessData(facturadorId: string): Promise<BackofficeReadinessData | null> {

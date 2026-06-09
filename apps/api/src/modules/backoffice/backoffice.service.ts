@@ -167,6 +167,16 @@ export async function updateFacturador(
   return f;
 }
 
+export async function setFacturadorApiKey(
+  facturadorId: string,
+  apiKey: string,
+  repository: BackofficeRepository
+): Promise<void> {
+  const f = await repository.getFacturador(facturadorId);
+  if (!f) throw new HttpError(404, "NOT_FOUND", "Facturador no encontrado.");
+  await repository.setFacturadorApiKey(facturadorId, apiKey.trim());
+}
+
 export async function getFacturadorReadiness(
   facturadorId: string,
   repository: BackofficeRepository,

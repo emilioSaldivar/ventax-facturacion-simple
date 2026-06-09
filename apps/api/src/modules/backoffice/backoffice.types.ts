@@ -177,6 +177,7 @@ export interface BackofficeFacturadorResponse {
   razon_social: string;
   nombre_fantasia: string | null;
   activo: boolean;
+  has_api_key: boolean;
 }
 
 export interface BackofficeEstablecimientoResponse {
@@ -291,6 +292,7 @@ export interface BackofficeRepository {
   listFacturadores(tenantId: string): Promise<BackofficeFacturadorResponse[]>;
   getFacturador(facturadorId: string): Promise<BackofficeFacturadorResponse | null>;
   updateFacturador(facturadorId: string, input: BackofficeFacturadorUpdateInput): Promise<BackofficeFacturadorResponse | null>;
+  setFacturadorApiKey(facturadorId: string, apiKey: string): Promise<void>;
   getReadinessData(facturadorId: string): Promise<BackofficeReadinessData | null>;
 
   // Establecimientos

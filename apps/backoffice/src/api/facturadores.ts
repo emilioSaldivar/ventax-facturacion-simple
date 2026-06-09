@@ -1,4 +1,4 @@
-import { apiGet, apiPost, apiPatch } from "./client";
+import { apiGet, apiPost, apiPatch, apiPut } from "./client";
 
 export interface Facturador {
   id: string;
@@ -8,6 +8,7 @@ export interface Facturador {
   razon_social: string;
   nombre_fantasia: string | null;
   activo: boolean;
+  has_api_key: boolean;
 }
 
 export interface FacturadorCreateInput {
@@ -57,4 +58,8 @@ export function updateFacturador(id: string, input: FacturadorUpdateInput): Prom
 
 export function getFacturadorReadiness(id: string): Promise<FacturadorReadiness> {
   return apiGet<FacturadorReadiness>(`/backoffice/facturadores/${id}/readiness`);
+}
+
+export function setFacturadorApiKey(id: string, api_key: string): Promise<void> {
+  return apiPut<void>(`/backoffice/facturadores/${id}/api-key`, { api_key });
 }

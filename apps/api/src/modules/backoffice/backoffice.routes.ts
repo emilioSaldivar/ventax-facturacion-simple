@@ -37,6 +37,7 @@ import {
   updateBackofficeUser,
   updateContexto,
   updateEstablecimiento,
+  setFacturadorApiKey,
   updateFacturador,
   updateActividad,
   updatePerfil,
@@ -91,6 +92,10 @@ const facturadorUpdateSchema = z.object({
   nombre_fantasia: z.string().trim().max(300).nullable().optional(),
   activo: z.boolean().optional()
 }).refine((d) => Object.keys(d).length > 0, { message: "Al menos un campo requerido." });
+
+const facturadorApiKeySchema = z.object({
+  api_key: z.string().trim().min(10, "API key demasiado corta.")
+});
 
 const establecimientoCreateSchema = z.object({
   codigo: z.string().trim().regex(/^[0-9]{3}$/, "Codigo debe ser 3 digitos."),
@@ -265,6 +270,14 @@ backofficeRouter.patch("/backoffice/facturadores/:id", ...auth, validateRequest(
     const { id } = req.params as unknown as z.infer<typeof uuidParam>;
     res.json(await updateFacturador(id, req.body, backofficeRepository));
   } catch (e) { next(e); }
+});
+
+backofficeRouter.put("/backoffice/facturadores/:id/api-key", ...auth, validateRequest("params", uuidParam), validateRequest("body", facturadorApiKeySchema), async (req, res, next) => {
+  try {
+    const { id } = req.params as z.infer<typeof uuidParam>;
+    await setFacturadorApiKey(id, (req.body as { api_key: string }).api_key, backofficeRepository);
+    res.status(204).end();
+  } catch (err) { next(err); }
 });
 
 backofficeRouter.get("/backoffice/facturadores/:id/readiness", ...auth, validateRequest("params", uuidParam), async (req, res, next) => {
