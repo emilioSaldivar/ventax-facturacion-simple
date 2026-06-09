@@ -34,8 +34,15 @@ import type {
   BackofficeUserListQuery,
   BackofficeUserPasswordResetInput,
   BackofficeUserResponse,
-  BackofficeUserUpdateInput
+  BackofficeUserUpdateInput,
+  BackofficePlanResponse
 } from "./backoffice.types";
+
+// ─── Planes ───────────────────────────────────────────────────────────────────
+
+export async function listPlanes(repository: BackofficeRepository): Promise<BackofficePlanResponse[]> {
+  return repository.listPlanes();
+}
 
 // ─── Usuarios (existentes) ────────────────────────────────────────────────────
 

@@ -39,6 +39,7 @@ import {
   deleteUser,
   type BackofficeUser,
 } from "./api/usuarios";
+import { listPlanes, type Plan } from "./api/planes";
 import { Layout } from "./components/Layout";
 import { FormField } from "./components/FormField";
 import { CopyableSecret } from "./components/CopyableSecret";
@@ -392,9 +393,21 @@ function TenantsListView({ onNavigate }: { onNavigate: (v: AppView) => void }) {
 function TenantCreateView({ onNavigate }: { onNavigate: (v: AppView) => void }) {
   const [nombre, setNombre] = useState("");
   const [slug, setSlug] = useState("");
-  const [plan, setPlan] = useState("BASICO");
+  const [plan, setPlan] = useState("");
+  const [planes, setPlanes] = useState<Plan[]>([]);
+  const [loadingPlanes, setLoadingPlanes] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    listPlanes()
+      .then((data) => {
+        setPlanes(data);
+        if (data.length > 0) setPlan(data[0]!.codigo);
+      })
+      .catch(() => setError("No se pudieron cargar los planes."))
+      .finally(() => setLoadingPlanes(false));
+  }, []);
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -423,14 +436,17 @@ function TenantCreateView({ onNavigate }: { onNavigate: (v: AppView) => void }) 
             <input type="text" value={slug} onChange={(e) => setSlug(e.target.value)} placeholder="ej: mi-empresa" required />
           </FormField>
           <FormField label="Plan" required>
-            <select value={plan} onChange={(e) => setPlan(e.target.value)}>
-              <option value="BASICO">BASICO</option>
-              <option value="PROFESIONAL">PROFESIONAL</option>
-              <option value="ENTERPRISE">ENTERPRISE</option>
+            <select value={plan} onChange={(e) => setPlan(e.target.value)} disabled={loadingPlanes}>
+              {loadingPlanes
+                ? <option value="">Cargando...</option>
+                : planes.map((p) => (
+                    <option key={p.codigo} value={p.codigo}>{p.nombre}</option>
+                  ))
+              }
             </select>
           </FormField>
           <div className="form-actions">
-            <button className="btn btn-primary" disabled={submitting} type="submit">
+            <button className="btn btn-primary" disabled={submitting || loadingPlanes || !plan} type="submit">
               {submitting ? "Creando..." : "Crear tenant"}
             </button>
             <button className="btn" onClick={() => onNavigate({ tag: "tenants-list" })} type="button">Cancelar</button>
@@ -1914,6 +1930,12 @@ function UserCreateView({ onNavigate }: { onNavigate: (v: AppView) => void }) {
 
 // ─── UserDetailView ───────────────────────────────────────────────────────────
 
+function contextoLabel(c: Contexto): string {
+  const alias = c.alias_operativo ?? c.actividad.alias_operativo;
+  if (alias) return alias;
+  return `Est:${c.establecimiento.codigo} · Punto:${c.punto_expedicion.codigo} · Act:${c.actividad.codigo} · Perfil:${c.perfil_emision.codigo}`;
+}
+
 function UserDetailView({ userId, onNavigate }: { userId: string; onNavigate: (v: AppView) => void }) {
   const [user, setUser] = useState<BackofficeUser | null>(null);
   const [loading, setLoading] = useState(true);
@@ -1927,20 +1949,59 @@ function UserDetailView({ userId, onNavigate }: { userId: string; onNavigate: (v
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [configMode, setConfigMode] = useState(false);
-  const [configTenantId, setConfigTenantId] = useState("");
-  const [configFacturadorId, setConfigFacturadorId] = useState("");
-  const [configEmisorId, setConfigEmisorId] = useState("");
-  const [configEst, setConfigEst] = useState("");
-  const [configPunto, setConfigPunto] = useState("");
-  const [configPerfil, setConfigPerfil] = useState("");
-  const [configActividad, setConfigActividad] = useState("");
-  const [configSaving, setConfigSaving] = useState(false);
-  const [tenants, setTenants] = useState<Tenant[]>([]);
 
+  // Cascading selection state — reemplaza los 7 campos de texto libre
+  const [tenants, setTenants] = useState<Tenant[]>([]);
+  const [configTenantId, setConfigTenantId] = useState("");
+  const [facturadores, setFacturadores] = useState<Facturador[]>([]);
+  const [loadingFacturadores, setLoadingFacturadores] = useState(false);
+  const [configFacturadorId, setConfigFacturadorId] = useState("");
+  const [contextos, setContextos] = useState<Contexto[]>([]);
+  const [loadingContextos, setLoadingContextos] = useState(false);
+  const [configContextoId, setConfigContextoId] = useState("");
+
+  const [configSaving, setConfigSaving] = useState(false);
+
+  // Carga inicial del usuario y de todos los tenants
   useEffect(() => {
     void load();
     void listTenants().then(setTenants).catch(() => { /* noop */ });
   }, [userId]);
+
+  // Tenant seleccionado → carga facturadores, resetea selección inferior
+  useEffect(() => {
+    if (!configTenantId) { setFacturadores([]); setConfigFacturadorId(""); return; }
+    setLoadingFacturadores(true);
+    listFacturadores(configTenantId)
+      .then(setFacturadores)
+      .catch(() => setError("Error cargando facturadores."))
+      .finally(() => setLoadingFacturadores(false));
+  }, [configTenantId]);
+
+  // Facturador seleccionado → carga contextos, resetea selección inferior
+  useEffect(() => {
+    if (!configFacturadorId) { setContextos([]); setConfigContextoId(""); return; }
+    setLoadingContextos(true);
+    listContextos(configFacturadorId)
+      .then(setContextos)
+      .catch(() => setError("Error cargando contextos."))
+      .finally(() => setLoadingContextos(false));
+  }, [configFacturadorId]);
+
+  // Cuando los contextos cargan, intenta auto-seleccionar si hay config existente
+  useEffect(() => {
+    if (!contextos.length || configContextoId) return;
+    const cfg = user?.operation_config;
+    if (!cfg || cfg.facturador_id !== configFacturadorId) return;
+    const match = contextos.find(
+      (c) =>
+        c.establecimiento.codigo === cfg.establecimiento &&
+        c.punto_expedicion.codigo === cfg.punto_expedicion &&
+        c.perfil_emision.codigo === cfg.perfil_emision_codigo &&
+        c.actividad.codigo === cfg.actividad_economica_codigo
+    );
+    if (match) setConfigContextoId(match.id);
+  }, [contextos, user, configFacturadorId]);
 
   async function load() {
     setLoading(true);
@@ -1954,11 +2015,7 @@ function UserDetailView({ userId, onNavigate }: { userId: string; onNavigate: (v
       if (u.operation_config) {
         setConfigTenantId(u.operation_config.tenant_id);
         setConfigFacturadorId(u.operation_config.facturador_id);
-        setConfigEmisorId(u.operation_config.emisor_id);
-        setConfigEst(u.operation_config.establecimiento);
-        setConfigPunto(u.operation_config.punto_expedicion);
-        setConfigPerfil(u.operation_config.perfil_emision_codigo);
-        setConfigActividad(u.operation_config.actividad_economica_codigo);
+        // configContextoId se auto-selecciona vía el useEffect de contextos
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error cargando usuario.");
@@ -2009,17 +2066,20 @@ function UserDetailView({ userId, onNavigate }: { userId: string; onNavigate: (v
 
   async function saveConfig(e: FormEvent) {
     e.preventDefault();
+    const facturador = facturadores.find((f) => f.id === configFacturadorId);
+    const contexto = contextos.find((c) => c.id === configContextoId);
+    if (!facturador || !contexto) return;
     setConfigSaving(true);
     setError(null);
     try {
       await assignOperationConfig(userId, {
         tenant_id: configTenantId,
-        facturador_id: configFacturadorId,
-        emisor_id: configEmisorId,
-        establecimiento: configEst,
-        punto_expedicion: configPunto,
-        perfil_emision_codigo: configPerfil,
-        actividad_economica_codigo: configActividad,
+        facturador_id: facturador.id,
+        emisor_id: facturador.emisor_id,
+        establecimiento: contexto.establecimiento.codigo,
+        punto_expedicion: contexto.punto_expedicion.codigo,
+        perfil_emision_codigo: contexto.perfil_emision.codigo,
+        actividad_economica_codigo: contexto.actividad.codigo,
       });
       setConfigMode(false);
       await load();
@@ -2029,6 +2089,8 @@ function UserDetailView({ userId, onNavigate }: { userId: string; onNavigate: (v
       setConfigSaving(false);
     }
   }
+
+  const canSubmitConfig = !!configTenantId && !!configFacturadorId && !!configContextoId;
 
   if (loading) return <div className="empty-state">Cargando...</div>;
   if (error && !user) return <div className="error-msg">{error}</div>;
@@ -2096,54 +2158,99 @@ function UserDetailView({ userId, onNavigate }: { userId: string; onNavigate: (v
       <div className="panel">
         <div className="panel-header">
           <h2 className="panel-title">Configuracion operativa</h2>
-          <button className="btn" onClick={() => setConfigMode(!configMode)} type="button">{configMode ? "Cancelar" : (user.operation_config ? "Editar" : "Asignar")}</button>
+          <button className="btn" onClick={() => setConfigMode(!configMode)} type="button">
+            {configMode ? "Cancelar" : (user.operation_config ? "Editar" : "Asignar")}
+          </button>
         </div>
+
         {!configMode && !user.operation_config ? (
           <div className="empty-state">Sin configuracion operativa asignada.</div>
         ) : null}
+
         {!configMode && user.operation_config ? (
           <dl className="detail-grid">
             <div className="detail-item"><dt>Tenant ID</dt><dd className="monospace" style={{ fontSize: 11 }}>{user.operation_config.tenant_id}</dd></div>
             <div className="detail-item"><dt>Facturador ID</dt><dd className="monospace" style={{ fontSize: 11 }}>{user.operation_config.facturador_id}</dd></div>
-            <div className="detail-item"><dt>Emisor ID</dt><dd className="monospace" style={{ fontSize: 11 }}>{user.operation_config.emisor_id}</dd></div>
+            <div className="detail-item"><dt>Emisor ID</dt><dd className="monospace">{user.operation_config.emisor_id}</dd></div>
             <div className="detail-item"><dt>Establecimiento</dt><dd>{user.operation_config.establecimiento}</dd></div>
             <div className="detail-item"><dt>Punto expedicion</dt><dd>{user.operation_config.punto_expedicion}</dd></div>
             <div className="detail-item"><dt>Perfil emision</dt><dd>{user.operation_config.perfil_emision_codigo}</dd></div>
             <div className="detail-item"><dt>Actividad economica</dt><dd>{user.operation_config.actividad_economica_codigo}</dd></div>
           </dl>
         ) : null}
+
         {configMode ? (
           <form className="form" onSubmit={(e) => void saveConfig(e)}>
+            {/* Paso 1: Tenant */}
             <FormField label="Tenant" required>
-              <select value={configTenantId} onChange={(e) => setConfigTenantId(e.target.value)} required>
+              <select
+                value={configTenantId}
+                onChange={(e) => { setConfigTenantId(e.target.value); setConfigFacturadorId(""); setConfigContextoId(""); }}
+                required
+              >
                 <option value="">Seleccionar tenant...</option>
-                {tenants.map((t) => <option key={t.id} value={t.id}>{t.nombre} ({t.slug})</option>)}
+                {tenants.map((t) => (
+                  <option key={t.id} value={t.id}>{t.nombre} ({t.slug})</option>
+                ))}
               </select>
             </FormField>
-            <FormField label="Facturador ID (UUID)" required>
-              <input type="text" value={configFacturadorId} onChange={(e) => setConfigFacturadorId(e.target.value)} required />
+
+            {/* Paso 2: Facturador — carga cuando hay tenant */}
+            <FormField label="Facturador" required>
+              <select
+                value={configFacturadorId}
+                onChange={(e) => { setConfigFacturadorId(e.target.value); setConfigContextoId(""); }}
+                disabled={!configTenantId || loadingFacturadores}
+                required
+              >
+                <option value="">
+                  {!configTenantId ? "Seleccionar tenant primero..." : loadingFacturadores ? "Cargando..." : "Seleccionar facturador..."}
+                </option>
+                {facturadores.map((f) => (
+                  <option key={f.id} value={f.id}>
+                    {f.razon_social} — {f.emisor_id}
+                  </option>
+                ))}
+              </select>
             </FormField>
-            <FormField label="Emisor ID (UUID del backend fiscal)" required>
-              <input type="text" value={configEmisorId} onChange={(e) => setConfigEmisorId(e.target.value)} required />
+
+            {/* Paso 3: Contexto — carga cuando hay facturador */}
+            <FormField label="Contexto operativo" required>
+              <select
+                value={configContextoId}
+                onChange={(e) => setConfigContextoId(e.target.value)}
+                disabled={!configFacturadorId || loadingContextos}
+                required
+              >
+                <option value="">
+                  {!configFacturadorId ? "Seleccionar facturador primero..." : loadingContextos ? "Cargando..." : "Seleccionar contexto..."}
+                </option>
+                {contextos.map((c) => (
+                  <option key={c.id} value={c.id}>{contextoLabel(c)}</option>
+                ))}
+              </select>
             </FormField>
-            <div className="form-row">
-              <FormField label="Establecimiento (codigo, 3 digitos)" required>
-                <input type="text" value={configEst} onChange={(e) => setConfigEst(e.target.value)} placeholder="001" required />
-              </FormField>
-              <FormField label="Punto expedicion (codigo, 3 digitos)" required>
-                <input type="text" value={configPunto} onChange={(e) => setConfigPunto(e.target.value)} placeholder="001" required />
-              </FormField>
-            </div>
-            <div className="form-row">
-              <FormField label="Perfil emision (codigo)" required>
-                <input type="text" value={configPerfil} onChange={(e) => setConfigPerfil(e.target.value)} required />
-              </FormField>
-              <FormField label="Actividad economica (codigo)" required>
-                <input type="text" value={configActividad} onChange={(e) => setConfigActividad(e.target.value)} required />
-              </FormField>
-            </div>
+
+            {/* Resumen de los valores que se enviarán, solo informativo */}
+            {configContextoId && (() => {
+              const f = facturadores.find((x) => x.id === configFacturadorId);
+              const c = contextos.find((x) => x.id === configContextoId);
+              if (!f || !c) return null;
+              return (
+                <dl className="detail-grid" style={{ marginTop: 8, opacity: 0.75 }}>
+                  <div className="detail-item"><dt>Emisor ID</dt><dd className="monospace">{f.emisor_id}</dd></div>
+                  <div className="detail-item"><dt>Establecimiento</dt><dd>{c.establecimiento.codigo}</dd></div>
+                  <div className="detail-item"><dt>Punto</dt><dd>{c.punto_expedicion.codigo}</dd></div>
+                  <div className="detail-item"><dt>Perfil</dt><dd>{c.perfil_emision.codigo}</dd></div>
+                  <div className="detail-item"><dt>Actividad</dt><dd>{c.actividad.codigo}</dd></div>
+                </dl>
+              );
+            })()}
+
             <div className="form-actions">
-              <button className="btn btn-primary" disabled={configSaving} type="submit">{configSaving ? "Guardando..." : "Guardar configuracion"}</button>
+              <button className="btn btn-primary" disabled={configSaving || !canSubmitConfig} type="submit">
+                {configSaving ? "Guardando..." : "Guardar configuracion"}
+              </button>
             </div>
           </form>
         ) : null}

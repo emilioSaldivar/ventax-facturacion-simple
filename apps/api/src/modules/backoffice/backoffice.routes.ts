@@ -8,6 +8,7 @@ import { backofficeRepository } from "./backoffice.repository";
 import {
   assignBackofficeOperationConfig,
   createBackofficeUser,
+  listPlanes,
   createTenant,
   createFacturador,
   createEstablecimiento,
@@ -213,6 +214,14 @@ export const backofficeRouter = Router();
 
 const auth = [requireAuth, requireBackofficeRole] as const;
 const adminAuth = [requireAuth, requireBackofficeRole, requireAdminRole] as const;
+
+// ── Planes ────────────────────────────────────────────────────────────────────
+
+backofficeRouter.get("/backoffice/planes", ...auth, async (_req, res, next) => {
+  try {
+    res.json(await listPlanes(backofficeRepository));
+  } catch (e) { next(e); }
+});
 
 // ── Tenants ───────────────────────────────────────────────────────────────────
 

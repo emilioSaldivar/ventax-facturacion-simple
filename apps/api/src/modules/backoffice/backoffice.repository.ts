@@ -31,7 +31,8 @@ import type {
   BackofficeUserDetailResponse,
   BackofficeUserListQuery,
   BackofficeUserResponse,
-  BackofficeUserUpdateInput
+  BackofficeUserUpdateInput,
+  BackofficePlanResponse
 } from "./backoffice.types";
 
 interface Queryable {
@@ -487,6 +488,16 @@ export class PgBackofficeRepository implements BackofficeRepository {
     } finally {
       client.release();
     }
+  }
+
+  // ── Planes ────────────────────────────────────────────────────────────────
+
+  async listPlanes(): Promise<BackofficePlanResponse[]> {
+    const result = await pool.query<{ id: string; codigo: string; nombre: string; descripcion: string | null; max_usuarios: number; max_facturadores: number }>(
+      `select id, codigo, nombre, descripcion, max_usuarios, max_facturadores
+       from planes where activo = true and deleted_at is null order by nombre`
+    );
+    return result.rows;
   }
 
   // ── Tenants ───────────────────────────────────────────────────────────────

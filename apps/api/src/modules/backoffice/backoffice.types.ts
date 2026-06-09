@@ -261,6 +261,15 @@ export interface BackofficeReadinessData {
   usuarios_operativos: number;
 }
 
+export interface BackofficePlanResponse {
+  id: string;
+  codigo: string;
+  nombre: string;
+  descripcion: string | null;
+  max_usuarios: number;
+  max_facturadores: number;
+}
+
 // ─── Repository interface ─────────────────────────────────────────────────────
 
 export interface BackofficeRepository {
@@ -280,6 +289,9 @@ export interface BackofficeRepository {
     userId: string;
     data: BackofficeOperationConfigInput;
   }): Promise<BackofficeOperationConfigResponse | null>;
+
+  // Planes
+  listPlanes(): Promise<BackofficePlanResponse[]>;
 
   // Tenants
   createTenant(input: { nombre: string; slug: string; planCodigo: string }): Promise<BackofficeTenantResponse>;
