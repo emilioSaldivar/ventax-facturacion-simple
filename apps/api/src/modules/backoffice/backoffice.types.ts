@@ -7,6 +7,7 @@ export interface BackofficeUserCreateInput {
   display_name?: string | null;
   role: UserSummary["role"];
   temporary_password?: string | null;
+  // tenant_id se pasa como primer argumento a createBackofficeUser, no dentro de este objeto
 }
 
 export interface BackofficeUserPasswordResetInput {

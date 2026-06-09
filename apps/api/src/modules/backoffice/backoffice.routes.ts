@@ -164,6 +164,7 @@ const contextoUpdateSchema = z.object({
 }).refine((d) => Object.keys(d).length > 0, { message: "Al menos un campo requerido." });
 
 const userCreateSchema = z.object({
+  tenant_id: z.string().uuid(),
   username: z.string().trim().min(3).max(120),
   display_name: z.string().trim().min(1).max(180).nullable().optional(),
   role: z.enum(roles),
@@ -456,7 +457,8 @@ backofficeRouter.get("/backoffice/users", ...auth, validateRequest("query", user
 
 backofficeRouter.post("/backoffice/users", ...auth, validateRequest("body", userCreateSchema), async (req, res, next) => {
   try {
-    res.status(201).json(await createBackofficeUser(req.user!.tenantId, req.body, backofficeRepository));
+    const { tenant_id, ...userInput } = req.body as z.infer<typeof userCreateSchema>;
+    res.status(201).json(await createBackofficeUser(tenant_id, userInput, backofficeRepository));
   } catch (e) { next(e); }
 });
 
