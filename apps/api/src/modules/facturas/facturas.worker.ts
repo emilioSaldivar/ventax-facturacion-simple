@@ -6,6 +6,7 @@ import type { FacturaRepository } from "./facturas.types";
 export function startFacturaEmissionWorker(options: {
   repository: FacturaRepository;
   gateway: FiscalGateway;
+  gatewayWithKey: (apiKey: string) => FiscalGateway;
   intervalMs: number;
 }): () => void {
   let running = false;
@@ -17,7 +18,7 @@ export function startFacturaEmissionWorker(options: {
 
     running = true;
     try {
-      await processNextQueuedFiscalEmission(options.repository, options.gateway);
+      await processNextQueuedFiscalEmission(options.repository, options.gateway, options.gatewayWithKey);
     } catch (error) {
       logger.error({ err: error }, "factura emission worker failed");
     } finally {

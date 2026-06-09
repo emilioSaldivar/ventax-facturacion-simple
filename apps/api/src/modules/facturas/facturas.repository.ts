@@ -47,6 +47,7 @@ interface PendingFiscalEmissionRow {
   outbox_id: string;
   documento_id: string;
   facturador_id: string;
+  fe_consumer_api_key: string | null;
   fiscal_request_snapshot: unknown;
 }
 
@@ -767,12 +768,14 @@ export class PgFacturaRepository implements FacturaRepository {
           locked_at = now(),
           updated_at = now()
         from next_job, facturas_operativas f
+        join facturadores fa on fa.id = f.facturador_id
         where o.id = next_job.id
           and f.id = o.factura_operativa_id
         returning
           o.id as outbox_id,
           f.id as documento_id,
           f.facturador_id,
+          fa.fe_consumer_api_key,
           f.fiscal_request_snapshot
       `
     );
@@ -786,6 +789,7 @@ export class PgFacturaRepository implements FacturaRepository {
       outboxId: row.outbox_id,
       documentoId: row.documento_id,
       facturadorId: row.facturador_id,
+      facturadorApiKey: (row.fe_consumer_api_key as string | null) ?? null,
       fiscalRequest: row.fiscal_request_snapshot as PendingFiscalEmission["fiscalRequest"]
     };
   }

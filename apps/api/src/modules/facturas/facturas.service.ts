@@ -990,15 +990,20 @@ export async function enqueueFacturaEmission(
 
 export async function processNextQueuedFiscalEmission(
   repository: FacturaRepository,
-  gateway: FiscalGateway
+  gateway: FiscalGateway,
+  gatewayWithKey?: (apiKey: string) => FiscalGateway
 ): Promise<DocumentoResponse | null> {
   const pending = await repository.claimNextPendingEmission();
   if (!pending) {
     return null;
   }
 
+  const effectiveGateway = pending.facturadorApiKey && gatewayWithKey
+    ? gatewayWithKey(pending.facturadorApiKey)
+    : gateway;
+
   try {
-    const response = await gateway.emitFactura(pending.fiscalRequest);
+    const response = await effectiveGateway.emitFactura(pending.fiscalRequest);
     return repository.completePendingEmission({
       outboxId: pending.outboxId,
       documentoId: pending.documentoId,

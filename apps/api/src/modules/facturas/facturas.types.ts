@@ -282,6 +282,7 @@ export interface PendingFiscalEmission {
   outboxId: string;
   documentoId: string;
   facturadorId: string;
+  facturadorApiKey: string | null;
   fiscalRequest: FiscalEmitFacturaRequest;
 }
 
