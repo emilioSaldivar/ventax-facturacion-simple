@@ -854,8 +854,9 @@ export class RealFiscalGateway implements FiscalGateway {
       envio: buildEnvio(request.fiscal_context.fiscal_envio_modo)
     };
 
-    if (this.config.sendEmissionProfileCode !== false) {
-      payload.emission_profile_code = request.fiscal_context.perfil_emision_codigo;
+    const profileCode = request.fiscal_context.perfil_emision_codigo;
+    if (this.config.sendEmissionProfileCode !== false && profileCode !== "NO_REQUERIDO") {
+      payload.emission_profile_code = profileCode;
     }
 
     return payload;
@@ -899,8 +900,9 @@ export class RealFiscalGateway implements FiscalGateway {
       envio: buildEnvio(request.fiscal_context.fiscal_envio_modo)
     };
 
-    if (this.config.sendEmissionProfileCode !== false) {
-      payload.emission_profile_code = request.fiscal_context.perfil_emision_codigo;
+    const profileCode = request.fiscal_context.perfil_emision_codigo;
+    if (this.config.sendEmissionProfileCode !== false && profileCode !== "NO_REQUERIDO") {
+      payload.emission_profile_code = profileCode;
     }
 
     return payload;
