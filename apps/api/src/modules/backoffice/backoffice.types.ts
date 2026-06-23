@@ -4,6 +4,7 @@ import type { UserSummary } from "@facturacion-simple/shared";
 
 export interface BackofficeUserCreateInput {
   username: string;
+  email: string;
   display_name?: string | null;
   role: UserSummary["role"];
   temporary_password?: string | null;
@@ -278,6 +279,7 @@ export interface BackofficeRepository {
   createUser(input: {
     tenantId: string;
     username: string;
+    email: string;
     displayName: string | null;
     passwordHash: string;
     role: UserSummary["role"];

@@ -2,14 +2,14 @@ import type { AuthResponse } from "@facturacion-simple/shared";
 import { env } from "../../config/env";
 import { HttpError } from "../../shared/errors/http-error";
 import { verifyPassword } from "./password.service";
-import { createRefreshToken, hashRefreshToken, signAccessToken } from "./token.service";
+import { createRefreshToken, hashRefreshToken, signAccessToken, signOnboardingToken } from "./token.service";
 import type { AuthRepository, LoginInput, RefreshTokenRecord } from "./auth.types";
 
 const maxFailedAttempts = 5;
 
 export interface LoginResult {
   response: AuthResponse;
-  refreshToken: RefreshTokenRecord;
+  refreshToken: RefreshTokenRecord | null;
 }
 
 export interface RefreshResult {
@@ -75,20 +75,72 @@ export async function login(input: LoginInput, repository: AuthRepository): Prom
     throw invalidCredentials();
   }
 
-  const accessToken = signAccessToken({
-    sub: user.id,
-    tenant_id: user.tenantId,
-    username: user.username,
-    role: user.role
-  });
-  const refreshToken = createRefreshToken();
-
   await repository.recordSuccessfulLogin({
     userId: user.id,
     username: user.username,
     ip: input.ip,
     userAgent: input.userAgent
   });
+
+  if (user.mustChangePassword) {
+    const accessToken = signOnboardingToken({
+      sub: user.id,
+      tenant_id: user.tenantId,
+      username: user.username,
+      role: user.role
+    });
+
+    return {
+      response: {
+        access_token: accessToken,
+        token_type: "Bearer",
+        expires_in: 30 * 60,
+        user: {
+          id: user.id,
+          username: user.username,
+          display_name: user.displayName,
+          role: user.role
+        },
+        pending_actions: ["CHANGE_PASSWORD", "ACCEPT_TYC"]
+      },
+      refreshToken: null
+    };
+  }
+
+  if (!user.hasAcceptedCurrentTyc) {
+    const accessToken = signOnboardingToken({
+      sub: user.id,
+      tenant_id: user.tenantId,
+      username: user.username,
+      role: user.role
+    });
+
+    return {
+      response: {
+        access_token: accessToken,
+        token_type: "Bearer",
+        expires_in: 30 * 60,
+        user: {
+          id: user.id,
+          username: user.username,
+          display_name: user.displayName,
+          role: user.role
+        },
+        pending_actions: ["ACCEPT_TYC"]
+      },
+      refreshToken: null
+    };
+  }
+
+  const accessToken = signAccessToken({
+    sub: user.id,
+    tenant_id: user.tenantId,
+    username: user.username,
+    role: user.role,
+    scope: "full"
+  });
+  const refreshToken = createRefreshToken();
+
   await repository.createRefreshToken({
     userId: user.id,
     tokenHash: refreshToken.tokenHash,
@@ -138,7 +190,8 @@ export async function refreshSession(rawRefreshToken: string | undefined, reposi
     sub: user.id,
     tenant_id: user.tenantId,
     username: user.username,
-    role: user.role
+    role: user.role,
+    scope: "full"
   });
 
   return {

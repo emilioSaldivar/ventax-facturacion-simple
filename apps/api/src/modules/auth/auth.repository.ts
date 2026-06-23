@@ -12,6 +12,8 @@ interface UserRow {
   activo: boolean;
   bloqueado_at: Date | null;
   failed_login_count: number;
+  must_change_password: boolean;
+  has_accepted_current_tyc: boolean;
 }
 
 export class PgAuthRepository implements AuthRepository {
@@ -27,7 +29,13 @@ export class PgAuthRepository implements AuthRepository {
           coalesce(r.codigo, 'OPERADOR_FACTURACION') as role,
           u.activo,
           u.bloqueado_at,
-          u.failed_login_count
+          u.failed_login_count,
+          u.must_change_password,
+          exists (
+            select 1 from tyc_aceptaciones ta
+            join tyc_versiones tv on tv.id = ta.tyc_version_id and tv.activo = true
+            where ta.usuario_id = u.id
+          ) as has_accepted_current_tyc
         from usuarios u
         left join usuario_roles ur on ur.usuario_id = u.id
         left join roles r on r.id = ur.role_id and r.activo = true and r.deleted_at is null
@@ -59,7 +67,9 @@ export class PgAuthRepository implements AuthRepository {
       role: row.role,
       activo: row.activo,
       bloqueadoAt: row.bloqueado_at,
-      failedLoginCount: row.failed_login_count
+      failedLoginCount: row.failed_login_count,
+      mustChangePassword: row.must_change_password,
+      hasAcceptedCurrentTyc: row.has_accepted_current_tyc
     };
   }
 
@@ -191,7 +201,9 @@ export class PgAuthRepository implements AuthRepository {
             coalesce(r.codigo, 'OPERADOR_FACTURACION') as role,
             u.activo,
             u.bloqueado_at,
-            u.failed_login_count
+            u.failed_login_count,
+            u.must_change_password,
+            true as has_accepted_current_tyc
           from usuarios u
           left join usuario_roles ur on ur.usuario_id = u.id
           left join roles r on r.id = ur.role_id and r.activo = true and r.deleted_at is null
@@ -314,6 +326,8 @@ function mapUserRow(row: UserRow): LoginUserRecord {
     role: row.role,
     activo: row.activo,
     bloqueadoAt: row.bloqueado_at,
-    failedLoginCount: row.failed_login_count
+    failedLoginCount: row.failed_login_count,
+    mustChangePassword: row.must_change_password,
+    hasAcceptedCurrentTyc: row.has_accepted_current_tyc
   };
 }

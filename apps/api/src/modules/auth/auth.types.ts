@@ -17,6 +17,8 @@ export interface LoginUserRecord {
   activo: boolean;
   bloqueadoAt: Date | null;
   failedLoginCount: number;
+  mustChangePassword: boolean;
+  hasAcceptedCurrentTyc: boolean;
 }
 
 export interface RefreshTokenRecord {

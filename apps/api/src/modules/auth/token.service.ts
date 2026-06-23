@@ -8,12 +8,20 @@ export interface AccessTokenPayload {
   tenant_id: string;
   username: string;
   role: UserSummary["role"];
+  scope: "full" | "onboarding_only";
 }
 
 export function signAccessToken(payload: AccessTokenPayload): string {
   return jwt.sign(payload, getAccessSecret(), {
     algorithm: "HS256",
     expiresIn: `${env.JWT_ACCESS_TTL_MINUTES}m`
+  });
+}
+
+export function signOnboardingToken(payload: Omit<AccessTokenPayload, "scope">): string {
+  return jwt.sign({ ...payload, scope: "onboarding_only" }, getAccessSecret(), {
+    algorithm: "HS256",
+    expiresIn: "30m"
   });
 }
 
@@ -65,6 +73,7 @@ function isAccessTokenPayload(payload: unknown): payload is AccessTokenPayload {
     typeof candidate.username === "string" &&
     (candidate.role === "OPERADOR_FACTURACION" ||
       candidate.role === "SOPORTE_INTERNO" ||
-      candidate.role === "ADMIN_INTERNO")
+      candidate.role === "ADMIN_INTERNO") &&
+    (candidate.scope === "full" || candidate.scope === "onboarding_only")
   );
 }

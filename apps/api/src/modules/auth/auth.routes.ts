@@ -25,13 +25,15 @@ authRouter.post("/auth/login", validateRequest("body", loginSchema), async (req,
       authRepository
     );
 
-    res.cookie(refreshCookieName, result.refreshToken.rawToken, {
-      httpOnly: true,
-      secure: env.NODE_ENV === "production",
-      sameSite: "lax",
-      expires: result.refreshToken.expiresAt,
-      path: "/api/v1/auth"
-    });
+    if (result.refreshToken) {
+      res.cookie(refreshCookieName, result.refreshToken.rawToken, {
+        httpOnly: true,
+        secure: env.NODE_ENV === "production",
+        sameSite: "lax",
+        expires: result.refreshToken.expiresAt,
+        path: "/api/v1/auth"
+      });
+    }
 
     res.json(result.response);
   } catch (error) {

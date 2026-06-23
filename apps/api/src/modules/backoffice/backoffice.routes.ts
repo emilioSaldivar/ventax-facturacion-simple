@@ -166,6 +166,7 @@ const contextoUpdateSchema = z.object({
 const userCreateSchema = z.object({
   tenant_id: z.string().uuid(),
   username: z.string().trim().min(3).max(120),
+  email: z.string().trim().email().max(180),
   display_name: z.string().trim().min(1).max(180).nullable().optional(),
   role: z.enum(roles),
   temporary_password: z.string().trim().min(10).max(120).nullable().optional()

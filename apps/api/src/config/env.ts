@@ -21,7 +21,16 @@ const envSchema = z.object({
   FE_OUTBOX_WORKER_ENABLED: z.enum(["true", "false"]).default("true").transform((value) => value === "true"),
   FE_OUTBOX_WORKER_INTERVAL_MS: z.coerce.number().int().positive().default(5000),
   PUBLIC_APP_BASE_URL: z.string().url().default("https://factura.ventax.app"),
-  APP_VERSION: z.string().default("dev")
+  APP_VERSION: z.string().default("dev"),
+  RESEND_API_KEY: z.string().optional(),
+  EMAIL_FROM: z.string().email().default("facturacion@ventax.app"),
+  EMAIL_FROM_NAME: z.string().default("Ventax Facturación Simple"),
+  SMTP_HOST: z.string().optional(),
+  SMTP_PORT: z.coerce.number().int().positive().default(587),
+  SMTP_SECURE: z.enum(["true", "false"]).default("false").transform((v) => v === "true"),
+  SMTP_USER: z.string().optional(),
+  SMTP_PASS: z.string().optional(),
+  SMTP_REPLY_TO: z.string().email().optional()
 });
 
 export type Env = z.infer<typeof envSchema>;

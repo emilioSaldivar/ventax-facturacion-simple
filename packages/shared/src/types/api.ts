@@ -4,7 +4,8 @@ export type ApiErrorCode =
   | "FORBIDDEN"
   | "NOT_FOUND"
   | "CONFLICT"
-  | "INTERNAL_ERROR";
+  | "INTERNAL_ERROR"
+  | "ONBOARDING_REQUIRED";
 
 export interface ApiErrorResponse {
   error: {
@@ -33,4 +34,5 @@ export interface AuthResponse {
   token_type: "Bearer";
   expires_in: number;
   user: UserSummary;
+  pending_actions?: string[];
 }

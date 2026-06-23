@@ -12,6 +12,9 @@ declare global {
   }
 }
 
+// Rutas accesibles con JWT de scope onboarding_only
+const ONBOARDING_WHITELIST = ["/onboarding/", "/auth/logout"];
+
 export const requireAuth = createRequireAuth(authRepository);
 
 export function createRequireAuth(repository: Pick<AuthRepository, "findActiveUserById">) {
@@ -24,6 +27,18 @@ export function createRequireAuth(repository: Pick<AuthRepository, "findActiveUs
       }
 
       const payload = verifyAccessToken(token);
+
+      if (payload.scope === "onboarding_only") {
+        const isAllowed = ONBOARDING_WHITELIST.some((prefix) => req.path.startsWith(prefix));
+        if (!isAllowed) {
+          throw new HttpError(
+            403,
+            "ONBOARDING_REQUIRED",
+            "Debes completar el proceso de activacion antes de usar la plataforma."
+          );
+        }
+      }
+
       const user = await repository.findActiveUserById(payload.sub);
       if (!user) {
         throw new HttpError(401, "AUTH_REQUIRED", "Usuario no autenticado o inactivo.");

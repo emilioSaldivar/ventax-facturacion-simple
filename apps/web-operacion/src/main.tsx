@@ -37,7 +37,7 @@ function checkVersionHeader(response: Response): void {
   }
 }
 
-type ViewState = "checking-session" | "login" | "loading-context" | "operacion";
+type ViewState = "checking-session" | "login" | "loading-context" | "operacion" | "onboarding";
 type OperationView = "status" | "invoice" | "credit-note" | "documents" | "catalog" | "clients";
 type CondicionVenta = "CONTADO" | "CREDITO";
 type TipoTransaccionServicio = 1 | 2 | 3;
@@ -64,6 +64,7 @@ interface AuthResponse {
   token_type: "Bearer";
   expires_in: number;
   user: UserSummary;
+  pending_actions?: string[];
 }
 
 interface OperationalContextResponse {
@@ -419,6 +420,7 @@ function App() {
   const [context, setContext] = useState<OperationalContextResponse | null>(null);
   const [readiness, setReadiness] = useState<ReadinessResponse | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [pendingActions, setPendingActions] = useState<string[]>([]);
 
   const api = useMemo(() => createApiClient(accessToken, setAccessToken), [accessToken]);
 
@@ -434,7 +436,7 @@ function App() {
     let active = true;
 
     async function bootstrap() {
-      if (accessToken && view === "operacion") {
+      if (accessToken && (view === "operacion" || view === "onboarding")) {
         return;
       }
 
@@ -507,8 +509,18 @@ function App() {
   async function handleLogin(username: string, password: string) {
     setErrorMessage(null);
     const response = await api.post<AuthResponse>("/auth/login", { username, password }, false);
+    if (response.pending_actions && response.pending_actions.length > 0) {
+      setPendingActions(response.pending_actions);
+      setView("onboarding");
+    }
     setAccessToken(response.access_token);
     setUser(response.user);
+  }
+
+  function handleOnboardingComplete(newAccessToken: string, newUser: UserSummary) {
+    setView("loading-context");
+    setAccessToken(newAccessToken);
+    setUser(newUser);
   }
 
   async function handleLogout() {
@@ -533,6 +545,10 @@ function App() {
 
   if (view === "login") {
     return <LoginScreen errorMessage={errorMessage} onLogin={handleLogin} onError={setErrorMessage} />;
+  }
+
+  if (view === "onboarding") {
+    return <OnboardingFlow accessToken={accessToken} onComplete={handleOnboardingComplete} pendingActions={pendingActions} />;
   }
 
   return (
@@ -613,6 +629,270 @@ function LoginScreen({
             {submitting ? "Ingresando..." : "Ingresar"}
           </button>
         </form>
+      </section>
+    </main>
+  );
+}
+
+interface TycCurrentData {
+  id: string;
+  version: string;
+  document_content: string;
+  context: {
+    tenant_nombre: string | null;
+    facturador_ruc: string | null;
+    facturador_razon_social: string | null;
+    plan_nombre: string | null;
+    username: string;
+    email: string | null;
+  };
+}
+
+function OnboardingFlow({
+  accessToken,
+  onComplete,
+  pendingActions
+}: {
+  accessToken: string | null;
+  onComplete: (newAccessToken: string, newUser: UserSummary) => void;
+  pendingActions: string[];
+}) {
+  const needsPasswordChange = pendingActions.includes("CHANGE_PASSWORD");
+  const api = useMemo(() => createApiClient(accessToken, () => undefined), [accessToken]);
+  const [phase, setPhase] = useState<"password" | "tyc" | "otp">(needsPasswordChange ? "password" : "tyc");
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+
+  const [tyc, setTyc] = useState<TycCurrentData | null>(null);
+  const [tycLoading, setTycLoading] = useState(false);
+  const [tycAccepted, setTycAccepted] = useState(false);
+
+  const [otpSessionId, setOtpSessionId] = useState<string | null>(null);
+  const [otpEmailMask, setOtpEmailMask] = useState<string | null>(null);
+  const [otpCode, setOtpCode] = useState("");
+  const [otpCooldown, setOtpCooldown] = useState(0);
+
+  useEffect(() => {
+    if (otpCooldown <= 0) return;
+    const timer = setTimeout(() => setOtpCooldown((c) => c - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [otpCooldown]);
+
+  useEffect(() => {
+    if (needsPasswordChange) return;
+    setTycLoading(true);
+    api.get<TycCurrentData>("/onboarding/tyc/current")
+      .then((data) => setTyc(data))
+      .catch((err) => setError(err instanceof Error ? err.message : "Error al cargar los Terminos y Condiciones."))
+      .finally(() => setTycLoading(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function handlePasswordSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError(null);
+    setSubmitting(true);
+    try {
+      await api.post("/onboarding/password", { new_password: newPassword, confirm_password: confirmPassword });
+      setTycLoading(true);
+      setPhase("tyc");
+      const tycData = await api.get<TycCurrentData>("/onboarding/tyc/current");
+      setTyc(tycData);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error al cambiar contrasena.");
+      setPhase("password");
+    } finally {
+      setSubmitting(false);
+      setTycLoading(false);
+    }
+  }
+
+  async function handleTycContinue() {
+    if (!tycAccepted) {
+      setError("Debes leer y aceptar los Terminos y Condiciones para continuar.");
+      return;
+    }
+    setError(null);
+    setSubmitting(true);
+    try {
+      const result = await api.post<{ otp_session_id: string; email_destino_ofuscado: string; expires_in_seconds: number }>(
+        "/onboarding/otp/request",
+        {}
+      );
+      setOtpSessionId(result.otp_session_id);
+      setOtpEmailMask(result.email_destino_ofuscado);
+      setOtpCooldown(60);
+      setPhase("otp");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error al solicitar codigo de verificacion.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleOtpSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!otpSessionId) return;
+    setError(null);
+    setSubmitting(true);
+    try {
+      const result = await api.post<AuthResponse>("/onboarding/complete", {
+        otp_session_id: otpSessionId,
+        otp_code: otpCode,
+        checkbox_aceptado: true
+      });
+      onComplete(result.access_token, result.user);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error al completar la activacion.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleOtpResend() {
+    if (otpCooldown > 0) return;
+    setError(null);
+    setSubmitting(true);
+    try {
+      const result = await api.post<{ otp_session_id: string; email_destino_ofuscado: string; expires_in_seconds: number }>(
+        "/onboarding/otp/request",
+        {}
+      );
+      setOtpSessionId(result.otp_session_id);
+      setOtpEmailMask(result.email_destino_ofuscado);
+      setOtpCode("");
+      setOtpCooldown(60);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error al reenviar codigo.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  const phaseTitle =
+    phase === "password" ? "Crear nueva contrasena" :
+    phase === "tyc" ? "Terminos y Condiciones" :
+    "Verificacion por correo";
+
+  return (
+    <main className="auth-shell">
+      <section className="auth-panel" aria-labelledby="onboarding-title">
+        <BrandMark />
+        <div className="auth-copy">
+          <p className="eyebrow">Activacion de cuenta</p>
+          <h1 id="onboarding-title">{phaseTitle}</h1>
+        </div>
+
+        {phase === "password" ? (
+          <form className="login-form" onSubmit={(e) => void handlePasswordSubmit(e)}>
+            <p className="muted">Crea una contrasena segura. Minimo 8 caracteres.</p>
+            <label>
+              Nueva contrasena
+              <input
+                autoComplete="new-password"
+                minLength={8}
+                onChange={(e) => setNewPassword(e.target.value)}
+                required
+                type="password"
+                value={newPassword}
+              />
+            </label>
+            <label>
+              Confirmar contrasena
+              <input
+                autoComplete="new-password"
+                minLength={8}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                required
+                type="password"
+                value={confirmPassword}
+              />
+            </label>
+            {error ? <p className="form-error">{error}</p> : null}
+            <button className="primary-action" disabled={submitting} type="submit">
+              {submitting ? "Guardando..." : "Continuar"}
+            </button>
+          </form>
+        ) : phase === "tyc" ? (
+          <div>
+            {tycLoading ? (
+              <p className="muted">Cargando terminos...</p>
+            ) : tyc ? (
+              <>
+                <section aria-label="Datos de tu cuenta">
+                  <p className="eyebrow">Datos de tu cuenta</p>
+                  <dl className="receipt-summary">
+                    <div><dt>Empresa</dt><dd>{tyc.context.tenant_nombre ?? "-"}</dd></div>
+                    <div><dt>RUC</dt><dd>{tyc.context.facturador_ruc ?? "-"}</dd></div>
+                    <div><dt>Razon social</dt><dd>{tyc.context.facturador_razon_social ?? "-"}</dd></div>
+                    <div><dt>Plan</dt><dd>{tyc.context.plan_nombre ?? "-"}</dd></div>
+                    <div><dt>Usuario</dt><dd>{tyc.context.username}</dd></div>
+                    <div><dt>Email</dt><dd>{tyc.context.email ?? "-"}</dd></div>
+                  </dl>
+                </section>
+                <section aria-label="Documento de terminos" style={{ maxHeight: "40vh", overflowY: "auto", border: "1px solid var(--color-border, #ccc)", borderRadius: "8px", padding: "1rem", margin: "1rem 0" }}>
+                  <pre style={{ whiteSpace: "pre-wrap", fontFamily: "inherit", fontSize: "0.85rem", margin: 0 }}>{tyc.document_content}</pre>
+                </section>
+                <label style={{ display: "flex", gap: "0.75rem", alignItems: "flex-start", cursor: "pointer", marginBottom: "1rem" }}>
+                  <input
+                    checked={tycAccepted}
+                    onChange={(e) => setTycAccepted(e.target.checked)}
+                    style={{ marginTop: "0.2rem", flexShrink: 0 }}
+                    type="checkbox"
+                  />
+                  <span>He leido y acepto los Terminos y Condiciones (version {tyc.version})</span>
+                </label>
+                {error ? <p className="form-error">{error}</p> : null}
+                <button
+                  className="primary-action"
+                  disabled={submitting || !tycAccepted}
+                  onClick={() => void handleTycContinue()}
+                  type="button"
+                >
+                  {submitting ? "Procesando..." : "Aceptar y continuar"}
+                </button>
+              </>
+            ) : (
+              <p className="form-error">No se pudo cargar los terminos. Recarga la pagina.</p>
+            )}
+          </div>
+        ) : (
+          <form className="login-form" onSubmit={(e) => void handleOtpSubmit(e)}>
+            <p className="muted">
+              Ingresa el codigo de 6 digitos enviado a {otpEmailMask ?? "tu correo electronico"}.
+            </p>
+            <label>
+              Codigo de verificacion
+              <input
+                autoComplete="one-time-code"
+                inputMode="numeric"
+                maxLength={6}
+                minLength={6}
+                onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                pattern="\d{6}"
+                placeholder="000000"
+                required
+                type="text"
+                value={otpCode}
+              />
+            </label>
+            {error ? <p className="form-error">{error}</p> : null}
+            <button className="primary-action" disabled={submitting || otpCode.length !== 6} type="submit">
+              {submitting ? "Verificando..." : "Verificar y activar cuenta"}
+            </button>
+            <button
+              className="ghost-action"
+              disabled={otpCooldown > 0 || submitting}
+              onClick={() => void handleOtpResend()}
+              type="button"
+            >
+              {otpCooldown > 0 ? `Reenviar en ${otpCooldown}s` : "Reenviar codigo"}
+            </button>
+          </form>
+        )}
       </section>
     </main>
   );

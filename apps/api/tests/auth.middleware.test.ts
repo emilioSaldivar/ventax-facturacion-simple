@@ -29,7 +29,8 @@ describe("requireAuth", () => {
       sub: user.id,
       tenant_id: user.tenantId,
       username: user.username,
-      role: user.role
+      role: user.role,
+      scope: "full"
     });
     const req = requestWithAuthorization(`Bearer ${token}`);
 

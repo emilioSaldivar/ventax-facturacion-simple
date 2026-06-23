@@ -78,6 +78,8 @@ async function activeUser(overrides: Partial<LoginUserRecord> = {}): Promise<Log
     activo: true,
     bloqueadoAt: null,
     failedLoginCount: 0,
+    mustChangePassword: false,
+    hasAcceptedCurrentTyc: true,
     ...overrides
   };
 }

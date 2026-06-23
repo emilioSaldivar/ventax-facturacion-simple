@@ -395,6 +395,7 @@ export class PgBackofficeRepository implements BackofficeRepository {
   async createUser(input: {
     tenantId: string;
     username: string;
+    email: string;
     displayName: string | null;
     passwordHash: string;
     role: UserSummary["role"];
@@ -403,9 +404,9 @@ export class PgBackofficeRepository implements BackofficeRepository {
     try {
       await client.query("begin");
       const userResult = await client.query<{ id: string }>(
-        `insert into usuarios (tenant_id, username, display_name, password_hash)
-         values ($1, $2, $3, $4) returning id`,
-        [input.tenantId, input.username, input.displayName, input.passwordHash]
+        `insert into usuarios (tenant_id, username, email, display_name, password_hash, must_change_password)
+         values ($1, $2, $3, $4, $5, true) returning id`,
+        [input.tenantId, input.username, input.email, input.displayName, input.passwordHash]
       );
       const userId = userResult.rows[0]!.id;
       await client.query(
@@ -432,7 +433,7 @@ export class PgBackofficeRepository implements BackofficeRepository {
       await client.query("begin");
       const updated = await client.query<{ id: string }>(
         `update usuarios
-         set password_hash = $2, failed_login_count = 0, bloqueado_at = null, activo = true, updated_at = now()
+         set password_hash = $2, must_change_password = true, failed_login_count = 0, bloqueado_at = null, activo = true, updated_at = now()
          where id = $1 and deleted_at is null returning id`,
         [input.userId, input.passwordHash]
       );

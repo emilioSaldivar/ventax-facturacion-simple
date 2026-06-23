@@ -55,7 +55,7 @@ export async function createBackofficeUser(
   const displayName = normalizeOptional(input.display_name);
   const temporaryPassword = normalizePassword(input.temporary_password) ?? generateTemporaryPassword();
   const passwordHash = await hashPassword(temporaryPassword);
-  const user = await repository.createUser({ tenantId, username, displayName, passwordHash, role: input.role });
+  const user = await repository.createUser({ tenantId, username, email: input.email, displayName, passwordHash, role: input.role });
   return { ...user, temporary_password: temporaryPassword };
 }
 
