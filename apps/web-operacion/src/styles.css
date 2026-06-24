@@ -445,6 +445,33 @@ h2 {
   margin-left: auto;
 }
 
+.update-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  max-width: 520px;
+  margin: 0 auto 12px;
+  border: 1px solid #f59e0b;
+  border-radius: 8px;
+  background: #fffbeb;
+  padding: 12px;
+}
+
+.update-banner strong {
+  display: block;
+  margin: 0;
+  color: #78350f;
+  font-size: 14px;
+}
+
+.update-banner small {
+  display: block;
+  margin-top: 4px;
+  color: #92400e;
+  font-size: 12px;
+}
+
 .install-banner {
   display: grid;
   gap: 10px;

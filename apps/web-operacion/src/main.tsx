@@ -37,6 +37,23 @@ function checkVersionHeader(response: Response): void {
   }
 }
 
+async function pollVersion(): Promise<void> {
+  if (BUILD_VERSION === "dev" || _updatePending) return;
+  try {
+    const res = await fetch(`${API_BASE_URL}/health`, { cache: "no-store" });
+    checkVersionHeader(res);
+  } catch {
+    // red sin conexion — ignorar
+  }
+}
+
+function startVersionPolling(): () => void {
+  const INTERVAL_MS = 5 * 60 * 1000; // cada 5 minutos
+  void pollVersion();
+  const id = window.setInterval(() => void pollVersion(), INTERVAL_MS);
+  return () => window.clearInterval(id);
+}
+
 type ViewState = "checking-session" | "login" | "loading-context" | "operacion" | "onboarding";
 type OperationView = "status" | "invoice" | "credit-note" | "documents" | "catalog" | "clients";
 type CondicionVenta = "CONTADO" | "CREDITO";
@@ -431,6 +448,8 @@ function App() {
       localStorage.removeItem(ACCESS_TOKEN_STORAGE_KEY);
     }
   }, [accessToken]);
+
+  useEffect(() => startVersionPolling(), []);
 
   useEffect(() => {
     let active = true;
@@ -1122,7 +1141,19 @@ function OperationHome({
         </div>
       ) : null}
 
-      {showInstallHint && !isStandalone ? (
+      {updatePending ? (
+        <section className="update-banner" aria-live="assertive">
+          <div>
+            <strong>Nueva version disponible</strong>
+            <small>Hay una actualizacion lista. Toca el boton para cargarla ahora.</small>
+          </div>
+          <button className="primary-action" onClick={() => window.location.reload()} type="button">
+            Actualizar
+          </button>
+        </section>
+      ) : null}
+
+      {showInstallHint && !isStandalone && !updatePending ? (
         <section className="install-banner" aria-live="polite">
           <div>
             <strong>Instala Ventax en tu dispositivo</strong>

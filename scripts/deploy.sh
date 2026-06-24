@@ -19,9 +19,11 @@ if [[ ! -f "$APP_ENV_FILE" ]]; then
 fi
 
 COMPOSE_ARGS=(--env-file "$APP_ENV_FILE" -f "$COMPOSE_FILE")
+BUILD_COMMIT_SHA=$(git rev-parse --short HEAD 2>/dev/null || echo "dev")
 
-echo "Construyendo y levantando stack con $COMPOSE_FILE y $APP_ENV_FILE..."
-docker compose "${COMPOSE_ARGS[@]}" up -d --build
+echo "Construyendo y levantando stack con $COMPOSE_FILE y $APP_ENV_FILE (commit: $BUILD_COMMIT_SHA)..."
+docker compose "${COMPOSE_ARGS[@]}" build --build-arg BUILD_COMMIT_SHA="$BUILD_COMMIT_SHA"
+docker compose "${COMPOSE_ARGS[@]}" up -d
 
 echo "Estado del stack:"
 docker compose "${COMPOSE_ARGS[@]}" ps
