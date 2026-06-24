@@ -3,7 +3,7 @@
 ## Alineacion
 
 - `AGENTS.md`
-- `docs/SPEC_RECIBO_DINERO_v0.1.md` (PENDIENTE — crear antes de implementar)
+- `docs/SPEC_RECIBO_DINERO_v0.1.md`
 - `docs/PLAN_RECIBO_DINERO_v0.1.md` (PENDIENTE — crear antes de implementar)
 - `spec/openapi.yaml`
 
@@ -33,7 +33,7 @@ El recibo NO es un comprobante fiscal. No interactua con SIFEN ni con facturacio
 
 | ID | Fase | Tarea | Estado | Criterio de aceptacion |
 |---|---|---|---|---|
-| RD-001 | SDD | Crear SPEC del modulo con ejemplo PDF del cliente | PENDIENTE | Existe `docs/SPEC_RECIBO_DINERO_v0.1.md` con modelo de datos, estructura PDF, reglas de vinculacion a factura credito y estados |
+| RD-001 | SDD | Crear SPEC del modulo | DONE | Existe `docs/SPEC_RECIBO_DINERO_v0.1.md` con modelo de datos, estructura PDF, verificacion QR, estados, reglas de vinculacion a factura credito y API REST |
 | RD-002 | SDD | Crear PLAN de implementacion | PENDIENTE | Existe `docs/PLAN_RECIBO_DINERO_v0.1.md` con fases, archivos a crear/modificar y orden de ejecucion |
 | RD-003 | DB | Migracion: tabla `recibos_dinero` | PENDIENTE | Nueva tabla con `facturador_id`, `numero`, `fecha_emision`, `pagador_nombre`, `pagador_documento_tipo`, `pagador_documento`, `concepto`, `importe`, `forma_pago`, `factura_id` (nullable FK a `facturas`), `estado`, timestamps |
 | RD-004 | DB | Migracion: secuencia de numeracion de recibos por facturador | PENDIENTE | Cada facturador tiene un numerador correlativo propio para recibos; el numero se asigna al emitir |
@@ -61,4 +61,5 @@ El recibo NO es un comprobante fiscal. No interactua con SIFEN ni con facturacio
 
 ## Evidencia
 
-- 2026-06-23: backlog creado. Pendiente de ejemplo PDF del cliente para redactar SPEC.
+- 2026-06-23: backlog creado.
+- 2026-06-24: SPEC redactado en `docs/SPEC_RECIBO_DINERO_v0.1.md`. Incluye modelo de datos, tabla de numeracion, formas de pago, estructura PDF con importe en letras, sistema de verificacion QR publico, flujo desde factura credito, API REST y criterios de aceptacion. RD-001 marcado DONE.

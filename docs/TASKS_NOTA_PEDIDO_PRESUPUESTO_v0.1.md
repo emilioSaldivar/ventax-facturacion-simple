@@ -3,7 +3,7 @@
 ## Alineacion
 
 - `AGENTS.md`
-- `docs/SPEC_NOTA_PEDIDO_PRESUPUESTO_v0.1.md` (PENDIENTE — crear antes de implementar)
+- `docs/SPEC_NOTA_PEDIDO_PRESUPUESTO_v0.1.md`
 - `docs/PLAN_NOTA_PEDIDO_PRESUPUESTO_v0.1.md` (PENDIENTE — crear antes de implementar)
 - `spec/openapi.yaml`
 
@@ -28,7 +28,7 @@ El documento NO es un comprobante fiscal. No interactua con SIFEN ni con factura
 
 | ID | Fase | Tarea | Estado | Criterio de aceptacion |
 |---|---|---|---|---|
-| NP-001 | SDD | Crear SPEC del modulo con ejemplo PDF del cliente | PENDIENTE | Existe `docs/SPEC_NOTA_PEDIDO_PRESUPUESTO_v0.1.md` con modelo de datos, estructura PDF, estados del documento y reglas de negocio |
+| NP-001 | SDD | Crear SPEC del modulo | DONE | Existe `docs/SPEC_NOTA_PEDIDO_PRESUPUESTO_v0.1.md` con modelo de datos, estructura PDF, verificacion QR, estados y reglas de negocio |
 | NP-002 | SDD | Crear PLAN de implementacion | PENDIENTE | Existe `docs/PLAN_NOTA_PEDIDO_PRESUPUESTO_v0.1.md` con fases, archivos a crear/modificar y orden de ejecucion |
 | NP-003 | DB | Migracion: tabla `notas_comerciales` | PENDIENTE | Nueva tabla con `tipo` (PEDIDO/PRESUPUESTO), `facturador_id`, `numero`, `destinatario_*`, `texto_libre`, `condicion_pago`, `validez_dias`, `estado`, timestamps |
 | NP-004 | DB | Migracion: tabla `notas_comerciales_items` | PENDIENTE | Items vinculados a nota con `descripcion`, `cantidad`, `precio_unitario`, `iva_tipo`, `precio_total` |
@@ -57,4 +57,5 @@ El documento NO es un comprobante fiscal. No interactua con SIFEN ni con factura
 
 ## Evidencia
 
-- 2026-06-23: backlog creado. Pendiente de ejemplo PDF del cliente para redactar SPEC.
+- 2026-06-23: backlog creado.
+- 2026-06-24: SPEC redactado en `docs/SPEC_NOTA_PEDIDO_PRESUPUESTO_v0.1.md`. Incluye modelo de datos completo, estructura PDF, sistema de verificacion QR con endpoint publico, estados, calculos de totales, API REST y criterios de aceptacion. NP-001 marcado DONE.
