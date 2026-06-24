@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import type { AuthResponse } from "@facturacion-simple/shared";
 import { env } from "../../config/env";
 import { HttpError } from "../../shared/errors/http-error";
-import { sendOtpEmail } from "../../shared/email/email.service";
+import { sendAdminEmailRequiredNotification, sendOtpEmail } from "../../shared/email/email.service";
 import { hashPassword, verifyPassword } from "../auth/password.service";
 import { createRefreshToken, signAccessToken } from "../auth/token.service";
 import type { OnboardingRepository, TycVersionRecord } from "./onboarding.types";
@@ -100,10 +100,11 @@ export async function requestOtp(
   const userData = await repository.getUserEmail(userId);
 
   if (!userData.email) {
+    sendAdminEmailRequiredNotification(userData.username, userData.displayName).catch(() => {});
     throw new HttpError(
       412,
-      "VALIDATION_ERROR",
-      "No hay correo electronico configurado para este usuario. Contacta al administrador."
+      "EMAIL_REQUIRED",
+      "No hay correo electronico configurado para tu cuenta. Ya notificamos a Ventax — te contactaremos a la brevedad."
     );
   }
 

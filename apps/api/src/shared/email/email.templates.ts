@@ -143,6 +143,55 @@ function buildTextVersion(otpCode: string, displayName: string, purposeDescripti
   ].join("\n");
 }
 
+export function adminEmailRequiredTemplate(username: string, displayName: string | null): EmailTemplate {
+  const safeUsername = escapeHtml(username);
+  const safeName = escapeHtml(displayName ?? username);
+
+  const html = buildLayout({
+    preheader: `El usuario ${username} necesita su correo configurado para activar su cuenta.`,
+    headerContent: `
+      ${VENTAX_ISO_SVG}
+      <span style="color:#ffffff;font-size:17px;font-weight:bold;vertical-align:middle;margin-left:10px;letter-spacing:-0.3px;">${escapeHtml(BRAND_NAME)}</span>
+    `,
+    bodyContent: `
+      <p style="margin:0 0 6px 0;font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:0.8px;color:#f59e0b;">Correo faltante — Accion requerida</p>
+      <p style="margin:0 0 20px 0;font-size:16px;color:#111827;">Solicitud de configuracion de email</p>
+      <p style="margin:0 0 20px 0;font-size:14px;line-height:1.6;color:#4b5563;">
+        El siguiente usuario intento completar su activacion pero <strong>no tiene correo electronico configurado</strong> en su cuenta.
+      </p>
+      <table cellpadding="0" cellspacing="0" role="presentation" style="width:100%;background:#f9fafb;border-radius:8px;border:1px solid #e5e7eb;margin:0 0 24px 0;">
+        <tr>
+          <td style="padding:16px 20px;">
+            <p style="margin:0 0 8px 0;font-size:13px;color:#6b7280;">Usuario</p>
+            <p style="margin:0;font-size:16px;font-weight:700;color:#111827;font-family:'Courier New',monospace;">${safeUsername}</p>
+            ${displayName ? `<p style="margin:4px 0 0 0;font-size:13px;color:#6b7280;">${safeName}</p>` : ""}
+          </td>
+        </tr>
+      </table>
+      <p style="margin:0;font-size:13px;line-height:1.6;color:#6b7280;">
+        Contacta al usuario para obtener su correo electronico y configuralo en el backoffice desde <strong>Gestion → Usuarios → ${safeUsername}</strong>.
+      </p>
+    `
+  });
+
+  const text = [
+    "Solicitud de configuracion de email — Ventax Facturacion Simple",
+    "",
+    `El usuario "${username}"${displayName ? ` (${displayName})` : ""} intento completar su activacion pero no tiene correo electronico configurado.`,
+    "",
+    "Accion requerida: contacta al usuario y configura su email en el backoffice.",
+    "",
+    `— ${BRAND_NAME}`,
+    "facturacion@ventax.app"
+  ].join("\n");
+
+  return {
+    subject: `[Ventax] Usuario sin email: ${username}`,
+    html,
+    text
+  };
+}
+
 function escapeHtml(str: string): string {
   return str
     .replace(/&/g, "&amp;")

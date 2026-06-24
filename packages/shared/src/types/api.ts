@@ -5,7 +5,8 @@ export type ApiErrorCode =
   | "NOT_FOUND"
   | "CONFLICT"
   | "INTERNAL_ERROR"
-  | "ONBOARDING_REQUIRED";
+  | "ONBOARDING_REQUIRED"
+  | "EMAIL_REQUIRED";
 
 export interface ApiErrorResponse {
   error: {

@@ -548,7 +548,7 @@ function App() {
   }
 
   if (view === "onboarding") {
-    return <OnboardingFlow accessToken={accessToken} onComplete={handleOnboardingComplete} pendingActions={pendingActions} />;
+    return <OnboardingFlow accessToken={accessToken} onComplete={handleOnboardingComplete} pendingActions={pendingActions} username={user?.username ?? ""} />;
   }
 
   return (
@@ -651,11 +651,13 @@ interface TycCurrentData {
 function OnboardingFlow({
   accessToken,
   onComplete,
-  pendingActions
+  pendingActions,
+  username
 }: {
   accessToken: string | null;
   onComplete: (newAccessToken: string, newUser: UserSummary) => void;
   pendingActions: string[];
+  username: string;
 }) {
   const needsPasswordChange = pendingActions.includes("CHANGE_PASSWORD");
   const api = useMemo(() => createApiClient(accessToken, () => undefined), [accessToken]);
@@ -727,7 +729,11 @@ function OnboardingFlow({
       setOtpCooldown(60);
       setPhase("otp");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Error al solicitar codigo de verificacion.");
+      if (err instanceof ApiClientError && err.status === 412) {
+        setError(`Tu cuenta (${username}) no tiene correo electronico configurado. Ya le avisamos a Ventax y te van a contactar. Si es urgente, escribi a facturacion@ventax.app indicando tu usuario.`);
+      } else {
+        setError(err instanceof Error ? err.message : "Error al solicitar codigo de verificacion.");
+      }
     } finally {
       setSubmitting(false);
     }
@@ -766,7 +772,11 @@ function OnboardingFlow({
       setOtpCode("");
       setOtpCooldown(60);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Error al reenviar codigo.");
+      if (err instanceof ApiClientError && err.status === 412) {
+        setError(`Tu cuenta (${username}) no tiene correo electronico configurado. Ya le avisamos a Ventax y te van a contactar. Si es urgente, escribi a facturacion@ventax.app indicando tu usuario.`);
+      } else {
+        setError(err instanceof Error ? err.message : "Error al reenviar codigo.");
+      }
     } finally {
       setSubmitting(false);
     }

@@ -2,7 +2,7 @@ import nodemailer from "nodemailer";
 import { Resend } from "resend";
 import { env } from "../../config/env";
 import { logger } from "../logging/logger";
-import { otpTemplate } from "./email.templates";
+import { adminEmailRequiredTemplate, otpTemplate } from "./email.templates";
 import type { EmailTemplate, OtpPurpose } from "./email.types";
 
 export type { EmailTemplate, OtpPurpose };
@@ -71,4 +71,8 @@ export async function sendOtpEmail(
   purpose: OtpPurpose = "onboarding"
 ): Promise<void> {
   await sendEmail(to, otpTemplate(otpCode, displayName, purpose));
+}
+
+export async function sendAdminEmailRequiredNotification(username: string, displayName: string | null): Promise<void> {
+  await sendEmail("facturacion@ventax.app", adminEmailRequiredTemplate(username, displayName));
 }
