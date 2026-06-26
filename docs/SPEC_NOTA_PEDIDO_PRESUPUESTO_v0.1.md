@@ -4,152 +4,210 @@
 
 Definir el modelo funcional del modulo de documentos comerciales internos no fiscales: **Nota de Pedido** y **Nota de Presupuesto**.
 
-Ambos documentos comparten la misma estructura de datos y el mismo PDF. Se diferencian solo por el tipo declarado al crearlos. No son comprobantes fiscales ni interactuan con SIFEN. Son documentos operativos de apoyo al ciclo comercial del facturador.
+Ambos tipos comparten la misma estructura de datos y el mismo PDF. El tipo solo afecta el titulo visible en el encabezado. No son comprobantes fiscales ni interactuan con SIFEN.
 
-El sistema debe emitir un PDF con firma visual del facturador y un codigo QR que permita a cualquier receptor verificar la autenticidad del documento escaneando el codigo. Esta verificacion es publica y no requiere autenticacion.
+El sistema emite un PDF firmado visualmente por el facturador y un codigo QR que permite verificar la autenticidad del documento sin necesidad de autenticacion.
 
 ---
 
 ## 2. Tipos De Documento
 
-| Tipo | Uso tipico |
+| Tipo | Titulo en PDF |
 |---|---|
-| `PRESUPUESTO` | Cotizacion de precio emitida por el facturador hacia un cliente o prospecto |
-| `PEDIDO` | Solicitud de provision de bienes o servicios, tipicamente entre un cliente y el facturador, o entre el facturador y un proveedor |
-
-Ambos tipos comparten la misma tabla, logica y PDF. El tipo solo afecta el titulo visible en el documento.
+| `PRESUPUESTO` | NOTA DE PRESUPUESTO |
+| `PEDIDO` | NOTA DE PEDIDO |
 
 ---
 
-## 3. Modelo De Datos
+## 3. Cabecera Del PDF
 
-### 3.1 Tabla `notas_comerciales`
+Basado en los ejemplos reales, la cabecera replica exactamente la estructura de una factura electronica del sistema.
+
+### 3.1 Zonas De La Cabecera
+
+```
+┌──────────────────┬──────────────────────────────────────┬──────────────┐
+│  LOGO            │  [Banner oscuro]                     │  Nro:        │
+│  (imagen del     │  rubro_descripcion                   │  0023        │
+│   facturador)    ├──────────────────────────────────────┤  (destacado) │
+│                  │  direccion — localidad — pais        │              │
+│                  │  Tel: telefono                       │              │
+│                  │  RUC: ruc                            │              │
+│                  │  NOTA DE PRESUPUESTO                 │              │
+│                  │  No valido como comprobante de venta │              │
+├──────────────────┴──────────────────────────────────────┴──────────────┤
+│  DE [razon_social del facturador]                                       │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### 3.2 Origen De Cada Campo
+
+| Campo visual | Origen en DB |
+|---|---|
+| Logo | `facturadores.logo_url` (nuevo campo) |
+| Banner texto rubro | `facturadores.rubro_descripcion` (nuevo campo) |
+| Dirección + localidad | `facturador_establecimientos.direccion` del establecimiento principal del facturador |
+| Teléfono | `facturadores.telefono` |
+| RUC | `facturadores.ruc` |
+| Nombre propietario ("DE ...") | `facturadores.razon_social` |
+
+### 3.3 Numero De Documento
+
+Formato: `NNNN` con ceros a la izquierda (4 dígitos mínimo). Ejemplos reales: `0023`, `0138`. Se asigna al emitir.
+
+### 3.4 Campos Nuevos Necesarios En `facturadores`
+
+| Campo | Tipo | Descripcion |
+|---|---|---|
+| `logo_url` | text nullable | URL publica o path del logo del facturador configurado desde backoffice |
+| `rubro_descripcion` | text nullable | Descripcion corta del rubro (ej: "Chapería - Pintura - Mantenimiento...") |
+
+Estos campos se configuran desde el backoffice. El usuario operativo no los edita.
+
+---
+
+## 4. Bloque De Cliente
+
+Debajo de la cabecera, antes de los ítems:
+
+```
+┌──────────────────────┬─────────────────────────────────┐
+│  FECHA DE EMISIÓN:   │  DD/MM/YYYY                     │
+│  RUC:                │  [ruc del cliente o "—"]        │
+├──────────────────────┴─────────────────────────────────┤
+│  CLIENTE:  [nombre o razon social]                     │
+└────────────────────────────────────────────────────────┘
+```
+
+El RUC del cliente puede ser vacío — en ese caso se muestra `—` (ejemplo real: cliente persona física sin RUC visible).
+
+---
+
+## 5. Modelo De Datos
+
+### 5.1 Tabla `notas_comerciales`
 
 | Campo | Tipo | Descripcion |
 |---|---|---|
 | `id` | uuid PK | Identificador interno |
 | `facturador_id` | uuid FK | Propietario del documento |
 | `tipo` | enum(`PRESUPUESTO`,`PEDIDO`) | Tipo del documento |
-| `numero` | integer | Correlativo asignado al emitir; null mientras es borrador |
+| `numero` | integer nullable | Correlativo asignado al emitir; null mientras borrador |
 | `estado` | enum(`BORRADOR`,`EMITIDO`) | Estado del documento |
-| `destinatario_nombre` | text | Nombre o razon social del destinatario |
-| `destinatario_documento_tipo` | text nullable | RUC / CI / PASAPORTE / etc |
-| `destinatario_documento` | text nullable | Numero del documento |
-| `destinatario_direccion` | text nullable | Direccion del destinatario |
-| `destinatario_telefono` | text nullable | Telefono del destinatario |
-| `destinatario_email` | text nullable | Email del destinatario |
-| `texto_libre` | text nullable | Texto previo a los items (descripcion general, condiciones, referencia, etc) |
-| `condicion_pago` | text nullable | Ej: "Credito 30 dias", "Contado", "A convenir" |
-| `validez_dias` | integer nullable | Dias de validez desde la emision |
-| `verification_token` | uuid unique | Token publico para verificacion QR; generado al crear, inmutable |
-| `emitido_at` | timestamptz nullable | Fecha y hora de emision |
+| `fecha_emision` | date nullable | Fecha de emision; asignada al emitir (no editable) |
+| `cliente_nombre` | text | Nombre o razon social del cliente |
+| `cliente_ruc` | text nullable | RUC o CI del cliente |
+| `verification_token` | uuid unique | Token publico para QR; generado al crear, inmutable |
+| `emitido_at` | timestamptz nullable | Timestamp exacto de emision |
 | `deleted_at` | timestamptz nullable | Soft delete (solo borradores) |
-| `created_at` | timestamptz | Fecha de creacion |
-| `updated_at` | timestamptz | Ultima modificacion |
+| `created_at` | timestamptz | — |
+| `updated_at` | timestamptz | — |
 
-### 3.2 Tabla `notas_comerciales_items`
+Campos removidos respecto al borrador anterior: `destinatario_direccion`, `destinatario_telefono`, `destinatario_email`, `texto_libre`, `condicion_pago`, `validez_dias`. Los PDFs reales no los usan.
+
+### 5.2 Tabla `notas_comerciales_items`
+
+Cada nota tiene una lista de filas. Las filas son de tres tipos:
+
+| Tipo (`fila_tipo`) | Comportamiento |
+|---|---|
+| `CONTEXTO` | Fila descriptiva. Aparece en negrita. Sin cantidad ni precio. Sirve como encabezado de la seccion en el PDF. |
+| `ITEM` | Fila con cantidad, precio unitario y total. |
+| `ITEM_SIN_PRECIO` | Fila con descripcion y cantidad opcional, pero sin precio (`—`). Util para repuestos a cargo de terceros o trabajos incluidos sin costo. |
 
 | Campo | Tipo | Descripcion |
 |---|---|---|
-| `id` | uuid PK | Identificador interno |
+| `id` | uuid PK | — |
 | `nota_id` | uuid FK | Nota a la que pertenece |
-| `orden` | integer | Posicion del item en la lista (1-based) |
-| `descripcion` | text | Descripcion del producto o servicio |
-| `cantidad` | numeric(12,2) | Cantidad |
-| `precio_unitario` | numeric(14,2) | Precio unitario sin IVA |
-| `iva_tipo` | enum(`IVA_10`,`IVA_5`,`EXENTA`) | Tipo de IVA aplicable |
-| `precio_total` | numeric(14,2) | cantidad × precio_unitario (calculado y persistido) |
+| `orden` | integer | Posicion (1-based); define el orden de aparicion |
+| `fila_tipo` | enum(`CONTEXTO`,`ITEM`,`ITEM_SIN_PRECIO`) | Tipo de fila |
+| `descripcion` | text | Texto de la fila. Acepta saltos de linea para sub-items tipo lista (el usuario escribe manualmente "• texto") |
+| `cantidad` | numeric(12,2) nullable | Solo para `ITEM`. Null para `CONTEXTO` e `ITEM_SIN_PRECIO` |
+| `precio_unitario` | numeric(14,2) nullable | Solo para `ITEM`. Null para los demas tipos |
+| `precio_total` | numeric(14,2) nullable | `cantidad × precio_unitario`. Null para los demas tipos |
 
-### 3.3 Tabla `notas_comerciales_numeracion`
+### 5.3 Tabla `notas_comerciales_numeracion`
 
 | Campo | Tipo | Descripcion |
 |---|---|---|
-| `facturador_id` | uuid PK | Facturador propietario |
-| `tipo` | enum PK | Tipo de documento |
+| `facturador_id` | uuid PK | — |
+| `tipo` | enum PK | PRESUPUESTO o PEDIDO |
 | `ultimo_numero` | integer | Ultimo numero emitido; inicia en 0 |
 
-El numero correlativo se obtiene con `UPDATE ... SET ultimo_numero = ultimo_numero + 1 RETURNING ultimo_numero` dentro de la misma transaccion de emision, garantizando secuencia sin gaps en condiciones normales.
+Numeracion separada por tipo y por facturador.
 
 ---
 
-## 4. Estados Del Documento
+## 6. Calculos De Total
+
+Solo se calcula y muestra un **total unico** (suma de `precio_total` de todos los items con tipo `ITEM`). No hay desglose de IVA en la nota. Los PDFs reales confirman este comportamiento.
+
+```
+total = SUM(precio_total) WHERE fila_tipo = 'ITEM'
+```
+
+El total se calcula en backend al momento de generar el PDF y al responder el GET del documento.
+
+### 6.1 Total En Letras
+
+Obligatorio en el PDF. Convierte el total numerico a texto en guaranies.
+
+Ejemplos de los PDFs reales:
+- `1.750.000` → "Un millon setecientos cincuenta mil guaranies"
+- `650.000` → "Seiscientos cincuenta mil guaranies"
+- `739.000` → "Setecientos treinta y nueve mil"
+
+La conversion se implementa en el backend con una funcion local (sin libreria externa).
+
+---
+
+## 7. Estados Del Documento
 
 ```
 BORRADOR  →  EMITIDO
 ```
 
-- **BORRADOR**: editable en todos sus campos. No tiene numero asignado. Puede eliminarse (soft delete).
-- **EMITIDO**: inmutable. Tiene numero asignado. No puede editarse ni eliminarse. Solo puede archivarse logicamente en el futuro si se requiere.
+- **BORRADOR**: editable libremente, sin numero, eliminable (soft delete).
+- **EMITIDO**: inmutable, con numero asignado, `fecha_emision` fijada, PDF disponible. No se puede editar ni eliminar.
 
-La transicion a EMITIDO es irreversible.
-
----
-
-## 5. Calculos De Totales
-
-Los totales se calculan en el backend al responder un GET y al emitir el PDF. No se persisten totales en la nota padre; solo `precio_total` por item se persiste.
-
-| Campo calculado | Formula |
-|---|---|
-| `subtotal_gravado_10` | suma de `precio_total` donde `iva_tipo = IVA_10` |
-| `subtotal_gravado_5` | suma de `precio_total` donde `iva_tipo = IVA_5` |
-| `subtotal_exento` | suma de `precio_total` donde `iva_tipo = EXENTA` |
-| `iva_10` | `subtotal_gravado_10 / 11` (redondeado entero) |
-| `iva_5` | `subtotal_gravado_5 / 21` (redondeado entero) |
-| `total` | `subtotal_gravado_10 + subtotal_gravado_5 + subtotal_exento` |
+La transicion es irreversible. Al emitir:
+1. Se obtiene el siguiente numero correlativo en transaccion atomica.
+2. Se asigna `fecha_emision = today`.
+3. Se cambia estado a `EMITIDO`.
 
 ---
 
-## 6. Sistema De Verificacion QR
+## 8. Sistema De Verificacion QR
 
-### 6.1 Proposito
+### 8.1 Token
 
-Cada nota emitida incluye en su PDF un codigo QR que permite a cualquier receptor verificar que el documento es autentico y fue emitido por el sistema Ventax Facturacion Simple. No requiere login ni cuenta.
+El campo `verification_token` (uuid v4) se genera al **crear** el documento (estado BORRADOR). Es inmutable. El QR solo es funcional cuando el estado es `EMITIDO`.
 
-### 6.2 Token De Verificacion
-
-- El campo `verification_token` (uuid v4) se genera automaticamente al crear la nota, antes de la primera persistencia.
-- Es inmutable: nunca cambia aunque el documento sea editado.
-- Solo es operativo en documentos con estado `EMITIDO` — un borrador no expone su QR.
-- El token no es el `id` del documento. Usar un token separado permite invalidar el mecanismo en el futuro sin afectar llaves primarias.
-
-### 6.3 URL De Verificacion
+### 8.2 URL De Verificacion
 
 ```
 GET {PUBLIC_APP_BASE_URL}/verificar/nota/{verification_token}
 ```
 
-Ejemplo: `https://factura.ventax.app/verificar/nota/550e8400-e29b-41d4-a716-446655440000`
+Endpoint publico, sin autenticacion. Rate-limit: 60 req/min por IP.
 
-Esta URL es publica, sin autenticacion, sin rate-limit agresivo (max 60 req/min por IP).
+### 8.3 Respuesta
 
-### 6.4 Respuesta De Verificacion
-
-El endpoint devuelve una pagina HTML simple (no requiere React) o un JSON segun el `Accept` header:
-
-**Documento valido (`200`):**
-
+**Valido (`200`):**
 ```json
 {
   "valido": true,
   "tipo": "PRESUPUESTO",
-  "numero": 42,
-  "emitido_at": "2026-06-24T10:00:00Z",
-  "facturador": {
-    "razon_social": "EMILIO SALDIVAR",
-    "ruc": "5057016-1"
-  },
-  "destinatario": {
-    "nombre": "FILARTIGA PALLAROLAS, FIDEL ALBERTO",
-    "documento": "562538-6"
-  },
-  "total": 1050000,
+  "numero": 23,
+  "fecha_emision": "2025-12-15",
+  "facturador": { "razon_social": "...", "ruc": "5057016-1" },
+  "cliente": { "nombre": "EL SOL DEL PARAGUAY...", "ruc": "80006416-0" },
+  "total": 1750000,
   "mensaje": "Este documento fue emitido por Ventax Facturacion Simple y es autentico."
 }
 ```
 
-**Token invalido o borrador (`404`):**
-
+**Invalido o borrador (`404`):**
 ```json
 {
   "valido": false,
@@ -157,154 +215,121 @@ El endpoint devuelve una pagina HTML simple (no requiere React) o un JSON segun 
 }
 ```
 
-### 6.5 Datos Mostrados En El QR Del PDF
+### 8.4 En El PDF
 
-El QR se imprime en el pie del PDF, acompanado del texto:
-> "Verificar autenticidad: escanea el codigo QR o ingresa a factura.ventax.app/verificar"
-
-El QR codifica la URL completa de verificacion.
-
-### 6.6 Privacidad
-
-La URL de verificacion expone datos minimos del documento (tipo, numero, fecha, facturador, destinatario, total). No expone items detallados, texto libre, ni datos internos. La persona que escanea el QR solo puede confirmar si el documento es autentico o no.
+El QR se ubica en el **pie inferior izquierdo** del PDF. Junto al QR, el texto:
+> "Verificar autenticidad: factura.ventax.app/verificar"
 
 ---
 
-## 7. Estructura Del PDF
-
-El PDF se genera en el servidor con Puppeteer (HTML→PDF) sobre una plantilla HTML propia del modulo. Tamanio: A4 vertical.
-
-### 7.1 Secciones Del PDF (De Arriba Hacia Abajo)
+## 9. Estructura Completa Del PDF
 
 ```
-┌────────────────────────────────────────────┐
-│  LOGO / NOMBRE FACTURADOR                  │
-│  RUC · Direccion · Telefono · Email        │
-├────────────────────────────────────────────┤
-│  Tipo de documento: PRESUPUESTO / PEDIDO   │
-│  Nro: XXXX          Fecha: DD/MM/YYYY      │
-├──────────────────────┬─────────────────────┤
-│  DESTINATARIO        │  Condicion de pago  │
-│  Nombre / RUC / CI   │  Validez: X dias    │
-│  Direccion / Tel     │                     │
-├────────────────────────────────────────────┤
-│  TEXTO LIBRE (observaciones / contexto)    │
-│  (bloque de texto libre, puede ser vacio)  │
-├──────────┬───────────────────┬──────┬──────┤
-│  Cant    │  Descripcion      │  IVA │ Total│
-├──────────┼───────────────────┼──────┼──────┤
-│  ...     │  ...              │  10% │  ... │
-│  ...     │  ...              │   5% │  ... │
-├────────────────────────────────────────────┤
-│  Subtotal gravado 10%  |  Gs. XXXX         │
-│  IVA 10%               |  Gs. XXXX         │
-│  Subtotal gravado 5%   |  Gs. XXXX         │
-│  IVA 5%                |  Gs. XXXX         │
-│  Total                 |  Gs. XXXX         │
-├───────────────────────┬────────────────────┤
-│  QR verificacion      │  Firma del emisor  │
-│  [codigo QR]          │  _________________ │
-│  factura.ventax.app   │  Nombre / RUC      │
-└───────────────────────┴────────────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│  CABECERA (logo + rubro + datos + Nro)                      │
+│  DE [razon_social]                                          │
+├─────────────────────────────────────────────────────────────┤
+│  FECHA DE EMISION:  DD/MM/YYYY   |  RUC: [cliente ruc]     │
+│  CLIENTE: [nombre cliente]                                  │
+├──────────┬──────────────────────────────────┬──────┬────────┤
+│  CANT.   │  DESCRIPCION                     │ P.U. │ TOTAL  │
+├──────────┼──────────────────────────────────┼──────┼────────┤
+│          │  [Fila CONTEXTO — bold]           │      │        │
+├──────────┼──────────────────────────────────┼──────┼────────┤
+│  1       │  [Fila ITEM]                     │350Gs │ 350Gs  │
+│          │  [Fila ITEM_SIN_PRECIO]          │  —   │   —    │
+│          │  ...                             │      │        │
+├──────────┴──────────────────────────────────┴──────┴────────┤
+│  TOTAL                                          1.750.000 gs│
+├─────────────────────────────────────────────────────────────┤
+│  TOTAL: Un millon setecientos cincuenta mil guaranies——--   │
+├──────────────────────────┬──────────────────────────────────┤
+│  [QR verificacion]       │  (espacio firma opcional futuro) │
+│  factura.ventax.app/...  │                                  │
+└──────────────────────────┴──────────────────────────────────┘
 ```
 
-### 7.2 Cabecera Del Facturador
+**Tamanio del PDF**: A4 vertical.
 
-Se obtiene de los datos del facturador activo asociado al `facturador_id` de la nota:
-- `razon_social` y/o `nombre_fantasia`
-- `ruc`
-- `direccion` del establecimiento principal
-- `telefono` (campo agregado en migracion 0017)
-- `email` del facturador si existe
+**Columnas de la tabla**: CANT. | DESCRIPCION | P.UNITARIO | TOTAL
 
-### 7.3 Texto Libre
-
-Se renderiza como un bloque de texto con saltos de linea respetados (`white-space: pre-wrap`). Si esta vacio, la seccion no aparece en el PDF.
-
-### 7.4 Tabla De Items
-
-Columnas: `Cant` · `Descripcion` · `% IVA` · `Total Gs.`
-El precio unitario no se muestra en la columna — queda como dato interno para calcular el total. (Decision de diseno: el receptor ve el total por item, no el precio unitario de forma separada. Puede incluirse si el cliente lo requiere.)
-
-> **Nota:** El ejemplo PDF recibido (orden de provision AESA) muestra: Cant · Descripcion · Importe · % · IVA · Total. Ajustar columnas al confirmar el ejemplo final con el cliente.
+- Filas `CONTEXTO`: toda la fila en negrita, celdas de P.UNIT y TOTAL vacias.
+- Filas `ITEM`: cantidad, descripcion, precio unitario con formato `350.000 gs`, total con formato `350.000- gs`.
+- Filas `ITEM_SIN_PRECIO`: descripcion visible, P.UNIT y TOTAL muestran `—`.
 
 ---
 
-## 8. API REST
+## 10. API REST
 
-### 8.1 Endpoints
+| Metodo | Ruta | Auth | Descripcion |
+|---|---|---|---|
+| `POST` | `/notas` | SI | Crear nota en estado BORRADOR |
+| `GET` | `/notas` | SI | Listar notas del facturador activo |
+| `GET` | `/notas/:id` | SI | Obtener nota con items y total calculado |
+| `PATCH` | `/notas/:id` | SI | Actualizar nota (solo BORRADOR) |
+| `POST` | `/notas/:id/emitir` | SI | Emitir nota |
+| `GET` | `/notas/:id/pdf` | SI | Generar y devolver PDF (solo EMITIDO) |
+| `DELETE` | `/notas/:id` | SI | Eliminar nota (solo BORRADOR) |
+| `GET` | `/verificar/nota/:token` | NO | Verificacion publica del QR |
 
-| Metodo | Ruta | Descripcion |
-|---|---|---|
-| `POST` | `/notas` | Crear nota en estado BORRADOR |
-| `GET` | `/notas` | Listar notas del facturador activo |
-| `GET` | `/notas/:id` | Obtener nota con items y totales calculados |
-| `PATCH` | `/notas/:id` | Actualizar nota (solo BORRADOR) |
-| `POST` | `/notas/:id/emitir` | Emitir: asigna numero, cambia estado a EMITIDO |
-| `GET` | `/notas/:id/pdf` | Generar y devolver PDF (solo EMITIDO) |
-| `DELETE` | `/notas/:id` | Eliminar nota (solo BORRADOR, soft delete) |
-| `GET` | `/verificar/nota/:token` | Verificacion publica — sin autenticacion |
+Todos los endpoints autenticados filtran por `facturador_id` del contexto operativo.
 
-### 8.2 Alcance Por Facturador
-
-Todos los endpoints autenticados (`/notas/*`) filtran por el `facturador_id` del contexto operativo del usuario. Un usuario no puede acceder ni listar notas de otro facturador.
-
-### 8.3 Reglas De Negocio
-
-- Items: `cantidad > 0`, `precio_unitario >= 0`.
-- Una nota debe tener al menos 1 item para poder emitirse.
-- Una vez emitida, cualquier intento de PATCH o DELETE devuelve `409 CONFLICT`.
-- El PDF solo se puede solicitar para notas con estado `EMITIDO`.
-- El `verification_token` no se expone en la respuesta de listado; solo en el GET individual y al emitir.
+**Reglas:**
+- Una nota debe tener al menos 1 fila de tipo `ITEM` para poder emitirse.
+- PATCH o DELETE sobre nota EMITIDA → `409 CONFLICT`.
+- PDF sobre nota BORRADOR → `409 CONFLICT`.
+- Insercion de items: se valida `cantidad > 0` y `precio_unitario >= 0` para tipo `ITEM`.
 
 ---
 
-## 9. UX Operativa
+## 11. UX Operativa
 
-### 9.1 Vista Listado
+### 11.1 Listado
 
-- Tabs o chips de filtro: `Todos` / `Presupuesto` / `Pedido`
-- Columnas visibles: Tipo · Numero · Destinatario · Estado · Fecha · Total
-- Acciones por fila: `Ver` / `Descargar PDF` (si EMITIDO) / `Eliminar` (si BORRADOR)
-- Boton principal: `+ Nuevo`
+- Chips de filtro: Todos / Presupuesto / Pedido
+- Columnas: Tipo · Nro · Cliente · Estado · Fecha · Total
+- Acciones por fila: Ver · Descargar PDF (si EMITIDO) · Eliminar (si BORRADOR)
+- CTA principal: `+ Nueva nota`
 
-### 9.2 Formulario De Alta / Edicion
+### 11.2 Formulario
 
-1. Seleccion de tipo: `Presupuesto` o `Pedido` (selector visible)
-2. Destinatario: campo de busqueda con reuso de agenda de clientes del facturador
-3. Texto libre: textarea multillinea ("Descripcion / Contexto / Observaciones")
-4. Tabla de items: filas dinamicas, cada fila con `descripcion` (autocompletado desde catalogo), `cantidad`, `precio_unitario`, `iva_tipo`; total por fila calculado en tiempo real
-5. Panel de totales: visible abajo de la tabla, calculado en tiempo real
-6. Condicion de pago y validez: campos opcionales
-7. Acciones: `Guardar borrador` / `Emitir` (con confirmacion modal — accion irreversible)
+1. Tipo: selector `Presupuesto` / `Pedido`
+2. Cliente: busqueda en agenda del facturador (reusa componente existente)
+3. Tabla de filas dinamica:
+   - Boton `+ Contexto` agrega fila tipo CONTEXTO (textarea, sin precio)
+   - Boton `+ Item` agrega fila tipo ITEM (descripcion + cantidad + precio unitario; total calculado en tiempo real)
+   - Boton `+ Item sin precio` agrega fila ITEM_SIN_PRECIO (descripcion + cantidad; precio = —)
+   - Cada fila tiene handle de arrastre para reordenar y boton de eliminar
+4. Total calculado en tiempo real debajo de la tabla
+5. Acciones: `Guardar borrador` · `Emitir` (confirmacion modal — irreversible)
 
-### 9.3 Vista Post-Emision
+### 11.3 Post-emision
 
-Al emitir, la UI muestra:
-- Numero asignado
+- Numero asignado visible
 - Boton `Descargar PDF`
-- Boton `Compartir` (share API nativa del dispositivo si disponible)
-- El documento queda en solo-lectura
+- Boton `Compartir` (Web Share API si disponible)
+- Vista de solo lectura
 
 ---
 
-## 10. Criterios De Aceptacion
+## 12. Criterios De Aceptacion
 
-- Un borrador puede crearse sin items; no puede emitirse sin items.
-- Al emitir se asigna el siguiente numero correlativo por tipo y facturador.
-- El PDF incluye todos los datos del facturador, destinatario, texto libre, items, totales y QR de verificacion.
-- La URL del QR devuelve `200` con datos del documento para notas emitidas.
-- La URL del QR devuelve `404` con mensaje de advertencia para tokens inexistentes o borradores.
-- La verificacion no requiere autenticacion.
+- Una nota sin filas tipo `ITEM` no puede emitirse.
+- Al emitir se asigna el numero correlativo por tipo y facturador en transaccion atomica.
+- El PDF muestra la cabecera con logo (o solo texto si no hay logo), rubro, direccion, RUC, tipo, numero, cliente, tabla de filas con sus tipos diferenciados, total numerico, total en letras y QR.
+- La URL del QR devuelve 200 para notas EMITIDAS y 404 para borradores o tokens inexistentes.
+- La verificacion es publica y sin autenticacion.
 - Un usuario no puede ver ni operar notas de otro facturador.
-- Editar una nota emitida devuelve error `409`.
+- Modificar o eliminar una nota EMITIDA devuelve 409.
 
 ---
 
-## 11. Fuera De Alcance (Esta Version)
+## 13. Fuera De Alcance — v0.1
 
-- Envio por email directo desde la UI (modulo de notificaciones futuro)
-- Estados adicionales: `ACEPTADO`, `RECHAZADO`, `VENCIDO`
-- Conversion de presupuesto a factura
+- Subir el logo desde la app operativa (solo backoffice)
 - Firma digital criptografica del PDF
+- Estados adicionales: ACEPTADO, RECHAZADO, VENCIDO
+- Conversion de presupuesto a factura
+- Envio por email desde la UI
+- Condicion de pago y validez (posible v0.2)
 - Multi-moneda

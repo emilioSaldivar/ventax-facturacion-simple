@@ -21,6 +21,11 @@ WORKDIR /app
 ENV NODE_ENV=production
 ARG BUILD_COMMIT_SHA=dev
 ENV APP_VERSION=$BUILD_COMMIT_SHA
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
+
+RUN apk add --no-cache chromium font-noto font-noto-emoji \
+    && rm -rf /var/cache/apk/*
+
 COPY package.json package-lock.json ./
 COPY apps/api/package.json apps/api/package.json
 COPY packages/shared/package.json packages/shared/package.json

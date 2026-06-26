@@ -4,7 +4,7 @@
 
 - `AGENTS.md`
 - `docs/SPEC_RECIBO_DINERO_v0.1.md`
-- `docs/PLAN_RECIBO_DINERO_v0.1.md` (PENDIENTE — crear antes de implementar)
+- `docs/PLAN_RECIBO_DINERO_v0.1.md`
 - `spec/openapi.yaml`
 
 ## Descripcion del modulo
@@ -34,22 +34,22 @@ El recibo NO es un comprobante fiscal. No interactua con SIFEN ni con facturacio
 | ID | Fase | Tarea | Estado | Criterio de aceptacion |
 |---|---|---|---|---|
 | RD-001 | SDD | Crear SPEC del modulo | DONE | Existe `docs/SPEC_RECIBO_DINERO_v0.1.md` con modelo de datos, estructura PDF, verificacion QR, estados, reglas de vinculacion a factura credito y API REST |
-| RD-002 | SDD | Crear PLAN de implementacion | PENDIENTE | Existe `docs/PLAN_RECIBO_DINERO_v0.1.md` con fases, archivos a crear/modificar y orden de ejecucion |
-| RD-003 | DB | Migracion: tabla `recibos_dinero` | PENDIENTE | Nueva tabla con `facturador_id`, `numero`, `fecha_emision`, `pagador_nombre`, `pagador_documento_tipo`, `pagador_documento`, `concepto`, `importe`, `forma_pago`, `factura_id` (nullable FK a `facturas`), `estado`, timestamps |
-| RD-004 | DB | Migracion: secuencia de numeracion de recibos por facturador | PENDIENTE | Cada facturador tiene un numerador correlativo propio para recibos; el numero se asigna al emitir |
-| RD-005 | API — tipos | Definir tipos TypeScript del modulo | PENDIENTE | `recibos.types.ts` con interfaces de request/response, `FormaPago` enum, referencia opcional a factura |
-| RD-006 | API — repository | Implementar `RecibosRepository` con PostgreSQL | PENDIENTE | CRUD: crear, listar por facturador, obtener por id, vincular a factura; consulta de recibos por factura |
-| RD-007 | API — service | Implementar `RecibosService` con reglas de negocio | PENDIENTE | Validacion de importe (> 0), asignacion de numero al emitir, resolucion de datos del pagador desde factura vinculada, bloqueo de edicion en estado EMITIDO |
-| RD-008 | API — PDF | Generar PDF de recibo | PENDIENTE | PDF A4 o media carta con datos del facturador, numero, fecha, pagador, concepto, importe en letras y numeros, forma de pago, referencia a factura si existe, y firma |
-| RD-009 | API — routes | Implementar rutas REST del modulo | PENDIENTE | `POST /recibos`, `GET /recibos`, `GET /recibos/:id`, `POST /recibos/:id/emitir`, `GET /recibos/:id/pdf`, `DELETE /recibos/:id` (solo borradores) |
-| RD-010 | API — integracion factura | Ruta para crear recibo desde factura credito | PENDIENTE | `POST /facturas/:id/recibo` crea un recibo pre-llenado con datos de la factura (cliente, importe total, referencia); la factura debe tener `condicion_venta = CREDITO` |
-| RD-011 | API — contrato | Documentar endpoints en `spec/openapi.yaml` | PENDIENTE | Todos los endpoints estan en el contrato OpenAPI con schemas completos |
-| RD-012 | Frontend — listado | Vista de listado de recibos | PENDIENTE | Lista con busqueda por numero/pagador, filtro por fecha; acceso desde menu lateral |
-| RD-013 | Frontend — nueva recibo | Formulario de alta directa | PENDIENTE | Permite completar pagador (con reuso de agenda), concepto, importe, forma de pago; opcion de vincular a factura existente |
-| RD-014 | Frontend — desde factura | Boton `Emitir recibo` en detalle de factura credito | PENDIENTE | En el panel de detalle/gestion de una factura con `condicion_venta = CREDITO` aparece boton `Emitir recibo`; al tocar pre-llena y navega al formulario de recibo |
-| RD-015 | Frontend — emitir y PDF | Flujo de emision y descarga | PENDIENTE | Boton `Emitir` asigna numero, bloquea edicion y habilita `Descargar PDF`; confirmacion antes de emitir |
-| RD-016 | QA | Tests del service | PENDIENTE | Tests cubren: validacion importe, numeracion correlativa, vinculo a factura credito, error al intentar vincular factura contado |
-| RD-017 | QA | Validacion typecheck + build | PENDIENTE | `npm run typecheck` y `npm run build` pasan en `apps/api` y `apps/web-operacion` |
+| RD-002 | SDD | Crear PLAN de implementacion | DONE | Existe `docs/PLAN_RECIBO_DINERO_v0.1.md` con fases, archivos a crear/modificar y orden de ejecucion |
+| RD-003 | DB | Migracion: tabla `recibos_dinero` | DONE | Nueva tabla con `facturador_id`, `numero`, `fecha_emision`, `pagador_nombre`, `pagador_documento_tipo`, `pagador_documento`, `concepto`, `importe`, `forma_pago`, `factura_id` (nullable FK a `facturas`), `estado`, timestamps |
+| RD-004 | DB | Migracion: secuencia de numeracion de recibos por facturador | DONE | `recibos_dinero_numeracion` tabla creada en `0023_recibos_dinero.sql`; numeracion atomica via INSERT ON CONFLICT en `emitir()` |
+| RD-005 | API — tipos | Definir tipos TypeScript del modulo | DONE | `apps/api/src/modules/recibos/recibos.types.ts` creado con `ReciboEstado`, `ReciboFormaPago`, `ReciboRecord`, `ReciboCreateInput`, `ReciboUpdateInput`, `RecibosRepository` |
+| RD-006 | API — repository | Implementar `RecibosRepository` con PostgreSQL | DONE | `apps/api/src/modules/recibos/recibos.repository.ts` creado; CRUD completo, `emitir()` con transaccion atomica, `listByFactura()`, `getFacturadorParaPdf()` |
+| RD-007 | API — service | Implementar `RecibosService` con reglas de negocio | DONE | `apps/api/src/modules/recibos/recibos.service.ts` creado; validaciones: importe > 0, pagador requerido, 409 en estado EMITIDO para update/delete/emitir |
+| RD-008 | API — PDF | Generar PDF de recibo | DONE | `apps/api/src/modules/recibos/recibos.pdf.ts` creado; formato A5/media carta, QR, importe en letras via `shared/utils/numero-letras.ts`, 6 formas de pago |
+| RD-009 | API — routes | Implementar rutas REST del modulo | DONE | `apps/api/src/modules/recibos/recibos.routes.ts` creado; 7 endpoints registrados en `app.ts`: POST/GET /recibos, GET/PATCH/DELETE /recibos/:id, POST /recibos/:id/emitir, GET /recibos/:id/pdf |
+| RD-010 | API — integracion factura | Ruta para crear recibo desde factura credito | DONE | `POST /facturas/:id/recibo` implementado en `recibos.routes.ts`; valida condicion_venta = CREDITO, pre-llena razon_social, documento, total e numero_fiscal |
+| RD-011 | API — contrato | Documentar endpoints en `spec/openapi.yaml` | DONE | 7 paths agregados (tag `Recibos`), parametro `ReciboId`, 7 schemas: `ReciboFormaPago`, `ReciboRecord`, `ReciboListResponse`, `ReciboCreateRequest`, `ReciboUpdateRequest`, `ReciboVerificacionResponse`; YAML valido |
+| RD-012 | Frontend — listado | Vista de listado de recibos | DONE | `RecibosView` agregada a `main.tsx`; menu lateral "Cobros / Recibos"; lista con estado, importe, pagador, forma de pago |
+| RD-013 | Frontend — nueva recibo | Formulario de alta directa | DONE | Formulario completo: fecha cobro, pagador, documento, concepto, importe, forma de pago, referencia bancaria; opciones "Guardar borrador" y "Guardar y emitir" |
+| RD-014 | Frontend — desde factura | Boton `Emitir recibo` en detalle de factura credito | DONE | Boton "Emitir recibo de cobro" en panel de acciones secundarias de `DocumentsView`; visible solo para facturas CREDITO; llama `POST /facturas/:id/recibo` y navega a RecibosView |
+| RD-015 | Frontend — emitir y PDF | Flujo de emision y descarga | DONE | Sub-view "detail" con boton "Emitir" (con confirmacion) y "Descargar PDF" para recibos EMITIDOS |
+| RD-016 | QA | Tests del service | DONE | `apps/api/tests/recibos.service.test.ts`; 16 tests, todos verdes: validacion importe, create, emitir (exitoso/404/409), update (409 si emitido), delete (409 si emitido), verificar (valido/borrador/inexistente) |
+| RD-017 | QA | Validacion typecheck + build | DONE | `npm run typecheck` pasa en `apps/api` y `apps/web-operacion` sin errores. Tests pre-existentes de facturas.service y entrega.service fallaban antes de este modulo (no relacionados). |
 
 ## Notas de producto
 
@@ -62,4 +62,6 @@ El recibo NO es un comprobante fiscal. No interactua con SIFEN ni con facturacio
 ## Evidencia
 
 - 2026-06-23: backlog creado.
-- 2026-06-24: SPEC redactado en `docs/SPEC_RECIBO_DINERO_v0.1.md`. Incluye modelo de datos, tabla de numeracion, formas de pago, estructura PDF con importe en letras, sistema de verificacion QR publico, flujo desde factura credito, API REST y criterios de aceptacion. RD-001 marcado DONE.
+- 2026-06-24: SPEC redactado en `docs/SPEC_RECIBO_DINERO_v0.1.md`. Incluye modelo de datos, tabla de numeracion, formas de pago, estructura PDF con importe en letras, sistema de verificacion QR publico, flujo desde factura credito, API REST y criterios de aceptacion. RD-001 → DONE.
+- 2026-06-24: PLAN redactado en `docs/PLAN_RECIBO_DINERO_v0.1.md`. Detalla migracion SQL, modulos API, reutilizacion de pdf.service.ts y verificacion.routes.ts del modulo Notas, integracion en detalle factura credito y orden de ejecucion. RD-002 → DONE.
+- 2026-06-25: Implementacion completa RD-003 a RD-017. Modulo Recibo de Dinero en produccion: migracion SQL, repository, service, PDF (formato A5, QR, importe en letras), rutas REST, integracion con factura credito, RecibosView en frontend, OpenAPI documentado. `numeroALetras` movida a `shared/utils/numero-letras.ts` — ambos modulos (Notas y Recibos) importan desde ahi. 16/16 tests verdes. typecheck limpio en api y web-operacion.

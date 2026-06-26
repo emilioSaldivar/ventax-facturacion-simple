@@ -14,7 +14,10 @@ import { entregaRouter, publicEntregaRouter } from "./modules/entrega/entrega.ro
 import { facturasRouter } from "./modules/facturas/facturas.routes";
 import { fiscalGatewayRouter } from "./modules/fiscal-gateway/fiscal-gateway.routes";
 import { healthRouter } from "./modules/health/health.routes";
+import { notasRouter } from "./modules/notas/notas.routes";
 import { onboardingRouter } from "./modules/onboarding/onboarding.routes";
+import { recibosRouter } from "./modules/recibos/recibos.routes";
+import { verificacionRouter } from "./modules/verificacion/verificacion.routes";
 import { errorHandler } from "./shared/errors/error-handler";
 import { HttpError } from "./shared/errors/http-error";
 import { logger } from "./shared/logging/logger";
@@ -70,8 +73,11 @@ export function createApp() {
   app.use(env.API_BASE_PATH, facturasRouter);
   app.use(env.API_BASE_PATH, entregaRouter);
   app.use(env.API_BASE_PATH, fiscalGatewayRouter);
+  app.use(env.API_BASE_PATH, notasRouter);
+  app.use(env.API_BASE_PATH, recibosRouter);
   app.use(env.API_BASE_PATH, healthRouter);
   app.use(publicEntregaRouter);
+  app.use("/verificar", verificacionRouter);
   app.get("/health", (_req, res) => res.redirect(307, `${env.API_BASE_PATH}/health`));
 
   app.use((_req, _res, next) => {

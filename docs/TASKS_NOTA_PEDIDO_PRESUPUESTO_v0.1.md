@@ -2,60 +2,56 @@
 
 ## Alineacion
 
-- `AGENTS.md`
 - `docs/SPEC_NOTA_PEDIDO_PRESUPUESTO_v0.1.md`
-- `docs/PLAN_NOTA_PEDIDO_PRESUPUESTO_v0.1.md` (PENDIENTE — crear antes de implementar)
+- `docs/PLAN_NOTA_PEDIDO_PRESUPUESTO_v0.1.md`
 - `spec/openapi.yaml`
 
 ## Descripcion del modulo
 
-Modulo para emitir documentos comerciales internos no fiscales: **Nota de Pedido** (solicitud de compra/servicio hacia un proveedor) y **Nota de Presupuesto** (cotizacion emitida hacia un cliente). Ambos comparten la misma estructura de datos y PDF.
+Modulo para emitir documentos comerciales internos no fiscales: **Nota de Pedido** y **Nota de Presupuesto**. Ambos comparten la misma estructura de datos y PDF.
 
-### Estructura del documento
+Basado en ejemplos PDF reales: cabecera identica a una factura (logo + rubro + datos + Nro), tabla de items con tres tipos de fila (CONTEXTO / ITEM / ITEM_SIN_PRECIO), total unico en guaranies (sin desglose IVA), total en letras obligatorio, y QR de verificacion publica.
 
-| Seccion | Descripcion |
-|---|---|
-| Encabezado | Datos del facturador (nombre, RUC, direccion, telefono, email, logo) |
-| Destinatario | Nombre / RUC / CI del cliente o proveedor |
-| Texto libre | Seccion de observaciones o descripcion general antes de los items (ej: datos del riesgo, condiciones, referencia a siniestro, vehiculo, etc.) |
-| Items | Tabla: cantidad · descripcion · precio unitario · % IVA · total |
-| Totales | Subtotal, IVA desglosado (5% / 10%), Total |
-| Pie | Condicion de pago, validez del documento, firma |
-
-El documento NO es un comprobante fiscal. No interactua con SIFEN ni con facturacion-electronica.
+El documento NO es un comprobante fiscal. No interactua con SIFEN.
 
 ## Matriz
 
 | ID | Fase | Tarea | Estado | Criterio de aceptacion |
 |---|---|---|---|---|
-| NP-001 | SDD | Crear SPEC del modulo | DONE | Existe `docs/SPEC_NOTA_PEDIDO_PRESUPUESTO_v0.1.md` con modelo de datos, estructura PDF, verificacion QR, estados y reglas de negocio |
-| NP-002 | SDD | Crear PLAN de implementacion | PENDIENTE | Existe `docs/PLAN_NOTA_PEDIDO_PRESUPUESTO_v0.1.md` con fases, archivos a crear/modificar y orden de ejecucion |
-| NP-003 | DB | Migracion: tabla `notas_comerciales` | PENDIENTE | Nueva tabla con `tipo` (PEDIDO/PRESUPUESTO), `facturador_id`, `numero`, `destinatario_*`, `texto_libre`, `condicion_pago`, `validez_dias`, `estado`, timestamps |
-| NP-004 | DB | Migracion: tabla `notas_comerciales_items` | PENDIENTE | Items vinculados a nota con `descripcion`, `cantidad`, `precio_unitario`, `iva_tipo`, `precio_total` |
-| NP-005 | DB | Migracion: secuencia de numeracion por facturador y tipo | PENDIENTE | Cada facturador tiene numerador independiente para PEDIDO y para PRESUPUESTO; el numero se asigna al emitir |
-| NP-006 | API — tipos | Definir tipos TypeScript del modulo | PENDIENTE | `notas.types.ts` con interfaces de request/response, estados y tipos de IVA alineados con el resto del sistema |
-| NP-007 | API — repository | Implementar `NotasRepository` con PostgreSQL | PENDIENTE | CRUD: crear borrador, listar, obtener por id, actualizar, cambiar estado, eliminar borrador |
-| NP-008 | API — service | Implementar `NotasService` con reglas de negocio | PENDIENTE | Validacion de items (precio >= 0, cantidad > 0), calculo de totales IVA, asignacion de numero al emitir, bloqueo de edicion en estado EMITIDO |
-| NP-009 | API — PDF | Generar PDF de nota con puppeteer/jsPDF | PENDIENTE | PDF branded con datos del facturador, texto libre antes de la tabla de items, tabla de items, totales y pie; compatible A4 |
-| NP-010 | API — routes | Implementar rutas REST del modulo | PENDIENTE | `POST /notas`, `GET /notas`, `GET /notas/:id`, `PATCH /notas/:id`, `POST /notas/:id/emitir`, `GET /notas/:id/pdf`, `DELETE /notas/:id` |
-| NP-011 | API — contrato | Documentar endpoints en `spec/openapi.yaml` | PENDIENTE | Todos los endpoints del modulo estan en el contrato OpenAPI con request/response schemas completos |
-| NP-012 | Frontend — listado | Vista de listado de notas comerciales | PENDIENTE | Lista con filtro por tipo (PEDIDO/PRESUPUESTO), estado y busqueda por numero/destinatario; acceso desde menu lateral |
-| NP-013 | Frontend — nueva nota | Formulario de creacion/edicion | PENDIENTE | Permite seleccionar tipo, completar destinatario (con reuso de agenda de clientes), escribir texto libre, agregar/editar/eliminar items con calculo de totales en tiempo real |
-| NP-014 | Frontend — emitir | Flujo de emision y descarga PDF | PENDIENTE | Boton `Emitir` bloquea edicion, asigna numero y habilita `Descargar PDF`; confirmacion antes de emitir (accion irreversible) |
-| NP-015 | Frontend — items | Autocompletado desde catalogo en items | PENDIENTE | Al escribir en `descripcion` de un item se sugiere del catalogo propio del facturador; seleccionar pre-completa precio unitario e IVA |
-| NP-016 | QA | Tests del service y validaciones | PENDIENTE | Tests cubren: totales correctos, bloqueo de edicion emitida, error en items invalidos, numeracion secuencial |
-| NP-017 | QA | Validacion typecheck + build | PENDIENTE | `npm run typecheck` y `npm run build` pasan en `apps/api` y `apps/web-operacion` |
+| NP-001 | SDD | Crear SPEC del modulo | DONE | Existe `docs/SPEC_NOTA_PEDIDO_PRESUPUESTO_v0.1.md` con modelo de datos, estructura PDF basada en ejemplos reales, verificacion QR, estados y reglas de negocio |
+| NP-002 | SDD | Crear PLAN de implementacion | DONE | Existe `docs/PLAN_NOTA_PEDIDO_PRESUPUESTO_v0.1.md` con fases, archivos a crear/modificar y orden de ejecucion |
+| NP-003 | DB | Migracion: campos `logo_url` y `rubro_descripcion` en `facturadores` | DONE | `db/migrations/0021_facturador_logo_rubro.sql` creado |
+| NP-004 | DB | Migracion: tabla `notas_comerciales` | DONE | `db/migrations/0022_notas_comerciales.sql` creado |
+| NP-005 | DB | Migracion: tabla `notas_comerciales_items` | DONE | Incluido en `0022_notas_comerciales.sql` |
+| NP-006 | DB | Migracion: tabla `notas_comerciales_numeracion` | DONE | Incluido en `0022_notas_comerciales.sql` con `INSERT ... ON CONFLICT DO UPDATE RETURNING` |
+| NP-007 | API — tipos | Definir tipos TypeScript del modulo | DONE | `apps/api/src/modules/notas/notas.types.ts` con todos los tipos + `FacturadorParaPdf` + `NotasRepository` |
+| NP-008 | API — repository | Implementar `PgNotasRepository` | DONE | `apps/api/src/modules/notas/notas.repository.ts` con todos los metodos + `getFacturadorParaPdf` |
+| NP-009 | API — service | Implementar `NotasService` con reglas de negocio | DONE | `apps/api/src/modules/notas/notas.service.ts` con validaciones, `numeroALetras` y `verificarNota` |
+| NP-010 | API — PDF | Generar HTML del PDF | DONE | `apps/api/src/modules/notas/notas.pdf.ts` con `buildNotaPdfHtml` + QR via `qrcode` + estilos inline |
+| NP-011 | API — pdf wrapper | Wrapper `htmlToPdfBuffer` | DONE | `apps/api/src/shared/pdf/pdf.service.ts` con `puppeteer-core`. Dockerfile actualizado con `chromium` + `font-noto` en Alpine |
+| NP-012 | API — verificacion | Endpoint publico de verificacion | DONE | `apps/api/src/modules/verificacion/verificacion.routes.ts`. `GET /verificar/nota/:token` sin auth; 404 para borradores/inexistentes |
+| NP-013 | API — routes | Implementar rutas REST del modulo | DONE | `apps/api/src/modules/notas/notas.routes.ts` con los 7 endpoints |
+| NP-014 | API — registro | Registrar routers en `app.ts` | DONE | `notasRouter` en `API_BASE_PATH` y `verificacionRouter` en `/verificar` |
+| NP-015 | API — contrato | Documentar endpoints en `spec/openapi.yaml` | DONE | Tag `Notas`, 8 paths (`/notas`, `/notas/{notaId}`, `/notas/{notaId}/emitir`, `/notas/{notaId}/pdf`, `/verificar/nota/{token}`), parameter `NotaId`, schemas `NotaTipo`, `NotaEstado`, `NotaFilaTipo`, `NotaFilaInput`, `NotaFilaResponse`, `NotaRecord`, `NotaConItems`, `NotaListResponse`, `NotaCreateRequest`, `NotaUpdateRequest`, `NotaVerificacionResponse` |
+| NP-016 | Frontend — listado | Vista de listado de notas | DONE | `NotasView` en `main.tsx` con filtros Todos/Presupuesto/Pedido, acciones Ver/PDF/Eliminar/Emitir |
+| NP-017 | Frontend — formulario | Formulario de alta/edicion con tabla dinamica | DONE | Formulario con filas CONTEXTO/ITEM/ITEM_SIN_PRECIO, reorden, total en tiempo real, guardar borrador y emitir |
+| NP-018 | Frontend — detalle | Vista post-emision y descarga PDF | DONE | Sub-vista `detail` con numero, fecha, cliente, total y boton Descargar PDF (blob) |
+| NP-019 | QA — tests | Tests del service y `numeroALetras` | DONE | `apps/api/tests/notas.service.test.ts` — 16/16 passed |
+| NP-020 | QA — typecheck | Typecheck + build | DONE | `npm run typecheck` OK en `apps/api` y `apps/web-operacion`. `npm run build` OK en `apps/web-operacion` |
 
 ## Notas de producto
 
-- Un documento en estado `BORRADOR` puede editarse libremente.
-- Al `EMITIR` se asigna el numero correlativo y el documento queda inmutable.
-- El texto libre (seccion pre-items) acepta salto de linea y se renderiza como parrafo en el PDF.
-- La nota puede ser enviada por email directamente desde la UI (fase futura, no en este alcance).
-- Reutiliza la agenda de clientes para el destinatario.
-- Reutiliza el catalogo para autocompletar items.
+- Un BORRADOR puede editarse libremente. Al EMITIR el documento es inmutable.
+- La cabecera del PDF replica la de una factura: logo del facturador (campo `logo_url`, nuevo), rubro/actividad (`rubro_descripcion`, nuevo), direccion del establecimiento principal, RUC, telefono.
+- Tres tipos de fila en la tabla: CONTEXTO (bold, sin precio — reemplaza el concepto de "texto libre" separado), ITEM (con cantidad y precio), ITEM_SIN_PRECIO (sin precio, muestra "—").
+- Sin desglose de IVA — solo total en guaranies.
+- El total en letras es obligatorio en el PDF.
+- Logo y rubro se configuran desde backoffice — el usuario operativo no los edita.
 
 ## Evidencia
 
 - 2026-06-23: backlog creado.
-- 2026-06-24: SPEC redactado en `docs/SPEC_NOTA_PEDIDO_PRESUPUESTO_v0.1.md`. Incluye modelo de datos completo, estructura PDF, sistema de verificacion QR con endpoint publico, estados, calculos de totales, API REST y criterios de aceptacion. NP-001 marcado DONE.
+- 2026-06-24: SPEC redactado en `docs/SPEC_NOTA_PEDIDO_PRESUPUESTO_v0.1.md`. NP-001 → DONE.
+- 2026-06-23: SPEC revisado con base en PDF reales: eliminado texto_libre separado, eliminado desglose IVA, agregado `logo_url`/`rubro_descripcion`, definidos 3 tipos de fila, actualizado layout PDF. PLAN redactado en `docs/PLAN_NOTA_PEDIDO_PRESUPUESTO_v0.1.md`. NP-002 → DONE.
+- 2026-06-25: implementacion completa NP-003 a NP-020 (excepto NP-015 OpenAPI). Tests: 16/16 passed (`notas.service.test.ts`). Typecheck OK en `apps/api` y `apps/web-operacion`. Build OK. Motor PDF: `puppeteer-core` + Chromium Alpine (Dockerfile actualizado). QR con paquete `qrcode`.
+- 2026-06-25: NP-015 completado. Documentados 8 paths, tag `Notas`, parameter `NotaId` y 11 schemas en `spec/openapi.yaml`. YAML validado con `js-yaml`. Modulo 100% cerrado.

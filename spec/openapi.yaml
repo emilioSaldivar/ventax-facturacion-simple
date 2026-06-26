@@ -29,6 +29,8 @@ tags:
   - name: NotasCredito
   - name: Entrega
   - name: Backoffice
+  - name: Notas
+  - name: Recibos
   - name: Public
 
 security:
@@ -1190,6 +1192,456 @@ paths:
               schema:
                 $ref: "#/components/schemas/EmailStatusResponse"
 
+  # ── Notas Comerciales (Nota de Pedido / Nota de Presupuesto) ─────────────────
+
+  /notas:
+    get:
+      tags: [Notas]
+      summary: Listar notas comerciales del facturador activo
+      parameters:
+        - in: query
+          name: tipo
+          required: false
+          schema:
+            $ref: "#/components/schemas/NotaTipo"
+          description: Filtrar por tipo de nota.
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+      responses:
+        "200":
+          description: Lista de notas
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotaListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          description: Usuario sin configuracion operativa completa
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    post:
+      tags: [Notas]
+      summary: Crear nota comercial en estado BORRADOR
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NotaCreateRequest"
+      responses:
+        "201":
+          description: Nota creada en estado BORRADOR
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotaConItems"
+        "400":
+          description: Datos invalidos (cliente_nombre vacio, etc.)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          description: Usuario sin configuracion operativa completa
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /notas/{notaId}:
+    get:
+      tags: [Notas]
+      summary: Obtener nota con items y total calculado
+      parameters:
+        - $ref: "#/components/parameters/NotaId"
+      responses:
+        "200":
+          description: Nota con items
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotaConItems"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Usuario sin configuracion operativa completa
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    patch:
+      tags: [Notas]
+      summary: Actualizar nota (solo si esta en BORRADOR)
+      parameters:
+        - $ref: "#/components/parameters/NotaId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NotaUpdateRequest"
+      responses:
+        "200":
+          description: Nota actualizada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotaConItems"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Nota ya emitida o usuario sin configuracion operativa
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+    delete:
+      tags: [Notas]
+      summary: Eliminar nota (solo si esta en BORRADOR)
+      parameters:
+        - $ref: "#/components/parameters/NotaId"
+      responses:
+        "204":
+          description: Nota eliminada (soft delete)
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Nota ya emitida — no se puede eliminar
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /notas/{notaId}/emitir:
+    post:
+      tags: [Notas]
+      summary: Emitir nota — asigna numero correlativo e inmoviliza el documento
+      description: >
+        La nota debe tener al menos una fila de tipo `ITEM` para poder emitirse.
+        La transicion es irreversible: una vez emitida no se puede modificar ni eliminar.
+      parameters:
+        - $ref: "#/components/parameters/NotaId"
+      responses:
+        "200":
+          description: Nota emitida con numero asignado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotaConItems"
+        "400":
+          description: La nota no tiene items con precio para emitir
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Nota ya emitida o usuario sin configuracion operativa
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /notas/{notaId}/pdf:
+    get:
+      tags: [Notas]
+      summary: Generar y descargar PDF de la nota (solo si esta EMITIDA)
+      parameters:
+        - $ref: "#/components/parameters/NotaId"
+      responses:
+        "200":
+          description: PDF del documento
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: La nota aun no fue emitida — PDF no disponible
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # Endpoint de verificacion publica — montado en / (fuera del prefijo /api/v1)
+  /recibos:
+    get:
+      tags: [Recibos]
+      summary: Listar recibos del facturador
+      security:
+        - cookieAuth: []
+      parameters:
+        - in: query
+          name: limit
+          schema: { type: integer, default: 20, minimum: 1, maximum: 100 }
+        - in: query
+          name: offset
+          schema: { type: integer, default: 0, minimum: 0 }
+      responses:
+        "200":
+          description: Lista paginada de recibos
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReciboListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+    post:
+      tags: [Recibos]
+      summary: Crear recibo en estado BORRADOR
+      security:
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReciboCreateRequest"
+      responses:
+        "201":
+          description: Recibo creado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReciboRecord"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /recibos/{reciboId}:
+    parameters:
+      - $ref: "#/components/parameters/ReciboId"
+
+    get:
+      tags: [Recibos]
+      summary: Obtener recibo por ID
+      security:
+        - cookieAuth: []
+      responses:
+        "200":
+          description: Recibo encontrado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReciboRecord"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    patch:
+      tags: [Recibos]
+      summary: Actualizar recibo en BORRADOR
+      security:
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReciboUpdateRequest"
+      responses:
+        "200":
+          description: Recibo actualizado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReciboRecord"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+    delete:
+      tags: [Recibos]
+      summary: Eliminar recibo en BORRADOR (soft delete)
+      security:
+        - cookieAuth: []
+      responses:
+        "204":
+          description: Recibo eliminado
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /recibos/{reciboId}/emitir:
+    parameters:
+      - $ref: "#/components/parameters/ReciboId"
+    post:
+      tags: [Recibos]
+      summary: Emitir recibo (BORRADOR → EMITIDO, asigna numero correlativo)
+      security:
+        - cookieAuth: []
+      responses:
+        "200":
+          description: Recibo emitido con numero asignado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReciboRecord"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /recibos/{reciboId}/pdf:
+    parameters:
+      - $ref: "#/components/parameters/ReciboId"
+    get:
+      tags: [Recibos]
+      summary: Descargar PDF del recibo
+      security:
+        - cookieAuth: []
+      responses:
+        "200":
+          description: PDF del recibo
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /facturas/{documentoId}/recibo:
+    parameters:
+      - $ref: "#/components/parameters/DocumentoId"
+    post:
+      tags: [Recibos]
+      summary: Crear recibo pre-llenado desde factura a credito
+      description: >
+        Solo funciona para facturas con condicion_venta = CREDITO.
+        Pre-llena pagador, importe y referencia con los datos de la factura.
+        El recibo creado queda en estado BORRADOR para revision antes de emitir.
+      security:
+        - cookieAuth: []
+      responses:
+        "201":
+          description: Recibo creado pre-llenado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReciboRecord"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /verificar/recibo/{token}:
+    servers:
+      - url: /
+        description: Raiz del servidor (sin prefijo /api/v1)
+    get:
+      tags: [Recibos]
+      summary: Verificar autenticidad de un recibo por QR token
+      description: >
+        Endpoint publico sin autenticacion. El QR del PDF apunta a esta URL.
+        Devuelve 200 con datos si el recibo esta EMITIDO; 404 si el token no existe
+        o corresponde a un BORRADOR.
+      security: []
+      parameters:
+        - in: path
+          name: token
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: verification_token del recibo (uuid v4).
+      responses:
+        "200":
+          description: Recibo valido y emitido
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReciboVerificacionResponse"
+        "404":
+          description: Token inexistente o recibo en estado BORRADOR
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [valido]
+                properties:
+                  valido:
+                    type: boolean
+                    example: false
+
+  /verificar/nota/{token}:
+    servers:
+      - url: /
+        description: Raiz del servidor (sin prefijo /api/v1)
+    get:
+      tags: [Notas]
+      summary: Verificar autenticidad de una nota por QR token
+      description: >
+        Endpoint publico sin autenticacion. El QR del PDF apunta a esta URL.
+        Devuelve 200 con datos si la nota esta EMITIDA; 404 si el token no existe
+        o corresponde a un BORRADOR.
+      security: []
+      parameters:
+        - in: path
+          name: token
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: verification_token generado al crear la nota (uuid v4).
+      responses:
+        "200":
+          description: Nota valida y emitida
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotaVerificacionResponse"
+        "404":
+          description: Token inexistente o nota en estado BORRADOR
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [valido]
+                properties:
+                  valido:
+                    type: boolean
+                    example: false
+
   /public/d/{token}:
     get:
       tags: [Public]
@@ -1454,6 +1906,24 @@ components:
         type: string
         minLength: 8
         maxLength: 120
+    NotaId:
+      in: path
+      name: notaId
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: ID interno de la nota comercial.
+
+    ReciboId:
+      in: path
+      name: reciboId
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: ID interno del recibo de dinero.
+
     PublicToken:
       in: path
       name: token
@@ -2656,3 +3126,389 @@ components:
               type: string
             active:
               type: boolean
+
+    # ── Notas Comerciales ─────────────────────────────────────────────────────
+
+    NotaTipo:
+      type: string
+      enum: [PRESUPUESTO, PEDIDO]
+      description: >
+        Tipo del documento comercial interno.
+        `PRESUPUESTO` imprime "NOTA DE PRESUPUESTO"; `PEDIDO` imprime "NOTA DE PEDIDO".
+
+    NotaEstado:
+      type: string
+      enum: [BORRADOR, EMITIDO]
+      description: >
+        Estado del documento. `BORRADOR` es editable; `EMITIDO` es inmutable y tiene PDF disponible.
+
+    NotaFilaTipo:
+      type: string
+      enum: [CONTEXTO, ITEM, ITEM_SIN_PRECIO]
+      description: >
+        Tipo de fila en la tabla de items del PDF.
+        `CONTEXTO`: fila en negrita sin precio (encabezado de seccion).
+        `ITEM`: fila con cantidad, precio unitario y total calculado.
+        `ITEM_SIN_PRECIO`: fila con descripcion sin precio visible (muestra "—").
+
+    NotaFilaInput:
+      type: object
+      required: [orden, fila_tipo, descripcion]
+      properties:
+        orden:
+          type: integer
+          minimum: 0
+          description: Posicion de la fila (0-based). Define el orden de aparicion en el PDF.
+        fila_tipo:
+          $ref: "#/components/schemas/NotaFilaTipo"
+        descripcion:
+          type: string
+          minLength: 1
+          maxLength: 500
+        cantidad:
+          type: number
+          nullable: true
+          description: Solo requerido para fila_tipo ITEM. Ignorado para CONTEXTO e ITEM_SIN_PRECIO.
+        precio_unitario:
+          type: number
+          minimum: 0
+          nullable: true
+          description: Solo requerido para fila_tipo ITEM. Ignorado para los demas tipos.
+
+    NotaFilaResponse:
+      type: object
+      required: [id, nota_id, orden, fila_tipo, descripcion]
+      properties:
+        id:
+          type: string
+          format: uuid
+        nota_id:
+          type: string
+          format: uuid
+        orden:
+          type: integer
+        fila_tipo:
+          $ref: "#/components/schemas/NotaFilaTipo"
+        descripcion:
+          type: string
+        cantidad:
+          type: number
+          nullable: true
+        precio_unitario:
+          type: number
+          nullable: true
+        precio_total:
+          type: number
+          nullable: true
+          description: >
+            cantidad * precio_unitario, calculado por el backend.
+            Null para filas que no son ITEM.
+
+    NotaRecord:
+      type: object
+      required: [id, facturador_id, tipo, estado, cliente_nombre, verification_token, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        facturador_id:
+          type: string
+          format: uuid
+        tipo:
+          $ref: "#/components/schemas/NotaTipo"
+        numero:
+          type: integer
+          nullable: true
+          description: Numero correlativo asignado al emitir. Null mientras BORRADOR.
+        estado:
+          $ref: "#/components/schemas/NotaEstado"
+        fecha_emision:
+          type: string
+          format: date
+          nullable: true
+          description: Fecha de emision (YYYY-MM-DD). Asignada al emitir; null en BORRADOR.
+        cliente_nombre:
+          type: string
+        cliente_ruc:
+          type: string
+          nullable: true
+        verification_token:
+          type: string
+          format: uuid
+          description: Token publico para el QR. Generado al crear; inmutable.
+        emitido_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    NotaConItems:
+      allOf:
+        - $ref: "#/components/schemas/NotaRecord"
+        - type: object
+          required: [items, total]
+          properties:
+            items:
+              type: array
+              items:
+                $ref: "#/components/schemas/NotaFilaResponse"
+              description: Filas ordenadas por `orden` ASC.
+            total:
+              type: number
+              description: Suma de precio_total de todas las filas ITEM. Calculado por el backend.
+
+    NotaListResponse:
+      type: object
+      required: [items, total]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/NotaRecord"
+        total:
+          type: integer
+          description: Total de notas que cumplen el filtro (sin paginar).
+
+    NotaCreateRequest:
+      type: object
+      required: [tipo, cliente_nombre]
+      properties:
+        tipo:
+          $ref: "#/components/schemas/NotaTipo"
+        cliente_nombre:
+          type: string
+          minLength: 1
+          maxLength: 200
+        cliente_ruc:
+          type: string
+          maxLength: 20
+          nullable: true
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/NotaFilaInput"
+          default: []
+          description: Lista de filas. Puede estar vacia al crear el borrador.
+
+    NotaUpdateRequest:
+      type: object
+      description: Todos los campos son opcionales. Solo se pueden modificar notas en estado BORRADOR.
+      properties:
+        cliente_nombre:
+          type: string
+          minLength: 1
+          maxLength: 200
+        cliente_ruc:
+          type: string
+          maxLength: 20
+          nullable: true
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/NotaFilaInput"
+          description: Si se incluye, reemplaza completamente la lista de items.
+
+    NotaVerificacionResponse:
+      type: object
+      required: [valido]
+      properties:
+        valido:
+          type: boolean
+          example: true
+        tipo:
+          $ref: "#/components/schemas/NotaTipo"
+        numero:
+          type: integer
+          nullable: true
+        fecha_emision:
+          type: string
+          format: date
+          nullable: true
+        cliente_nombre:
+          type: string
+        cliente_ruc:
+          type: string
+          nullable: true
+        emitido_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    ReciboFormaPago:
+      type: string
+      enum: [EFECTIVO, TRANSFERENCIA, CHEQUE, TARJETA_CREDITO, TARJETA_DEBITO, OTRO]
+      description: Forma de pago del recibo.
+
+    ReciboRecord:
+      type: object
+      required:
+        - id
+        - facturador_id
+        - estado
+        - fecha_cobro
+        - pagador_nombre
+        - concepto
+        - importe
+        - forma_pago
+        - verification_token
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        facturador_id:
+          type: string
+          format: uuid
+        numero:
+          type: integer
+          nullable: true
+          description: Numero correlativo. Null mientras el recibo esta en BORRADOR.
+        estado:
+          type: string
+          enum: [BORRADOR, EMITIDO]
+        fecha_cobro:
+          type: string
+          format: date
+        pagador_nombre:
+          type: string
+        pagador_documento_tipo:
+          type: string
+          nullable: true
+        pagador_documento:
+          type: string
+          nullable: true
+        concepto:
+          type: string
+        importe:
+          type: number
+          format: double
+        forma_pago:
+          $ref: "#/components/schemas/ReciboFormaPago"
+        referencia_bancaria:
+          type: string
+          nullable: true
+        factura_id:
+          type: string
+          format: uuid
+          nullable: true
+        factura_numero_display:
+          type: string
+          nullable: true
+        verification_token:
+          type: string
+          format: uuid
+        emitido_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    ReciboListResponse:
+      type: object
+      required: [items, total]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ReciboRecord"
+        total:
+          type: integer
+
+    ReciboCreateRequest:
+      type: object
+      required: [fecha_cobro, pagador_nombre, concepto, importe]
+      properties:
+        fecha_cobro:
+          type: string
+          format: date
+        pagador_nombre:
+          type: string
+          minLength: 1
+        pagador_documento_tipo:
+          type: string
+          nullable: true
+        pagador_documento:
+          type: string
+          nullable: true
+        concepto:
+          type: string
+          minLength: 1
+        importe:
+          type: number
+          format: double
+          exclusiveMinimum: 0
+        forma_pago:
+          $ref: "#/components/schemas/ReciboFormaPago"
+        referencia_bancaria:
+          type: string
+          nullable: true
+
+    ReciboUpdateRequest:
+      type: object
+      description: Todos los campos son opcionales. Solo se pueden modificar recibos en estado BORRADOR.
+      properties:
+        fecha_cobro:
+          type: string
+          format: date
+        pagador_nombre:
+          type: string
+          minLength: 1
+        pagador_documento_tipo:
+          type: string
+          nullable: true
+        pagador_documento:
+          type: string
+          nullable: true
+        concepto:
+          type: string
+          minLength: 1
+        importe:
+          type: number
+          format: double
+          exclusiveMinimum: 0
+        forma_pago:
+          $ref: "#/components/schemas/ReciboFormaPago"
+        referencia_bancaria:
+          type: string
+          nullable: true
+
+    ReciboVerificacionResponse:
+      type: object
+      required: [valido]
+      properties:
+        valido:
+          type: boolean
+          example: true
+        numero:
+          type: integer
+          nullable: true
+        fecha_cobro:
+          type: string
+          format: date
+        pagador_nombre:
+          type: string
+        concepto:
+          type: string
+        importe:
+          type: number
+          format: double
+        forma_pago:
+          $ref: "#/components/schemas/ReciboFormaPago"
+        factura_numero_display:
+          type: string
+          nullable: true
+        emitido_at:
+          type: string
+          format: date-time
+          nullable: true

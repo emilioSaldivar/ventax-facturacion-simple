@@ -55,7 +55,7 @@ function startVersionPolling(): () => void {
 }
 
 type ViewState = "checking-session" | "login" | "loading-context" | "operacion" | "onboarding";
-type OperationView = "status" | "invoice" | "credit-note" | "documents" | "catalog" | "clients";
+type OperationView = "status" | "invoice" | "credit-note" | "documents" | "catalog" | "clients" | "notas" | "recibos";
 type CondicionVenta = "CONTADO" | "CREDITO";
 type TipoTransaccionServicio = 1 | 2 | 3;
 type DocumentoIdentidadTipo = "RUC" | "CI" | "PASAPORTE" | "CEDULA_EXTRANJERA" | "NO_ESPECIFICADO";
@@ -1067,6 +1067,8 @@ function OperationHome({
     { label: "Nueva factura", view: "invoice", disabled: !canEmit, icon: "🧾", group: "primary", featured: true },
     { label: "Agenda / Clientes", view: "clients", icon: "👥", group: "primary" },
     { label: "Documentos", view: "documents", icon: "📂", group: "primary" },
+    { label: "Notas / Presupuestos", view: "notas", icon: "📋", group: "secondary" },
+    { label: "Cobros / Recibos", view: "recibos", icon: "💵", group: "secondary" },
     { label: "Catalogo", view: "catalog", icon: "📦", group: "secondary" },
     { label: "Devolver factura", view: "credit-note", disabled: !canEmit, icon: "↩", group: "secondary" },
     { label: "Informacion y estado", view: "status", icon: "🛡", group: "admin" }
@@ -1197,6 +1199,7 @@ function OperationHome({
           accessToken={accessToken}
           setAccessToken={setAccessToken}
           onBack={() => goTo("invoice")}
+          onGoTo={goTo}
           role={user?.role ?? "OPERADOR_FACTURACION"}
         />
       ) : operationView === "clients" ? (
@@ -1208,6 +1211,10 @@ function OperationHome({
         />
       ) : operationView === "catalog" ? (
         <CatalogView accessToken={accessToken} setAccessToken={setAccessToken} onBack={() => goTo("invoice")} />
+      ) : operationView === "notas" ? (
+        <NotasView accessToken={accessToken} setAccessToken={setAccessToken} onBack={() => goTo("invoice")} />
+      ) : operationView === "recibos" ? (
+        <RecibosView accessToken={accessToken} setAccessToken={setAccessToken} onBack={() => goTo("invoice")} />
       ) : (
         <StatusView
           canEmit={canEmit}
@@ -1313,11 +1320,13 @@ function DocumentsView({
   accessToken,
   setAccessToken,
   onBack,
+  onGoTo,
   role
 }: {
   accessToken: string | null;
   setAccessToken: (token: string | null) => void;
   onBack: () => void;
+  onGoTo?: (view: OperationView) => void;
   role: UserSummary["role"];
 }) {
   const api = useMemo(() => createApiClient(accessToken, setAccessToken), [accessToken, setAccessToken]);
@@ -2072,6 +2081,25 @@ function DocumentsView({
 
               <div className="action-group action-group-secondary">
                 <h4 className="group-title">Acciones sobre esta {getDocumentoNombreLower(selected.tipo)}</h4>
+                {selected.tipo === "FACTURA" && selected.condicion_venta === "CREDITO" ? (
+                  <button
+                    className="secondary-action"
+                    disabled={actionLoading}
+                    onClick={() => {
+                      void (async () => {
+                        try {
+                          await api.request(`/facturas/${selected.id}/recibo`, { method: "POST" });
+                          onGoTo?.("recibos");
+                        } catch {
+                          // error silencioso — el usuario puede ir manualmente a Cobros
+                        }
+                      })();
+                    }}
+                    type="button"
+                  >
+                    💵 Emitir recibo de cobro
+                  </button>
+                ) : null}
                 <button className="secondary-action" disabled={actionLoading || !canEmitNotaCredito(selected, documents)} onClick={() => void emitSelectedNotaCredito()} type="button">
                   ↩ Crear nota de credito
                 </button>
@@ -4784,7 +4812,9 @@ function formatOperationViewTitle(value: OperationView): string {
     clients: "Agenda clientes",
     "credit-note": "Devolver factura",
     catalog: "Catalogo",
-    documents: "Documentos"
+    documents: "Documentos",
+    notas: "Notas / Presupuestos",
+    recibos: "Cobros / Recibos"
   };
   return labels[value];
 }
@@ -4796,7 +4826,9 @@ function getOperationViewHint(value: OperationView): string {
     clients: "Agenda de contactos",
     "credit-note": "Devolver una factura",
     catalog: "Productos y servicios",
-    documents: "Facturas y notas emitidas"
+    documents: "Facturas y notas emitidas",
+    notas: "Notas de pedido y presupuesto",
+    recibos: "Cobros y recibos de dinero"
   };
   return hints[value];
 }
@@ -5108,6 +5140,795 @@ function formatDocumentoEstadoSimple(value: DocumentoEstado, tipo?: DocumentoRes
 function clearSession(setAccessToken: (token: string | null) => void) {
   localStorage.removeItem(ACCESS_TOKEN_STORAGE_KEY);
   setAccessToken(null);
+}
+
+// ─── Tipos locales del módulo notas ───────────────────────────────────────────
+
+type NotaTipo = "PRESUPUESTO" | "PEDIDO";
+type NotaEstado = "BORRADOR" | "EMITIDO";
+type NotaFilaTipo = "CONTEXTO" | "ITEM" | "ITEM_SIN_PRECIO";
+
+interface NotaFilaInput {
+  orden: number;
+  fila_tipo: NotaFilaTipo;
+  descripcion: string;
+  cantidad?: number | null;
+  precio_unitario?: number | null;
+}
+
+interface NotaRecord {
+  id: string;
+  tipo: NotaTipo;
+  numero: number | null;
+  estado: NotaEstado;
+  fecha_emision: string | null;
+  cliente_nombre: string;
+  cliente_ruc: string | null;
+  created_at: string;
+  total: number;
+  items: Array<{
+    id: string;
+    orden: number;
+    fila_tipo: NotaFilaTipo;
+    descripcion: string;
+    cantidad: number | null;
+    precio_unitario: number | null;
+    precio_total: number | null;
+  }>;
+}
+
+// ─── Componente NotasView ──────────────────────────────────────────────────────
+
+function NotasView({
+  accessToken,
+  setAccessToken,
+  onBack
+}: {
+  accessToken: string | null;
+  setAccessToken: (token: string | null) => void;
+  onBack: () => void;
+}) {
+  const api = useMemo(() => createApiClient(accessToken, setAccessToken), [accessToken, setAccessToken]);
+  type SubView = "list" | "form" | "detail";
+  const [subView, setSubView] = useState<SubView>("list");
+  const [notas, setNotas] = useState<NotaRecord[]>([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+  const [selectedNota, setSelectedNota] = useState<NotaRecord | null>(null);
+  const [filtroTipo, setFiltroTipo] = useState<NotaTipo | "ALL">("ALL");
+  const [deleteTarget, setDeleteTarget] = useState<NotaRecord | null>(null);
+
+  // Formulario
+  const [formTipo, setFormTipo] = useState<NotaTipo>("PRESUPUESTO");
+  const [formClienteNombre, setFormClienteNombre] = useState("");
+  const [formClienteRuc, setFormClienteRuc] = useState("");
+  const [formItems, setFormItems] = useState<NotaFilaInput[]>([]);
+  const [editingId, setEditingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (subView === "list") void loadNotas();
+  }, [subView, filtroTipo]);
+
+  async function loadNotas() {
+    setLoading(true);
+    setError(null);
+    try {
+      const params = new URLSearchParams({ limit: "50", offset: "0" });
+      if (filtroTipo !== "ALL") params.set("tipo", filtroTipo);
+      const result = await api.get<{ items: NotaRecord[]; total: number }>(`/notas?${params.toString()}`);
+      setNotas(result.items);
+      setTotal(result.total);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo cargar las notas.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function openCreate() {
+    setEditingId(null);
+    setFormTipo("PRESUPUESTO");
+    setFormClienteNombre("");
+    setFormClienteRuc("");
+    setFormItems([]);
+    setError(null);
+    setMessage(null);
+    setSubView("form");
+  }
+
+  function openEdit(nota: NotaRecord) {
+    setEditingId(nota.id);
+    setFormTipo(nota.tipo);
+    setFormClienteNombre(nota.cliente_nombre);
+    setFormClienteRuc(nota.cliente_ruc ?? "");
+    setFormItems(nota.items.map(it => ({
+      orden: it.orden,
+      fila_tipo: it.fila_tipo,
+      descripcion: it.descripcion,
+      cantidad: it.cantidad,
+      precio_unitario: it.precio_unitario,
+    })));
+    setError(null);
+    setMessage(null);
+    setSubView("form");
+  }
+
+  function addFila(tipo: NotaFilaTipo) {
+    setFormItems(prev => [...prev, { orden: prev.length, fila_tipo: tipo, descripcion: "" }]);
+  }
+
+  function removeFila(idx: number) {
+    setFormItems(prev => prev.filter((_, i) => i !== idx).map((it, i) => ({ ...it, orden: i })));
+  }
+
+  function moveFila(idx: number, dir: -1 | 1) {
+    const next = [...formItems];
+    const target = idx + dir;
+    if (target < 0 || target >= next.length) return;
+    [next[idx], next[target]] = [next[target]!, next[idx]!];
+    setFormItems(next.map((it, i) => ({ ...it, orden: i })));
+  }
+
+  function updateFila(idx: number, patch: Partial<NotaFilaInput>) {
+    setFormItems(prev => prev.map((it, i) => i === idx ? { ...it, ...patch } : it));
+  }
+
+  function calcTotal(): number {
+    return formItems.reduce((acc, it) => {
+      if (it.fila_tipo === "ITEM" && it.cantidad != null && it.precio_unitario != null) {
+        return acc + it.cantidad * it.precio_unitario;
+      }
+      return acc;
+    }, 0);
+  }
+
+  async function saveForm(andEmit: boolean) {
+    if (!formClienteNombre.trim()) {
+      setError("El nombre del cliente es requerido.");
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      const body = {
+        tipo: formTipo,
+        cliente_nombre: formClienteNombre.trim(),
+        cliente_ruc: formClienteRuc.trim() || null,
+        items: formItems.map((it, i) => ({
+          orden: i,
+          fila_tipo: it.fila_tipo,
+          descripcion: it.descripcion,
+          cantidad: it.fila_tipo === "ITEM" ? (it.cantidad ?? null) : null,
+          precio_unitario: it.fila_tipo === "ITEM" ? (it.precio_unitario ?? null) : null,
+        })),
+      };
+
+      let nota: NotaRecord;
+      if (editingId) {
+        nota = await api.request<NotaRecord>(`/notas/${editingId}`, { method: "PATCH", body: JSON.stringify(body) });
+      } else {
+        nota = await api.request<NotaRecord>("/notas", { method: "POST", body: JSON.stringify(body) });
+      }
+
+      if (andEmit) {
+        nota = await api.request<NotaRecord>(`/notas/${nota.id}/emitir`, { method: "POST" });
+        setMessage("Nota emitida correctamente.");
+        setSelectedNota(nota);
+        setSubView("detail");
+      } else {
+        setMessage("Borrador guardado.");
+        setSelectedNota(nota);
+        setSubView("list");
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo guardar la nota.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function emitirNota(nota: NotaRecord) {
+    setSaving(true);
+    setError(null);
+    try {
+      const emitida = await api.request<NotaRecord>(`/notas/${nota.id}/emitir`, { method: "POST" });
+      setSelectedNota(emitida);
+      setSubView("detail");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo emitir la nota.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function deleteNota() {
+    if (!deleteTarget) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await api.request(`/notas/${deleteTarget.id}`, { method: "DELETE" });
+      setDeleteTarget(null);
+      setMessage("Nota eliminada.");
+      void loadNotas();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo eliminar la nota.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function openPdf(nota: NotaRecord) {
+    void (async () => {
+      try {
+        const token = accessToken;
+        const response = await fetch(`/api/v1/notas/${nota.id}/pdf`, {
+          headers: { Authorization: `Bearer ${token ?? ""}` },
+        });
+        if (!response.ok) throw new Error("No se pudo generar el PDF.");
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        window.open(url, "_blank");
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Error al abrir el PDF.");
+      }
+    })();
+  }
+
+  // ── Sub-vista: detalle post-emisión ──
+
+  if (subView === "detail" && selectedNota) {
+    const nroStr = selectedNota.numero != null ? String(selectedNota.numero).padStart(7, "0") : "-------";
+    const tipoLabel = selectedNota.tipo === "PRESUPUESTO" ? "Presupuesto" : "Pedido";
+    return (
+      <div className="view-shell">
+        <div className="view-header">
+          <button className="back-action" onClick={() => { setSubView("list"); setMessage(null); }} type="button">← Volver</button>
+          <h1>{tipoLabel} emitido</h1>
+        </div>
+        <div className="view-body">
+          {message ? <p className="success-banner">{message}</p> : null}
+          <div className="detail-card">
+            <div className="detail-row"><span>Numero</span><strong>{nroStr}</strong></div>
+            <div className="detail-row"><span>Tipo</span><span>{tipoLabel}</span></div>
+            <div className="detail-row"><span>Fecha</span><span>{selectedNota.fecha_emision ?? "—"}</span></div>
+            <div className="detail-row"><span>Cliente</span><span>{selectedNota.cliente_nombre}</span></div>
+            {selectedNota.cliente_ruc ? <div className="detail-row"><span>RUC/CI</span><span>{selectedNota.cliente_ruc}</span></div> : null}
+            <div className="detail-row"><span>Total</span><strong>Gs. {selectedNota.total.toLocaleString("es-PY")}</strong></div>
+          </div>
+          <div className="action-row" style={{ marginTop: "16px", gap: "8px", display: "flex" }}>
+            <button className="primary-action" onClick={() => openPdf(selectedNota)} type="button">Descargar PDF</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Sub-vista: formulario ──
+
+  if (subView === "form") {
+    const totalCalc = calcTotal();
+    return (
+      <div className="view-shell">
+        <div className="view-header">
+          <button className="back-action" onClick={() => setSubView("list")} type="button">← Volver</button>
+          <h1>{editingId ? "Editar nota" : "Nueva nota"}</h1>
+        </div>
+        <div className="view-body">
+          {error ? <p className="error-banner">{error}</p> : null}
+          <div className="form-group">
+            <label className="field-label">Tipo</label>
+            <select className="select-field" value={formTipo} onChange={e => setFormTipo(e.target.value as NotaTipo)}>
+              <option value="PRESUPUESTO">Presupuesto</option>
+              <option value="PEDIDO">Pedido</option>
+            </select>
+          </div>
+          <div className="form-group">
+            <label className="field-label">Cliente *</label>
+            <input className="text-field" value={formClienteNombre} onChange={e => setFormClienteNombre(e.target.value)} placeholder="Nombre del cliente" />
+          </div>
+          <div className="form-group">
+            <label className="field-label">RUC / CI</label>
+            <input className="text-field" value={formClienteRuc} onChange={e => setFormClienteRuc(e.target.value)} placeholder="Opcional" />
+          </div>
+
+          <div style={{ marginTop: "16px" }}>
+            <p className="eyebrow">Items</p>
+            {formItems.length === 0 ? (
+              <p className="muted" style={{ padding: "12px 0" }}>Sin items. Agrega filas usando los botones de abajo.</p>
+            ) : (
+              <div className="notas-items-list">
+                {formItems.map((it, idx) => (
+                  <div key={idx} className={`nota-fila nota-fila-${it.fila_tipo.toLowerCase().replace("_", "-")}`}>
+                    <div className="nota-fila-controls">
+                      <button type="button" className="ghost-action compact" onClick={() => moveFila(idx, -1)} disabled={idx === 0}>↑</button>
+                      <button type="button" className="ghost-action compact" onClick={() => moveFila(idx, 1)} disabled={idx === formItems.length - 1}>↓</button>
+                      <span className="nota-fila-tipo-badge">{it.fila_tipo === "CONTEXTO" ? "Ctx" : it.fila_tipo === "ITEM" ? "Item" : "S/P"}</span>
+                    </div>
+                    <div className="nota-fila-desc">
+                      <textarea
+                        className="text-field"
+                        rows={2}
+                        value={it.descripcion}
+                        onChange={e => updateFila(idx, { descripcion: e.target.value })}
+                        placeholder="Descripcion"
+                      />
+                    </div>
+                    {it.fila_tipo === "ITEM" ? (
+                      <div className="nota-fila-precio">
+                        <input
+                          type="number"
+                          className="text-field compact"
+                          placeholder="Cant."
+                          value={it.cantidad ?? ""}
+                          onChange={e => updateFila(idx, { cantidad: e.target.value ? Number(e.target.value) : null })}
+                        />
+                        <input
+                          type="number"
+                          className="text-field compact"
+                          placeholder="Precio u."
+                          value={it.precio_unitario ?? ""}
+                          onChange={e => updateFila(idx, { precio_unitario: e.target.value ? Number(e.target.value) : null })}
+                        />
+                        <span className="nota-fila-subtotal">
+                          {it.cantidad != null && it.precio_unitario != null
+                            ? `Gs. ${(it.cantidad * it.precio_unitario).toLocaleString("es-PY")}`
+                            : "—"}
+                        </span>
+                      </div>
+                    ) : null}
+                    <button type="button" className="ghost-action compact danger" onClick={() => removeFila(idx)}>✕</button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="nota-add-fila-row" style={{ display: "flex", gap: "8px", marginTop: "8px" }}>
+              <button type="button" className="ghost-action" onClick={() => addFila("CONTEXTO")}>+ Contexto</button>
+              <button type="button" className="ghost-action" onClick={() => addFila("ITEM")}>+ Item</button>
+              <button type="button" className="ghost-action" onClick={() => addFila("ITEM_SIN_PRECIO")}>+ Item s/precio</button>
+            </div>
+          </div>
+
+          {totalCalc > 0 ? (
+            <div className="nota-total-preview" style={{ textAlign: "right", marginTop: "12px" }}>
+              <span className="muted">Total </span>
+              <strong>Gs. {totalCalc.toLocaleString("es-PY")}</strong>
+            </div>
+          ) : null}
+
+          <div className="action-row" style={{ marginTop: "24px", display: "flex", gap: "8px" }}>
+            <button className="ghost-action" onClick={() => void saveForm(false)} disabled={saving} type="button">
+              {saving ? "Guardando…" : "Guardar borrador"}
+            </button>
+            <button className="primary-action" onClick={() => void saveForm(true)} disabled={saving} type="button">
+              {saving ? "Emitiendo…" : "Guardar y emitir"}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Sub-vista: listado ──
+
+  return (
+    <div className="view-shell">
+      <div className="view-header">
+        <button className="back-action" onClick={onBack} type="button">← Volver</button>
+        <h1>Notas / Presupuestos</h1>
+        <button className="primary-action compact" onClick={openCreate} type="button">+ Nueva nota</button>
+      </div>
+      <div className="view-body">
+        {message ? <p className="success-banner">{message}</p> : null}
+        {error ? <p className="error-banner">{error}</p> : null}
+
+        <div className="filter-chips" style={{ display: "flex", gap: "8px", marginBottom: "12px" }}>
+          {(["ALL", "PRESUPUESTO", "PEDIDO"] as const).map(t => (
+            <button
+              key={t}
+              type="button"
+              className={`chip ${filtroTipo === t ? "active" : ""}`}
+              onClick={() => setFiltroTipo(t)}
+            >
+              {t === "ALL" ? "Todos" : t === "PRESUPUESTO" ? "Presupuesto" : "Pedido"}
+            </button>
+          ))}
+        </div>
+
+        {loading ? <p className="muted">Cargando…</p> : notas.length === 0 ? (
+          <p className="muted">Sin notas. {filtroTipo !== "ALL" ? "Cambia el filtro o " : ""}crea una nueva.</p>
+        ) : (
+          <div className="list-table">
+            {notas.map(nota => {
+              const nroStr = nota.numero != null ? String(nota.numero).padStart(7, "0") : "BORRADOR";
+              const tipoLabel = nota.tipo === "PRESUPUESTO" ? "Presupuesto" : "Pedido";
+              return (
+                <div key={nota.id} className="list-row">
+                  <div className="list-row-main">
+                    <span className={`estado-badge estado-${nota.estado.toLowerCase()}`}>{nota.estado === "EMITIDO" ? "Emitido" : "Borrador"}</span>
+                    <span className="list-row-tipo">{tipoLabel}</span>
+                    <span className="list-row-nro">{nroStr}</span>
+                    <span className="list-row-cliente">{nota.cliente_nombre}</span>
+                  </div>
+                  <div className="list-row-meta">
+                    <span className="muted">{nota.fecha_emision ?? nota.created_at.slice(0, 10)}</span>
+                    {nota.total > 0 ? <strong>Gs. {nota.total.toLocaleString("es-PY")}</strong> : null}
+                  </div>
+                  <div className="list-row-actions">
+                    {nota.estado === "BORRADOR" ? (
+                      <>
+                        <button type="button" className="ghost-action compact" onClick={() => openEdit(nota)}>Editar</button>
+                        <button type="button" className="ghost-action compact" onClick={() => void emitirNota(nota)} disabled={saving}>Emitir</button>
+                        <button type="button" className="ghost-action compact danger" onClick={() => setDeleteTarget(nota)}>Eliminar</button>
+                      </>
+                    ) : (
+                      <>
+                        <button type="button" className="ghost-action compact" onClick={() => { setSelectedNota(nota); setSubView("detail"); }}>Ver</button>
+                        <button type="button" className="ghost-action compact" onClick={() => openPdf(nota)}>PDF</button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+        <p className="muted" style={{ marginTop: "8px", fontSize: "11px" }}>{total} nota(s) en total</p>
+      </div>
+
+      {deleteTarget ? (
+        <div className="modal-scrim" role="dialog" aria-modal="true">
+          <div className="modal-card">
+            <h2>Eliminar nota</h2>
+            <p>¿Eliminar el borrador de {deleteTarget.tipo === "PRESUPUESTO" ? "presupuesto" : "pedido"} para <strong>{deleteTarget.cliente_nombre}</strong>? Esta accion no se puede deshacer.</p>
+            {error ? <p className="error-banner">{error}</p> : null}
+            <div className="modal-actions">
+              <button type="button" className="ghost-action" onClick={() => setDeleteTarget(null)}>Cancelar</button>
+              <button type="button" className="danger-action" onClick={() => void deleteNota()} disabled={saving}>{saving ? "Eliminando…" : "Eliminar"}</button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+// ─── Tipos locales del módulo recibos ────────────────────────────────────────
+
+type ReciboFormaPago = "EFECTIVO" | "TRANSFERENCIA" | "CHEQUE" | "TARJETA_CREDITO" | "TARJETA_DEBITO" | "OTRO";
+
+const FORMAS_PAGO_LABELS: Record<ReciboFormaPago, string> = {
+  EFECTIVO: "Efectivo",
+  TRANSFERENCIA: "Transferencia",
+  CHEQUE: "Cheque",
+  TARJETA_CREDITO: "Tarjeta de Crédito",
+  TARJETA_DEBITO: "Tarjeta de Débito",
+  OTRO: "Otro",
+};
+
+interface ReciboRecord {
+  id: string;
+  numero: number | null;
+  estado: "BORRADOR" | "EMITIDO";
+  fecha_cobro: string;
+  pagador_nombre: string;
+  pagador_documento_tipo: string | null;
+  pagador_documento: string | null;
+  concepto: string;
+  importe: number;
+  forma_pago: ReciboFormaPago;
+  referencia_bancaria: string | null;
+  factura_id: string | null;
+  factura_numero_display: string | null;
+  verification_token: string;
+  emitido_at: string | null;
+  created_at: string;
+}
+
+// ─── Componente RecibosView ───────────────────────────────────────────────────
+
+function RecibosView({
+  accessToken,
+  setAccessToken,
+  onBack,
+}: {
+  accessToken: string | null;
+  setAccessToken: (token: string | null) => void;
+  onBack: () => void;
+}) {
+  const api = useMemo(() => createApiClient(accessToken, setAccessToken), [accessToken, setAccessToken]);
+  const [recibos, setRecibos] = useState<ReciboRecord[]>([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  type SubView = "list" | "form" | "detail";
+  const [subView, setSubView] = useState<SubView>("list");
+  const [selectedRecibo, setSelectedRecibo] = useState<ReciboRecord | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<ReciboRecord | null>(null);
+
+  const [formPagadorNombre, setFormPagadorNombre] = useState("");
+  const [formPagadorDocTipo, setFormPagadorDocTipo] = useState("");
+  const [formPagadorDoc, setFormPagadorDoc] = useState("");
+  const [formConcepto, setFormConcepto] = useState("");
+  const [formImporte, setFormImporte] = useState("");
+  const [formFormaPago, setFormFormaPago] = useState<ReciboFormaPago>("EFECTIVO");
+  const [formFechaCobro, setFormFechaCobro] = useState(() => new Date().toISOString().slice(0, 10));
+  const [formRefBancaria, setFormRefBancaria] = useState("");
+
+  const loadRecibos = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await api.get<{ items: ReciboRecord[]; total: number }>("/recibos?limit=50&offset=0");
+      setRecibos(result.items);
+      setTotal(result.total);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo cargar los recibos.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { void loadRecibos(); }, []);
+
+  const openNew = () => {
+    setEditingId(null);
+    setFormPagadorNombre("");
+    setFormPagadorDocTipo("");
+    setFormPagadorDoc("");
+    setFormConcepto("");
+    setFormImporte("");
+    setFormFormaPago("EFECTIVO");
+    setFormFechaCobro(new Date().toISOString().slice(0, 10));
+    setFormRefBancaria("");
+    setError(null);
+    setSubView("form");
+  };
+
+  const openEdit = (r: ReciboRecord) => {
+    setEditingId(r.id);
+    setFormPagadorNombre(r.pagador_nombre);
+    setFormPagadorDocTipo(r.pagador_documento_tipo ?? "");
+    setFormPagadorDoc(r.pagador_documento ?? "");
+    setFormConcepto(r.concepto);
+    setFormImporte(String(r.importe));
+    setFormFormaPago(r.forma_pago);
+    setFormFechaCobro(r.fecha_cobro);
+    setFormRefBancaria(r.referencia_bancaria ?? "");
+    setError(null);
+    setSubView("form");
+  };
+
+  const saveRecibo = async (emitirDespues?: boolean) => {
+    setSaving(true);
+    setError(null);
+    try {
+      const body = {
+        pagador_nombre: formPagadorNombre.trim(),
+        pagador_documento_tipo: formPagadorDocTipo.trim() || null,
+        pagador_documento: formPagadorDoc.trim() || null,
+        concepto: formConcepto.trim(),
+        importe: Number(formImporte),
+        forma_pago: formFormaPago,
+        fecha_cobro: formFechaCobro,
+        referencia_bancaria: formRefBancaria.trim() || null,
+      };
+      let recibo: ReciboRecord;
+      if (editingId) {
+        recibo = await api.request<ReciboRecord>(`/recibos/${editingId}`, { method: "PATCH", body: JSON.stringify(body) });
+      } else {
+        recibo = await api.request<ReciboRecord>("/recibos", { method: "POST", body: JSON.stringify(body) });
+      }
+      if (emitirDespues) {
+        recibo = await api.request<ReciboRecord>(`/recibos/${recibo.id}/emitir`, { method: "POST" });
+      }
+      setSelectedRecibo(recibo);
+      await loadRecibos();
+      setSubView("detail");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error al guardar.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const emitirRecibo = async (r: ReciboRecord) => {
+    setSaving(true);
+    setError(null);
+    try {
+      if (!confirm(`¿Emitir el recibo para ${r.pagador_nombre}? Esta accion no se puede deshacer.`)) return;
+      const emitido = await api.request<ReciboRecord>(`/recibos/${r.id}/emitir`, { method: "POST" });
+      setSelectedRecibo(emitido);
+      await loadRecibos();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error al emitir.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const openPdf = (r: ReciboRecord) => {
+    const token = accessToken ?? "";
+    window.open(`/api/v1/recibos/${r.id}/pdf?token=${token}`, "_blank");
+  };
+
+  const deleteRecibo = async () => {
+    if (!deleteTarget) return;
+    setSaving(true);
+    try {
+      await api.request(`/recibos/${deleteTarget.id}`, { method: "DELETE" });
+      setDeleteTarget(null);
+      await loadRecibos();
+      setSubView("list");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error al eliminar.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (subView === "form") {
+    return (
+      <div className="module-view">
+        <div className="view-header">
+          <button type="button" className="ghost-action" onClick={() => setSubView("list")}>← Volver</button>
+          <h2>{editingId ? "Editar recibo" : "Nuevo recibo"}</h2>
+        </div>
+        {error ? <p className="error-banner">{error}</p> : null}
+        <div className="form-section">
+          <label>
+            Fecha de cobro
+            <input type="date" value={formFechaCobro} onChange={(e) => setFormFechaCobro(e.target.value)} />
+          </label>
+          <label>
+            Pagador (nombre o razon social) *
+            <input type="text" value={formPagadorNombre} onChange={(e) => setFormPagadorNombre(e.target.value)} placeholder="Juan Perez" />
+          </label>
+          <div style={{ display: "flex", gap: "8px" }}>
+            <label style={{ flex: "0 0 120px" }}>
+              Tipo documento
+              <select value={formPagadorDocTipo} onChange={(e) => setFormPagadorDocTipo(e.target.value)}>
+                <option value="">—</option>
+                <option value="CI">CI</option>
+                <option value="RUC">RUC</option>
+                <option value="PASAPORTE">Pasaporte</option>
+              </select>
+            </label>
+            <label style={{ flex: 1 }}>
+              Numero documento
+              <input type="text" value={formPagadorDoc} onChange={(e) => setFormPagadorDoc(e.target.value)} placeholder="1234567" />
+            </label>
+          </div>
+          <label>
+            Concepto *
+            <input type="text" value={formConcepto} onChange={(e) => setFormConcepto(e.target.value)} placeholder="Pago de servicio mensual" />
+          </label>
+          <label>
+            Importe (Gs.) *
+            <input type="number" min="1" value={formImporte} onChange={(e) => setFormImporte(e.target.value)} placeholder="0" />
+          </label>
+          <label>
+            Forma de pago
+            <select value={formFormaPago} onChange={(e) => setFormFormaPago(e.target.value as ReciboFormaPago)}>
+              {(Object.keys(FORMAS_PAGO_LABELS) as ReciboFormaPago[]).map((fp) => (
+                <option key={fp} value={fp}>{FORMAS_PAGO_LABELS[fp]}</option>
+              ))}
+            </select>
+          </label>
+          {formFormaPago !== "EFECTIVO" ? (
+            <label>
+              Referencia bancaria / numero de cheque
+              <input type="text" value={formRefBancaria} onChange={(e) => setFormRefBancaria(e.target.value)} placeholder="Nro. transferencia, cheque, etc." />
+            </label>
+          ) : null}
+        </div>
+        <div style={{ display: "flex", gap: "8px", marginTop: "16px" }}>
+          <button type="button" className="secondary-action" disabled={saving} onClick={() => void saveRecibo(false)}>
+            {saving ? "Guardando…" : "Guardar borrador"}
+          </button>
+          <button type="button" className="primary-action" disabled={saving} onClick={() => void saveRecibo(true)}>
+            {saving ? "Emitiendo…" : "Guardar y emitir"}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (subView === "detail" && selectedRecibo) {
+    const r = selectedRecibo;
+    return (
+      <div className="module-view">
+        <div className="view-header">
+          <button type="button" className="ghost-action" onClick={() => setSubView("list")}>← Volver</button>
+          <h2>Recibo {r.numero != null ? `N° ${String(r.numero).padStart(7, "0")}` : "(borrador)"}</h2>
+          <span className={r.estado === "EMITIDO" ? "status-pill ready" : "status-pill blocked"}>{r.estado}</span>
+        </div>
+        {error ? <p className="error-banner">{error}</p> : null}
+        <dl className="receipt-summary">
+          <div><dt>Pagador</dt><dd>{r.pagador_nombre}</dd></div>
+          {r.pagador_documento ? <div><dt>{r.pagador_documento_tipo ?? "Doc."}</dt><dd>{r.pagador_documento}</dd></div> : null}
+          <div><dt>Concepto</dt><dd>{r.concepto}</dd></div>
+          <div><dt>Importe</dt><dd>{formatGuaranies(r.importe)}</dd></div>
+          <div><dt>Forma de pago</dt><dd>{FORMAS_PAGO_LABELS[r.forma_pago]}</dd></div>
+          <div><dt>Fecha cobro</dt><dd>{r.fecha_cobro}</dd></div>
+          {r.referencia_bancaria ? <div><dt>Referencia</dt><dd>{r.referencia_bancaria}</dd></div> : null}
+          {r.factura_numero_display ? <div><dt>Factura ref.</dt><dd>{r.factura_numero_display}</dd></div> : null}
+        </dl>
+        <div style={{ display: "flex", gap: "8px", marginTop: "12px", flexWrap: "wrap" }}>
+          {r.estado === "BORRADOR" ? (
+            <>
+              <button type="button" className="secondary-action" onClick={() => openEdit(r)}>Editar</button>
+              <button type="button" className="primary-action" disabled={saving} onClick={() => void emitirRecibo(r)}>
+                {saving ? "Emitiendo…" : "Emitir"}
+              </button>
+              <button type="button" className="danger-action" onClick={() => setDeleteTarget(r)}>Eliminar</button>
+            </>
+          ) : (
+            <button type="button" className="secondary-action" onClick={() => openPdf(r)}>Descargar PDF</button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="module-view">
+      <div className="view-header">
+        <button type="button" className="ghost-action" onClick={onBack}>← Volver</button>
+        <h2>Cobros / Recibos</h2>
+        <button type="button" className="primary-action" onClick={openNew}>+ Nuevo recibo</button>
+      </div>
+      {error ? <p className="error-banner">{error}</p> : null}
+      {loading ? (
+        <p className="muted">Cargando recibos...</p>
+      ) : recibos.length === 0 ? (
+        <p className="muted empty-state">No hay recibos aun. Crea el primero con el boton de arriba.</p>
+      ) : (
+        <div className="notas-list">
+          {recibos.map((r) => (
+            <div key={r.id} className="nota-card">
+              <div className="nota-card-main">
+                <strong>{r.pagador_nombre}</strong>
+                <span className={r.estado === "EMITIDO" ? "status-pill ready" : "status-pill blocked"}>{r.estado}</span>
+              </div>
+              <div className="nota-card-meta">
+                <span>{r.concepto}</span>
+                <span>{formatGuaranies(r.importe)}</span>
+                <span>{FORMAS_PAGO_LABELS[r.forma_pago]}</span>
+                {r.numero != null ? <span>N° {String(r.numero).padStart(7, "0")}</span> : null}
+              </div>
+              <div className="nota-card-actions">
+                <button type="button" className="ghost-action compact" onClick={() => { setSelectedRecibo(r); setSubView("detail"); }}>Ver</button>
+                {r.estado === "EMITIDO" ? (
+                  <button type="button" className="ghost-action compact" onClick={() => openPdf(r)}>PDF</button>
+                ) : null}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      <p className="muted" style={{ marginTop: "8px", fontSize: "11px" }}>{total} recibo(s) en total</p>
+
+      {deleteTarget ? (
+        <div className="modal-scrim" role="dialog" aria-modal="true">
+          <div className="modal-card">
+            <h2>Eliminar recibo</h2>
+            <p>¿Eliminar el borrador de recibo para <strong>{deleteTarget.pagador_nombre}</strong>? Esta accion no se puede deshacer.</p>
+            {error ? <p className="error-banner">{error}</p> : null}
+            <div className="modal-actions">
+              <button type="button" className="ghost-action" onClick={() => setDeleteTarget(null)}>Cancelar</button>
+              <button type="button" className="danger-action" onClick={() => void deleteRecibo()} disabled={saving}>{saving ? "Eliminando…" : "Eliminar"}</button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 createRoot(document.getElementById("root") as HTMLElement).render(
