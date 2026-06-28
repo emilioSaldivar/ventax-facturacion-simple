@@ -948,6 +948,7 @@ function OperationHome({
   const updatePending = useUpdatePending();
   const [invoiceClientePrefill, setInvoiceClientePrefill] = useState<InvoiceClientePrefillRequest | null>(null);
   const invoiceClientePrefillSeqRef = useRef(0);
+  const [invoiceInitialDraft, setInvoiceInitialDraft] = useState<InvoiceInitialDraft | null>(null);
   const [installPromptEvent, setInstallPromptEvent] = useState<BeforeInstallPromptEvent | null>(null);
   const [showInstallHint, setShowInstallHint] = useState(false);
   const [installing, setInstalling] = useState(false);
@@ -1184,9 +1185,10 @@ function OperationHome({
           canEmit={canEmit}
           context={context}
           clientePrefillRequest={invoiceClientePrefill}
+          initialDraft={invoiceInitialDraft}
           readiness={readiness}
           setAccessToken={setAccessToken}
-          onBack={() => goTo("status")}
+          onBack={() => { setInvoiceInitialDraft(null); goTo("status"); }}
         />
       ) : operationView === "credit-note" ? (
         <CreditNoteView
@@ -1212,7 +1214,12 @@ function OperationHome({
       ) : operationView === "catalog" ? (
         <CatalogView accessToken={accessToken} setAccessToken={setAccessToken} onBack={() => goTo("invoice")} />
       ) : operationView === "notas" ? (
-        <NotasView accessToken={accessToken} setAccessToken={setAccessToken} onBack={() => goTo("invoice")} />
+        <NotasView
+          accessToken={accessToken}
+          setAccessToken={setAccessToken}
+          onBack={() => goTo("invoice")}
+          onConvertirEnFactura={(draft) => { setInvoiceInitialDraft(draft); goTo("invoice"); }}
+        />
       ) : operationView === "recibos" ? (
         <RecibosView accessToken={accessToken} setAccessToken={setAccessToken} onBack={() => goTo("invoice")} />
       ) : (
@@ -3228,6 +3235,7 @@ function InvoiceEditor({
   accessToken,
   canEmit,
   clientePrefillRequest,
+  initialDraft,
   context,
   readiness,
   setAccessToken,
@@ -3236,6 +3244,7 @@ function InvoiceEditor({
   accessToken: string | null;
   canEmit: boolean;
   clientePrefillRequest: InvoiceClientePrefillRequest | null;
+  initialDraft?: InvoiceInitialDraft | null;
   context: OperationalContextResponse | null;
   readiness: ReadinessResponse | null;
   setAccessToken: (token: string | null) => void;
@@ -3289,6 +3298,7 @@ function InvoiceEditor({
   const productsSectionRef = useRef<HTMLElement | null>(null);
   const emissionResultRef = useRef<HTMLElement | null>(null);
   const lastAppliedClientePrefillIdRef = useRef<number | null>(null);
+  const initialDraftAppliedRef = useRef(false);
 
   const api = useMemo(() => createApiClient(accessToken, setAccessToken), [accessToken, setAccessToken]);
   const today = useMemo(() => new Date().toLocaleDateString("es-PY"), []);
@@ -3356,6 +3366,31 @@ function InvoiceEditor({
     lastAppliedClientePrefillIdRef.current = clientePrefillRequest.request_id;
     scrollSection(clientSectionRef);
   }, [clientePrefillRequest]);
+
+  useEffect(() => {
+    if (!initialDraft || initialDraftAppliedRef.current) return;
+    initialDraftAppliedRef.current = true;
+
+    setCliente(prev => ({
+      ...prev,
+      razon_social: initialDraft.cliente_nombre,
+      documento: initialDraft.cliente_ruc ?? "",
+      documento_tipo: initialDraft.cliente_ruc ? "RUC" : "RUC",
+    }));
+
+    if (initialDraft.items.length > 0) {
+      setLines(initialDraft.items.map(item => ({
+        id: crypto.randomUUID(),
+        catalogo_item_id: item.catalog_item_id,
+        codigo: "",
+        descripcion: item.descripcion,
+        cantidad: String(item.cantidad),
+        precio_unitario: String(item.precio_unitario),
+        iva_tipo: item.iva_tipo,
+        lockedFromCatalog: item.catalog_item_id != null,
+      })));
+    }
+  }, [initialDraft]);
 
   useEffect(() => {
     if (!activeLineId && lines[0]) {
@@ -5146,6 +5181,8 @@ function clearSession(setAccessToken: (token: string | null) => void) {
 
 type NotaTipo = "PRESUPUESTO" | "PEDIDO";
 type NotaEstado = "BORRADOR" | "EMITIDO";
+type NotaEstadoComercial = "PENDIENTE_RESPUESTA" | "ACEPTADO" | "RECHAZADO";
+type NotaEstadoVisual = "BORRADOR" | "PENDIENTE" | "VENCIDO" | "ACEPTADO" | "RECHAZADO";
 type NotaFilaTipo = "CONTEXTO" | "ITEM" | "ITEM_SIN_PRECIO";
 
 interface NotaFilaDraft {
@@ -5154,6 +5191,8 @@ interface NotaFilaDraft {
   descripcion: string;
   cantidad: string;
   precio_unitario: string;
+  catalog_item_id: string | null;
+  catalog_iva_tipo: string | null;
 }
 
 interface NotaClienteDraft {
@@ -5168,9 +5207,12 @@ interface NotaListItem {
   tipo: NotaTipo;
   numero: number | null;
   estado: NotaEstado;
+  estado_comercial: NotaEstadoComercial | null;
   fecha_emision: string | null;
+  valido_hasta: string | null;
   cliente_nombre: string;
   cliente_ruc: string | null;
+  observaciones: string | null;
   created_at: string;
   total?: number;
   verification_token?: string;
@@ -5185,12 +5227,45 @@ interface NotaConItems extends NotaListItem {
     cantidad: number | null;
     precio_unitario: number | null;
     precio_total: number | null;
+    catalog_item_id: string | null;
+    catalog_iva_tipo: string | null;
   }>;
   total: number;
 }
 
+interface InvoiceInitialDraft {
+  cliente_nombre: string;
+  cliente_ruc: string | null;
+  items: Array<{
+    descripcion: string;
+    cantidad: number;
+    precio_unitario: number;
+    iva_tipo: TipoIva;
+    catalog_item_id: string | null;
+  }>;
+}
+
+function calcularEstadoVisualNota(nota: Pick<NotaListItem, "estado" | "estado_comercial" | "valido_hasta">): NotaEstadoVisual {
+  if (nota.estado === "BORRADOR") return "BORRADOR";
+  if (nota.estado_comercial === "ACEPTADO") return "ACEPTADO";
+  if (nota.estado_comercial === "RECHAZADO") return "RECHAZADO";
+  if (nota.valido_hasta) {
+    const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
+    if (new Date(nota.valido_hasta) < hoy) return "VENCIDO";
+  }
+  return "PENDIENTE";
+}
+
+const ESTADO_VISUAL_LABEL: Record<NotaEstadoVisual, string> = {
+  BORRADOR: "Borrador", PENDIENTE: "Pendiente", VENCIDO: "Vencido", ACEPTADO: "Aceptado", RECHAZADO: "Rechazado",
+};
+const ESTADO_VISUAL_CLASS: Record<NotaEstadoVisual, string> = {
+  BORRADOR: "status-pill draft", PENDIENTE: "status-pill pending", VENCIDO: "status-pill vencido",
+  ACEPTADO: "status-pill ready", RECHAZADO: "status-pill rechazado",
+};
+
 function createNotaFila(tipo: NotaFilaTipo): NotaFilaDraft {
-  return { _id: crypto.randomUUID(), fila_tipo: tipo, descripcion: "", cantidad: "1", precio_unitario: "" };
+  return { _id: crypto.randomUUID(), fila_tipo: tipo, descripcion: "", cantidad: "1", precio_unitario: "", catalog_item_id: null, catalog_iva_tipo: null };
 }
 
 // ─── Componente NotasView ──────────────────────────────────────────────────────
@@ -5198,11 +5273,13 @@ function createNotaFila(tipo: NotaFilaTipo): NotaFilaDraft {
 function NotasView({
   accessToken,
   setAccessToken,
-  onBack
+  onBack,
+  onConvertirEnFactura,
 }: {
   accessToken: string | null;
   setAccessToken: (token: string | null) => void;
   onBack: () => void;
+  onConvertirEnFactura: (draft: InvoiceInitialDraft) => void;
 }) {
   const api = useMemo(() => createApiClient(accessToken, setAccessToken), [accessToken, setAccessToken]);
   type SubView = "list" | "form" | "detail";
@@ -5212,14 +5289,20 @@ function NotasView({
   const [notas, setNotas] = useState<NotaListItem[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(false);
-  const [filtroTipo, setFiltroTipo] = useState<NotaTipo | "ALL">("ALL");
+  const [filtroTipo, setFiltroTipo] = useState<NotaTipo>("PRESUPUESTO");
+  const [busqueda, setBusqueda] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<NotaListItem | null>(null);
   const [selectedNota, setSelectedNota] = useState<NotaListItem | null>(null);
+  const [selectedNotaFull, setSelectedNotaFull] = useState<NotaConItems | null>(null);
+  const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
 
   // Formulario — general
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formTipo, setFormTipo] = useState<NotaTipo>("PRESUPUESTO");
+  const [formValidoHasta, setFormValidoHasta] = useState("");
+  const [formObservaciones, setFormObservaciones] = useState("");
   const [saving, setSaving] = useState(false);
+  const [estadoComercialLoading, setEstadoComercialLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -5256,6 +5339,14 @@ function NotasView({
   useEffect(() => {
     if (subView === "list") void loadNotas();
   }, [subView, filtroTipo]);
+
+  // Cerrar menu de tarjeta al hacer click fuera
+  useEffect(() => {
+    if (!menuOpenId) return;
+    const handler = () => setMenuOpenId(null);
+    window.addEventListener("click", handler);
+    return () => window.removeEventListener("click", handler);
+  }, [menuOpenId]);
 
   // Búsqueda de agenda al tipear documento
   useEffect(() => {
@@ -5294,19 +5385,20 @@ function NotasView({
     setLoading(true);
     setError(null);
     try {
-      const p = new URLSearchParams({ limit: "50", offset: "0" });
-      if (filtroTipo !== "ALL") p.set("tipo", filtroTipo);
+      const p = new URLSearchParams({ limit: "100", offset: "0", tipo: filtroTipo });
       const r = await api.get<{ items: NotaListItem[]; total: number }>(`/notas?${p.toString()}`);
       setNotas(r.items);
       setTotalCount(r.total);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "No se pudo cargar las notas.");
+      setError(e instanceof Error ? e.message : "No se pudo cargar.");
     } finally { setLoading(false); }
   }
 
   function resetForm() {
     setEditingId(null);
-    setFormTipo("PRESUPUESTO");
+    setFormTipo(filtroTipo);
+    setFormValidoHasta("");
+    setFormObservaciones("");
     setCliente({ documento_tipo: "RUC", documento: "", nombre: "", cliente_id: null });
     setClienteMessage(null);
     setClienteSuggestions([]);
@@ -5336,6 +5428,8 @@ function NotasView({
       const full = await api.get<NotaConItems>(`/notas/${nota.id}`);
       setEditingId(full.id);
       setFormTipo(full.tipo);
+      setFormValidoHasta(full.valido_hasta ?? "");
+      setFormObservaciones(full.observaciones ?? "");
       setCliente({ documento_tipo: "RUC", documento: full.cliente_ruc ?? "", nombre: full.cliente_nombre, cliente_id: null });
       setFormFilas(full.items.map(it => ({
         _id: crypto.randomUUID(),
@@ -5343,11 +5437,68 @@ function NotasView({
         descripcion: it.descripcion,
         cantidad: it.cantidad != null ? String(it.cantidad) : "1",
         precio_unitario: it.precio_unitario != null ? String(it.precio_unitario) : "",
+        catalog_item_id: it.catalog_item_id,
+        catalog_iva_tipo: it.catalog_iva_tipo,
       })));
       setSubView("form");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "No se pudo cargar la nota.");
+      setError(e instanceof Error ? e.message : "No se pudo cargar.");
     } finally { setSaving(false); }
+  }
+
+  async function openDetail(nota: NotaListItem) {
+    setSelectedNota(nota);
+    setSelectedNotaFull(null);
+    setNotaPublicUrl(nota.verification_token ? `${window.location.origin}/verificar/nota/${nota.verification_token}` : null);
+    setDeliveryMessage(null);
+    setWhatsappPhone("");
+    setSubView("detail");
+    try {
+      const full = await api.get<NotaConItems>(`/notas/${nota.id}`);
+      setSelectedNotaFull(full);
+      setSelectedNota(full);
+    } catch { /* usar datos del listado si falla */ }
+  }
+
+  async function handleDuplicar(nota: NotaListItem) {
+    try {
+      const nuevo = await api.request<NotaListItem>(`/notas/${nota.id}/duplicar`, { method: "POST" });
+      setMessage(`Borrador creado a partir de ${nota.tipo === "PRESUPUESTO" ? "presupuesto" : "pedido"} N° ${String(nota.numero ?? "").padStart(7, "0")}.`);
+      void openEdit(nuevo);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "No se pudo duplicar.");
+    }
+  }
+
+  async function handleEstadoComercial(id: string, estado: NotaEstadoComercial) {
+    setEstadoComercialLoading(true);
+    try {
+      const updated = await api.request<NotaListItem>(`/notas/${id}/estado-comercial`, {
+        method: "PATCH",
+        body: JSON.stringify({ estado_comercial: estado }),
+      });
+      setSelectedNota(updated);
+      setNotas(prev => prev.map(n => n.id === id ? updated : n));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "No se pudo actualizar el estado.");
+    } finally { setEstadoComercialLoading(false); }
+  }
+
+  function handleConvertirEnFactura(nota: NotaConItems) {
+    const items = nota.items
+      .filter(f => f.fila_tipo === "ITEM" && f.precio_unitario != null && f.precio_unitario > 0)
+      .map(f => ({
+        descripcion: f.descripcion,
+        cantidad: f.cantidad ?? 1,
+        precio_unitario: f.precio_unitario!,
+        iva_tipo: (f.catalog_iva_tipo ?? "IVA_10") as TipoIva,
+        catalog_item_id: f.catalog_item_id,
+      }));
+    onConvertirEnFactura({
+      cliente_nombre: nota.cliente_nombre,
+      cliente_ruc: nota.cliente_ruc,
+      items,
+    });
   }
 
   async function tryAutocompleteDnit() {
@@ -5419,7 +5570,7 @@ function NotasView({
   }
 
   function applyCatalogItem(filaId: string, item: CatalogoItem) {
-    updateFila(filaId, { descripcion: item.descripcion, precio_unitario: String(item.precio_unitario) });
+    updateFila(filaId, { descripcion: item.descripcion, precio_unitario: String(item.precio_unitario), catalog_item_id: item.id, catalog_iva_tipo: item.iva_tipo });
     setCatalogSuggestions(c => ({ ...c, [filaId]: [] }));
     setCatalogMessage(c => ({ ...c, [filaId]: "Precio pre-llenado del catálogo (editable)." }));
   }
@@ -5466,12 +5617,15 @@ function NotasView({
         tipo: formTipo,
         cliente_nombre: cliente.nombre.trim(),
         cliente_ruc: cliente.documento.trim() || null,
+        valido_hasta: formValidoHasta || null,
+        observaciones: formObservaciones.trim() || null,
         items: formFilas.map((f, i) => ({
           orden: i + 1,
           fila_tipo: f.fila_tipo,
           descripcion: f.descripcion,
           cantidad: f.fila_tipo === "ITEM" ? (Number(f.cantidad) || null) : null,
           precio_unitario: f.fila_tipo === "ITEM" ? (Number(f.precio_unitario) || null) : null,
+          catalog_item_id: f.catalog_item_id ?? null,
         })),
       };
       let nota: NotaListItem = editingId
@@ -5483,13 +5637,7 @@ function NotasView({
         setNotaPublicUrl(token ? `${window.location.origin}/verificar/nota/${token}` : null);
         setWhatsappPhone("");
         setDeliveryMessage(null);
-        setSelectedNota(nota);
-        setSubView("detail");
-        window.setTimeout(() => {
-          const el = emissionResultRef.current;
-          if (el) { el.scrollIntoView({ behavior: "smooth", block: "start" }); return; }
-          window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
-        }, 220);
+        void openDetail(nota);
       } else {
         setMessage("Borrador guardado.");
         setSubView("list");
@@ -5506,7 +5654,7 @@ function NotasView({
     try {
       await api.request(`/notas/${deleteTarget.id}`, { method: "DELETE" });
       setDeleteTarget(null);
-      setMessage("Nota eliminada.");
+      setMessage(`${filtroTipo === "PRESUPUESTO" ? "Presupuesto" : "Pedido"} eliminado.`);
       void loadNotas();
     } catch (e) {
       setError(e instanceof Error ? e.message : "No se pudo eliminar.");
@@ -5528,29 +5676,24 @@ function NotasView({
   if (subView === "detail" && selectedNota) {
     const nroStr = selectedNota.numero != null ? String(selectedNota.numero).padStart(7, "0") : "-------";
     const tipoLabel = selectedNota.tipo === "PRESUPUESTO" ? "Presupuesto" : "Pedido";
+    const estadoVisual = calcularEstadoVisualNota(selectedNota);
+    const notaFull = selectedNotaFull;
+    const itemsConcepto = notaFull ? notaFull.items.filter(f => f.fila_tipo === "ITEM") : [];
+    const puedeConvertir = selectedNota.estado === "EMITIDO" && selectedNota.estado_comercial !== "RECHAZADO";
+    const puedeMarcarEstado = selectedNota.estado === "EMITIDO";
 
     async function copyNotaLink() {
       if (!notaPublicUrl) return;
-      try {
-        await navigator.clipboard.writeText(notaPublicUrl);
-        setDeliveryMessage("Enlace copiado.");
-      } catch {
-        setDeliveryMessage(notaPublicUrl);
-      }
+      try { await navigator.clipboard.writeText(notaPublicUrl); setDeliveryMessage("Enlace copiado."); }
+      catch { setDeliveryMessage(notaPublicUrl); }
     }
-
     async function shareNotaLink() {
       if (!notaPublicUrl) return;
       try {
-        if (navigator.share) {
-          await navigator.share({ title: `${tipoLabel} Ventax`, url: notaPublicUrl });
-          return;
-        }
+        if (navigator.share) { await navigator.share({ title: `${tipoLabel} Ventax`, url: notaPublicUrl }); return; }
         await navigator.clipboard.writeText(notaPublicUrl);
         setDeliveryMessage("Enlace copiado.");
-      } catch {
-        setDeliveryMessage(notaPublicUrl);
-      }
+      } catch { setDeliveryMessage(notaPublicUrl); }
     }
 
     return (
@@ -5560,55 +5703,127 @@ function NotasView({
             <p className="eyebrow">{tipoLabel}</p>
             <h2 id="nota-detail-title">{tipoLabel} N° {nroStr}</h2>
           </div>
-          <button className="ghost-action" onClick={() => { setSubView("list"); setMessage(null); setNotaPublicUrl(null); }} type="button">Volver</button>
+          <button className="ghost-action" onClick={() => { setSubView("list"); setMessage(null); setNotaPublicUrl(null); setSelectedNotaFull(null); }} type="button">Volver</button>
         </div>
 
-        <section className="emission-result" ref={emissionResultRef} aria-live="polite">
-          <div className="receipt-heading">
-            <div>
-              <p className="eyebrow">{tipoLabel}</p>
-              <h3>{tipoLabel} emitido</h3>
-              <p className="muted">Número {nroStr}</p>
-            </div>
-            <span className="status-pill ready">Emitido</span>
-          </div>
+        {error ? <p className="inline-error" role="alert">{error}</p> : null}
 
-          <div className="receipt-summary">
-            <div><dt>Número</dt><dd><strong>{nroStr}</strong></dd></div>
-            <div><dt>Fecha</dt><dd>{selectedNota.fecha_emision ?? "—"}</dd></div>
+        {/* Resumen */}
+        <section className="nota-detail-resumen">
+          <div className="nota-detail-resumen-header">
+            <span className={ESTADO_VISUAL_CLASS[estadoVisual]}>{ESTADO_VISUAL_LABEL[estadoVisual]}</span>
+          </div>
+          <dl className="receipt-summary">
+            {(selectedNota.total ?? 0) > 0 ? <div><dt>Total</dt><dd><strong>{formatGuaranies(selectedNota.total ?? 0)}</strong></dd></div> : null}
+            <div><dt>Fecha</dt><dd>{selectedNota.fecha_emision ?? "Borrador"}</dd></div>
+            {selectedNota.valido_hasta ? <div><dt>Validez</dt><dd>{selectedNota.valido_hasta}</dd></div> : null}
             <div><dt>Cliente</dt><dd>{selectedNota.cliente_nombre}</dd></div>
             {selectedNota.cliente_ruc ? <div><dt>RUC/CI</dt><dd>{selectedNota.cliente_ruc}</dd></div> : null}
-            {(selectedNota.total ?? 0) > 0 ? <div><dt>Total</dt><dd><strong>{formatGuaranies(selectedNota.total ?? 0)}</strong></dd></div> : null}
-          </div>
-
-          <div className="action-group">
-            <p className="group-title">Compartir documento</p>
-            <div className="delivery-inline-form">
-              <label>
-                📱 WhatsApp
-                <input inputMode="tel" placeholder="Número de celular" value={whatsappPhone} onChange={e => setWhatsappPhone(e.target.value)} />
-              </label>
-            </div>
-            <a
-              className={notaPublicUrl ? "primary-action wide secondary-link-as-button" : "primary-action wide secondary-link-as-button disabled"}
-              href={notaPublicUrl ? buildWhatsAppShareUrl(notaPublicUrl, whatsappPhone) : "#"}
-              rel="noreferrer"
-              target="_blank"
-            >
-              Enviar por WhatsApp
-            </a>
-            <div className="delivery-actions">
-              <button className="secondary-action" disabled={!notaPublicUrl} onClick={() => void shareNotaLink()} type="button">Compartir enlace</button>
-              <button className="secondary-action" disabled={!notaPublicUrl} onClick={() => void copyNotaLink()} type="button">Copiar enlace</button>
-              <button className="secondary-action" onClick={() => openPdf(selectedNota)} type="button">Ver / Descargar PDF</button>
-            </div>
-            {deliveryMessage ? <p className="inline-message">{deliveryMessage}</p> : null}
-          </div>
-
-          <div className="action-group">
-            <button className="primary-action wide" onClick={() => { openCreate(); }} type="button">Nueva nota</button>
-          </div>
+            {itemsConcepto.length > 0 ? <div><dt>Conceptos</dt><dd>{itemsConcepto.length} item{itemsConcepto.length !== 1 ? "s" : ""}</dd></div> : null}
+          </dl>
         </section>
+
+        {/* Conceptos */}
+        {notaFull && notaFull.items.length > 0 ? (
+          <section className="nota-detail-section">
+            <p className="eyebrow">Conceptos presupuestados</p>
+            <div className="nota-detail-items">
+              {notaFull.items.map(it => {
+                if (it.fila_tipo === "CONTEXTO") return (
+                  <div key={it.id} className="nota-fila-contexto"><strong>{it.descripcion}</strong></div>
+                );
+                if (it.fila_tipo === "ITEM_SIN_PRECIO") return (
+                  <div key={it.id} className="nota-fila-item">
+                    <span className="nota-fila-desc">{it.descripcion}</span>
+                    <span className="nota-fila-precio muted">—</span>
+                  </div>
+                );
+                return (
+                  <div key={it.id} className="nota-fila-item">
+                    <span className="nota-fila-desc">{it.descripcion}</span>
+                    <span className="nota-fila-precio">{it.cantidad != null && it.cantidad !== 1 ? `${it.cantidad} × ` : ""}{formatGuaranies(it.precio_total ?? 0)}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        ) : null}
+
+        {/* Observaciones */}
+        {selectedNota.observaciones ? (
+          <section className="nota-detail-section">
+            <p className="eyebrow">Observaciones</p>
+            <p className="nota-observaciones-text">{selectedNota.observaciones}</p>
+          </section>
+        ) : null}
+
+        {/* Estado comercial */}
+        {puedeMarcarEstado ? (
+          <section className="nota-detail-section">
+            <p className="eyebrow">Estado del presupuesto</p>
+            <div className="delivery-actions">
+              <button
+                className={`secondary-action${selectedNota.estado_comercial === "ACEPTADO" ? " active-state-btn" : ""}`}
+                onClick={() => void handleEstadoComercial(selectedNota.id, "ACEPTADO")}
+                disabled={estadoComercialLoading || selectedNota.estado_comercial === "ACEPTADO"}
+                type="button"
+              >Aceptado</button>
+              <button
+                className={`secondary-action${selectedNota.estado_comercial === "RECHAZADO" ? " active-state-btn" : ""}`}
+                onClick={() => void handleEstadoComercial(selectedNota.id, "RECHAZADO")}
+                disabled={estadoComercialLoading || selectedNota.estado_comercial === "RECHAZADO"}
+                type="button"
+              >Rechazado</button>
+              <button
+                className="secondary-action"
+                onClick={() => void handleEstadoComercial(selectedNota.id, "PENDIENTE_RESPUESTA")}
+                disabled={estadoComercialLoading || selectedNota.estado_comercial == null || selectedNota.estado_comercial === "PENDIENTE_RESPUESTA"}
+                type="button"
+              >Pendiente</button>
+            </div>
+          </section>
+        ) : null}
+
+        {/* Convertir en factura */}
+        {puedeConvertir && notaFull ? (
+          <div className="action-group">
+            <button className="primary-action wide" onClick={() => handleConvertirEnFactura(notaFull)} type="button">
+              Convertir en factura
+            </button>
+          </div>
+        ) : null}
+
+        {/* Compartir */}
+        <div className="action-group">
+          <p className="group-title">Compartir</p>
+          <div className="delivery-inline-form">
+            <label>
+              WhatsApp
+              <input inputMode="tel" placeholder="Número de celular" value={whatsappPhone} onChange={e => setWhatsappPhone(e.target.value)} />
+            </label>
+          </div>
+          <a
+            className={notaPublicUrl ? "primary-action wide secondary-link-as-button" : "primary-action wide secondary-link-as-button disabled"}
+            href={notaPublicUrl ? buildWhatsAppShareUrl(notaPublicUrl, whatsappPhone) : "#"}
+            rel="noreferrer"
+            target="_blank"
+          >
+            Enviar por WhatsApp
+          </a>
+          <div className="delivery-actions">
+            <button className="secondary-action" disabled={!notaPublicUrl} onClick={() => void shareNotaLink()} type="button">Compartir enlace</button>
+            <button className="secondary-action" disabled={!notaPublicUrl} onClick={() => void copyNotaLink()} type="button">Copiar enlace</button>
+            <button className="secondary-action" onClick={() => openPdf(selectedNota)} type="button">Ver PDF</button>
+          </div>
+          {deliveryMessage ? <p className="inline-message">{deliveryMessage}</p> : null}
+        </div>
+
+        {/* Nueva nota */}
+        <div className="action-group">
+          <button className="primary-action wide" onClick={openCreate} type="button">
+            {filtroTipo === "PRESUPUESTO" ? "Nuevo presupuesto" : "Nuevo pedido"}
+          </button>
+        </div>
       </section>
     );
   }
@@ -5786,6 +6001,22 @@ function NotasView({
           </div>
         </section>
 
+        {/* Validez y observaciones */}
+        <section className="form-section">
+          <p className="eyebrow">Detalles</p>
+          <div className="field-grid">
+            <label>
+              Válido hasta
+              <input type="date" value={formValidoHasta} onChange={e => setFormValidoHasta(e.target.value)} />
+              <span className="field-hint">Si no se indica, se asignará 30 días desde hoy al emitir.</span>
+            </label>
+            <label>
+              Observaciones
+              <textarea rows={3} placeholder="Condiciones, notas adicionales..." value={formObservaciones} onChange={e => setFormObservaciones(e.target.value)} style={{ resize: "vertical" }} />
+            </label>
+          </div>
+        </section>
+
         {/* Total */}
         <section className="totals-section" aria-live="polite">
           <div className="totals-grid">
@@ -5895,84 +6126,154 @@ function NotasView({
 
   // ── Sub-vista: listado ──
 
-  const tipoLabels: Record<NotaTipo, string> = { PRESUPUESTO: "Presupuesto", PEDIDO: "Pedido" };
+  const notasFiltradas = notas.filter(n => {
+    if (!busqueda.trim()) return true;
+    const q = busqueda.toLowerCase();
+    return n.cliente_nombre.toLowerCase().includes(q) || (n.cliente_ruc ?? "").includes(q) || String(n.numero ?? "").includes(q);
+  });
+
+  // Agrupar por mes
+  const gruposPorMes: Array<{ label: string; notas: NotaListItem[] }> = [];
+  for (const nota of notasFiltradas) {
+    const fecha = nota.fecha_emision ?? nota.created_at.slice(0, 7);
+    const mes = fecha.slice(0, 7);
+    const mesLabel = new Date(mes + "-01").toLocaleString("es-PY", { month: "long", year: "numeric" });
+    const label = nota.estado === "BORRADOR" ? "Borradores" : mesLabel.charAt(0).toUpperCase() + mesLabel.slice(1);
+    const ultimo = gruposPorMes[gruposPorMes.length - 1];
+    if (ultimo && ultimo.label === label) ultimo.notas.push(nota);
+    else gruposPorMes.push({ label, notas: [nota] });
+  }
 
   return (
     <section className="documents-view" aria-labelledby="notas-list-title">
       <div className="editor-heading">
         <div>
           <p className="eyebrow">Documentos comerciales</p>
-          <h2 id="notas-list-title">Notas / Presupuestos</h2>
+          <h2 id="notas-list-title">Presupuestos</h2>
         </div>
         <button className="ghost-action" onClick={onBack} type="button">Volver</button>
       </div>
 
-      <section className="documents-filters">
-        <div className="filter-tabs" role="group" aria-label="Filtro por tipo">
-          {(["ALL", "PRESUPUESTO", "PEDIDO"] as const).map(t => (
-            <button key={t} type="button" className={filtroTipo === t ? "active" : ""} onClick={() => setFiltroTipo(t)}>
-              {t === "ALL" ? "Todos" : tipoLabels[t]}
-            </button>
-          ))}
-        </div>
-        <div className="quick-actions-row compact">
-          <button className="primary-action" onClick={openCreate} type="button">+ Nueva nota</button>
-        </div>
-      </section>
+      {/* Tabs */}
+      <div className="filter-tabs" role="tablist" aria-label="Tipo de documento">
+        {(["PRESUPUESTO", "PEDIDO"] as const).map(t => (
+          <button
+            key={t}
+            type="button"
+            role="tab"
+            aria-selected={filtroTipo === t}
+            className={filtroTipo === t ? "active" : ""}
+            onClick={() => { setFiltroTipo(t); setBusqueda(""); }}
+          >
+            {t === "PRESUPUESTO" ? "Presupuestos" : "Pedidos"}
+          </button>
+        ))}
+      </div>
+
+      {/* Barra de búsqueda + acción */}
+      <div className="list-toolbar">
+        <input
+          className="list-search-input"
+          type="search"
+          placeholder="Buscar por cliente, RUC o número..."
+          value={busqueda}
+          onChange={e => setBusqueda(e.target.value)}
+          aria-label="Buscar"
+        />
+        <button className="primary-action" onClick={openCreate} type="button">
+          + {filtroTipo === "PRESUPUESTO" ? "Nuevo presupuesto" : "Nuevo pedido"}
+        </button>
+      </div>
 
       {message ? <p className="editor-alert ready">{message}</p> : null}
       {error ? <p className="form-error">{error}</p> : null}
 
-      {loading ? <p className="muted" style={{ padding: "16px 0" }}>Cargando…</p> : notas.length === 0 ? (
-        <p className="muted" style={{ padding: "16px 0" }}>Sin notas. {filtroTipo !== "ALL" ? "Cambia el filtro o crea " : "Crea "}una nueva.</p>
+      {loading ? (
+        <p className="muted" style={{ padding: "24px 0" }}>Cargando…</p>
+      ) : notasFiltradas.length === 0 ? (
+        <div className="empty-state-box">
+          <p>{busqueda ? "Sin resultados para esa búsqueda." : `No hay ${filtroTipo === "PRESUPUESTO" ? "presupuestos" : "pedidos"} aún.`}</p>
+          {!busqueda ? <button className="primary-action" onClick={openCreate} type="button">+ {filtroTipo === "PRESUPUESTO" ? "Nuevo presupuesto" : "Nuevo pedido"}</button> : null}
+        </div>
       ) : (
-        <div className="list-table">
-          {notas.map(nota => {
-            const nroStr = nota.numero != null ? String(nota.numero).padStart(7, "0") : "BORRADOR";
-            const tipoLabel = tipoLabels[nota.tipo];
-            return (
-              <div key={nota.id} className="list-row">
-                <div className="list-row-main">
-                  <span className={`estado-badge estado-${nota.estado.toLowerCase()}`}>{nota.estado === "EMITIDO" ? "Emitido" : "Borrador"}</span>
-                  <span className="list-row-tipo">{tipoLabel}</span>
-                  <span className="list-row-nro">{nroStr}</span>
-                  <span className="list-row-cliente">{nota.cliente_nombre}</span>
-                </div>
-                <div className="list-row-meta">
-                  <span className="muted">{nota.fecha_emision ?? nota.created_at.slice(0, 10)}</span>
-                  {(nota.total ?? 0) > 0 ? <strong>{formatGuaranies(nota.total ?? 0)}</strong> : null}
-                </div>
-                <div className="list-row-actions">
-                  {nota.estado === "BORRADOR" ? (
-                    <>
-                      <button type="button" className="ghost-action compact" onClick={() => openEdit(nota)}>Editar</button>
-                      <button type="button" className="ghost-action compact danger" onClick={() => setDeleteTarget(nota)}>Eliminar</button>
-                    </>
-                  ) : (
-                    <>
-                      <button type="button" className="ghost-action compact" onClick={() => {
-                        const token = nota.verification_token;
-                        setNotaPublicUrl(token ? `${window.location.origin}/verificar/nota/${token}` : null);
-                        setDeliveryMessage(null);
-                        setSelectedNota(nota);
-                        setSubView("detail");
-                      }}>Ver</button>
-                      <button type="button" className="ghost-action compact" onClick={() => openPdf(nota)}>PDF</button>
-                    </>
-                  )}
-                </div>
-              </div>
-            );
-          })}
+        <div className="invoice-list-groups">
+          {gruposPorMes.map(grupo => (
+            <div key={grupo.label} className="invoice-list-group">
+              <p className="invoice-list-group-label">{grupo.label}</p>
+              {grupo.notas.map(nota => {
+                const nroStr = nota.numero != null ? String(nota.numero).padStart(7, "0") : "Borrador";
+                const estadoVisual = calcularEstadoVisualNota(nota);
+                const isMenuOpen = menuOpenId === nota.id;
+                return (
+                  <div key={nota.id} className="invoice-card">
+                    <button
+                      className="invoice-card-main"
+                      type="button"
+                      onClick={() => nota.estado === "BORRADOR" ? openEdit(nota) : void openDetail(nota)}
+                    >
+                      <div className="invoice-card-top">
+                        <span className="invoice-card-nro">{nroStr}</span>
+                        <span className={ESTADO_VISUAL_CLASS[estadoVisual]}>{ESTADO_VISUAL_LABEL[estadoVisual]}</span>
+                      </div>
+                      <div className="invoice-card-cliente">{nota.cliente_nombre}</div>
+                      <div className="invoice-card-meta">
+                        <span className="muted">{nota.fecha_emision ?? nota.created_at.slice(0, 10)}</span>
+                        {(nota.total ?? 0) > 0 ? <strong>{formatGuaranies(nota.total ?? 0)}</strong> : null}
+                      </div>
+                    </button>
+                    <div className="invoice-card-menu-wrapper">
+                      <button
+                        className="invoice-card-menu-btn"
+                        type="button"
+                        aria-label="Más opciones"
+                        aria-expanded={isMenuOpen}
+                        onClick={e => { e.stopPropagation(); setMenuOpenId(isMenuOpen ? null : nota.id); }}
+                      >⋯</button>
+                      {isMenuOpen ? (
+                        <div className="invoice-card-menu" role="menu" onClick={e => e.stopPropagation()}>
+                          {nota.estado === "EMITIDO" ? (
+                            <button role="menuitem" type="button" onClick={() => { setMenuOpenId(null); void openDetail(nota); }}>Ver detalle</button>
+                          ) : (
+                            <button role="menuitem" type="button" onClick={() => { setMenuOpenId(null); void openEdit(nota); }}>Editar</button>
+                          )}
+                          {nota.estado === "EMITIDO" && nota.verification_token ? (
+                            <>
+                              <button role="menuitem" type="button" onClick={() => {
+                                setMenuOpenId(null);
+                                const url = `${window.location.origin}/verificar/nota/${nota.verification_token!}`;
+                                void (navigator.share
+                                  ? navigator.share({ title: `${filtroTipo === "PRESUPUESTO" ? "Presupuesto" : "Pedido"} Ventax`, url })
+                                  : navigator.clipboard.writeText(url));
+                              }}>Compartir enlace</button>
+                              <button role="menuitem" type="button" onClick={() => {
+                                setMenuOpenId(null);
+                                const url = `${window.location.origin}/verificar/nota/${nota.verification_token!}`;
+                                const wa = buildWhatsAppShareUrl(url, "");
+                                window.open(wa, "_blank");
+                              }}>Enviar por WhatsApp</button>
+                              <button role="menuitem" type="button" onClick={() => { setMenuOpenId(null); openPdf(nota); }}>Ver PDF</button>
+                            </>
+                          ) : null}
+                          <button role="menuitem" type="button" onClick={() => { setMenuOpenId(null); void handleDuplicar(nota); }}>Duplicar</button>
+                          {nota.estado === "BORRADOR" ? (
+                            <button role="menuitem" type="button" className="menu-danger" onClick={() => { setMenuOpenId(null); setDeleteTarget(nota); }}>Eliminar</button>
+                          ) : null}
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ))}
         </div>
       )}
-      <p className="muted" style={{ marginTop: "8px", fontSize: "11px" }}>{totalCount} nota(s) en total</p>
 
       {deleteTarget ? (
         <div className="modal-scrim" role="dialog" aria-modal="true">
           <div className="modal-card">
-            <h2>Eliminar nota</h2>
-            <p>¿Eliminar el borrador de {tipoLabels[deleteTarget.tipo].toLowerCase()} para <strong>{deleteTarget.cliente_nombre}</strong>? Esta acción no se puede deshacer.</p>
+            <h2>Eliminar {filtroTipo === "PRESUPUESTO" ? "presupuesto" : "pedido"}</h2>
+            <p>¿Eliminar el borrador de <strong>{deleteTarget.cliente_nombre}</strong>? Esta acción no se puede deshacer.</p>
             {error ? <p className="error-banner">{error}</p> : null}
             <div className="modal-actions">
               <button type="button" className="ghost-action" onClick={() => { setDeleteTarget(null); setError(null); }}>Cancelar</button>

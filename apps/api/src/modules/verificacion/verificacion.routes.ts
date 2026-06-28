@@ -25,14 +25,26 @@ verificacionRouter.get(
         return;
       }
 
+      const n = result.nota!;
       res.json({
         valido: true,
-        tipo: result.nota!.tipo,
-        numero: result.nota!.numero,
-        fecha_emision: result.nota!.fecha_emision,
-        cliente_nombre: result.nota!.cliente_nombre,
-        cliente_ruc: result.nota!.cliente_ruc,
-        emitido_at: result.nota!.emitido_at,
+        tipo: n.tipo,
+        numero: n.numero,
+        fecha_emision: n.fecha_emision,
+        valido_hasta: n.valido_hasta,
+        cliente_nombre: n.cliente_nombre,
+        cliente_ruc: n.cliente_ruc,
+        observaciones: n.observaciones,
+        estado_comercial: n.estado_comercial,
+        estado_visual: result.estado_visual,
+        total: n.total,
+        items: n.items.map(it => ({
+          fila_tipo: it.fila_tipo,
+          descripcion: it.descripcion,
+          cantidad: it.cantidad,
+          precio_total: it.precio_total,
+        })),
+        emitido_at: n.emitido_at,
       });
     } catch (error) {
       next(error);

@@ -3,6 +3,8 @@ import { numeroALetras } from "../../shared/utils/numero-letras.js";
 import type {
   NotaConItems,
   NotaCreateInput,
+  NotaEstadoComercial,
+  NotaEstadoVisual,
   NotaListFilters,
   NotaListResponse,
   NotaRecord,
@@ -11,6 +13,19 @@ import type {
 } from "./notas.types.js";
 
 export { numeroALetras };
+
+export function calcularEstadoVisual(nota: NotaRecord): NotaEstadoVisual {
+  if (nota.estado === "BORRADOR") return "BORRADOR";
+  if (nota.estado_comercial === "ACEPTADO") return "ACEPTADO";
+  if (nota.estado_comercial === "RECHAZADO") return "RECHAZADO";
+  if (nota.valido_hasta) {
+    const hoy = new Date();
+    hoy.setHours(0, 0, 0, 0);
+    const vence = new Date(nota.valido_hasta);
+    if (vence < hoy) return "VENCIDO";
+  }
+  return "PENDIENTE";
+}
 
 export async function createNota(
   facturadorId: string,
@@ -74,13 +89,34 @@ export async function deleteNota(
   return repository.softDelete(id, facturadorId);
 }
 
+export async function actualizarEstadoComercial(
+  id: string,
+  facturadorId: string,
+  estado: NotaEstadoComercial,
+  repository: NotasRepository
+): Promise<NotaRecord> {
+  const validos: NotaEstadoComercial[] = ["PENDIENTE_RESPUESTA", "ACEPTADO", "RECHAZADO"];
+  if (!validos.includes(estado)) {
+    throw new HttpError(400, "VALIDATION_ERROR", "Estado comercial no válido.");
+  }
+  return repository.actualizarEstadoComercial(id, facturadorId, estado);
+}
+
+export async function duplicarNota(
+  id: string,
+  facturadorId: string,
+  repository: NotasRepository
+): Promise<NotaRecord> {
+  return repository.duplicar(id, facturadorId);
+}
+
 export async function verificarNota(
   token: string,
   repository: NotasRepository
-): Promise<{ valido: boolean; nota?: NotaRecord }> {
+): Promise<{ valido: boolean; nota?: NotaConItems; estado_visual?: NotaEstadoVisual }> {
   const nota = await repository.findByVerificationToken(token);
   if (!nota || nota.estado !== "EMITIDO") {
     return { valido: false };
   }
-  return { valido: true, nota };
+  return { valido: true, nota, estado_visual: calcularEstadoVisual(nota) };
 }
