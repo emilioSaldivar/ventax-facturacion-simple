@@ -5173,6 +5173,7 @@ interface NotaListItem {
   cliente_ruc: string | null;
   created_at: string;
   total?: number;
+  verification_token?: string;
 }
 
 interface NotaConItems extends NotaListItem {
@@ -5221,7 +5222,12 @@ function NotasView({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
-  const [confirmEmitir, setConfirmEmitir] = useState(false);
+
+  // Post-emisión
+  const [notaPublicUrl, setNotaPublicUrl] = useState<string | null>(null);
+  const [whatsappPhone, setWhatsappPhone] = useState("");
+  const [deliveryMessage, setDeliveryMessage] = useState<string | null>(null);
+  const emissionResultRef = useRef<HTMLElement | null>(null);
 
   // Formulario — cliente
   const [cliente, setCliente] = useState<NotaClienteDraft>({ documento_tipo: "RUC", documento: "", nombre: "", cliente_id: null });
@@ -5313,7 +5319,9 @@ function NotasView({
     setCatalogSearching({});
     setError(null);
     setMessage(null);
-    setConfirmEmitir(false);
+    setNotaPublicUrl(null);
+    setDeliveryMessage(null);
+    setWhatsappPhone("");
   }
 
   function openCreate() {
@@ -5471,16 +5479,24 @@ function NotasView({
         : await api.post<NotaListItem>("/notas", body);
       if (andEmit) {
         nota = await api.request<NotaListItem>(`/notas/${nota.id}/emitir`, { method: "POST" });
-        setMessage("Nota emitida correctamente.");
+        const token = nota.verification_token;
+        setNotaPublicUrl(token ? `${window.location.origin}/verificar/nota/${token}` : null);
+        setWhatsappPhone("");
+        setDeliveryMessage(null);
         setSelectedNota(nota);
         setSubView("detail");
+        window.setTimeout(() => {
+          const el = emissionResultRef.current;
+          if (el) { el.scrollIntoView({ behavior: "smooth", block: "start" }); return; }
+          window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
+        }, 220);
       } else {
         setMessage("Borrador guardado.");
         setSubView("list");
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "No se pudo guardar.");
-    } finally { setSaving(false); setConfirmEmitir(false); }
+    } finally { setSaving(false); }
   }
 
   async function deleteNota() {
@@ -5512,19 +5528,42 @@ function NotasView({
   if (subView === "detail" && selectedNota) {
     const nroStr = selectedNota.numero != null ? String(selectedNota.numero).padStart(7, "0") : "-------";
     const tipoLabel = selectedNota.tipo === "PRESUPUESTO" ? "Presupuesto" : "Pedido";
+
+    async function copyNotaLink() {
+      if (!notaPublicUrl) return;
+      try {
+        await navigator.clipboard.writeText(notaPublicUrl);
+        setDeliveryMessage("Enlace copiado.");
+      } catch {
+        setDeliveryMessage(notaPublicUrl);
+      }
+    }
+
+    async function shareNotaLink() {
+      if (!notaPublicUrl) return;
+      try {
+        if (navigator.share) {
+          await navigator.share({ title: `${tipoLabel} Ventax`, url: notaPublicUrl });
+          return;
+        }
+        await navigator.clipboard.writeText(notaPublicUrl);
+        setDeliveryMessage("Enlace copiado.");
+      } catch {
+        setDeliveryMessage(notaPublicUrl);
+      }
+    }
+
     return (
       <section className="invoice-editor" aria-labelledby="nota-detail-title">
         <div className="editor-heading">
           <div>
-            <p className="eyebrow">{tipoLabel} emitido</p>
+            <p className="eyebrow">{tipoLabel}</p>
             <h2 id="nota-detail-title">{tipoLabel} N° {nroStr}</h2>
           </div>
-          <div className="header-actions">
-            <button className="ghost-action" onClick={() => { setSubView("list"); setMessage(null); }} type="button">Volver</button>
-          </div>
+          <button className="ghost-action" onClick={() => { setSubView("list"); setMessage(null); setNotaPublicUrl(null); }} type="button">Volver</button>
         </div>
-        {message ? <p className="editor-alert ready">{message}</p> : null}
-        <section className="emission-result">
+
+        <section className="emission-result" ref={emissionResultRef} aria-live="polite">
           <div className="receipt-heading">
             <div>
               <p className="eyebrow">{tipoLabel}</p>
@@ -5533,6 +5572,7 @@ function NotasView({
             </div>
             <span className="status-pill ready">Emitido</span>
           </div>
+
           <div className="receipt-summary">
             <div><dt>Número</dt><dd><strong>{nroStr}</strong></dd></div>
             <div><dt>Fecha</dt><dd>{selectedNota.fecha_emision ?? "—"}</dd></div>
@@ -5540,8 +5580,33 @@ function NotasView({
             {selectedNota.cliente_ruc ? <div><dt>RUC/CI</dt><dd>{selectedNota.cliente_ruc}</dd></div> : null}
             {(selectedNota.total ?? 0) > 0 ? <div><dt>Total</dt><dd><strong>{formatGuaranies(selectedNota.total ?? 0)}</strong></dd></div> : null}
           </div>
+
           <div className="action-group">
-            <button className="primary-action wide" onClick={() => openPdf(selectedNota)} type="button">Descargar PDF</button>
+            <p className="group-title">Compartir documento</p>
+            <div className="delivery-inline-form">
+              <label>
+                📱 WhatsApp
+                <input inputMode="tel" placeholder="Número de celular" value={whatsappPhone} onChange={e => setWhatsappPhone(e.target.value)} />
+              </label>
+            </div>
+            <a
+              className={notaPublicUrl ? "primary-action wide secondary-link-as-button" : "primary-action wide secondary-link-as-button disabled"}
+              href={notaPublicUrl ? buildWhatsAppShareUrl(notaPublicUrl, whatsappPhone) : "#"}
+              rel="noreferrer"
+              target="_blank"
+            >
+              Enviar por WhatsApp
+            </a>
+            <div className="delivery-actions">
+              <button className="secondary-action" disabled={!notaPublicUrl} onClick={() => void shareNotaLink()} type="button">Compartir enlace</button>
+              <button className="secondary-action" disabled={!notaPublicUrl} onClick={() => void copyNotaLink()} type="button">Copiar enlace</button>
+              <button className="secondary-action" onClick={() => openPdf(selectedNota)} type="button">Ver / Descargar PDF</button>
+            </div>
+            {deliveryMessage ? <p className="inline-message">{deliveryMessage}</p> : null}
+          </div>
+
+          <div className="action-group">
+            <button className="primary-action wide" onClick={() => { openCreate(); }} type="button">Nueva nota</button>
           </div>
         </section>
       </section>
@@ -5565,9 +5630,7 @@ function NotasView({
             <p className="eyebrow">{editingId ? "Editar" : "Nueva"} nota</p>
             <h2 id="nota-form-title">{tipoLabel}{cliente.nombre.trim() ? ` · ${cliente.nombre.trim()}` : ""}</h2>
           </div>
-          <div className="header-actions">
-            <button className="ghost-action" onClick={() => setSubView("list")} type="button">Volver</button>
-          </div>
+          <button className="ghost-action" onClick={() => setSubView("list")} type="button">Volver</button>
         </div>
 
         {/* Tipo de documento */}
@@ -5736,8 +5799,8 @@ function NotasView({
             <button className="secondary-action wide" onClick={() => void saveForm(false)} disabled={saving} type="button">
               {saving ? "Guardando…" : "Guardar borrador"}
             </button>
-            <button className="primary-action wide" onClick={() => setConfirmEmitir(true)} disabled={!canEmitir} type="button">
-              Emitir
+            <button className="primary-action wide" onClick={() => void saveForm(true)} disabled={!canEmitir || saving} type="button">
+              {saving ? "Emitiendo…" : "Emitir"}
             </button>
           </div>
         </section>
@@ -5826,20 +5889,6 @@ function NotasView({
           </div>
         ) : null}
 
-        {/* Modal confirmar emisión */}
-        {confirmEmitir ? (
-          <div className="modal-scrim" role="dialog" aria-modal="true">
-            <div className="modal-card">
-              <h2>Emitir {formTipo === "PRESUPUESTO" ? "presupuesto" : "pedido"}</h2>
-              <p>Una vez emitido el documento es inmutable y se asigna el número correlativo. ¿Confirmar?</p>
-              {error ? <p className="error-banner">{error}</p> : null}
-              <div className="modal-actions">
-                <button type="button" className="ghost-action" onClick={() => { setConfirmEmitir(false); setError(null); }} disabled={saving}>Cancelar</button>
-                <button type="button" className="primary-action" onClick={() => void saveForm(true)} disabled={saving}>{saving ? "Emitiendo…" : "Emitir"}</button>
-              </div>
-            </div>
-          </div>
-        ) : null}
       </section>
     );
   }
@@ -5849,16 +5898,16 @@ function NotasView({
   const tipoLabels: Record<NotaTipo, string> = { PRESUPUESTO: "Presupuesto", PEDIDO: "Pedido" };
 
   return (
-    <div className="view-shell">
-      <div className="view-header">
-        <button className="back-action" onClick={onBack} type="button">← Volver</button>
-        <h1>Notas / Presupuestos</h1>
-        <button className="primary-action compact" onClick={openCreate} type="button">+ Nueva nota</button>
+    <section className="documents-view" aria-labelledby="notas-list-title">
+      <div className="editor-heading">
+        <div>
+          <p className="eyebrow">Documentos comerciales</p>
+          <h2 id="notas-list-title">Notas / Presupuestos</h2>
+        </div>
+        <button className="ghost-action" onClick={onBack} type="button">Volver</button>
       </div>
-      <div className="view-body">
-        {message ? <p className="success-banner">{message}</p> : null}
-        {error ? <p className="error-banner">{error}</p> : null}
 
+      <section className="documents-filters">
         <div className="filter-tabs" role="group" aria-label="Filtro por tipo">
           {(["ALL", "PRESUPUESTO", "PEDIDO"] as const).map(t => (
             <button key={t} type="button" className={filtroTipo === t ? "active" : ""} onClick={() => setFiltroTipo(t)}>
@@ -5866,46 +5915,58 @@ function NotasView({
             </button>
           ))}
         </div>
+        <div className="quick-actions-row compact">
+          <button className="primary-action" onClick={openCreate} type="button">+ Nueva nota</button>
+        </div>
+      </section>
 
-        {loading ? <p className="muted">Cargando…</p> : notas.length === 0 ? (
-          <p className="muted">Sin notas. {filtroTipo !== "ALL" ? "Cambia el filtro o " : ""}Crea una nueva.</p>
-        ) : (
-          <div className="list-table">
-            {notas.map(nota => {
-              const nroStr = nota.numero != null ? String(nota.numero).padStart(7, "0") : "BORRADOR";
-              const tipoLabel = tipoLabels[nota.tipo];
-              return (
-                <div key={nota.id} className="list-row">
-                  <div className="list-row-main">
-                    <span className={`estado-badge estado-${nota.estado.toLowerCase()}`}>{nota.estado === "EMITIDO" ? "Emitido" : "Borrador"}</span>
-                    <span className="list-row-tipo">{tipoLabel}</span>
-                    <span className="list-row-nro">{nroStr}</span>
-                    <span className="list-row-cliente">{nota.cliente_nombre}</span>
-                  </div>
-                  <div className="list-row-meta">
-                    <span className="muted">{nota.fecha_emision ?? nota.created_at.slice(0, 10)}</span>
-                    {(nota.total ?? 0) > 0 ? <strong>{formatGuaranies(nota.total ?? 0)}</strong> : null}
-                  </div>
-                  <div className="list-row-actions">
-                    {nota.estado === "BORRADOR" ? (
-                      <>
-                        <button type="button" className="ghost-action compact" onClick={() => openEdit(nota)}>Editar</button>
-                        <button type="button" className="ghost-action compact danger" onClick={() => setDeleteTarget(nota)}>Eliminar</button>
-                      </>
-                    ) : (
-                      <>
-                        <button type="button" className="ghost-action compact" onClick={() => { setSelectedNota(nota); setSubView("detail"); }}>Ver</button>
-                        <button type="button" className="ghost-action compact" onClick={() => openPdf(nota)}>PDF</button>
-                      </>
-                    )}
-                  </div>
+      {message ? <p className="editor-alert ready">{message}</p> : null}
+      {error ? <p className="form-error">{error}</p> : null}
+
+      {loading ? <p className="muted" style={{ padding: "16px 0" }}>Cargando…</p> : notas.length === 0 ? (
+        <p className="muted" style={{ padding: "16px 0" }}>Sin notas. {filtroTipo !== "ALL" ? "Cambia el filtro o crea " : "Crea "}una nueva.</p>
+      ) : (
+        <div className="list-table">
+          {notas.map(nota => {
+            const nroStr = nota.numero != null ? String(nota.numero).padStart(7, "0") : "BORRADOR";
+            const tipoLabel = tipoLabels[nota.tipo];
+            return (
+              <div key={nota.id} className="list-row">
+                <div className="list-row-main">
+                  <span className={`estado-badge estado-${nota.estado.toLowerCase()}`}>{nota.estado === "EMITIDO" ? "Emitido" : "Borrador"}</span>
+                  <span className="list-row-tipo">{tipoLabel}</span>
+                  <span className="list-row-nro">{nroStr}</span>
+                  <span className="list-row-cliente">{nota.cliente_nombre}</span>
                 </div>
-              );
-            })}
-          </div>
-        )}
-        <p className="muted" style={{ marginTop: "8px", fontSize: "11px" }}>{totalCount} nota(s) en total</p>
-      </div>
+                <div className="list-row-meta">
+                  <span className="muted">{nota.fecha_emision ?? nota.created_at.slice(0, 10)}</span>
+                  {(nota.total ?? 0) > 0 ? <strong>{formatGuaranies(nota.total ?? 0)}</strong> : null}
+                </div>
+                <div className="list-row-actions">
+                  {nota.estado === "BORRADOR" ? (
+                    <>
+                      <button type="button" className="ghost-action compact" onClick={() => openEdit(nota)}>Editar</button>
+                      <button type="button" className="ghost-action compact danger" onClick={() => setDeleteTarget(nota)}>Eliminar</button>
+                    </>
+                  ) : (
+                    <>
+                      <button type="button" className="ghost-action compact" onClick={() => {
+                        const token = nota.verification_token;
+                        setNotaPublicUrl(token ? `${window.location.origin}/verificar/nota/${token}` : null);
+                        setDeliveryMessage(null);
+                        setSelectedNota(nota);
+                        setSubView("detail");
+                      }}>Ver</button>
+                      <button type="button" className="ghost-action compact" onClick={() => openPdf(nota)}>PDF</button>
+                    </>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+      <p className="muted" style={{ marginTop: "8px", fontSize: "11px" }}>{totalCount} nota(s) en total</p>
 
       {deleteTarget ? (
         <div className="modal-scrim" role="dialog" aria-modal="true">
@@ -5920,7 +5981,7 @@ function NotasView({
           </div>
         </div>
       ) : null}
-    </div>
+    </section>
   );
 }
 

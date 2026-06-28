@@ -1,6 +1,8 @@
 import puppeteer from "puppeteer-core";
 
-const CHROMIUM_PATH = process.env.PUPPETEER_EXECUTABLE_PATH ?? "/usr/bin/chromium-browser";
+const CHROMIUM_PATH =
+  process.env.PUPPETEER_EXECUTABLE_PATH ??
+  "/usr/bin/chromium-browser";
 
 export async function htmlToPdfBuffer(html: string): Promise<Buffer> {
   const browser = await puppeteer.launch({
@@ -10,13 +12,17 @@ export async function htmlToPdfBuffer(html: string): Promise<Buffer> {
       "--disable-setuid-sandbox",
       "--disable-dev-shm-usage",
       "--disable-gpu",
+      "--disable-web-security",
     ],
     headless: true,
+    timeout: 15_000,
   });
 
   try {
     const page = await browser.newPage();
-    await page.setContent(html, { waitUntil: "load" });
+    // domcontentloaded: no espera recursos externos (imágenes remotas, fuentes CDN)
+    // Evita que logo_url externo bloquee la generación del PDF
+    await page.setContent(html, { waitUntil: "domcontentloaded", timeout: 15_000 });
     const pdf = await page.pdf({
       format: "A4",
       printBackground: true,
