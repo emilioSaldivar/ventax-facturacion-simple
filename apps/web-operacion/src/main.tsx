@@ -5148,15 +5148,22 @@ type NotaTipo = "PRESUPUESTO" | "PEDIDO";
 type NotaEstado = "BORRADOR" | "EMITIDO";
 type NotaFilaTipo = "CONTEXTO" | "ITEM" | "ITEM_SIN_PRECIO";
 
-interface NotaFilaInput {
-  orden: number;
+interface NotaFilaDraft {
+  _id: string;
   fila_tipo: NotaFilaTipo;
   descripcion: string;
-  cantidad?: number | null;
-  precio_unitario?: number | null;
+  cantidad: string;
+  precio_unitario: string;
 }
 
-interface NotaRecord {
+interface NotaClienteDraft {
+  documento_tipo: "RUC" | "CI";
+  documento: string;
+  nombre: string;
+  cliente_id: string | null;
+}
+
+interface NotaListItem {
   id: string;
   tipo: NotaTipo;
   numero: number | null;
@@ -5165,7 +5172,10 @@ interface NotaRecord {
   cliente_nombre: string;
   cliente_ruc: string | null;
   created_at: string;
-  total: number;
+  total?: number;
+}
+
+interface NotaConItems extends NotaListItem {
   items: Array<{
     id: string;
     orden: number;
@@ -5175,6 +5185,11 @@ interface NotaRecord {
     precio_unitario: number | null;
     precio_total: number | null;
   }>;
+  total: number;
+}
+
+function createNotaFila(tipo: NotaFilaTipo): NotaFilaDraft {
+  return { _id: crypto.randomUUID(), fila_tipo: tipo, descripcion: "", cantidad: "1", precio_unitario: "" };
 }
 
 // ─── Componente NotasView ──────────────────────────────────────────────────────
@@ -5191,103 +5206,249 @@ function NotasView({
   const api = useMemo(() => createApiClient(accessToken, setAccessToken), [accessToken, setAccessToken]);
   type SubView = "list" | "form" | "detail";
   const [subView, setSubView] = useState<SubView>("list");
-  const [notas, setNotas] = useState<NotaRecord[]>([]);
-  const [total, setTotal] = useState(0);
+
+  // Listado
+  const [notas, setNotas] = useState<NotaListItem[]>([]);
+  const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [filtroTipo, setFiltroTipo] = useState<NotaTipo | "ALL">("ALL");
+  const [deleteTarget, setDeleteTarget] = useState<NotaListItem | null>(null);
+  const [selectedNota, setSelectedNota] = useState<NotaListItem | null>(null);
+
+  // Formulario — general
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [formTipo, setFormTipo] = useState<NotaTipo>("PRESUPUESTO");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
-  const [selectedNota, setSelectedNota] = useState<NotaRecord | null>(null);
-  const [filtroTipo, setFiltroTipo] = useState<NotaTipo | "ALL">("ALL");
-  const [deleteTarget, setDeleteTarget] = useState<NotaRecord | null>(null);
+  const [confirmEmitir, setConfirmEmitir] = useState(false);
 
-  // Formulario
-  const [formTipo, setFormTipo] = useState<NotaTipo>("PRESUPUESTO");
-  const [formClienteNombre, setFormClienteNombre] = useState("");
-  const [formClienteRuc, setFormClienteRuc] = useState("");
-  const [formItems, setFormItems] = useState<NotaFilaInput[]>([]);
-  const [editingId, setEditingId] = useState<string | null>(null);
+  // Formulario — cliente
+  const [cliente, setCliente] = useState<NotaClienteDraft>({ documento_tipo: "RUC", documento: "", nombre: "", cliente_id: null });
+  const [clienteAutocompleting, setClienteAutocompleting] = useState(false);
+  const [clienteSearching, setClienteSearching] = useState(false);
+  const [clienteMessage, setClienteMessage] = useState<string | null>(null);
+  const [clienteSuggestions, setClienteSuggestions] = useState<ClienteSearchResult[]>([]);
+
+  // Formulario — filas
+  const [formFilas, setFormFilas] = useState<NotaFilaDraft[]>([]);
+  const [activeFilaId, setActiveFilaId] = useState<string | null>(null);
+  const [filaSheetOpen, setFilaSheetOpen] = useState(false);
+
+  // Catálogo por fila
+  const [catalogSuggestions, setCatalogSuggestions] = useState<Record<string, CatalogoItem[]>>({});
+  const [catalogMessage, setCatalogMessage] = useState<Record<string, string | null>>({});
+  const [catalogSaving, setCatalogSaving] = useState<Record<string, boolean>>({});
+  const [catalogSearching, setCatalogSearching] = useState<Record<string, boolean>>({});
+
+  // Derivado
+  const activeFila = formFilas.find(f => f._id === activeFilaId) ?? null;
+  const activeFilaDescripcion = activeFila?.descripcion ?? "";
+
+  // ── Effects ──
 
   useEffect(() => {
     if (subView === "list") void loadNotas();
   }, [subView, filtroTipo]);
 
+  // Búsqueda de agenda al tipear documento
+  useEffect(() => {
+    const q = cliente.documento.trim();
+    if (q.length < 2) { setClienteSuggestions([]); return; }
+    const t = window.setTimeout(async () => {
+      setClienteSearching(true);
+      try {
+        const r = await api.get<{ items: ClienteSearchResult[] }>(`/clientes/search?q=${encodeURIComponent(q)}&limit=5`);
+        setClienteSuggestions(r.items);
+      } catch { setClienteSuggestions([]); }
+      finally { setClienteSearching(false); }
+    }, 300);
+    return () => window.clearTimeout(t);
+  }, [api, cliente.documento]);
+
+  // Búsqueda de catálogo al tipear en fila ITEM activa
+  useEffect(() => {
+    if (!activeFilaId || !activeFila || activeFila.fila_tipo !== "ITEM") return;
+    const q = activeFilaDescripcion.trim();
+    if (q.length < 2) { setCatalogSuggestions(c => ({ ...c, [activeFilaId]: [] })); return; }
+    const t = window.setTimeout(async () => {
+      setCatalogSearching(c => ({ ...c, [activeFilaId]: true }));
+      try {
+        const r = await api.get<{ items: CatalogoItem[] }>(`/catalogo/items/search?q=${encodeURIComponent(q)}&limit=5`);
+        setCatalogSuggestions(c => ({ ...c, [activeFilaId]: r.items }));
+      } catch { setCatalogSuggestions(c => ({ ...c, [activeFilaId]: [] })); }
+      finally { setCatalogSearching(c => ({ ...c, [activeFilaId]: false })); }
+    }, 300);
+    return () => window.clearTimeout(t);
+  }, [api, activeFilaId, activeFilaDescripcion]);
+
+  // ── Handlers ──
+
   async function loadNotas() {
     setLoading(true);
     setError(null);
     try {
-      const params = new URLSearchParams({ limit: "50", offset: "0" });
-      if (filtroTipo !== "ALL") params.set("tipo", filtroTipo);
-      const result = await api.get<{ items: NotaRecord[]; total: number }>(`/notas?${params.toString()}`);
-      setNotas(result.items);
-      setTotal(result.total);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "No se pudo cargar las notas.");
-    } finally {
-      setLoading(false);
-    }
+      const p = new URLSearchParams({ limit: "50", offset: "0" });
+      if (filtroTipo !== "ALL") p.set("tipo", filtroTipo);
+      const r = await api.get<{ items: NotaListItem[]; total: number }>(`/notas?${p.toString()}`);
+      setNotas(r.items);
+      setTotalCount(r.total);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "No se pudo cargar las notas.");
+    } finally { setLoading(false); }
+  }
+
+  function resetForm() {
+    setEditingId(null);
+    setFormTipo("PRESUPUESTO");
+    setCliente({ documento_tipo: "RUC", documento: "", nombre: "", cliente_id: null });
+    setClienteMessage(null);
+    setClienteSuggestions([]);
+    setFormFilas([]);
+    setActiveFilaId(null);
+    setFilaSheetOpen(false);
+    setCatalogSuggestions({});
+    setCatalogMessage({});
+    setCatalogSaving({});
+    setCatalogSearching({});
+    setError(null);
+    setMessage(null);
+    setConfirmEmitir(false);
   }
 
   function openCreate() {
-    setEditingId(null);
-    setFormTipo("PRESUPUESTO");
-    setFormClienteNombre("");
-    setFormClienteRuc("");
-    setFormItems([]);
-    setError(null);
-    setMessage(null);
+    resetForm();
     setSubView("form");
   }
 
-  function openEdit(nota: NotaRecord) {
-    setEditingId(nota.id);
-    setFormTipo(nota.tipo);
-    setFormClienteNombre(nota.cliente_nombre);
-    setFormClienteRuc(nota.cliente_ruc ?? "");
-    setFormItems(nota.items.map(it => ({
-      orden: it.orden,
-      fila_tipo: it.fila_tipo,
-      descripcion: it.descripcion,
-      cantidad: it.cantidad,
-      precio_unitario: it.precio_unitario,
-    })));
-    setError(null);
-    setMessage(null);
-    setSubView("form");
+  async function openEdit(nota: NotaListItem) {
+    resetForm();
+    setSaving(true);
+    try {
+      const full = await api.get<NotaConItems>(`/notas/${nota.id}`);
+      setEditingId(full.id);
+      setFormTipo(full.tipo);
+      setCliente({ documento_tipo: "RUC", documento: full.cliente_ruc ?? "", nombre: full.cliente_nombre, cliente_id: null });
+      setFormFilas(full.items.map(it => ({
+        _id: crypto.randomUUID(),
+        fila_tipo: it.fila_tipo,
+        descripcion: it.descripcion,
+        cantidad: it.cantidad != null ? String(it.cantidad) : "1",
+        precio_unitario: it.precio_unitario != null ? String(it.precio_unitario) : "",
+      })));
+      setSubView("form");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "No se pudo cargar la nota.");
+    } finally { setSaving(false); }
+  }
+
+  async function tryAutocompleteDnit() {
+    if (cliente.documento_tipo !== "RUC" && cliente.documento_tipo !== "CI") return;
+    const doc = cliente.documento.trim();
+    if (doc.length < 3) return;
+    if (clienteSuggestions.some(s => normalizeDocKey(s.documento) === normalizeDocKey(doc))) return;
+    setClienteAutocompleting(true);
+    try {
+      const r = await api.get<DnitAutocompleteResponse>(
+        `/clientes/dnit/autocomplete?documento_tipo=${cliente.documento_tipo}&documento=${encodeURIComponent(doc)}`
+      );
+      if (r.found && r.cliente) {
+        setCliente(c => ({ ...c, nombre: r.cliente?.razon_social ?? c.nombre }));
+        setClienteMessage("Nombre autocompletado desde SET/DNIT.");
+      }
+    } catch { /* no interrumpir flujo */ }
+    finally { setClienteAutocompleting(false); }
+  }
+
+  function applyClienteSuggestion(s: ClienteSearchResult) {
+    setCliente({
+      documento_tipo: (s.documento_tipo === "RUC" || s.documento_tipo === "CI") ? s.documento_tipo : "RUC",
+      documento: s.documento,
+      nombre: s.razon_social,
+      cliente_id: s.cliente_id,
+    });
+    setClienteMessage(s.source === "AGENDA_FACTURADOR" ? "Cliente seleccionado de la agenda." : "Cliente encontrado.");
+    setClienteSuggestions([]);
+  }
+
+  async function saveClienteRapido() {
+    if (!cliente.documento.trim() || !cliente.nombre.trim()) return;
+    try {
+      const payload = { documento_tipo: cliente.documento_tipo, documento: cliente.documento.trim(), razon_social: cliente.nombre.trim(), direccion: null, telefono: null, email: null };
+      const saved = cliente.cliente_id
+        ? await api.request<ClienteResponse>(`/clientes/${cliente.cliente_id}`, { method: "PATCH", body: JSON.stringify(payload) })
+        : await api.post<ClienteResponse>("/clientes", payload);
+      setCliente(c => ({ ...c, cliente_id: saved.cliente_id }));
+      setClienteMessage(cliente.cliente_id ? "Cliente actualizado." : "Cliente guardado en agenda.");
+    } catch (e) { setClienteMessage(e instanceof Error ? e.message : "No se pudo guardar."); }
   }
 
   function addFila(tipo: NotaFilaTipo) {
-    setFormItems(prev => [...prev, { orden: prev.length, fila_tipo: tipo, descripcion: "" }]);
+    const fila = createNotaFila(tipo);
+    setFormFilas(prev => [...prev, fila]);
+    if (tipo === "ITEM") { setActiveFilaId(fila._id); setFilaSheetOpen(true); }
   }
 
-  function removeFila(idx: number) {
-    setFormItems(prev => prev.filter((_, i) => i !== idx).map((it, i) => ({ ...it, orden: i })));
+  function removeFila(id: string) {
+    setFormFilas(prev => prev.filter(f => f._id !== id));
+    if (activeFilaId === id) { setActiveFilaId(null); setFilaSheetOpen(false); }
   }
 
-  function moveFila(idx: number, dir: -1 | 1) {
-    const next = [...formItems];
-    const target = idx + dir;
-    if (target < 0 || target >= next.length) return;
-    [next[idx], next[target]] = [next[target]!, next[idx]!];
-    setFormItems(next.map((it, i) => ({ ...it, orden: i })));
+  function moveFila(id: string, dir: -1 | 1) {
+    setFormFilas(prev => {
+      const idx = prev.findIndex(f => f._id === id);
+      if (idx < 0) return prev;
+      const next = [...prev];
+      const target = idx + dir;
+      if (target < 0 || target >= next.length) return prev;
+      [next[idx], next[target]] = [next[target]!, next[idx]!];
+      return next;
+    });
   }
 
-  function updateFila(idx: number, patch: Partial<NotaFilaInput>) {
-    setFormItems(prev => prev.map((it, i) => i === idx ? { ...it, ...patch } : it));
+  function updateFila(id: string, patch: Partial<NotaFilaDraft>) {
+    setFormFilas(prev => prev.map(f => f._id === id ? { ...f, ...patch } : f));
   }
 
-  function calcTotal(): number {
-    return formItems.reduce((acc, it) => {
-      if (it.fila_tipo === "ITEM" && it.cantidad != null && it.precio_unitario != null) {
-        return acc + it.cantidad * it.precio_unitario;
-      }
-      return acc;
+  function applyCatalogItem(filaId: string, item: CatalogoItem) {
+    updateFila(filaId, { descripcion: item.descripcion, precio_unitario: String(item.precio_unitario) });
+    setCatalogSuggestions(c => ({ ...c, [filaId]: [] }));
+    setCatalogMessage(c => ({ ...c, [filaId]: "Precio pre-llenado del catálogo (editable)." }));
+  }
+
+  async function saveQuickCatalogItem(fila: NotaFilaDraft): Promise<boolean> {
+    const precio = Number(fila.precio_unitario);
+    if (!Number.isInteger(precio) || precio <= 0) {
+      setCatalogMessage(c => ({ ...c, [fila._id]: "Ingrese un precio entero mayor a cero." }));
+      return false;
+    }
+    setCatalogSaving(c => ({ ...c, [fila._id]: true }));
+    try {
+      await api.post<CatalogoItem>("/catalogo/items", { descripcion: fila.descripcion.trim(), precio_unitario: precio, iva_tipo: "IVA_10", activo: true });
+      setCatalogMessage(c => ({ ...c, [fila._id]: "Item guardado en catálogo." }));
+      return true;
+    } catch (e) {
+      setCatalogMessage(c => ({ ...c, [fila._id]: e instanceof Error ? e.message : "No se pudo guardar." }));
+      return false;
+    } finally { setCatalogSaving(c => ({ ...c, [fila._id]: false })); }
+  }
+
+  async function confirmFila(fila: NotaFilaDraft, saveInCatalog: boolean) {
+    if (saveInCatalog) { const ok = await saveQuickCatalogItem(fila); if (!ok) return; }
+    setFilaSheetOpen(false);
+  }
+
+  const totalNota = formFilas
+    .filter(f => f.fila_tipo === "ITEM")
+    .reduce((acc, f) => {
+      const cant = Number(f.cantidad); const precio = Number(f.precio_unitario);
+      return cant > 0 && precio > 0 ? acc + Math.round(cant * precio) : acc;
     }, 0);
-  }
 
   async function saveForm(andEmit: boolean) {
-    if (!formClienteNombre.trim()) {
-      setError("El nombre del cliente es requerido.");
+    if (!cliente.nombre.trim()) { setError("El nombre del cliente es requerido."); return; }
+    if (andEmit && !formFilas.some(f => f.fila_tipo === "ITEM")) {
+      setError("Se requiere al menos un item con precio para emitir.");
       return;
     }
     setSaving(true);
@@ -5295,53 +5456,31 @@ function NotasView({
     try {
       const body = {
         tipo: formTipo,
-        cliente_nombre: formClienteNombre.trim(),
-        cliente_ruc: formClienteRuc.trim() || null,
-        items: formItems.map((it, i) => ({
-          orden: i,
-          fila_tipo: it.fila_tipo,
-          descripcion: it.descripcion,
-          cantidad: it.fila_tipo === "ITEM" ? (it.cantidad ?? null) : null,
-          precio_unitario: it.fila_tipo === "ITEM" ? (it.precio_unitario ?? null) : null,
+        cliente_nombre: cliente.nombre.trim(),
+        cliente_ruc: cliente.documento.trim() || null,
+        items: formFilas.map((f, i) => ({
+          orden: i + 1,
+          fila_tipo: f.fila_tipo,
+          descripcion: f.descripcion,
+          cantidad: f.fila_tipo === "ITEM" ? (Number(f.cantidad) || null) : null,
+          precio_unitario: f.fila_tipo === "ITEM" ? (Number(f.precio_unitario) || null) : null,
         })),
       };
-
-      let nota: NotaRecord;
-      if (editingId) {
-        nota = await api.request<NotaRecord>(`/notas/${editingId}`, { method: "PATCH", body: JSON.stringify(body) });
-      } else {
-        nota = await api.request<NotaRecord>("/notas", { method: "POST", body: JSON.stringify(body) });
-      }
-
+      let nota: NotaListItem = editingId
+        ? await api.request<NotaListItem>(`/notas/${editingId}`, { method: "PATCH", body: JSON.stringify(body) })
+        : await api.post<NotaListItem>("/notas", body);
       if (andEmit) {
-        nota = await api.request<NotaRecord>(`/notas/${nota.id}/emitir`, { method: "POST" });
+        nota = await api.request<NotaListItem>(`/notas/${nota.id}/emitir`, { method: "POST" });
         setMessage("Nota emitida correctamente.");
         setSelectedNota(nota);
         setSubView("detail");
       } else {
         setMessage("Borrador guardado.");
-        setSelectedNota(nota);
         setSubView("list");
       }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "No se pudo guardar la nota.");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function emitirNota(nota: NotaRecord) {
-    setSaving(true);
-    setError(null);
-    try {
-      const emitida = await api.request<NotaRecord>(`/notas/${nota.id}/emitir`, { method: "POST" });
-      setSelectedNota(emitida);
-      setSubView("detail");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "No se pudo emitir la nota.");
-    } finally {
-      setSaving(false);
-    }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "No se pudo guardar.");
+    } finally { setSaving(false); setConfirmEmitir(false); }
   }
 
   async function deleteNota() {
@@ -5353,165 +5492,361 @@ function NotasView({
       setDeleteTarget(null);
       setMessage("Nota eliminada.");
       void loadNotas();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "No se pudo eliminar la nota.");
-    } finally {
-      setSaving(false);
-    }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "No se pudo eliminar.");
+    } finally { setSaving(false); }
   }
 
-  function openPdf(nota: NotaRecord) {
+  function openPdf(nota: NotaListItem) {
     void (async () => {
       try {
-        const token = accessToken;
-        const response = await fetch(`/api/v1/notas/${nota.id}/pdf`, {
-          headers: { Authorization: `Bearer ${token ?? ""}` },
-        });
-        if (!response.ok) throw new Error("No se pudo generar el PDF.");
-        const blob = await response.blob();
-        const url = URL.createObjectURL(blob);
-        window.open(url, "_blank");
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Error al abrir el PDF.");
-      }
+        const res = await fetch(`/api/v1/notas/${nota.id}/pdf`, { headers: { Authorization: `Bearer ${accessToken ?? ""}` } });
+        if (!res.ok) throw new Error("No se pudo generar el PDF.");
+        window.open(URL.createObjectURL(await res.blob()), "_blank");
+      } catch (e) { setError(e instanceof Error ? e.message : "Error al abrir el PDF."); }
     })();
   }
 
-  // ── Sub-vista: detalle post-emisión ──
+  // ── Sub-vista: detalle ──
 
   if (subView === "detail" && selectedNota) {
     const nroStr = selectedNota.numero != null ? String(selectedNota.numero).padStart(7, "0") : "-------";
     const tipoLabel = selectedNota.tipo === "PRESUPUESTO" ? "Presupuesto" : "Pedido";
     return (
-      <div className="view-shell">
-        <div className="view-header">
-          <button className="back-action" onClick={() => { setSubView("list"); setMessage(null); }} type="button">← Volver</button>
-          <h1>{tipoLabel} emitido</h1>
-        </div>
-        <div className="view-body">
-          {message ? <p className="success-banner">{message}</p> : null}
-          <div className="detail-card">
-            <div className="detail-row"><span>Numero</span><strong>{nroStr}</strong></div>
-            <div className="detail-row"><span>Tipo</span><span>{tipoLabel}</span></div>
-            <div className="detail-row"><span>Fecha</span><span>{selectedNota.fecha_emision ?? "—"}</span></div>
-            <div className="detail-row"><span>Cliente</span><span>{selectedNota.cliente_nombre}</span></div>
-            {selectedNota.cliente_ruc ? <div className="detail-row"><span>RUC/CI</span><span>{selectedNota.cliente_ruc}</span></div> : null}
-            <div className="detail-row"><span>Total</span><strong>Gs. {selectedNota.total.toLocaleString("es-PY")}</strong></div>
+      <section className="invoice-editor" aria-labelledby="nota-detail-title">
+        <div className="editor-heading">
+          <div>
+            <p className="eyebrow">{tipoLabel} emitido</p>
+            <h2 id="nota-detail-title">{tipoLabel} N° {nroStr}</h2>
           </div>
-          <div className="action-row" style={{ marginTop: "16px", gap: "8px", display: "flex" }}>
-            <button className="primary-action" onClick={() => openPdf(selectedNota)} type="button">Descargar PDF</button>
+          <div className="header-actions">
+            <button className="ghost-action" onClick={() => { setSubView("list"); setMessage(null); }} type="button">Volver</button>
           </div>
         </div>
-      </div>
+        {message ? <p className="editor-alert ready">{message}</p> : null}
+        <section className="emission-result">
+          <div className="receipt-heading">
+            <div>
+              <p className="eyebrow">{tipoLabel}</p>
+              <h3>{tipoLabel} emitido</h3>
+              <p className="muted">Número {nroStr}</p>
+            </div>
+            <span className="status-pill ready">Emitido</span>
+          </div>
+          <div className="receipt-summary">
+            <div><dt>Número</dt><dd><strong>{nroStr}</strong></dd></div>
+            <div><dt>Fecha</dt><dd>{selectedNota.fecha_emision ?? "—"}</dd></div>
+            <div><dt>Cliente</dt><dd>{selectedNota.cliente_nombre}</dd></div>
+            {selectedNota.cliente_ruc ? <div><dt>RUC/CI</dt><dd>{selectedNota.cliente_ruc}</dd></div> : null}
+            {(selectedNota.total ?? 0) > 0 ? <div><dt>Total</dt><dd><strong>{formatGuaranies(selectedNota.total ?? 0)}</strong></dd></div> : null}
+          </div>
+          <div className="action-group">
+            <button className="primary-action wide" onClick={() => openPdf(selectedNota)} type="button">Descargar PDF</button>
+          </div>
+        </section>
+      </section>
     );
   }
 
   // ── Sub-vista: formulario ──
 
   if (subView === "form") {
-    const totalCalc = calcTotal();
-    return (
-      <div className="view-shell">
-        <div className="view-header">
-          <button className="back-action" onClick={() => setSubView("list")} type="button">← Volver</button>
-          <h1>{editingId ? "Editar nota" : "Nueva nota"}</h1>
-        </div>
-        <div className="view-body">
-          {error ? <p className="error-banner">{error}</p> : null}
-          <div className="form-group">
-            <label className="field-label">Tipo</label>
-            <select className="select-field" value={formTipo} onChange={e => setFormTipo(e.target.value as NotaTipo)}>
-              <option value="PRESUPUESTO">Presupuesto</option>
-              <option value="PEDIDO">Pedido</option>
-            </select>
-          </div>
-          <div className="form-group">
-            <label className="field-label">Cliente *</label>
-            <input className="text-field" value={formClienteNombre} onChange={e => setFormClienteNombre(e.target.value)} placeholder="Nombre del cliente" />
-          </div>
-          <div className="form-group">
-            <label className="field-label">RUC / CI</label>
-            <input className="text-field" value={formClienteRuc} onChange={e => setFormClienteRuc(e.target.value)} placeholder="Opcional" />
-          </div>
+    const isSavingCatalog = activeFilaId ? (catalogSaving[activeFilaId] ?? false) : false;
+    const catalogSugg = activeFilaId ? (catalogSuggestions[activeFilaId] ?? []) : [];
+    const catalogMsg = activeFilaId ? (catalogMessage[activeFilaId] ?? null) : null;
+    const isCatalogSearching = activeFilaId ? (catalogSearching[activeFilaId] ?? false) : false;
+    const canEmitir = formFilas.some(f => f.fila_tipo === "ITEM") && !saving;
+    const tipoLabel = formTipo === "PRESUPUESTO" ? "Nota de Presupuesto" : "Nota de Pedido";
 
-          <div style={{ marginTop: "16px" }}>
-            <p className="eyebrow">Items</p>
-            {formItems.length === 0 ? (
-              <p className="muted" style={{ padding: "12px 0" }}>Sin items. Agrega filas usando los botones de abajo.</p>
-            ) : (
-              <div className="notas-items-list">
-                {formItems.map((it, idx) => (
-                  <div key={idx} className={`nota-fila nota-fila-${it.fila_tipo.toLowerCase().replace("_", "-")}`}>
-                    <div className="nota-fila-controls">
-                      <button type="button" className="ghost-action compact" onClick={() => moveFila(idx, -1)} disabled={idx === 0}>↑</button>
-                      <button type="button" className="ghost-action compact" onClick={() => moveFila(idx, 1)} disabled={idx === formItems.length - 1}>↓</button>
-                      <span className="nota-fila-tipo-badge">{it.fila_tipo === "CONTEXTO" ? "Ctx" : it.fila_tipo === "ITEM" ? "Item" : "S/P"}</span>
-                    </div>
-                    <div className="nota-fila-desc">
-                      <textarea
-                        className="text-field"
-                        rows={2}
-                        value={it.descripcion}
-                        onChange={e => updateFila(idx, { descripcion: e.target.value })}
-                        placeholder="Descripcion"
-                      />
-                    </div>
-                    {it.fila_tipo === "ITEM" ? (
-                      <div className="nota-fila-precio">
-                        <input
-                          type="number"
-                          className="text-field compact"
-                          placeholder="Cant."
-                          value={it.cantidad ?? ""}
-                          onChange={e => updateFila(idx, { cantidad: e.target.value ? Number(e.target.value) : null })}
-                        />
-                        <input
-                          type="number"
-                          className="text-field compact"
-                          placeholder="Precio u."
-                          value={it.precio_unitario ?? ""}
-                          onChange={e => updateFila(idx, { precio_unitario: e.target.value ? Number(e.target.value) : null })}
-                        />
-                        <span className="nota-fila-subtotal">
-                          {it.cantidad != null && it.precio_unitario != null
-                            ? `Gs. ${(it.cantidad * it.precio_unitario).toLocaleString("es-PY")}`
-                            : "—"}
-                        </span>
-                      </div>
-                    ) : null}
-                    <button type="button" className="ghost-action compact danger" onClick={() => removeFila(idx)}>✕</button>
-                  </div>
+    return (
+      <section className="invoice-editor" aria-labelledby="nota-form-title">
+        <div className="editor-heading">
+          <div>
+            <p className="eyebrow">{editingId ? "Editar" : "Nueva"} nota</p>
+            <h2 id="nota-form-title">{tipoLabel}{cliente.nombre.trim() ? ` · ${cliente.nombre.trim()}` : ""}</h2>
+          </div>
+          <div className="header-actions">
+            <button className="ghost-action" onClick={() => setSubView("list")} type="button">Volver</button>
+          </div>
+        </div>
+
+        {/* Tipo de documento */}
+        <section className="form-section comprobante-section">
+          <div>
+            <p className="eyebrow">Documento</p>
+            <h3>{tipoLabel}</h3>
+          </div>
+          <div className="invoice-options">
+            <p className="invoice-options-title">Tipo de nota</p>
+            <div className="invoice-options-body">
+              <div className="segmented-control" role="group" aria-label="Tipo de nota">
+                {(["PRESUPUESTO", "PEDIDO"] as const).map(t => (
+                  <button key={t} className={formTipo === t ? "active" : ""} onClick={() => setFormTipo(t)} type="button" disabled={!!editingId}>
+                    {t === "PRESUPUESTO" ? "Presupuesto" : "Pedido"}
+                  </button>
                 ))}
               </div>
-            )}
-            <div className="nota-add-fila-row" style={{ display: "flex", gap: "8px", marginTop: "8px" }}>
-              <button type="button" className="ghost-action" onClick={() => addFila("CONTEXTO")}>+ Contexto</button>
-              <button type="button" className="ghost-action" onClick={() => addFila("ITEM")}>+ Item</button>
-              <button type="button" className="ghost-action" onClick={() => addFila("ITEM_SIN_PRECIO")}>+ Item s/precio</button>
+            </div>
+          </div>
+        </section>
+
+        {/* Cliente */}
+        <section className="form-section client-section">
+          <p className="eyebrow">Cliente</p>
+          <div className="field-grid">
+            <label className="required-field">
+              Documento
+              <div className="inline-fields">
+                <select value={cliente.documento_tipo} onChange={e => setCliente(c => ({ ...c, documento_tipo: e.target.value as "RUC" | "CI", nombre: "", cliente_id: null }))}>
+                  <option value="RUC">RUC</option>
+                  <option value="CI">CI</option>
+                </select>
+                <input
+                  inputMode="numeric"
+                  placeholder="Número de documento"
+                  value={cliente.documento}
+                  onChange={e => setCliente(c => ({ ...c, documento: e.target.value, nombre: "", cliente_id: null }))}
+                  onBlur={() => void tryAutocompleteDnit()}
+                  onKeyDown={e => { if (e.key === "Enter" || e.key === "Tab") void tryAutocompleteDnit(); }}
+                />
+              </div>
+              {clienteSearching || clienteAutocompleting ? (
+                <span className="field-hint">{clienteSearching ? "Buscando..." : "Autocompletando..."}</span>
+              ) : null}
+              {clienteSuggestions.length > 0 ? (
+                <div className="suggestion-list">
+                  {clienteSuggestions.map(s => (
+                    <button key={`${s.source}-${s.cliente_id ?? s.documento}`} onClick={() => applyClienteSuggestion(s)} type="button">
+                      <strong>{s.documento}</strong>
+                      <span>{s.razon_social}</span>
+                      <small>{s.source === "AGENDA_FACTURADOR" ? "Agenda" : "Sugerencia"}</small>
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </label>
+            <label className="required-field">
+              Nombre o razón social
+              <input placeholder="Nombre del cliente" value={cliente.nombre} onChange={e => setCliente(c => ({ ...c, nombre: e.target.value, cliente_id: null }))} />
+            </label>
+          </div>
+          <div className="quick-actions-row">
+            <button className="secondary-action" disabled={!cliente.documento.trim() || !cliente.nombre.trim()} onClick={() => void saveClienteRapido()} type="button">
+              {cliente.cliente_id ? "Actualizar en agenda" : "Guardar en agenda"}
+            </button>
+            {clienteMessage ? <p className="inline-message">{clienteMessage}</p> : null}
+          </div>
+        </section>
+
+        {/* Filas del documento */}
+        <section className="form-section products-section">
+          <div className="section-title-row">
+            <div>
+              <p className="eyebrow">Contenido</p>
+              <h3>Items del documento</h3>
             </div>
           </div>
 
-          {totalCalc > 0 ? (
-            <div className="nota-total-preview" style={{ textAlign: "right", marginTop: "12px" }}>
-              <span className="muted">Total </span>
-              <strong>Gs. {totalCalc.toLocaleString("es-PY")}</strong>
-            </div>
-          ) : null}
+          <div className="sale-list" aria-label="Filas del documento">
+            {formFilas.length === 0 ? (
+              <button className="empty-sale-list" onClick={() => addFila("ITEM")} type="button">
+                <strong>+ Agregar primer item</strong>
+                <span>Descripción, cantidad y precio.</span>
+              </button>
+            ) : null}
 
-          <div className="action-row" style={{ marginTop: "24px", display: "flex", gap: "8px" }}>
-            <button className="ghost-action" onClick={() => void saveForm(false)} disabled={saving} type="button">
+            {formFilas.map((fila, idx) => {
+              const isFirst = idx === 0;
+              const isLast = idx === formFilas.length - 1;
+
+              if (fila.fila_tipo === "CONTEXTO") {
+                return (
+                  <article key={fila._id} className="sale-item-card nota-fila-contexto">
+                    <div className="nota-fila-inline">
+                      <span className="nota-fila-badge">Título</span>
+                      <textarea className="nota-fila-textarea" rows={2} placeholder="Descripción de sección (aparece en negrita en el PDF)..." value={fila.descripcion} onChange={e => updateFila(fila._id, { descripcion: e.target.value })} />
+                    </div>
+                    <div className="sale-item-actions">
+                      <button type="button" className="icon-action" onClick={() => moveFila(fila._id, -1)} disabled={isFirst} aria-label="Subir">↑</button>
+                      <button type="button" className="icon-action" onClick={() => moveFila(fila._id, 1)} disabled={isLast} aria-label="Bajar">↓</button>
+                      <button type="button" className="icon-action danger" onClick={() => removeFila(fila._id)} aria-label="Eliminar">✕</button>
+                    </div>
+                  </article>
+                );
+              }
+
+              if (fila.fila_tipo === "ITEM_SIN_PRECIO") {
+                return (
+                  <article key={fila._id} className="sale-item-card nota-fila-sin-precio">
+                    <div className="nota-fila-inline">
+                      <span className="nota-fila-badge">Sin precio</span>
+                      <textarea className="nota-fila-textarea" rows={2} placeholder="Descripción del item (sin precio)..." value={fila.descripcion} onChange={e => updateFila(fila._id, { descripcion: e.target.value })} />
+                    </div>
+                    <div className="sale-item-actions">
+                      <button type="button" className="icon-action" onClick={() => moveFila(fila._id, -1)} disabled={isFirst} aria-label="Subir">↑</button>
+                      <button type="button" className="icon-action" onClick={() => moveFila(fila._id, 1)} disabled={isLast} aria-label="Bajar">↓</button>
+                      <button type="button" className="icon-action danger" onClick={() => removeFila(fila._id)} aria-label="Eliminar">✕</button>
+                    </div>
+                  </article>
+                );
+              }
+
+              const cant = Number(fila.cantidad) || 1;
+              const precio = Number(fila.precio_unitario) || 0;
+              return (
+                <article key={fila._id} className="sale-item-card">
+                  <button className="sale-item-main" onClick={() => { setActiveFilaId(fila._id); setFilaSheetOpen(true); }} type="button">
+                    <div className="nota-item-header">
+                      <span className="nota-fila-badge nota-fila-badge-item">Item</span>
+                      <strong>{fila.descripcion.trim() || "Item con precio"}</strong>
+                    </div>
+                    <span>{cant} × {formatGuaranies(precio)}</span>
+                    <b>{precio > 0 ? formatGuaranies(Math.round(cant * precio)) : "—"}</b>
+                  </button>
+                  <div className="sale-item-actions">
+                    <button type="button" className="icon-action" onClick={() => moveFila(fila._id, -1)} disabled={isFirst} aria-label="Subir">↑</button>
+                    <button type="button" className="icon-action" onClick={() => moveFila(fila._id, 1)} disabled={isLast} aria-label="Bajar">↓</button>
+                    <button type="button" className="icon-action danger" onClick={() => removeFila(fila._id)} aria-label="Eliminar">✕</button>
+                  </div>
+                </article>
+              );
+            })}
+
+            {formFilas.length > 0 ? (
+              <button className="add-product-action" onClick={() => addFila("ITEM")} type="button">+ Agregar item</button>
+            ) : null}
+          </div>
+
+          <div className="nota-add-fila-row">
+            <button type="button" className="secondary-action" onClick={() => addFila("CONTEXTO")}>+ Descripción</button>
+            <button type="button" className="secondary-action" onClick={() => addFila("ITEM_SIN_PRECIO")}>+ Item sin precio</button>
+          </div>
+        </section>
+
+        {/* Total */}
+        <section className="totals-section" aria-live="polite">
+          <div className="totals-grid">
+            <div className="total-row">
+              <span>Total estimado</span>
+              <strong>{formatGuaranies(totalNota)}</strong>
+            </div>
+          </div>
+          {error ? <p className="form-error">{error}</p> : null}
+          <div className="editor-actions">
+            <button className="secondary-action wide" onClick={() => void saveForm(false)} disabled={saving} type="button">
               {saving ? "Guardando…" : "Guardar borrador"}
             </button>
-            <button className="primary-action" onClick={() => void saveForm(true)} disabled={saving} type="button">
-              {saving ? "Emitiendo…" : "Guardar y emitir"}
+            <button className="primary-action wide" onClick={() => setConfirmEmitir(true)} disabled={!canEmitir} type="button">
+              Emitir
             </button>
           </div>
-        </div>
-      </div>
+        </section>
+
+        {/* Bottom sheet para filas ITEM */}
+        {filaSheetOpen && activeFila ? (
+          <div className="bottom-sheet-backdrop" role="presentation" onClick={() => setFilaSheetOpen(false)}>
+            <section className="bottom-sheet" aria-label={activeFila.fila_tipo === "ITEM" ? "Agregar item con precio" : "Editar fila"} aria-modal="true" role="dialog" onClick={e => e.stopPropagation()}>
+              <div className="sheet-handle" />
+              <div className="sheet-header">
+                <h3>{activeFila.fila_tipo === "CONTEXTO" ? "Descripción de sección" : activeFila.fila_tipo === "ITEM_SIN_PRECIO" ? "Item sin precio" : "Item con precio"}</h3>
+                <button className="sheet-close" onClick={() => setFilaSheetOpen(false)} aria-label="Cerrar" type="button">Cerrar</button>
+              </div>
+
+              {activeFila.fila_tipo !== "ITEM" ? (
+                <div className="sheet-grid">
+                  <label className="sheet-description">
+                    Descripción
+                    <textarea autoFocus rows={4} value={activeFila.descripcion} onChange={e => updateFila(activeFila._id, { descripcion: e.target.value })} placeholder={activeFila.fila_tipo === "CONTEXTO" ? "Título de sección (aparece en negrita)..." : "Descripción del item..."} />
+                  </label>
+                  <button className="primary-action wide" onClick={() => setFilaSheetOpen(false)} type="button">Confirmar</button>
+                </div>
+              ) : (
+                <div className="sheet-grid">
+                  <label className="sheet-description">
+                    Descripción
+                    <input autoFocus value={activeFila.descripcion} onChange={e => updateFila(activeFila._id, { descripcion: e.target.value })} placeholder="Descripción del producto o servicio" />
+                  </label>
+
+                  {isCatalogSearching ? <span className="field-hint">Buscando catálogo...</span> : null}
+                  {catalogSugg.length > 0 ? (
+                    <div className="suggestion-list catalog">
+                      {catalogSugg.map(item => (
+                        <button key={item.id} onClick={() => applyCatalogItem(activeFila._id, item)} type="button">
+                          {item.codigo ? <strong>{item.codigo}</strong> : null}
+                          <span>{item.descripcion}</span>
+                          <small>{formatGuaranies(item.precio_unitario)}</small>
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+
+                  <div className="quantity-price-grid">
+                    <label>
+                      Cantidad
+                      <div className="quantity-stepper">
+                        <button type="button" aria-label="Restar" onClick={() => updateFila(activeFila._id, { cantidad: String(Math.max(1, Number(activeFila.cantidad || 1) - 1)) })}>-</button>
+                        <input inputMode="numeric" min="1" value={activeFila.cantidad} onChange={e => updateFila(activeFila._id, { cantidad: e.target.value })} />
+                        <button type="button" aria-label="Sumar" onClick={() => updateFila(activeFila._id, { cantidad: String((Number(activeFila.cantidad) || 0) + 1) })}>+</button>
+                      </div>
+                    </label>
+                    <label>
+                      Precio (Gs.)
+                      <input inputMode="decimal" min="0" placeholder="0" value={formatPriceInput(activeFila.precio_unitario)} onChange={e => updateFila(activeFila._id, { precio_unitario: normalizePriceInput(e.target.value) })} />
+                    </label>
+                  </div>
+
+                  <div className="sheet-total-row">
+                    <span>Total</span>
+                    <strong>{formatGuaranies(Math.round((Number(activeFila.cantidad) || 1) * (Number(activeFila.precio_unitario) || 0)))}</strong>
+                  </div>
+
+                  {catalogMsg ? <p className="inline-message">{catalogMsg}</p> : null}
+
+                  <div className="catalog-save-choice" role="group" aria-label="Confirmar item">
+                    <button
+                      className="primary-action save-catalog"
+                      disabled={isSavingCatalog || !activeFila.descripcion.trim() || !Number.isInteger(Number(activeFila.precio_unitario)) || Number(activeFila.precio_unitario) <= 0}
+                      onClick={() => void confirmFila(activeFila, true)}
+                      type="button"
+                    >
+                      {isSavingCatalog ? "Guardando..." : "AGREGAR Y GUARDAR EN CATÁLOGO"}
+                    </button>
+                    <button
+                      className="secondary-action"
+                      disabled={isSavingCatalog || !activeFila.descripcion.trim() || !Number.isInteger(Number(activeFila.precio_unitario)) || Number(activeFila.precio_unitario) <= 0}
+                      onClick={() => void confirmFila(activeFila, false)}
+                      type="button"
+                    >
+                      AGREGAR SIN GUARDAR
+                    </button>
+                  </div>
+                </div>
+              )}
+            </section>
+          </div>
+        ) : null}
+
+        {/* Modal confirmar emisión */}
+        {confirmEmitir ? (
+          <div className="modal-scrim" role="dialog" aria-modal="true">
+            <div className="modal-card">
+              <h2>Emitir {formTipo === "PRESUPUESTO" ? "presupuesto" : "pedido"}</h2>
+              <p>Una vez emitido el documento es inmutable y se asigna el número correlativo. ¿Confirmar?</p>
+              {error ? <p className="error-banner">{error}</p> : null}
+              <div className="modal-actions">
+                <button type="button" className="ghost-action" onClick={() => { setConfirmEmitir(false); setError(null); }} disabled={saving}>Cancelar</button>
+                <button type="button" className="primary-action" onClick={() => void saveForm(true)} disabled={saving}>{saving ? "Emitiendo…" : "Emitir"}</button>
+              </div>
+            </div>
+          </div>
+        ) : null}
+      </section>
     );
   }
 
   // ── Sub-vista: listado ──
+
+  const tipoLabels: Record<NotaTipo, string> = { PRESUPUESTO: "Presupuesto", PEDIDO: "Pedido" };
 
   return (
     <div className="view-shell">
@@ -5524,26 +5859,21 @@ function NotasView({
         {message ? <p className="success-banner">{message}</p> : null}
         {error ? <p className="error-banner">{error}</p> : null}
 
-        <div className="filter-chips" style={{ display: "flex", gap: "8px", marginBottom: "12px" }}>
+        <div className="filter-tabs" role="group" aria-label="Filtro por tipo">
           {(["ALL", "PRESUPUESTO", "PEDIDO"] as const).map(t => (
-            <button
-              key={t}
-              type="button"
-              className={`chip ${filtroTipo === t ? "active" : ""}`}
-              onClick={() => setFiltroTipo(t)}
-            >
-              {t === "ALL" ? "Todos" : t === "PRESUPUESTO" ? "Presupuesto" : "Pedido"}
+            <button key={t} type="button" className={filtroTipo === t ? "active" : ""} onClick={() => setFiltroTipo(t)}>
+              {t === "ALL" ? "Todos" : tipoLabels[t]}
             </button>
           ))}
         </div>
 
         {loading ? <p className="muted">Cargando…</p> : notas.length === 0 ? (
-          <p className="muted">Sin notas. {filtroTipo !== "ALL" ? "Cambia el filtro o " : ""}crea una nueva.</p>
+          <p className="muted">Sin notas. {filtroTipo !== "ALL" ? "Cambia el filtro o " : ""}Crea una nueva.</p>
         ) : (
           <div className="list-table">
             {notas.map(nota => {
               const nroStr = nota.numero != null ? String(nota.numero).padStart(7, "0") : "BORRADOR";
-              const tipoLabel = nota.tipo === "PRESUPUESTO" ? "Presupuesto" : "Pedido";
+              const tipoLabel = tipoLabels[nota.tipo];
               return (
                 <div key={nota.id} className="list-row">
                   <div className="list-row-main">
@@ -5554,13 +5884,12 @@ function NotasView({
                   </div>
                   <div className="list-row-meta">
                     <span className="muted">{nota.fecha_emision ?? nota.created_at.slice(0, 10)}</span>
-                    {nota.total > 0 ? <strong>Gs. {nota.total.toLocaleString("es-PY")}</strong> : null}
+                    {(nota.total ?? 0) > 0 ? <strong>{formatGuaranies(nota.total ?? 0)}</strong> : null}
                   </div>
                   <div className="list-row-actions">
                     {nota.estado === "BORRADOR" ? (
                       <>
                         <button type="button" className="ghost-action compact" onClick={() => openEdit(nota)}>Editar</button>
-                        <button type="button" className="ghost-action compact" onClick={() => void emitirNota(nota)} disabled={saving}>Emitir</button>
                         <button type="button" className="ghost-action compact danger" onClick={() => setDeleteTarget(nota)}>Eliminar</button>
                       </>
                     ) : (
@@ -5575,17 +5904,17 @@ function NotasView({
             })}
           </div>
         )}
-        <p className="muted" style={{ marginTop: "8px", fontSize: "11px" }}>{total} nota(s) en total</p>
+        <p className="muted" style={{ marginTop: "8px", fontSize: "11px" }}>{totalCount} nota(s) en total</p>
       </div>
 
       {deleteTarget ? (
         <div className="modal-scrim" role="dialog" aria-modal="true">
           <div className="modal-card">
             <h2>Eliminar nota</h2>
-            <p>¿Eliminar el borrador de {deleteTarget.tipo === "PRESUPUESTO" ? "presupuesto" : "pedido"} para <strong>{deleteTarget.cliente_nombre}</strong>? Esta accion no se puede deshacer.</p>
+            <p>¿Eliminar el borrador de {tipoLabels[deleteTarget.tipo].toLowerCase()} para <strong>{deleteTarget.cliente_nombre}</strong>? Esta acción no se puede deshacer.</p>
             {error ? <p className="error-banner">{error}</p> : null}
             <div className="modal-actions">
-              <button type="button" className="ghost-action" onClick={() => setDeleteTarget(null)}>Cancelar</button>
+              <button type="button" className="ghost-action" onClick={() => { setDeleteTarget(null); setError(null); }}>Cancelar</button>
               <button type="button" className="danger-action" onClick={() => void deleteNota()} disabled={saving}>{saving ? "Eliminando…" : "Eliminar"}</button>
             </div>
           </div>

@@ -1943,3 +1943,105 @@ dd {
     grid-template-columns: 1fr;
   }
 }
+
+/* ── Nota de Pedido / Presupuesto ── */
+
+.nota-fila-inline {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  padding: 12px 16px;
+}
+
+.nota-fila-badge {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 2px 6px;
+  border-radius: 4px;
+  margin-top: 2px;
+  background: var(--surface-alt, #f3f4f6);
+  color: var(--text-muted, #6b7280);
+}
+
+.nota-fila-badge-item {
+  background: var(--accent-subtle, #eff6ff);
+  color: var(--accent, #2563eb);
+}
+
+.nota-fila-textarea {
+  flex: 1;
+  border: none;
+  background: transparent;
+  resize: vertical;
+  font-size: 14px;
+  line-height: 1.5;
+  color: inherit;
+  font-family: inherit;
+  padding: 0;
+  outline: none;
+  min-height: 40px;
+}
+
+.nota-fila-textarea:focus {
+  outline: none;
+}
+
+.nota-fila-contexto .nota-fila-badge {
+  background: var(--surface-alt, #f3f4f6);
+  color: var(--text-secondary, #374151);
+}
+
+.nota-fila-contexto .nota-fila-textarea {
+  font-weight: 600;
+}
+
+.nota-fila-sin-precio .nota-fila-badge {
+  background: #fef9c3;
+  color: #713f12;
+}
+
+.nota-item-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.nota-add-fila-row {
+  display: flex;
+  gap: 8px;
+  padding: 8px 0 0;
+  flex-wrap: wrap;
+}
+
+.filter-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--border, #e5e7eb);
+  padding-bottom: 0;
+}
+
+.filter-tabs button {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: 8px 12px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-muted, #6b7280);
+  cursor: pointer;
+  margin-bottom: -1px;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.filter-tabs button.active,
+.filter-tabs button:hover {
+  color: var(--accent, #2563eb);
+  border-bottom-color: var(--accent, #2563eb);
+}

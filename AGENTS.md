@@ -102,6 +102,7 @@ Cualquier agente que trabaje en este repositorio debe:
 - preferir validacion sobre stack containerizado (`bash scripts/deploy.sh`) cuando exista duda de paridad entre entorno local y contenedores;
 - no copiar logica fiscal SIFEN al frontend ni al backend SaaS si debe vivir en `facturacion-electronica`;
 - no exponer certificados, CSC, passwords ni secretos fiscales en UI, logs o respuestas no autorizadas.
+- **NUNCA escribir credenciales reales (passwords, API keys, tokens, secrets SMTP, claves privadas) en ningun archivo del repositorio** — ni en documentacion, ni en ejemplos, ni en comentarios de codigo. Si una tarea requiere documentar como configurar una credencial, usar siempre un placeholder explicito como `<rotar-en-zoho-y-agregar-aqui>` o `YOUR_SECRET_HERE`. Las credenciales reales solo existen en archivos `.env` locales que estan en `.gitignore` y en el servidor. Cualquier credencial real detectada en un archivo rastreado por git debe ser eliminada de inmediato y el secreto rotado.
 
 ## Limite De Dominio
 

@@ -213,71 +213,98 @@ export async function htmlToPdfBuffer(html: string): Promise<Buffer>
 
 ---
 
-## Fase 4 — Frontend Operativo
+## Fase 4 — Frontend Operativo (base — implementada)
 
-Archivos a modificar: `apps/web-operacion/src/main.tsx` y `apps/web-operacion/src/styles.css`.
-
-### 4.1 Tipo `OperationView`
-
-Agregar `"notas"` al union type.
-
-### 4.2 Item en menu lateral
-
-```typescript
-{ label: "Notas / Presupuestos", view: "notas", icon: "📋", group: "secondary" }
-```
-
-### 4.3 Componente `NotasView`
-
-Sub-vistas:
-- `"list"` — listado con filtros y CTA nueva nota
-- `"form"` — alta/edicion con tabla de filas dinamica
-- `"detail"` — vista de solo lectura post-emision con boton PDF
-
-### 4.4 Formulario — tabla de filas
-
-Cada fila tiene:
-- Handle de reorden (drag o flechas arriba/abajo)
-- Select de tipo (`Contexto` / `Item` / `Item sin precio`)
-- Textarea de descripcion
-- Campo cantidad (solo si tipo = ITEM)
-- Campo precio unitario (solo si tipo = ITEM)
-- Total calculado en tiempo real (solo si tipo = ITEM)
-- Boton eliminar fila
-
-CTA al pie de la tabla: `+ Contexto` · `+ Item` · `+ Item sin precio`
-
-Total de la nota, calculado en tiempo real, abajo de la tabla.
-
-### 4.5 Descarga De PDF
-
-`GET /notas/:id/pdf` devuelve `Content-Type: application/pdf`. El frontend hace:
-
-```typescript
-const blob = await fetch(`/api/v1/notas/${id}/pdf`, { headers: { Authorization: ... } }).then(r => r.blob());
-const url = URL.createObjectURL(blob);
-window.open(url, '_blank');
-```
+La estructura base ya fue implementada (NP-016 a NP-018 DONE): `NotasView` con sub-vistas list/form/detail, tabla de filas dinámica, total en tiempo real, guardar borrador, emitir y descarga de PDF.
 
 ---
 
-## Fase 5 — Tests
+## Fase 5 — Frontend UX Enhancement: DNIT + Catálogo
 
-### 5.1 `notas.service.test.ts`
+Modificación de `apps/web-operacion/src/main.tsx`. No requiere cambios en API ni en DB.
 
-- Crear borrador exitoso
-- Intentar emitir sin items ITEM → error
-- Emitir exitoso → numero asignado correctamente
-- PATCH sobre nota EMITIDA → 409
-- DELETE sobre nota EMITIDA → 409
-- Verificacion por token valido → `{ valido: true }`
-- Verificacion por token de borrador → `{ valido: false }`
-- Verificacion por token inexistente → `{ valido: false }`
-- `numeroALetras` cubre casos: 0, 1, 999, 1000, 1000000, 1750000
+### 5.1 Estado del cliente
 
-### 5.2 Typecheck + Build
+Reemplazar campos planos `formClienteNombre` + `formClienteRuc` por:
 
-- `npm run typecheck --workspace=apps/api`
+```typescript
+interface NotaClienteState {
+  documento_tipo: 'RUC' | 'CI';  // solo frontend, para DNIT lookup
+  documento: string;               // persiste como cliente_ruc
+  nombre: string;                  // persiste como cliente_nombre
+}
+const [cliente, setCliente] = useState<NotaClienteState>({
+  documento_tipo: 'RUC', documento: '', nombre: ''
+});
+const [clienteAutocompleting, setClienteAutocompleting] = useState(false);
+const [clienteMessage, setClienteMessage] = useState<string | null>(null);
+const [clienteSuggestions, setClienteSuggestions] = useState<ClienteSearchResult[]>([]);
+```
+
+### 5.2 Autocomplete desde DNIT
+
+Llamar `GET /clientes/dnit/autocomplete?documento_tipo=...&documento=...` al perder foco en el campo número. Mismo patrón que `InvoiceView.tryAutocompleteDnit()`.
+
+### 5.3 Busqueda de agenda mientras tipea nombre
+
+Debounce 300ms sobre `cliente.nombre` → `GET /clientes/buscar?q=...&limit=5` → muestra dropdown de sugerencias. Al seleccionar, llena nombre y documento. Mismo patrón que `InvoiceView`.
+
+### 5.4 Estado extendido de filas
+
+Cada fila necesita un ID cliente-side para indexar el estado de catálogo:
+
+```typescript
+interface NotaFilaDraft {
+  _id: string;           // crypto.randomUUID() — solo frontend, no va a la API
+  orden: number;
+  fila_tipo: NotaFilaTipo;
+  descripcion: string;
+  cantidad: string;        // string para input controlado
+  precio_unitario: string; // string para input controlado
+}
+const [catalogSuggestions, setCatalogSuggestions] = useState<Record<string, CatalogoItem[]>>({});
+const [catalogMessage, setCatalogMessage] = useState<Record<string, string | null>>({});
+const [catalogSaving, setCatalogSaving] = useState<Record<string, boolean>>({});
+```
+
+### 5.5 Typeahead de catalogo por fila ITEM
+
+Al cambiar descripcion en fila tipo ITEM (debounce 300ms): `GET /catalogo/items?q=...&limit=5`. Al seleccionar resultado: pre-llena descripcion + precio_unitario. El precio **no se bloquea** — siempre editable.
+
+### 5.6 Guardar item en catalogo
+
+Si el operador completa una fila tipo ITEM sin seleccionar del catálogo, ofrecer botón "Guardar en catálogo". Llama `POST /catalogo/items` con `iva_tipo: "IVA_10"` como default (sin desglose en notas, el campo es requerido por el schema del catálogo existente).
+
+### 5.7 Total en tiempo real
+
+```typescript
+const totalNota = formFilas
+  .filter(f => f.fila_tipo === 'ITEM')
+  .reduce((acc, f) => {
+    const cant = Number(f.cantidad);
+    const precio = Number(f.precio_unitario);
+    return acc + (cant > 0 && precio > 0 ? Math.round(cant * precio) : 0);
+  }, 0);
+```
+
+### 5.8 Payload al guardar
+
+Al construir el cuerpo del request:
+- `cliente_nombre`: `cliente.nombre.trim()`
+- `cliente_ruc`: `cliente.documento.trim() || null`
+- `items`: mapear `formFilas` a `NotaFilaInput[]` (excluir `_id`, convertir cantidad/precio a number)
+
+---
+
+## Fase 6 — Tests
+
+### 6.1 `notas.service.test.ts` (ya completado)
+
+Tests existentes: 16/16 passed. No requieren cambios para la Fase 5.
+
+### 6.2 Typecheck + Build post-enhancement
+
+Después de implementar Fase 5:
 - `npm run typecheck --workspace=apps/web-operacion`
 - `npm run build --workspace=apps/web-operacion`
 

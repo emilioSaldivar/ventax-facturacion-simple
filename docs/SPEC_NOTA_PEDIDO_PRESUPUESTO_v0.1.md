@@ -73,13 +73,27 @@ Debajo de la cabecera, antes de los ítems:
 ```
 ┌──────────────────────┬─────────────────────────────────┐
 │  FECHA DE EMISIÓN:   │  DD/MM/YYYY                     │
-│  RUC:                │  [ruc del cliente o "—"]        │
+│  RUC/CI:             │  [documento del cliente o "—"]  │
 ├──────────────────────┴─────────────────────────────────┤
 │  CLIENTE:  [nombre o razon social]                     │
 └────────────────────────────────────────────────────────┘
 ```
 
-El RUC del cliente puede ser vacío — en ese caso se muestra `—` (ejemplo real: cliente persona física sin RUC visible).
+El campo de documento puede ser vacío — en ese caso se muestra `—`.
+
+### 4.1 Autocompletado De Cliente En El Formulario
+
+El formulario replica el flujo de búsqueda de cliente de la pantalla de facturas:
+
+1. El operador selecciona **tipo de documento** (`RUC` o `CI`) — selector local en el formulario, no persiste en DB.
+2. Ingresa el número de documento.
+3. **Al salir del campo** (blur): el frontend llama `GET /clientes/dnit/autocomplete?documento_tipo=...&documento=...` y pre-llena el nombre si se encuentra en la base DNIT/SET.
+4. **Mientras tipea**: el frontend busca `GET /clientes/buscar?q=...` y muestra sugerencias de la agenda del facturador. Seleccionar una sugerencia llena todos los campos.
+5. Si el cliente no está en la agenda y el autocompletado lo encontró, se ofrece la opción de **guardarlo en la agenda** (botón "Guardar cliente").
+
+El tipo de documento (`RUC`/`CI`) se usa únicamente para la llamada DNIT — no se persiste en `notas_comerciales`. El campo `cliente_ruc` almacena el número de documento (RUC o CI) como texto libre.
+
+**Label en el PDF**: `RUC/CI:` para cubrir ambos tipos.
 
 ---
 
@@ -141,6 +155,10 @@ Numeracion separada por tipo y por facturador.
 ## 6. Calculos De Total
 
 Solo se calcula y muestra un **total unico** (suma de `precio_total` de todos los items con tipo `ITEM`). No hay desglose de IVA en la nota. Los PDFs reales confirman este comportamiento.
+
+### 6.1 Semantica Del Precio
+
+El precio unitario (`precio_unitario`) representa el **precio final con IVA incluido** — es el precio que el cliente paga. No se realiza ningún cálculo de base imponible ni desglose. El catálogo de items ya almacena precios con IVA incluido, por lo que los valores se usan directamente.
 
 ```
 total = SUM(precio_total) WHERE fila_tipo = 'ITEM'
@@ -293,15 +311,47 @@ Todos los endpoints autenticados filtran por `facturador_id` del contexto operat
 
 ### 11.2 Formulario
 
-1. Tipo: selector `Presupuesto` / `Pedido`
-2. Cliente: busqueda en agenda del facturador (reusa componente existente)
-3. Tabla de filas dinamica:
-   - Boton `+ Contexto` agrega fila tipo CONTEXTO (textarea, sin precio)
-   - Boton `+ Item` agrega fila tipo ITEM (descripcion + cantidad + precio unitario; total calculado en tiempo real)
-   - Boton `+ Item sin precio` agrega fila ITEM_SIN_PRECIO (descripcion + cantidad; precio = —)
-   - Cada fila tiene handle de arrastre para reordenar y boton de eliminar
-4. Total calculado en tiempo real debajo de la tabla
-5. Acciones: `Guardar borrador` · `Emitir` (confirmacion modal — irreversible)
+**Sección 1 — Tipo de documento**
+- Selector `Presupuesto` / `Pedido`
+
+**Sección 2 — Cliente**
+- Campo tipo de documento: selector `RUC` / `CI` (solo para autocomplete, no persiste en DB)
+- Campo número: al perder foco, dispara autocomplete contra DNIT
+- Campo nombre/razón social: se pre-llena desde DNIT o agenda; editable
+- Sugerencias de agenda mientras el operador tipea el nombre
+- Si el cliente fue autocompletado desde DNIT pero no está en agenda: botón "Guardar cliente en agenda"
+- Mensaje informativo de estado del autocomplete (autocompletando... / encontrado / no encontrado)
+
+**Sección 3 — Filas del documento**
+
+Tabla dinámica. Cada fila tiene ID cliente-side (no persiste) para asociar estado de catálogo por fila.
+
+Tipos de fila y sus campos:
+
+| Tipo | Campos en UI |
+|---|---|
+| `CONTEXTO` | Textarea descripción (full width, en negrita). Sin precio. |
+| `ITEM` | Descripción (con búsqueda catálogo), cantidad, precio unitario (editable), total (calculado en tiempo real). |
+| `ITEM_SIN_PRECIO` | Descripción. Sin precio (`—`). |
+
+Para filas tipo `ITEM`:
+- Al tipear en el campo descripción: búsqueda typeahead en catálogo (`GET /catalogo/items?q=...`)
+- Seleccionar resultado del catálogo: pre-llena descripción y precio unitario; el precio queda **siempre editable** (no se bloquea)
+- Si el item es nuevo (sin catalogo_item_id): se puede optar por "Guardar en catálogo" al confirmar la fila
+
+Controles de fila:
+- Flechas arriba/abajo para reordenar
+- Botón eliminar
+
+CTAs al pie de la tabla: `+ Descripción` · `+ Item con precio` · `+ Item sin precio`
+
+**Sección 4 — Total**
+- Total calculado en tiempo real (suma de precio_total de filas ITEM)
+- Visible debajo de la tabla
+
+**Sección 5 — Acciones**
+- `Guardar borrador` — guarda sin emitir (no requiere fecha)
+- `Emitir` — confirmación modal (irreversible); asigna número y fecha_emision al momento de emitir
 
 ### 11.3 Post-emision
 
@@ -309,6 +359,23 @@ Todos los endpoints autenticados filtran por `facturador_id` del contexto operat
 - Boton `Descargar PDF`
 - Boton `Compartir` (Web Share API si disponible)
 - Vista de solo lectura
+
+### 11.4 Integracion Con Catalogo De Items
+
+El catálogo existente (`/catalogo/items`) se reutiliza para pre-llenar filas tipo `ITEM`. El precio del catálogo incluye IVA y se usa directamente como precio unitario. No se bloquea el precio — el operador siempre puede ajustarlo (el presupuesto puede diferir del precio de lista).
+
+Flujo por fila tipo `ITEM`:
+
+1. El operador empieza a tipear en el campo descripción.
+2. El frontend busca `GET /catalogo/items?q=<texto>&limit=5` (debounce 300ms).
+3. Se muestran hasta 5 sugerencias con descripción y precio.
+4. Al seleccionar: pre-llena descripción + precio unitario. El precio queda editable.
+5. Si el operador ingresó descripción y precio sin seleccionar del catálogo (item ad-hoc): al confirmar la fila, se ofrece botón "Guardar en catálogo" (precio entero requerido).
+6. La opción "Guardar en catálogo" llama `POST /catalogo/items` y asocia el item al catálogo para futuras notas.
+
+**Diferencias vs facturas:**
+- No hay `iva_tipo` por item (sin desglose IVA)
+- El precio desde catálogo **no se bloquea** — siempre editable
 
 ---
 
