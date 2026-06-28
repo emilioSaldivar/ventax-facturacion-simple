@@ -176,10 +176,11 @@ export class PgRecibosRepository implements RecibosRepository {
   async getFacturadorParaPdf(facturadorId: string): Promise<FacturadorParaPdf | null> {
     const { rows } = await pool.query<FacturadorParaPdf>(
       `SELECT f.razon_social, f.ruc, f.logo_url, f.rubro_descripcion,
-              e.direccion, e.telefono, e.email
+              f.telefono,
+              (SELECT e.direccion FROM facturador_establecimientos e
+               WHERE e.facturador_id = f.id AND e.activo = true AND e.deleted_at IS NULL
+               ORDER BY e.codigo LIMIT 1) AS direccion
        FROM facturadores f
-       LEFT JOIN establecimientos e
-         ON e.facturador_id = f.id AND e.es_principal = true
        WHERE f.id = $1`,
       [facturadorId]
     );

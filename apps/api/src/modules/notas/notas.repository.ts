@@ -302,9 +302,11 @@ export class PgNotasRepository implements NotasRepository {
   async getFacturadorParaPdf(facturadorId: string): Promise<FacturadorParaPdf | null> {
     const result = await pool.query(
       `SELECT f.razon_social, f.ruc, f.logo_url, f.rubro_descripcion,
-              e.telefono, e.direccion
+              f.telefono,
+              (SELECT e.direccion FROM facturador_establecimientos e
+               WHERE e.facturador_id = f.id AND e.activo = true AND e.deleted_at IS NULL
+               ORDER BY e.codigo LIMIT 1) AS direccion
        FROM facturadores f
-       LEFT JOIN establecimientos e ON e.facturador_id = f.id AND e.es_principal = true
        WHERE f.id = $1`,
       [facturadorId]
     );
