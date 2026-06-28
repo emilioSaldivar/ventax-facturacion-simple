@@ -5572,7 +5572,8 @@ function NotasView({
   function applyCatalogItem(filaId: string, item: CatalogoItem) {
     updateFila(filaId, { descripcion: item.descripcion, precio_unitario: String(item.precio_unitario), catalog_item_id: item.id, catalog_iva_tipo: item.iva_tipo });
     setCatalogSuggestions(c => ({ ...c, [filaId]: [] }));
-    setCatalogMessage(c => ({ ...c, [filaId]: "Precio pre-llenado del catálogo (editable)." }));
+    setCatalogMessage(c => ({ ...c, [filaId]: null }));
+    setFilaSheetOpen(false);
   }
 
   async function saveQuickCatalogItem(fila: NotaFilaDraft): Promise<boolean> {
