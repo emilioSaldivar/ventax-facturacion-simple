@@ -4674,6 +4674,12 @@ function getNextFiscalNumber(current: string | undefined): string {
   return String(numeric + 1).padStart(current.length, "0");
 }
 
+function fmtFecha(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const [y, m, d] = iso.slice(0, 10).split("-");
+  return `${d}/${m}/${y}`;
+}
+
 function buildWhatsAppShareUrl(publicUrl: string, phone: string): string {
   const digits = normalizeParaguayWhatsAppDigits(phone);
   const text = encodeURIComponent(`Comprobante Ventax: ${publicUrl}`);
@@ -5713,11 +5719,29 @@ function NotasView({
         <section className="nota-detail-resumen">
           <div className="nota-detail-resumen-header">
             <span className={ESTADO_VISUAL_CLASS[estadoVisual]}>{ESTADO_VISUAL_LABEL[estadoVisual]}</span>
+            {/* Estado comercial como select inline */}
+            {puedeMarcarEstado ? (
+              <select
+                className="nota-estado-select"
+                value={selectedNota.estado_comercial ?? ""}
+                disabled={estadoComercialLoading}
+                onChange={e => {
+                  const v = e.target.value as NotaEstadoComercial;
+                  if (v) void handleEstadoComercial(selectedNota.id, v);
+                }}
+                aria-label="Estado del presupuesto"
+              >
+                <option value="">Marcar estado…</option>
+                <option value="PENDIENTE_RESPUESTA">Pendiente</option>
+                <option value="ACEPTADO">Aceptado</option>
+                <option value="RECHAZADO">Rechazado</option>
+              </select>
+            ) : null}
           </div>
           <dl className="receipt-summary">
             {(selectedNota.total ?? 0) > 0 ? <div><dt>Total</dt><dd><strong>{formatGuaranies(selectedNota.total ?? 0)}</strong></dd></div> : null}
-            <div><dt>Fecha</dt><dd>{selectedNota.fecha_emision ?? "Borrador"}</dd></div>
-            {selectedNota.valido_hasta ? <div><dt>Validez</dt><dd>{selectedNota.valido_hasta}</dd></div> : null}
+            <div><dt>Fecha</dt><dd>{fmtFecha(selectedNota.fecha_emision) || "Borrador"}</dd></div>
+            {selectedNota.valido_hasta ? <div><dt>Válido hasta</dt><dd>{fmtFecha(selectedNota.valido_hasta)}</dd></div> : null}
             <div><dt>Cliente</dt><dd>{selectedNota.cliente_nombre}</dd></div>
             {selectedNota.cliente_ruc ? <div><dt>RUC/CI</dt><dd>{selectedNota.cliente_ruc}</dd></div> : null}
             {itemsConcepto.length > 0 ? <div><dt>Conceptos</dt><dd>{itemsConcepto.length} item{itemsConcepto.length !== 1 ? "s" : ""}</dd></div> : null}
@@ -5758,33 +5782,6 @@ function NotasView({
           </section>
         ) : null}
 
-        {/* Estado comercial */}
-        {puedeMarcarEstado ? (
-          <section className="nota-detail-section">
-            <p className="eyebrow">Estado del presupuesto</p>
-            <div className="delivery-actions">
-              <button
-                className={`secondary-action${selectedNota.estado_comercial === "ACEPTADO" ? " active-state-btn" : ""}`}
-                onClick={() => void handleEstadoComercial(selectedNota.id, "ACEPTADO")}
-                disabled={estadoComercialLoading || selectedNota.estado_comercial === "ACEPTADO"}
-                type="button"
-              >Aceptado</button>
-              <button
-                className={`secondary-action${selectedNota.estado_comercial === "RECHAZADO" ? " active-state-btn" : ""}`}
-                onClick={() => void handleEstadoComercial(selectedNota.id, "RECHAZADO")}
-                disabled={estadoComercialLoading || selectedNota.estado_comercial === "RECHAZADO"}
-                type="button"
-              >Rechazado</button>
-              <button
-                className="secondary-action"
-                onClick={() => void handleEstadoComercial(selectedNota.id, "PENDIENTE_RESPUESTA")}
-                disabled={estadoComercialLoading || selectedNota.estado_comercial == null || selectedNota.estado_comercial === "PENDIENTE_RESPUESTA"}
-                type="button"
-              >Pendiente</button>
-            </div>
-          </section>
-        ) : null}
-
         {/* Convertir en factura */}
         {puedeConvertir && notaFull ? (
           <div className="action-group">
@@ -5794,9 +5791,8 @@ function NotasView({
           </div>
         ) : null}
 
-        {/* Compartir */}
+        {/* Compartir por WhatsApp */}
         <div className="action-group">
-          <p className="group-title">Compartir</p>
           <div className="delivery-inline-form">
             <label>
               WhatsApp
@@ -5812,8 +5808,6 @@ function NotasView({
             Enviar por WhatsApp
           </a>
           <div className="delivery-actions">
-            <button className="secondary-action" disabled={!notaPublicUrl} onClick={() => void shareNotaLink()} type="button">Compartir enlace</button>
-            <button className="secondary-action" disabled={!notaPublicUrl} onClick={() => void copyNotaLink()} type="button">Copiar enlace</button>
             <button className="secondary-action" onClick={() => openPdf(selectedNota)} type="button">Ver PDF</button>
           </div>
           {deliveryMessage ? <p className="inline-message">{deliveryMessage}</p> : null}
@@ -5822,7 +5816,7 @@ function NotasView({
         {/* Nueva nota */}
         <div className="action-group">
           <button className="primary-action wide" onClick={openCreate} type="button">
-            {filtroTipo === "PRESUPUESTO" ? "Nuevo presupuesto" : "Nuevo pedido"}
+            {selectedNota.tipo === "PRESUPUESTO" ? "Nuevo presupuesto" : "Nuevo pedido"}
           </button>
         </div>
       </section>
@@ -6138,7 +6132,7 @@ function NotasView({
   for (const nota of notasFiltradas) {
     const fecha = nota.fecha_emision ?? nota.created_at.slice(0, 7);
     const mes = fecha.slice(0, 7);
-    const mesLabel = new Date(mes + "-01").toLocaleString("es-PY", { month: "long", year: "numeric" });
+    const mesLabel = new Date(mes + "-02T00:00:00").toLocaleString("es-PY", { month: "long", year: "numeric" });
     const label = nota.estado === "BORRADOR" ? "Borradores" : mesLabel.charAt(0).toUpperCase() + mesLabel.slice(1);
     const ultimo = gruposPorMes[gruposPorMes.length - 1];
     if (ultimo && ultimo.label === label) ultimo.notas.push(nota);
@@ -6218,7 +6212,7 @@ function NotasView({
                       </div>
                       <div className="invoice-card-cliente">{nota.cliente_nombre}</div>
                       <div className="invoice-card-meta">
-                        <span className="muted">{nota.fecha_emision ?? nota.created_at.slice(0, 10)}</span>
+                        <span className="muted">{fmtFecha(nota.fecha_emision ?? nota.created_at.slice(0, 10))}</span>
                         {(nota.total ?? 0) > 0 ? <strong>{formatGuaranies(nota.total ?? 0)}</strong> : null}
                       </div>
                     </button>

@@ -12,8 +12,8 @@ export async function buildNotaPdfHtml(
 
   const tipoLabel = nota.tipo === "PRESUPUESTO" ? "PRESUPUESTO" : "NOTA DE PEDIDO";
   const nroStr = nota.numero != null ? String(nota.numero).padStart(7, "0") : "-------";
-  const fechaStr = nota.fecha_emision ?? "";
-  const validoHastaStr = nota.valido_hasta ?? null;
+  const fechaStr = fmtFecha(nota.fecha_emision);
+  const validoHastaStr = nota.valido_hasta ? fmtFecha(nota.valido_hasta) : null;
 
   const logoHtml = facturador.logo_url
     ? `<img src="${facturador.logo_url}" alt="Logo" style="max-height:60px;max-width:160px;object-fit:contain;">`
@@ -124,7 +124,7 @@ export async function buildNotaPdfHtml(
       <th style="text-align:left;width:50%;">Descripción</th>
       <th style="text-align:center;width:12%;">Cant.</th>
       <th style="text-align:right;width:18%;">Precio Unit.</th>
-      <th style="text-align:right;width:20%;">Total</th>
+      <th style="text-align:right;width:20%;">Subtotal</th>
     </tr>
   </thead>
   <tbody>
@@ -150,7 +150,6 @@ ${observacionesHtml}
     Para aceptar este presupuesto comuníquese con nosotros.<br>
     Verificar en: ${qrData}
   </div>
-  <img src="${qrDataUrl}" width="56" height="56" alt="QR">
 </div>
 
 </body>
@@ -160,6 +159,12 @@ ${observacionesHtml}
 function esc(s: string | null | undefined): string {
   if (!s) return "";
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function fmtFecha(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const [y, m, d] = iso.slice(0, 10).split("-");
+  return `${d}/${m}/${y}`;
 }
 
 function fmt(n: number | null | undefined): string {

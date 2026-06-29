@@ -2276,3 +2276,25 @@ dd {
   color: var(--text-muted, #6b7280);
   text-align: center;
 }
+
+.nota-estado-select {
+  font-size: 13px;
+  padding: 4px 8px;
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 6px;
+  background: white;
+  color: var(--text, #374151);
+  cursor: pointer;
+  max-width: 160px;
+}
+.nota-estado-select:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.nota-detail-resumen-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 12px;
+}

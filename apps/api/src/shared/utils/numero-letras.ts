@@ -11,7 +11,7 @@ export function numeroALetras(n: number): string {
     "SESENTA", "SETENTA", "OCHENTA", "NOVENTA",
   ];
   const centenas = [
-    "", "CIEN", "DOSCIENTOS", "TRESCIENTOS", "CUATROCIENTOS", "QUINIENTOS",
+    "", "CIENTO", "DOSCIENTOS", "TRESCIENTOS", "CUATROCIENTOS", "QUINIENTOS",
     "SEISCIENTOS", "SETECIENTOS", "OCHOCIENTOS", "NOVECIENTOS",
   ];
 
