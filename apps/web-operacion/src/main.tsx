@@ -4676,8 +4676,9 @@ function getNextFiscalNumber(current: string | undefined): string {
 
 function fmtFecha(iso: string | null | undefined): string {
   if (!iso) return "";
-  const [y, m, d] = iso.slice(0, 10).split("-");
-  return `${d}/${m}/${y}`;
+  const match = iso.match(/(\d{4})-(\d{2})-(\d{2})/);
+  if (match) return `${match[3]}/${match[2]}/${match[1]}`;
+  return iso;
 }
 
 function buildWhatsAppShareUrl(publicUrl: string, phone: string): string {
@@ -5424,6 +5425,9 @@ function NotasView({
 
   function openCreate() {
     resetForm();
+    const d = new Date();
+    d.setDate(d.getDate() + 30);
+    setFormValidoHasta(d.toISOString().slice(0, 10));
     setSubView("form");
   }
 

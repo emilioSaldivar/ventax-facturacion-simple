@@ -18,6 +18,20 @@ function calcularTotal(items: NotaFilaRecord[]): number {
   return items.reduce((acc, it) => acc + (it.precio_total ?? 0), 0);
 }
 
+/** pg devuelve date como Date object o string "YYYY-MM-DD" dependiendo de la versión. */
+function toIsoDate(val: unknown): string | null {
+  if (!val) return null;
+  if (val instanceof Date) {
+    const y = val.getUTCFullYear();
+    const m = String(val.getUTCMonth() + 1).padStart(2, "0");
+    const d = String(val.getUTCDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  }
+  const s = String(val);
+  const match = s.match(/(\d{4})-(\d{2})-(\d{2})/);
+  return match ? `${match[1]}-${match[2]}-${match[3]}` : null;
+}
+
 function rowToRecord(row: Record<string, unknown>): NotaRecord {
   return {
     id: row.id as string,
@@ -26,8 +40,8 @@ function rowToRecord(row: Record<string, unknown>): NotaRecord {
     numero: row.numero != null ? Number(row.numero) : null,
     estado: row.estado as NotaRecord["estado"],
     estado_comercial: (row.estado_comercial ?? null) as NotaRecord["estado_comercial"],
-    fecha_emision: row.fecha_emision ? String(row.fecha_emision).slice(0, 10) : null,
-    valido_hasta: row.valido_hasta ? String(row.valido_hasta).slice(0, 10) : null,
+    fecha_emision: toIsoDate(row.fecha_emision),
+    valido_hasta: toIsoDate(row.valido_hasta),
     cliente_nombre: row.cliente_nombre as string,
     cliente_ruc: (row.cliente_ruc ?? null) as string | null,
     observaciones: (row.observaciones ?? null) as string | null,

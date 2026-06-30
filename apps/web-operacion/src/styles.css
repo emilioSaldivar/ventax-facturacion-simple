@@ -2176,7 +2176,7 @@ dd {
   border-radius: 8px;
   margin-bottom: 8px;
   background: white;
-  overflow: hidden;
+  /* NO overflow:hidden — el dropdown del menú necesita salir del card */
 }
 .invoice-card-main {
   flex: 1;
@@ -2186,6 +2186,7 @@ dd {
   background: none;
   cursor: pointer;
   min-width: 0;
+  border-radius: 8px 0 0 8px;
 }
 .invoice-card-main:hover {
   background: #f9fafb;
@@ -2231,6 +2232,7 @@ dd {
   font-size: 20px;
   color: var(--text-muted, #6b7280);
   line-height: 1;
+  border-radius: 0 8px 8px 0;
 }
 .invoice-card-menu-btn:hover {
   background: #f3f4f6;
