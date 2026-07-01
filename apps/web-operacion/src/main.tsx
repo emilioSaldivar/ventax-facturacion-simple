@@ -430,6 +430,150 @@ interface InvoiceClientePrefillRequest {
   cliente: FacturaClienteInput;
 }
 
+// ─── Página pública de verificación de Notas ────────────────────────────────
+
+interface NotaPublicaPayload {
+  valido: boolean;
+  tipo?: "PRESUPUESTO" | "PEDIDO";
+  numero?: number | null;
+  fecha_emision?: string | null;
+  valido_hasta?: string | null;
+  cliente_nombre?: string;
+  cliente_ruc?: string | null;
+  observaciones?: string | null;
+  estado_visual?: string;
+  total?: number;
+  items?: Array<{
+    fila_tipo: string;
+    descripcion: string;
+    cantidad: number | null;
+    precio_total: number | null;
+  }>;
+}
+
+function NotaPublicaView({ token }: { token: string }) {
+  const [loading, setLoading] = useState(true);
+  const [data, setData] = useState<NotaPublicaPayload | null>(null);
+
+  useEffect(() => {
+    fetch(`/api/v1/verificar/nota/${token}`)
+      .then(r => r.json() as Promise<NotaPublicaPayload>)
+      .then(d => { setData(d); setLoading(false); })
+      .catch(() => { setData({ valido: false }); setLoading(false); });
+  }, [token]);
+
+  if (loading) {
+    return (
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100dvh", fontFamily: "Inter, sans-serif" }}>
+        Cargando...
+      </div>
+    );
+  }
+
+  if (!data?.valido) {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100dvh", fontFamily: "Inter, sans-serif", gap: "12px", color: "#374151" }}>
+        <div style={{ fontSize: "40px" }}>🔍</div>
+        <div style={{ fontSize: "16px", fontWeight: 600 }}>Documento no encontrado</div>
+        <div style={{ fontSize: "14px", color: "#6b7280" }}>El enlace no es válido o el documento fue eliminado.</div>
+      </div>
+    );
+  }
+
+  const tipoLabel = data.tipo === "PRESUPUESTO" ? "Presupuesto" : "Nota de Pedido";
+  const nroStr = data.numero != null ? String(data.numero).padStart(7, "0") : "-------";
+  const fmtGs = (n: number | null | undefined) => n != null ? Math.round(n).toLocaleString("es-PY") : "";
+  const pdfUrl = `/api/v1/verificar/nota/${token}/pdf`;
+
+  return (
+    <div style={{ minHeight: "100dvh", background: "#f4f8fa", fontFamily: "Inter, ui-sans-serif, sans-serif" }}>
+      {/* Header */}
+      <div style={{ background: "#fff", borderBottom: "1px solid #e5e7eb", padding: "14px 20px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div style={{ fontWeight: 700, fontSize: "16px", color: "#07a7e1", letterSpacing: "0.5px" }}>Ventax</div>
+        <a
+          href={pdfUrl}
+          target="_blank"
+          rel="noreferrer"
+          style={{ background: "#07a7e1", color: "#fff", padding: "8px 16px", borderRadius: "8px", textDecoration: "none", fontWeight: 600, fontSize: "14px" }}
+        >
+          Descargar PDF
+        </a>
+      </div>
+
+      {/* Card */}
+      <div style={{ maxWidth: "480px", margin: "24px auto", padding: "0 16px" }}>
+        <div style={{ background: "#fff", borderRadius: "12px", border: "1px solid #e5e7eb", overflow: "hidden" }}>
+          {/* Tipo + numero */}
+          <div style={{ background: "#1e3a5f", color: "#fff", padding: "18px 20px" }}>
+            <div style={{ fontSize: "11px", letterSpacing: "1px", opacity: 0.7, textTransform: "uppercase" }}>{tipoLabel}</div>
+            <div style={{ fontSize: "22px", fontWeight: 700, marginTop: "4px" }}>N° {nroStr}</div>
+            {data.fecha_emision && (
+              <div style={{ fontSize: "12px", opacity: 0.8, marginTop: "4px" }}>Emitido: {fmtFecha(data.fecha_emision)}</div>
+            )}
+            {data.valido_hasta && (
+              <div style={{ fontSize: "12px", opacity: 0.8, marginTop: "2px" }}>Válido hasta: {fmtFecha(data.valido_hasta)}</div>
+            )}
+          </div>
+
+          {/* Cliente */}
+          <div style={{ padding: "16px 20px", borderBottom: "1px solid #f3f4f6" }}>
+            <div style={{ fontSize: "11px", color: "#9ca3af", textTransform: "uppercase", marginBottom: "4px" }}>Cliente</div>
+            <div style={{ fontWeight: 600, fontSize: "15px" }}>{data.cliente_nombre}</div>
+            {data.cliente_ruc && <div style={{ fontSize: "13px", color: "#6b7280", marginTop: "2px" }}>RUC/CI: {data.cliente_ruc}</div>}
+          </div>
+
+          {/* Items */}
+          <div style={{ padding: "16px 20px" }}>
+            <div style={{ fontSize: "11px", color: "#9ca3af", textTransform: "uppercase", marginBottom: "10px" }}>Detalle</div>
+            {(data.items ?? []).map((it, i) => {
+              if (it.fila_tipo === "CONTEXTO") {
+                return <div key={i} style={{ fontSize: "12px", fontWeight: 600, color: "#374151", padding: "4px 0", borderBottom: "1px solid #f3f4f6" }}>{it.descripcion}</div>;
+              }
+              if (it.fila_tipo === "ITEM_SIN_PRECIO") {
+                return <div key={i} style={{ fontSize: "13px", color: "#374151", padding: "6px 0", borderBottom: "1px solid #f3f4f6" }}>{it.descripcion}</div>;
+              }
+              return (
+                <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: "1px solid #f3f4f6", fontSize: "13px" }}>
+                  <span style={{ color: "#374151" }}>
+                    {it.descripcion}{it.cantidad && it.cantidad !== 1 ? ` ×${it.cantidad}` : ""}
+                  </span>
+                  <span style={{ fontWeight: 500, color: "#111827" }}>Gs. {fmtGs(it.precio_total)}</span>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Total */}
+          <div style={{ background: "#f9fafb", padding: "16px 20px", display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: "1px solid #e5e7eb" }}>
+            <span style={{ fontWeight: 600, color: "#374151" }}>TOTAL</span>
+            <span style={{ fontWeight: 700, fontSize: "18px", color: "#1e3a5f" }}>Gs. {fmtGs(data.total)}</span>
+          </div>
+
+          {/* Observaciones */}
+          {data.observaciones && (
+            <div style={{ padding: "14px 20px", borderTop: "1px solid #e5e7eb", background: "#fafafa" }}>
+              <div style={{ fontSize: "11px", color: "#9ca3af", textTransform: "uppercase", marginBottom: "6px" }}>Observaciones</div>
+              <div style={{ fontSize: "13px", color: "#374151", whiteSpace: "pre-line" }}>{data.observaciones}</div>
+            </div>
+          )}
+        </div>
+
+        <div style={{ textAlign: "center", fontSize: "12px", color: "#9ca3af", marginTop: "20px" }}>
+          Documento emitido con Ventax · ventax.app
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Root: routing entre app privada y páginas públicas ─────────────────────
+function Root() {
+  const match = window.location.pathname.match(/^\/verificar\/nota\/([0-9a-f-]{36})$/i);
+  if (match?.[1]) return <NotaPublicaView token={match[1]} />;
+  return <App />;
+}
+
+// ─── App: shell autenticado ──────────────────────────────────────────────────
 function App() {
   const [view, setView] = useState<ViewState>("checking-session");
   const [accessToken, setAccessToken] = useState<string | null>(() => localStorage.getItem(ACCESS_TOKEN_STORAGE_KEY));
@@ -6623,7 +6767,7 @@ function RecibosView({
 
 createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
-    <App />
+    <Root />
   </React.StrictMode>
 );
 

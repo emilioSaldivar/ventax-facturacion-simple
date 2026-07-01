@@ -1,7 +1,10 @@
 import { Router } from "express";
 import { z } from "zod";
+import { env } from "../../config/env.js";
+import { htmlToPdfBuffer } from "../../shared/pdf/pdf.service.js";
 import { validateRequest } from "../../shared/validation/validate-request.js";
 import { notasRepository } from "../notas/notas.repository.js";
+import { buildNotaPdfHtml } from "../notas/notas.pdf.js";
 import { verificarNota } from "../notas/notas.service.js";
 import { recibosRepository } from "../recibos/recibos.repository.js";
 import { verificarRecibo } from "../recibos/recibos.service.js";
@@ -46,6 +49,41 @@ verificacionRouter.get(
         })),
         emitido_at: n.emitido_at,
       });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// PDF público — no requiere autenticación
+verificacionRouter.get(
+  "/nota/:token/pdf",
+  validateRequest("params", tokenParamsSchema),
+  async (req, res, next) => {
+    try {
+      const { token } = req.params as z.infer<typeof tokenParamsSchema>;
+      const nota = await notasRepository.findByVerificationToken(token);
+
+      if (!nota || nota.estado !== "EMITIDO") {
+        res.status(404).json({ error: "NOT_FOUND" });
+        return;
+      }
+
+      const facturador = await notasRepository.getFacturadorParaPdf(nota.facturador_id);
+      if (!facturador) {
+        res.status(404).json({ error: "NOT_FOUND" });
+        return;
+      }
+
+      const html = await buildNotaPdfHtml(nota, facturador, env.PUBLIC_APP_BASE_URL);
+      const pdf = await htmlToPdfBuffer(html);
+
+      const tipoLabel = nota.tipo === "PRESUPUESTO" ? "presupuesto" : "pedido";
+      const nroStr = String(nota.numero ?? 0).padStart(7, "0");
+
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `inline; filename="${tipoLabel}-${nroStr}.pdf"`);
+      res.send(pdf);
     } catch (error) {
       next(error);
     }
