@@ -7,6 +7,7 @@ import { notasRepository } from "../notas/notas.repository.js";
 import { buildNotaPdfHtml } from "../notas/notas.pdf.js";
 import { verificarNota } from "../notas/notas.service.js";
 import { recibosRepository } from "../recibos/recibos.repository.js";
+import { buildReciboPdfHtml } from "../recibos/recibos.pdf.js";
 import { verificarRecibo } from "../recibos/recibos.service.js";
 
 const tokenParamsSchema = z.object({
@@ -115,6 +116,39 @@ verificacionRouter.get(
         factura_numero_display: r.factura_numero_display,
         emitido_at: r.emitido_at,
       });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// PDF público — no requiere autenticación
+verificacionRouter.get(
+  "/recibo/:token/pdf",
+  validateRequest("params", tokenParamsSchema),
+  async (req, res, next) => {
+    try {
+      const { token } = req.params as z.infer<typeof tokenParamsSchema>;
+      const recibo = await recibosRepository.findByVerificationToken(token);
+
+      if (!recibo || recibo.estado !== "EMITIDO") {
+        res.status(404).json({ error: "NOT_FOUND" });
+        return;
+      }
+
+      const facturador = await recibosRepository.getFacturadorParaPdf(recibo.facturador_id);
+      if (!facturador) {
+        res.status(404).json({ error: "NOT_FOUND" });
+        return;
+      }
+
+      const html = await buildReciboPdfHtml(recibo, facturador, env.PUBLIC_APP_BASE_URL);
+      const pdf = await htmlToPdfBuffer(html);
+      const nroStr = recibo.numero != null ? String(recibo.numero).padStart(7, "0") : "borrador";
+
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `inline; filename="recibo-${nroStr}.pdf"`);
+      res.send(pdf);
     } catch (error) {
       next(error);
     }

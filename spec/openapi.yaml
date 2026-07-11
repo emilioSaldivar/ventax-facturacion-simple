@@ -1565,9 +1565,6 @@ paths:
           $ref: "#/components/responses/NotFound"
 
   /verificar/recibo/{token}:
-    servers:
-      - url: /
-        description: Raiz del servidor (sin prefijo /api/v1)
     get:
       tags: [Recibos]
       summary: Verificar autenticidad de un recibo por QR token
@@ -1603,10 +1600,43 @@ paths:
                     type: boolean
                     example: false
 
+  /verificar/recibo/{token}/pdf:
+    get:
+      tags: [Recibos]
+      summary: Descargar el PDF publico de un recibo por QR token
+      description: >
+        Endpoint publico sin autenticacion. Devuelve el PDF del recibo si esta
+        EMITIDO; 404 si el token no existe o corresponde a un BORRADOR.
+      security: []
+      parameters:
+        - in: path
+          name: token
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: verification_token del recibo (uuid v4).
+      responses:
+        "200":
+          description: PDF del recibo
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        "404":
+          description: Token inexistente o recibo en estado BORRADOR
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [error]
+                properties:
+                  error:
+                    type: string
+                    example: NOT_FOUND
+
   /verificar/nota/{token}:
-    servers:
-      - url: /
-        description: Raiz del servidor (sin prefijo /api/v1)
     get:
       tags: [Notas]
       summary: Verificar autenticidad de una nota por QR token

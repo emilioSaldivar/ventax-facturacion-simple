@@ -566,10 +566,123 @@ function NotaPublicaView({ token }: { token: string }) {
   );
 }
 
+// ─── Página pública de verificación de Recibos ──────────────────────────────
+
+interface ReciboPublicaPayload {
+  valido: boolean;
+  numero?: number | null;
+  fecha_cobro?: string;
+  pagador_nombre?: string;
+  concepto?: string;
+  importe?: number;
+  forma_pago?: string;
+  factura_numero_display?: string | null;
+  emitido_at?: string | null;
+}
+
+function ReciboPublicaView({ token }: { token: string }) {
+  const [loading, setLoading] = useState(true);
+  const [data, setData] = useState<ReciboPublicaPayload | null>(null);
+
+  useEffect(() => {
+    fetch(`/api/v1/verificar/recibo/${token}`)
+      .then(r => r.json() as Promise<ReciboPublicaPayload>)
+      .then(d => { setData(d); setLoading(false); })
+      .catch(() => { setData({ valido: false }); setLoading(false); });
+  }, [token]);
+
+  if (loading) {
+    return (
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100dvh", fontFamily: "Inter, sans-serif" }}>
+        Cargando...
+      </div>
+    );
+  }
+
+  if (!data?.valido) {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100dvh", fontFamily: "Inter, sans-serif", gap: "12px", color: "#374151" }}>
+        <div style={{ fontSize: "40px" }}>🔍</div>
+        <div style={{ fontSize: "16px", fontWeight: 600 }}>Documento no encontrado</div>
+        <div style={{ fontSize: "14px", color: "#6b7280" }}>El enlace no es válido o el documento fue eliminado.</div>
+      </div>
+    );
+  }
+
+  const nroStr = data.numero != null ? String(data.numero).padStart(7, "0") : "-------";
+  const pdfUrl = `/api/v1/verificar/recibo/${token}/pdf`;
+
+  return (
+    <div style={{ minHeight: "100dvh", background: "#f4f8fa", fontFamily: "Inter, ui-sans-serif, sans-serif" }}>
+      {/* Header */}
+      <div style={{ background: "#fff", borderBottom: "1px solid #e5e7eb", padding: "14px 20px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div style={{ fontWeight: 700, fontSize: "16px", color: "#07a7e1", letterSpacing: "0.5px" }}>Ventax</div>
+        <a
+          href={pdfUrl}
+          target="_blank"
+          rel="noreferrer"
+          style={{ background: "#07a7e1", color: "#fff", padding: "8px 16px", borderRadius: "8px", textDecoration: "none", fontWeight: 600, fontSize: "14px" }}
+        >
+          Descargar PDF
+        </a>
+      </div>
+
+      {/* Card */}
+      <div style={{ maxWidth: "480px", margin: "24px auto", padding: "0 16px" }}>
+        <div style={{ background: "#fff", borderRadius: "12px", border: "1px solid #e5e7eb", overflow: "hidden" }}>
+          {/* Tipo + numero */}
+          <div style={{ background: "#1e3a5f", color: "#fff", padding: "18px 20px" }}>
+            <div style={{ fontSize: "11px", letterSpacing: "1px", opacity: 0.7, textTransform: "uppercase" }}>Recibo de Dinero</div>
+            <div style={{ fontSize: "22px", fontWeight: 700, marginTop: "4px" }}>N° {nroStr}</div>
+            {data.fecha_cobro && (
+              <div style={{ fontSize: "12px", opacity: 0.8, marginTop: "4px" }}>Fecha de cobro: {fmtFecha(data.fecha_cobro)}</div>
+            )}
+          </div>
+
+          {/* Pagador */}
+          <div style={{ padding: "16px 20px", borderBottom: "1px solid #f3f4f6" }}>
+            <div style={{ fontSize: "11px", color: "#9ca3af", textTransform: "uppercase", marginBottom: "4px" }}>Recibido de</div>
+            <div style={{ fontWeight: 600, fontSize: "15px" }}>{data.pagador_nombre}</div>
+          </div>
+
+          {/* Concepto */}
+          <div style={{ padding: "16px 20px", borderBottom: "1px solid #f3f4f6" }}>
+            <div style={{ fontSize: "11px", color: "#9ca3af", textTransform: "uppercase", marginBottom: "4px" }}>Concepto</div>
+            <div style={{ fontSize: "13px", color: "#374151" }}>{data.concepto}</div>
+            {data.factura_numero_display && (
+              <div style={{ fontSize: "12px", color: "#6b7280", marginTop: "4px" }}>Referencia factura: N° {data.factura_numero_display}</div>
+            )}
+          </div>
+
+          {/* Importe */}
+          <div style={{ background: "#f9fafb", padding: "16px 20px", display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: "1px solid #e5e7eb" }}>
+            <span style={{ fontWeight: 600, color: "#374151" }}>IMPORTE</span>
+            <span style={{ fontWeight: 700, fontSize: "18px", color: "#1e3a5f" }}>{data.importe != null ? formatGuaranies(data.importe) : ""}</span>
+          </div>
+
+          {/* Forma de pago */}
+          {data.forma_pago && (
+            <div style={{ padding: "14px 20px", borderTop: "1px solid #e5e7eb", background: "#fafafa" }}>
+              <div style={{ fontSize: "11px", color: "#9ca3af", textTransform: "uppercase", marginBottom: "4px" }}>Forma de pago</div>
+              <div style={{ fontSize: "13px", color: "#374151" }}>{FORMAS_PAGO_LABELS[data.forma_pago as ReciboFormaPago] ?? data.forma_pago}</div>
+            </div>
+          )}
+        </div>
+
+        <div style={{ textAlign: "center", fontSize: "12px", color: "#9ca3af", marginTop: "20px" }}>
+          Documento emitido con Ventax · ventax.app
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Root: routing entre app privada y páginas públicas ─────────────────────
 function Root() {
-  const match = window.location.pathname.match(/^\/verificar\/nota\/([0-9a-f-]{36})$/i);
-  if (match?.[1]) return <NotaPublicaView token={match[1]} />;
+  const notaMatch = window.location.pathname.match(/^\/verificar\/nota\/([0-9a-f-]{36})$/i);
+  if (notaMatch?.[1]) return <NotaPublicaView token={notaMatch[1]} />;
+  const reciboMatch = window.location.pathname.match(/^\/verificar\/recibo\/([0-9a-f-]{36})$/i);
+  if (reciboMatch?.[1]) return <ReciboPublicaView token={reciboMatch[1]} />;
   return <App />;
 }
 
@@ -711,7 +824,7 @@ function App() {
   }
 
   if (view === "onboarding") {
-    return <OnboardingFlow accessToken={accessToken} onComplete={handleOnboardingComplete} pendingActions={pendingActions} username={user?.username ?? ""} />;
+    return <OnboardingFlow accessToken={accessToken} onComplete={handleOnboardingComplete} pendingActions={pendingActions} username={user?.username ?? ""} userRole={user?.role ?? "OPERADOR_FACTURACION"} />;
   }
 
   return (
@@ -815,13 +928,16 @@ function OnboardingFlow({
   accessToken,
   onComplete,
   pendingActions,
-  username
+  username,
+  userRole
 }: {
   accessToken: string | null;
   onComplete: (newAccessToken: string, newUser: UserSummary) => void;
   pendingActions: string[];
   username: string;
+  userRole: string;
 }) {
+  const isAdminRole = userRole === "ADMIN_INTERNO" || userRole === "SOPORTE_INTERNO";
   const needsPasswordChange = pendingActions.includes("CHANGE_PASSWORD");
   const api = useMemo(() => createApiClient(accessToken, () => undefined), [accessToken]);
   const [phase, setPhase] = useState<"password" | "tyc" | "otp">(needsPasswordChange ? "password" : "tyc");
@@ -875,6 +991,19 @@ function OnboardingFlow({
     }
   }
 
+  async function handleAdminBypass() {
+    setError(null);
+    setSubmitting(true);
+    try {
+      const result = await api.post<AuthResponse>("/onboarding/admin/accept-direct", {});
+      onComplete(result.access_token, result.user);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error al completar la activacion.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   async function handleTycContinue() {
     if (!tycAccepted) {
       setError("Debes leer y aceptar los Terminos y Condiciones para continuar.");
@@ -883,6 +1012,10 @@ function OnboardingFlow({
     setError(null);
     setSubmitting(true);
     try {
+      if (isAdminRole) {
+        await handleAdminBypass();
+        return;
+      }
       const result = await api.post<{ otp_session_id: string; email_destino_ofuscado: string; expires_in_seconds: number }>(
         "/onboarding/otp/request",
         {}
@@ -6493,6 +6626,7 @@ function RecibosView({
   const [formFormaPago, setFormFormaPago] = useState<ReciboFormaPago>("EFECTIVO");
   const [formFechaCobro, setFormFechaCobro] = useState(() => new Date().toISOString().slice(0, 10));
   const [formRefBancaria, setFormRefBancaria] = useState("");
+  const [whatsappPhone, setWhatsappPhone] = useState("");
 
   const loadRecibos = async () => {
     setLoading(true);
@@ -6562,6 +6696,7 @@ function RecibosView({
         recibo = await api.request<ReciboRecord>(`/recibos/${recibo.id}/emitir`, { method: "POST" });
       }
       setSelectedRecibo(recibo);
+      setWhatsappPhone("");
       await loadRecibos();
       setSubView("detail");
     } catch (err) {
@@ -6578,6 +6713,7 @@ function RecibosView({
       if (!confirm(`¿Emitir el recibo para ${r.pagador_nombre}? Esta accion no se puede deshacer.`)) return;
       const emitido = await api.request<ReciboRecord>(`/recibos/${r.id}/emitir`, { method: "POST" });
       setSelectedRecibo(emitido);
+      setWhatsappPhone("");
       await loadRecibos();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error al emitir.");
@@ -6587,8 +6723,17 @@ function RecibosView({
   };
 
   const openPdf = (r: ReciboRecord) => {
-    const token = accessToken ?? "";
-    window.open(`/api/v1/recibos/${r.id}/pdf?token=${token}`, "_blank");
+    void (async () => {
+      try {
+        const res = await fetch(`/api/v1/recibos/${r.id}/pdf`, {
+          headers: { Authorization: `Bearer ${accessToken ?? ""}` },
+        });
+        if (!res.ok) throw new Error("No se pudo generar el PDF.");
+        window.open(URL.createObjectURL(await res.blob()), "_blank");
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Error al abrir el PDF.");
+      }
+    })();
   };
 
   const deleteRecibo = async () => {
@@ -6615,53 +6760,55 @@ function RecibosView({
         </div>
         {error ? <p className="error-banner">{error}</p> : null}
         <div className="form-section">
-          <label>
-            Fecha de cobro
-            <input type="date" value={formFechaCobro} onChange={(e) => setFormFechaCobro(e.target.value)} />
-          </label>
-          <label>
-            Pagador (nombre o razon social) *
-            <input type="text" value={formPagadorNombre} onChange={(e) => setFormPagadorNombre(e.target.value)} placeholder="Juan Perez" />
-          </label>
-          <div style={{ display: "flex", gap: "8px" }}>
-            <label style={{ flex: "0 0 120px" }}>
-              Tipo documento
-              <select value={formPagadorDocTipo} onChange={(e) => setFormPagadorDocTipo(e.target.value)}>
-                <option value="">—</option>
-                <option value="CI">CI</option>
-                <option value="RUC">RUC</option>
-                <option value="PASAPORTE">Pasaporte</option>
+          <div className="field-grid">
+            <label>
+              Fecha de cobro
+              <input type="date" value={formFechaCobro} onChange={(e) => setFormFechaCobro(e.target.value)} />
+            </label>
+            <label>
+              Pagador (nombre o razon social) *
+              <input type="text" value={formPagadorNombre} onChange={(e) => setFormPagadorNombre(e.target.value)} placeholder="Juan Perez" />
+            </label>
+            <div className="inline-fields">
+              <label>
+                Tipo documento
+                <select value={formPagadorDocTipo} onChange={(e) => setFormPagadorDocTipo(e.target.value)}>
+                  <option value="">—</option>
+                  <option value="CI">CI</option>
+                  <option value="RUC">RUC</option>
+                  <option value="PASAPORTE">Pasaporte</option>
+                </select>
+              </label>
+              <label>
+                Numero documento
+                <input type="text" value={formPagadorDoc} onChange={(e) => setFormPagadorDoc(e.target.value)} placeholder="1234567" />
+              </label>
+            </div>
+            <label>
+              Concepto *
+              <input type="text" value={formConcepto} onChange={(e) => setFormConcepto(e.target.value)} placeholder="Pago de servicio mensual" />
+            </label>
+            <label>
+              Importe (Gs.) *
+              <input type="number" min="1" value={formImporte} onChange={(e) => setFormImporte(e.target.value)} placeholder="0" />
+            </label>
+            <label>
+              Forma de pago
+              <select value={formFormaPago} onChange={(e) => setFormFormaPago(e.target.value as ReciboFormaPago)}>
+                {(Object.keys(FORMAS_PAGO_LABELS) as ReciboFormaPago[]).map((fp) => (
+                  <option key={fp} value={fp}>{FORMAS_PAGO_LABELS[fp]}</option>
+                ))}
               </select>
             </label>
-            <label style={{ flex: 1 }}>
-              Numero documento
-              <input type="text" value={formPagadorDoc} onChange={(e) => setFormPagadorDoc(e.target.value)} placeholder="1234567" />
-            </label>
+            {formFormaPago !== "EFECTIVO" ? (
+              <label>
+                Referencia bancaria / numero de cheque
+                <input type="text" value={formRefBancaria} onChange={(e) => setFormRefBancaria(e.target.value)} placeholder="Nro. transferencia, cheque, etc." />
+              </label>
+            ) : null}
           </div>
-          <label>
-            Concepto *
-            <input type="text" value={formConcepto} onChange={(e) => setFormConcepto(e.target.value)} placeholder="Pago de servicio mensual" />
-          </label>
-          <label>
-            Importe (Gs.) *
-            <input type="number" min="1" value={formImporte} onChange={(e) => setFormImporte(e.target.value)} placeholder="0" />
-          </label>
-          <label>
-            Forma de pago
-            <select value={formFormaPago} onChange={(e) => setFormFormaPago(e.target.value as ReciboFormaPago)}>
-              {(Object.keys(FORMAS_PAGO_LABELS) as ReciboFormaPago[]).map((fp) => (
-                <option key={fp} value={fp}>{FORMAS_PAGO_LABELS[fp]}</option>
-              ))}
-            </select>
-          </label>
-          {formFormaPago !== "EFECTIVO" ? (
-            <label>
-              Referencia bancaria / numero de cheque
-              <input type="text" value={formRefBancaria} onChange={(e) => setFormRefBancaria(e.target.value)} placeholder="Nro. transferencia, cheque, etc." />
-            </label>
-          ) : null}
         </div>
-        <div style={{ display: "flex", gap: "8px", marginTop: "16px" }}>
+        <div className="result-actions" style={{ marginTop: "16px" }}>
           <button type="button" className="secondary-action" disabled={saving} onClick={() => void saveRecibo(false)}>
             {saving ? "Guardando…" : "Guardar borrador"}
           </button>
@@ -6693,19 +6840,35 @@ function RecibosView({
           {r.referencia_bancaria ? <div><dt>Referencia</dt><dd>{r.referencia_bancaria}</dd></div> : null}
           {r.factura_numero_display ? <div><dt>Factura ref.</dt><dd>{r.factura_numero_display}</dd></div> : null}
         </dl>
-        <div style={{ display: "flex", gap: "8px", marginTop: "12px", flexWrap: "wrap" }}>
-          {r.estado === "BORRADOR" ? (
-            <>
-              <button type="button" className="secondary-action" onClick={() => openEdit(r)}>Editar</button>
-              <button type="button" className="primary-action" disabled={saving} onClick={() => void emitirRecibo(r)}>
-                {saving ? "Emitiendo…" : "Emitir"}
-              </button>
-              <button type="button" className="danger-action" onClick={() => setDeleteTarget(r)}>Eliminar</button>
-            </>
-          ) : (
-            <button type="button" className="secondary-action" onClick={() => openPdf(r)}>Descargar PDF</button>
-          )}
-        </div>
+        {r.estado === "BORRADOR" ? (
+          <div className="result-actions" style={{ marginTop: "12px" }}>
+            <button type="button" className="secondary-action" onClick={() => openEdit(r)}>Editar</button>
+            <button type="button" className="primary-action" disabled={saving} onClick={() => void emitirRecibo(r)}>
+              {saving ? "Emitiendo…" : "Emitir"}
+            </button>
+            <button type="button" className="danger-action" onClick={() => setDeleteTarget(r)}>Eliminar</button>
+          </div>
+        ) : (
+          <div className="action-group" style={{ marginTop: "12px" }}>
+            <div className="delivery-inline-form">
+              <label>
+                WhatsApp
+                <input inputMode="tel" placeholder="Numero de celular" value={whatsappPhone} onChange={(e) => setWhatsappPhone(e.target.value)} />
+              </label>
+            </div>
+            <a
+              className="primary-action wide secondary-link-as-button"
+              href={buildWhatsAppShareUrl(`${window.location.origin}/verificar/recibo/${r.verification_token}`, whatsappPhone)}
+              rel="noreferrer"
+              target="_blank"
+            >
+              Enviar por WhatsApp
+            </a>
+            <div className="delivery-actions">
+              <button className="secondary-action" onClick={() => openPdf(r)} type="button">Ver PDF</button>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -6737,7 +6900,7 @@ function RecibosView({
                 {r.numero != null ? <span>N° {String(r.numero).padStart(7, "0")}</span> : null}
               </div>
               <div className="nota-card-actions">
-                <button type="button" className="ghost-action compact" onClick={() => { setSelectedRecibo(r); setSubView("detail"); }}>Ver</button>
+                <button type="button" className="ghost-action compact" onClick={() => { setSelectedRecibo(r); setWhatsappPhone(""); setSubView("detail"); }}>Ver</button>
                 {r.estado === "EMITIDO" ? (
                   <button type="button" className="ghost-action compact" onClick={() => openPdf(r)}>PDF</button>
                 ) : null}

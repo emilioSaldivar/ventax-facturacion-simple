@@ -1944,6 +1944,46 @@ dd {
   }
 }
 
+/* ── Recibos — listado (tarjetas) ── */
+
+.notas-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.nota-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border: 1px solid var(--color-line);
+  border-radius: 8px;
+  background: var(--color-surface);
+  padding: 12px 14px;
+}
+
+.nota-card-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.nota-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  color: var(--color-muted);
+  font-size: 12px;
+}
+
+.nota-card-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 2px;
+}
+
 /* ── Nota de Pedido / Presupuesto ── */
 
 .nota-fila-inline {

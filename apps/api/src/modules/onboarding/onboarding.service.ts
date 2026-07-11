@@ -142,10 +142,73 @@ export async function requestOtp(
   };
 }
 
+export async function acceptTycAdmin(
+  userId: string,
+  tenantId: string,
+  role: string,
+  ip: string | null,
+  userAgent: string | null,
+  repository: OnboardingRepository
+): Promise<{ response: AuthResponse; refreshToken: { rawToken: string; tokenHash: string; expiresAt: Date } }> {
+  const ALLOWED = ["ADMIN_INTERNO", "SOPORTE_INTERNO"];
+  if (!ALLOWED.includes(role)) {
+    throw new HttpError(403, "FORBIDDEN", "Solo administradores y soporte pueden usar este endpoint.");
+  }
+
+  const tyc = await repository.getActiveTycVersion();
+  if (!tyc) throw new HttpError(404, "NOT_FOUND", "No hay T&C activos.");
+
+  const [planSnapshot, userData] = await Promise.all([
+    repository.getTenantPlanSnapshot(tenantId),
+    repository.getUserEmail(userId)
+  ]);
+
+  await repository.recordAdminAcceptance({
+    usuarioId: userId,
+    tenantId,
+    tycVersionId: tyc.id,
+    tycVersionTexto: tyc.version,
+    tycDocumentHash: tyc.documentHash,
+    planSnapshot,
+    usernameSnapshot: userData.username,
+    emailSnapshot: userData.email,
+    displayNameSnapshot: userData.displayName,
+    ip,
+    userAgent
+  });
+
+  await repository.completeOnboarding({ usuarioId: userId });
+
+  const refreshToken = createRefreshToken();
+  const userRole = role as "ADMIN_INTERNO" | "SOPORTE_INTERNO";
+
+  return {
+    response: {
+      access_token: signAccessToken({
+        sub: userId,
+        tenant_id: tenantId,
+        username: userData.username,
+        role: userRole,
+        scope: "full"
+      }),
+      token_type: "Bearer",
+      expires_in: env.JWT_ACCESS_TTL_MINUTES * 60,
+      user: {
+        id: userId,
+        username: userData.username,
+        display_name: userData.displayName,
+        role: userRole
+      }
+    },
+    refreshToken
+  };
+}
+
 export async function completeOnboarding(
   userId: string,
   tenantId: string,
   input: OnboardingCompleteInput,
+  role: string,
   ip: string | null,
   userAgent: string | null,
   repository: OnboardingRepository
@@ -213,6 +276,7 @@ export async function completeOnboarding(
   });
 
   const refreshToken = createRefreshToken();
+  const userRole = (role as "OPERADOR_FACTURACION" | "SOPORTE_INTERNO" | "ADMIN_INTERNO") ?? "OPERADOR_FACTURACION";
 
   return {
     response: {
@@ -220,7 +284,7 @@ export async function completeOnboarding(
         sub: userId,
         tenant_id: tenantId,
         username: userData.username,
-        role: "OPERADOR_FACTURACION",
+        role: userRole,
         scope: "full"
       }),
       token_type: "Bearer",
@@ -229,7 +293,7 @@ export async function completeOnboarding(
         id: userId,
         username: userData.username,
         display_name: userData.displayName,
-        role: "OPERADOR_FACTURACION"
+        role: userRole
       }
     },
     refreshToken

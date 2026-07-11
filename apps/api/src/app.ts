@@ -77,7 +77,7 @@ export function createApp() {
   app.use(env.API_BASE_PATH, recibosRouter);
   app.use(env.API_BASE_PATH, healthRouter);
   app.use(publicEntregaRouter);
-  app.use("/verificar", verificacionRouter);
+  app.use(`${env.API_BASE_PATH}/verificar`, verificacionRouter);
   app.get("/health", (_req, res) => res.redirect(307, `${env.API_BASE_PATH}/health`));
 
   app.use((_req, _res, next) => {

@@ -6,7 +6,7 @@ import { refreshCookieName } from "../auth/auth.routes";
 import { authRepository } from "../auth/auth.repository";
 import { validateRequest } from "../../shared/validation/validate-request";
 import { onboardingRepository } from "./onboarding.repository";
-import { changePassword, completeOnboarding, getActiveTyc, requestOtp } from "./onboarding.service";
+import { acceptTycAdmin, changePassword, completeOnboarding, getActiveTyc, requestOtp } from "./onboarding.service";
 
 export const onboardingRouter = Router();
 
@@ -71,6 +71,7 @@ onboardingRouter.post(
           otpCode: req.body.otp_code,
           checkboxAceptado: req.body.checkbox_aceptado
         },
+        req.user!.role,
         req.ip ?? null,
         req.get("user-agent") ?? null,
         onboardingRepository
@@ -98,3 +99,37 @@ onboardingRouter.post(
     }
   }
 );
+
+// Bypass de OTP para roles admin/soporte — solo usable durante onboarding
+onboardingRouter.post("/onboarding/admin/accept-direct", requireAuth, async (req, res, next) => {
+  try {
+    const result = await acceptTycAdmin(
+      req.user!.id,
+      req.user!.tenantId,
+      req.user!.role,
+      req.ip ?? null,
+      req.get("user-agent") ?? null,
+      onboardingRepository
+    );
+
+    await authRepository.createRefreshToken({
+      userId: req.user!.id,
+      tokenHash: result.refreshToken.tokenHash,
+      expiresAt: result.refreshToken.expiresAt,
+      ip: req.ip,
+      userAgent: req.get("user-agent")
+    });
+
+    res.cookie(refreshCookieName, result.refreshToken.rawToken, {
+      httpOnly: true,
+      secure: env.NODE_ENV === "production",
+      sameSite: "lax",
+      expires: result.refreshToken.expiresAt,
+      path: "/api/v1/auth"
+    });
+
+    res.json(result.response);
+  } catch (error) {
+    next(error);
+  }
+});

@@ -400,6 +400,49 @@ export class PgOnboardingRepository implements OnboardingRepository {
       username: row?.username ?? ""
     };
   }
+
+  async hasTycAcceptance(usuarioId: string, tycVersionId: string): Promise<boolean> {
+    const result = await pool.query(
+      `select 1 from tyc_aceptaciones where usuario_id = $1 and tyc_version_id = $2 limit 1`,
+      [usuarioId, tycVersionId]
+    );
+    return result.rows.length > 0;
+  }
+
+  async recordAdminAcceptance(input: {
+    usuarioId: string;
+    tenantId: string;
+    tycVersionId: string;
+    tycVersionTexto: string;
+    tycDocumentHash: string;
+    planSnapshot: PlanSnapshotData;
+    usernameSnapshot: string;
+    emailSnapshot: string | null;
+    displayNameSnapshot: string | null;
+    ip: string | null;
+    userAgent: string | null;
+  }): Promise<void> {
+    const already = await this.hasTycAcceptance(input.usuarioId, input.tycVersionId);
+    if (already) return;
+
+    await pool.query(
+      `insert into tyc_aceptaciones (
+        usuario_id, tenant_id, tyc_version_id,
+        tyc_version_texto, tyc_document_hash, plan_snapshot,
+        username_snapshot, email_snapshot, display_name_snapshot,
+        ip, user_agent,
+        otp_email_destino, otp_enviado_at, otp_validado_at,
+        otp_intentos_fallidos, password_cambiado_en_flujo
+      ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::inet,$11,$12,now(),now(),0,false)`,
+      [
+        input.usuarioId, input.tenantId, input.tycVersionId,
+        input.tycVersionTexto, input.tycDocumentHash, JSON.stringify(input.planSnapshot),
+        input.usernameSnapshot, input.emailSnapshot, input.displayNameSnapshot,
+        input.ip, input.userAgent,
+        `admin-bypass:${input.usernameSnapshot}`
+      ]
+    );
+  }
 }
 
 export const onboardingRepository = new PgOnboardingRepository();

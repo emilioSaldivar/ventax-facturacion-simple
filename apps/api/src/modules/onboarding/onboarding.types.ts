@@ -87,6 +87,20 @@ export interface OnboardingRepository {
     otpIntentosFallidos: number;
     passwordCambiadoEnFlujo: boolean;
   }): Promise<TycAceptacionRecord>;
+  recordAdminAcceptance(input: {
+    usuarioId: string;
+    tenantId: string;
+    tycVersionId: string;
+    tycVersionTexto: string;
+    tycDocumentHash: string;
+    planSnapshot: PlanSnapshotData;
+    usernameSnapshot: string;
+    emailSnapshot: string | null;
+    displayNameSnapshot: string | null;
+    ip: string | null;
+    userAgent: string | null;
+  }): Promise<void>;
+  hasTycAcceptance(usuarioId: string, tycVersionId: string): Promise<boolean>;
   completeOnboarding(input: {
     usuarioId: string;
     newPasswordHash?: string;
