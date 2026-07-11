@@ -15,6 +15,7 @@ COPY apps apps
 COPY packages packages
 RUN npm run build -w @facturacion-simple/web-operacion
 RUN npm run build -w @facturacion-simple/backoffice
+RUN sed -i "s/__CACHE_VERSION__/${BUILD_COMMIT_SHA}/" apps/web-operacion/dist/sw.js
 
 FROM nginx:1.27-alpine AS runtime
 COPY infra/nginx-or-caddy/nginx.local.conf /etc/nginx/conf.d/default.conf

@@ -47,6 +47,22 @@ async function pollVersion(): Promise<void> {
   }
 }
 
+async function applyUpdate(): Promise<void> {
+  try {
+    if ("serviceWorker" in navigator) {
+      const registrations = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(registrations.map((registration) => registration.unregister()));
+    }
+    if ("caches" in window) {
+      const keys = await caches.keys();
+      await Promise.all(keys.map((key) => caches.delete(key)));
+    }
+  } catch {
+    // si falla la limpieza, igual forzamos la recarga
+  }
+  window.location.reload();
+}
+
 function startVersionPolling(): () => void {
   const INTERVAL_MS = 5 * 60 * 1000; // cada 5 minutos
   void pollVersion();
@@ -1427,7 +1443,7 @@ function OperationHome({
             <strong>Nueva version disponible</strong>
             <small>Hay una actualizacion lista. Toca el boton para cargarla ahora.</small>
           </div>
-          <button className="primary-action" onClick={() => window.location.reload()} type="button">
+          <button className="primary-action" onClick={() => void applyUpdate()} type="button">
             Actualizar
           </button>
         </section>
