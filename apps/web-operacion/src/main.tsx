@@ -6635,7 +6635,7 @@ function RecibosView({
   const [deleteTarget, setDeleteTarget] = useState<ReciboRecord | null>(null);
 
   const [formPagadorNombre, setFormPagadorNombre] = useState("");
-  const [formPagadorDocTipo, setFormPagadorDocTipo] = useState("");
+  const [formPagadorDocTipo, setFormPagadorDocTipo] = useState<DocumentoIdentidadTipo>("RUC");
   const [formPagadorDoc, setFormPagadorDoc] = useState("");
   const [formConcepto, setFormConcepto] = useState("");
   const [formImporte, setFormImporte] = useState("");
@@ -6643,6 +6643,17 @@ function RecibosView({
   const [formFechaCobro, setFormFechaCobro] = useState(() => new Date().toISOString().slice(0, 10));
   const [formRefBancaria, setFormRefBancaria] = useState("");
   const [whatsappPhone, setWhatsappPhone] = useState("");
+
+  const [formPagadorClienteId, setFormPagadorClienteId] = useState<string | null>(null);
+  const [formPagadorDireccion, setFormPagadorDireccion] = useState("");
+  const [formPagadorTelefono, setFormPagadorTelefono] = useState("");
+  const [formPagadorEmail, setFormPagadorEmail] = useState("");
+  const [clienteSuggestions, setClienteSuggestions] = useState<ClienteSearchResult[]>([]);
+  const [clienteSearching, setClienteSearching] = useState(false);
+  const [clienteAutocompleting, setClienteAutocompleting] = useState(false);
+  const [clienteMessage, setClienteMessage] = useState<string | null>(null);
+  const [clienteSaving, setClienteSaving] = useState(false);
+  const [clienteModalOpen, setClienteModalOpen] = useState(false);
 
   const loadRecibos = async () => {
     setLoading(true);
@@ -6660,16 +6671,113 @@ function RecibosView({
 
   useEffect(() => { void loadRecibos(); }, []);
 
+  useEffect(() => {
+    const q = formPagadorDoc.trim();
+    if (q.length < 2) {
+      setClienteSuggestions([]);
+      return;
+    }
+    const timeout = window.setTimeout(async () => {
+      setClienteSearching(true);
+      try {
+        const result = await api.get<{ items: ClienteSearchResult[] }>(`/clientes/search?q=${encodeURIComponent(q)}&limit=5`);
+        setClienteSuggestions(result.items);
+      } catch {
+        setClienteSuggestions([]);
+      } finally {
+        setClienteSearching(false);
+      }
+    }, 300);
+    return () => window.clearTimeout(timeout);
+  }, [api, formPagadorDoc]);
+
+  function applyClienteSuggestion(suggestion: ClienteSearchResult | ClienteResponse) {
+    setFormPagadorClienteId(suggestion.cliente_id);
+    setFormPagadorDocTipo(suggestion.documento_tipo);
+    setFormPagadorDoc(suggestion.documento);
+    setFormPagadorNombre(suggestion.razon_social);
+    setFormPagadorDireccion(suggestion.direccion ?? "");
+    setFormPagadorTelefono(suggestion.telefono ?? "");
+    setFormPagadorEmail(suggestion.email ?? "");
+    setClienteMessage(
+      "source" in suggestion && suggestion.source === "AGENDA_FACTURADOR"
+        ? "Cliente seleccionado de la agenda."
+        : "Datos encontrados para agregar a tu agenda."
+    );
+    setClienteSuggestions([]);
+  }
+
+  async function tryAutocompleteDnit() {
+    if (formPagadorDocTipo !== "RUC" && formPagadorDocTipo !== "CI") return;
+
+    const rawDocumento = formPagadorDoc.trim();
+    if (rawDocumento.length < 3) return;
+
+    const normalizedInput = normalizeDocKey(rawDocumento);
+    const exactMatch = clienteSuggestions.some((s) => normalizeDocKey(s.documento) === normalizedInput);
+    if (exactMatch) return;
+
+    setClienteAutocompleting(true);
+    try {
+      const result = await api.get<DnitAutocompleteResponse>(
+        `/clientes/dnit/autocomplete?documento_tipo=${formPagadorDocTipo}&documento=${encodeURIComponent(rawDocumento)}`
+      );
+      if (!result.found || !result.cliente) {
+        if (result.message && result.ambiguous) setClienteMessage(result.message);
+        return;
+      }
+      setFormPagadorDocTipo(result.cliente.documento_tipo);
+      setFormPagadorDoc(result.cliente.documento);
+      setFormPagadorNombre(result.cliente.razon_social);
+      setClienteMessage("Nombre o razon social autocompletado.");
+    } catch {
+      // No interrumpir el flujo operativo cuando DNIT no esta disponible.
+    } finally {
+      setClienteAutocompleting(false);
+    }
+  }
+
+  async function saveClienteRapido() {
+    setClienteSaving(true);
+    setClienteMessage(null);
+    try {
+      const payload = {
+        documento_tipo: formPagadorDocTipo,
+        documento: formPagadorDoc,
+        razon_social: formPagadorNombre,
+        direccion: formPagadorDireccion || null,
+        telefono: formPagadorTelefono || null,
+        email: formPagadorEmail || null
+      };
+      const saved = formPagadorClienteId
+        ? await api.request<ClienteResponse>(`/clientes/${formPagadorClienteId}`, { method: "PATCH", body: JSON.stringify(payload) })
+        : await api.post<ClienteResponse>("/clientes", payload);
+      applyClienteSuggestion(saved);
+      setClienteModalOpen(false);
+      setClienteMessage(formPagadorClienteId ? "Cliente actualizado." : "Cliente guardado para este facturador.");
+    } catch (error) {
+      setClienteMessage(error instanceof Error ? error.message : "No se pudo guardar el cliente.");
+    } finally {
+      setClienteSaving(false);
+    }
+  }
+
   const openNew = () => {
     setEditingId(null);
     setFormPagadorNombre("");
-    setFormPagadorDocTipo("");
+    setFormPagadorDocTipo("RUC");
     setFormPagadorDoc("");
     setFormConcepto("");
     setFormImporte("");
     setFormFormaPago("EFECTIVO");
     setFormFechaCobro(new Date().toISOString().slice(0, 10));
     setFormRefBancaria("");
+    setFormPagadorClienteId(null);
+    setFormPagadorDireccion("");
+    setFormPagadorTelefono("");
+    setFormPagadorEmail("");
+    setClienteSuggestions([]);
+    setClienteMessage(null);
     setError(null);
     setSubView("form");
   };
@@ -6677,13 +6785,21 @@ function RecibosView({
   const openEdit = (r: ReciboRecord) => {
     setEditingId(r.id);
     setFormPagadorNombre(r.pagador_nombre);
-    setFormPagadorDocTipo(r.pagador_documento_tipo ?? "");
+    setFormPagadorDocTipo((r.pagador_documento_tipo as DocumentoIdentidadTipo) || "RUC");
     setFormPagadorDoc(r.pagador_documento ?? "");
     setFormConcepto(r.concepto);
     setFormImporte(String(r.importe));
     setFormFormaPago(r.forma_pago);
     setFormFechaCobro(r.fecha_cobro);
     setFormRefBancaria(r.referencia_bancaria ?? "");
+    // El recibo no persiste direccion/telefono/email/cliente_id — quedan vacios aunque
+    // el pagador ya exista en la agenda (ver SPEC_RECIBO_DINERO_v0.3.md, seccion 3).
+    setFormPagadorClienteId(null);
+    setFormPagadorDireccion("");
+    setFormPagadorTelefono("");
+    setFormPagadorEmail("");
+    setClienteSuggestions([]);
+    setClienteMessage(null);
     setError(null);
     setSubView("form");
   };
@@ -6713,6 +6829,10 @@ function RecibosView({
       }
       setSelectedRecibo(recibo);
       setWhatsappPhone("");
+      setFormPagadorClienteId(null);
+      setFormPagadorDireccion("");
+      setFormPagadorTelefono("");
+      setFormPagadorEmail("");
       await loadRecibos();
       setSubView("detail");
     } catch (err) {
@@ -6781,24 +6901,78 @@ function RecibosView({
               Fecha de cobro
               <input type="date" value={formFechaCobro} onChange={(e) => setFormFechaCobro(e.target.value)} />
             </label>
-            <label>
-              Pagador (nombre o razon social) *
+            <label className="required-field">
+              Documento
+              <div className="inline-fields">
+                <select
+                  value={formPagadorDocTipo}
+                  onChange={(e) => setFormPagadorDocTipo(e.target.value as DocumentoIdentidadTipo)}
+                >
+                  <option value="RUC">RUC</option>
+                  <option value="CI">CI</option>
+                  <option value="PASAPORTE">Pasaporte</option>
+                  <option value="CEDULA_EXTRANJERA">Cedula extranjera</option>
+                  <option value="NO_ESPECIFICADO">No especificado</option>
+                </select>
+                <input
+                  type="text"
+                  inputMode={formPagadorDocTipo === "RUC" || formPagadorDocTipo === "CI" ? "numeric" : "text"}
+                  value={formPagadorDoc}
+                  onChange={(e) => {
+                    const next = e.target.value;
+                    setFormPagadorDoc(next);
+                    setFormPagadorClienteId(null);
+                    setFormPagadorNombre("");
+                    setFormPagadorDireccion("");
+                    setFormPagadorTelefono("");
+                    setFormPagadorEmail("");
+                  }}
+                  onBlur={() => void tryAutocompleteDnit()}
+                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === "Tab") void tryAutocompleteDnit(); }}
+                  placeholder="Ingrese numero de documento"
+                />
+              </div>
+              {clienteSearching || clienteAutocompleting ? (
+                <span className="field-hint">{clienteSearching ? "Buscando cliente..." : "Autocompletando..."}</span>
+              ) : null}
+              {clienteSuggestions.length > 0 ? (
+                <div className="suggestion-list">
+                  {clienteSuggestions.map((s) => (
+                    <button key={`${s.source}-${s.cliente_id ?? s.documento}`} onClick={() => applyClienteSuggestion(s)} type="button">
+                      <strong>{s.documento}</strong>
+                      <span>{s.razon_social}</span>
+                      <small>{s.source === "AGENDA_FACTURADOR" ? "Agenda" : "Sugerencia"}</small>
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </label>
+            <label className="required-field">
+              Pagador (nombre o razon social)
               <input type="text" value={formPagadorNombre} onChange={(e) => setFormPagadorNombre(e.target.value)} placeholder="Juan Perez" />
             </label>
-            <div className="inline-fields">
-              <label>
-                Tipo documento
-                <select value={formPagadorDocTipo} onChange={(e) => setFormPagadorDocTipo(e.target.value)}>
-                  <option value="">—</option>
-                  <option value="CI">CI</option>
-                  <option value="RUC">RUC</option>
-                  <option value="PASAPORTE">Pasaporte</option>
-                </select>
-              </label>
-              <label>
-                Numero documento
-                <input type="text" value={formPagadorDoc} onChange={(e) => setFormPagadorDoc(e.target.value)} placeholder="1234567" />
-              </label>
+            <label>
+              Direccion <small>(opcional)</small>
+              <input type="text" value={formPagadorDireccion} onChange={(e) => setFormPagadorDireccion(e.target.value)} />
+            </label>
+            <label>
+              Telefono <small>(opcional)</small>
+              <input type="text" inputMode="tel" value={formPagadorTelefono} onChange={(e) => setFormPagadorTelefono(e.target.value)} />
+            </label>
+            <label>
+              Correo <small>(opcional)</small>
+              <input type="text" inputMode="email" value={formPagadorEmail} onChange={(e) => setFormPagadorEmail(e.target.value)} />
+            </label>
+            <div className="quick-actions-row">
+              <button
+                type="button"
+                className="secondary-action"
+                disabled={!formPagadorDoc.trim() || !formPagadorNombre.trim()}
+                onClick={() => (formPagadorClienteId ? void saveClienteRapido() : setClienteModalOpen(true))}
+              >
+                {formPagadorClienteId ? "Actualizar" : "Guardar cliente"}
+              </button>
+              {clienteMessage ? <p className="inline-message">{clienteMessage}</p> : null}
             </div>
             <label>
               Concepto *
@@ -6832,6 +7006,27 @@ function RecibosView({
             {saving ? "Emitiendo…" : "Guardar y emitir"}
           </button>
         </div>
+        {clienteModalOpen ? (
+          <div className="modal-backdrop" role="presentation">
+            <section className="modal-panel" aria-labelledby="recibo-cliente-modal-title" role="dialog" aria-modal="true">
+              <div className="editor-heading">
+                <div>
+                  <p className="eyebrow">Alta rapida</p>
+                  <h2 id="recibo-cliente-modal-title">Guardar cliente</h2>
+                </div>
+                <button className="ghost-action" onClick={() => setClienteModalOpen(false)} type="button">Cerrar</button>
+              </div>
+              <dl className="confirm-dl">
+                <div><dt>Documento</dt><dd>{formPagadorDoc || "-"}</dd></div>
+                <div><dt>Razon social</dt><dd>{formPagadorNombre || "-"}</dd></div>
+              </dl>
+              {clienteMessage ? <p className="form-error">{clienteMessage}</p> : null}
+              <button className="primary-action wide" disabled={clienteSaving} onClick={() => void saveClienteRapido()} type="button">
+                {clienteSaving ? "Guardando..." : "Confirmar alta"}
+              </button>
+            </section>
+          </div>
+        ) : null}
       </div>
     );
   }

@@ -58,9 +58,8 @@ export async function buildReciboPdfHtml(
   .importe-letras { font-size: 9px; color: #555; font-style: italic; margin-top: 4px; }
   .meta-row { display: flex; gap: 24px; margin-bottom: 8px; }
   .meta-item { flex: 1; }
-  .footer { display: flex; justify-content: space-between; align-items: flex-end; margin-top: 18px; border-top: 1px solid #ddd; padding-top: 10px; }
+  .footer { margin-top: 18px; border-top: 1px solid #ddd; padding-top: 10px; }
   .footer-note { font-size: 8px; color: #aaa; }
-  .firma-box { text-align: center; border-top: 1px solid #999; padding-top: 6px; width: 120px; font-size: 9px; color: #555; }
 </style>
 </head>
 <body>
@@ -129,7 +128,6 @@ ${recibo.factura_numero_display ? `
     Documento no fiscal. Verificar autenticidad en:<br>
     ${qrData}
   </div>
-  <div class="firma-box">Firma del emisor</div>
 </div>
 
 </body>

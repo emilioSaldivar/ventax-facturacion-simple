@@ -192,12 +192,14 @@ Tamanio: A5 o media carta (recibos son documentos mas compactos que presupuestos
 ├──────────────────────────────────────────┤
 │  FORMA DE PAGO: Efectivo                 │
 │  Referencia bancaria: (si aplica)        │
-├─────────────────────┬────────────────────┤
-│  QR verificacion    │  Firma del emisor  │
-│  [codigo QR]        │  _________________ │
-│                     │  Nombre / RUC      │
-└─────────────────────┴────────────────────┘
+├──────────────────────────────────────────┤
+│  QR verificacion                         │
+│  [codigo QR]                             │
+│  Verificar autenticidad en: <url>        │
+└──────────────────────────────────────────┘
 ```
+
+**Nota (v0.4):** el bloque "Firma del emisor" que aparecia originalmente junto al QR fue eliminado — el documento se emite digitalmente y su autenticidad ya se verifica escaneando el QR, una firma manuscrita no aporta validez adicional. Ver `docs/SPEC_RECIBO_DINERO_v0.4.md`.
 
 ### 7.2 Importe En Letras
 
