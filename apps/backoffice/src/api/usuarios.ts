@@ -25,6 +25,7 @@ export interface BackofficeUser {
 export interface UserCreateInput {
   tenant_id: string;
   username: string;
+  email: string;
   display_name?: string | null;
   role: BackofficeUser["role"];
   temporary_password?: string | null;

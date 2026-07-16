@@ -1831,6 +1831,7 @@ function UserCreateView({ onNavigate }: { onNavigate: (v: AppView) => void }) {
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [tenantId, setTenantId] = useState("");
   const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [role, setRole] = useState<BackofficeUser["role"]>("OPERADOR_FACTURACION");
   const [password, setPassword] = useState("");
@@ -1850,6 +1851,7 @@ function UserCreateView({ onNavigate }: { onNavigate: (v: AppView) => void }) {
       const u = await createUser({
         tenant_id: tenantId,
         username: username.trim(),
+        email: email.trim(),
         display_name: displayName.trim() || null,
         role,
         temporary_password: password.trim() || null,
@@ -1904,6 +1906,11 @@ function UserCreateView({ onNavigate }: { onNavigate: (v: AppView) => void }) {
             </FormField>
             <FormField label="Nombre visible">
               <input type="text" value={displayName} onChange={(e) => setDisplayName(e.target.value)} />
+            </FormField>
+          </div>
+          <div className="form-row">
+            <FormField label="Email" required>
+              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="off" required />
             </FormField>
           </div>
           <div className="form-row">
