@@ -209,7 +209,7 @@ export class PgOperationalContextRepository implements OperationalContextReposit
             and app.credito_plazo_dias > 0 as fiscal_context_activo
         from usuarios u
         left join tenants t on t.id = u.tenant_id and t.deleted_at is null
-        left join usuario_operacion_config uoc on uoc.usuario_id = u.id and uoc.deleted_at is null
+        left join usuario_operacion_config uoc on uoc.usuario_id = u.id and uoc.activo = true and uoc.deleted_at is null
         left join facturadores f on f.id = uoc.facturador_id
         left join actividad_punto_perfiles app on app.id = uoc.actividad_punto_perfil_id
         left join facturador_actividades a on a.id = app.actividad_id
