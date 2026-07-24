@@ -139,3 +139,21 @@ verificacionRouter.get(
     }
   }
 );
+
+// XML firmado público — no requiere autenticación. Passthrough del XML firmado por facturacion-electronica.
+verificacionRouter.get(
+  "/recibo/:token/xml",
+  validateRequest("params", tokenParamsSchema),
+  async (req, res, next) => {
+    try {
+      const { token } = req.params as z.infer<typeof tokenParamsSchema>;
+      const artifact = await fiscalGateway.verificarReciboXml(token);
+
+      res.setHeader("Content-Type", artifact.content_type);
+      res.setHeader("Content-Disposition", `attachment; filename="${artifact.filename}"`);
+      res.send(artifact.body);
+    } catch (error) {
+      next(error);
+    }
+  }
+);

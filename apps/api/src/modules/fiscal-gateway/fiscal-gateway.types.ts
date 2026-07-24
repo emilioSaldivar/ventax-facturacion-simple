@@ -398,6 +398,7 @@ export interface FiscalGateway {
   getReciboXml(input: { reciboId: string }): Promise<FiscalArtifactResponse>;
   verificarRecibo(token: string): Promise<FiscalReciboVerificacionResult>;
   verificarReciboPdf(token: string): Promise<FiscalArtifactResponse>;
+  verificarReciboXml(token: string): Promise<FiscalArtifactResponse>;
 }
 
 export class FiscalGatewayError extends Error {

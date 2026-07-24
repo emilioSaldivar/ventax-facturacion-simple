@@ -516,6 +516,18 @@ export class MockFiscalGateway implements FiscalGateway {
     };
   }
 
+  async verificarReciboXml(token: string): Promise<FiscalArtifactResponse> {
+    const found = [...this.recibos.values()].find((r) => r.verification_token === token);
+    if (!found || found.estado === "BORRADOR") {
+      throw mockReciboError(404, "RECIBO_NOT_FOUND", "Token de verificacion invalido.");
+    }
+    return {
+      body: Buffer.from(`<?xml version="1.0" encoding="UTF-8"?><mockRecibo id="${escapeXml(found.id)}"/>`, "utf8"),
+      content_type: "application/xml; charset=utf-8",
+      filename: `recibo-${found.numero ?? "borrador"}.xml`
+    };
+  }
+
   private getMockRecibo(id: string): FiscalReciboResult {
     const existing = this.recibos.get(id);
     if (!existing || existing.deleted_at) {
@@ -1057,6 +1069,26 @@ export class RealFiscalGateway implements FiscalGateway {
       body,
       content_type: response.headers.get("content-type") ?? "application/pdf",
       filename: `recibo-${token}.pdf`
+    };
+  }
+
+  async verificarReciboXml(token: string): Promise<FiscalArtifactResponse> {
+    const response = await this.fetchWithTimeout(
+      `${this.config.baseUrl}/verificar/recibo/${encodeURIComponent(token)}/xml`,
+      { method: "GET", headers: { accept: "application/xml" } }
+    );
+    if (!response.ok) {
+      throw new FiscalGatewayError(
+        response.status === 408 || response.status === 504 ? "TIMEOUT" : "UPSTREAM_ERROR",
+        "Backend fiscal no entrego el XML publico del recibo.",
+        { status: response.status }
+      );
+    }
+    const body = Buffer.from(await response.arrayBuffer());
+    return {
+      body,
+      content_type: response.headers.get("content-type") ?? "application/xml",
+      filename: `recibo-${token}.xml`
     };
   }
 

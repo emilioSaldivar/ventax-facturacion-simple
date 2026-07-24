@@ -646,74 +646,94 @@ function ReciboPublicaView({ token }: { token: string }) {
 
   const nroStr = data.numero != null ? String(data.numero).padStart(7, "0") : "-------";
   const pdfUrl = `/api/v1/verificar/recibo/${token}/pdf`;
+  const xmlUrl = `/api/v1/verificar/recibo/${token}/xml`;
+  const anulado = data.estado === "ANULADO";
 
   return (
-    <div style={{ minHeight: "100dvh", background: "#f4f8fa", fontFamily: "Inter, ui-sans-serif, sans-serif" }}>
-      {/* Header */}
-      <div style={{ background: "#fff", borderBottom: "1px solid #e5e7eb", padding: "14px 20px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <div style={{ fontWeight: 700, fontSize: "16px", color: "#07a7e1", letterSpacing: "0.5px" }}>Ventax</div>
-        <a
-          href={pdfUrl}
-          target="_blank"
-          rel="noreferrer"
-          style={{ background: "#07a7e1", color: "#fff", padding: "8px 16px", borderRadius: "8px", textDecoration: "none", fontWeight: 600, fontSize: "14px" }}
-        >
-          Descargar PDF
-        </a>
-      </div>
-
-      {/* Card */}
-      <div style={{ maxWidth: "480px", margin: "24px auto", padding: "0 16px" }}>
-        <div style={{ background: "#fff", borderRadius: "12px", border: "1px solid #e5e7eb", overflow: "hidden" }}>
-          {/* Tipo + numero */}
-          <div style={{ background: "#1e3a5f", color: "#fff", padding: "18px 20px" }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-              <div style={{ fontSize: "11px", letterSpacing: "1px", opacity: 0.7, textTransform: "uppercase" }}>Recibo de Dinero</div>
-              {data.estado === "ANULADO" ? (
-                <span style={{ background: "#dc2626", color: "#fff", fontSize: "11px", fontWeight: 700, padding: "3px 10px", borderRadius: "999px", letterSpacing: "0.5px" }}>ANULADO</span>
-              ) : null}
-            </div>
-            <div style={{ fontSize: "22px", fontWeight: 700, marginTop: "4px" }}>N° {nroStr}</div>
-            {data.fecha_cobro && (
-              <div style={{ fontSize: "12px", opacity: 0.8, marginTop: "4px" }}>Fecha de cobro: {fmtFecha(data.fecha_cobro)}</div>
-            )}
-          </div>
-
-          {/* Pagador */}
-          <div style={{ padding: "16px 20px", borderBottom: "1px solid #f3f4f6" }}>
-            <div style={{ fontSize: "11px", color: "#9ca3af", textTransform: "uppercase", marginBottom: "4px" }}>Recibido de</div>
-            <div style={{ fontWeight: 600, fontSize: "15px" }}>{data.pagador_nombre}</div>
-          </div>
-
-          {/* Concepto */}
-          <div style={{ padding: "16px 20px", borderBottom: "1px solid #f3f4f6" }}>
-            <div style={{ fontSize: "11px", color: "#9ca3af", textTransform: "uppercase", marginBottom: "4px" }}>Concepto</div>
-            <div style={{ fontSize: "13px", color: "#374151" }}>{data.concepto}</div>
-            {data.referencia_documento_numero_display && (
-              <div style={{ fontSize: "12px", color: "#6b7280", marginTop: "4px" }}>Referencia factura: N° {data.referencia_documento_numero_display}</div>
-            )}
-          </div>
-
-          {/* Importe */}
-          <div style={{ background: "#f9fafb", padding: "16px 20px", display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: "1px solid #e5e7eb" }}>
-            <span style={{ fontWeight: 600, color: "#374151" }}>IMPORTE</span>
-            <span style={{ fontWeight: 700, fontSize: "18px", color: "#1e3a5f" }}>{data.importe != null ? formatGuaranies(data.importe) : ""}</span>
-          </div>
-
-          {/* Forma de pago */}
-          {data.forma_pago && (
-            <div style={{ padding: "14px 20px", borderTop: "1px solid #e5e7eb", background: "#fafafa" }}>
-              <div style={{ fontSize: "11px", color: "#9ca3af", textTransform: "uppercase", marginBottom: "4px" }}>Forma de pago</div>
-              <div style={{ fontSize: "13px", color: "#374151" }}>{FORMAS_PAGO_LABELS[data.forma_pago as ReciboFormaPago] ?? data.forma_pago}</div>
-            </div>
-          )}
+    <main style={{
+      minHeight: "100vh",
+      padding: "18px",
+      background: "linear-gradient(180deg, rgb(7 167 225 / 0.1), transparent 280px), #f4f8fa",
+      fontFamily: "Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+      color: "#18242a",
+      boxSizing: "border-box"
+    }}>
+      <section style={{ display: "grid", gap: "14px", width: "min(100%, 760px)", margin: "0 auto" }}>
+        <div style={{ display: "inline-flex", alignItems: "center", width: "fit-content", minHeight: "42px" }}>
+          <img src="/app/brand/VENTAX-PRINCIPAL.svg" alt="Ventax" width={142} height={46} style={{ display: "block", width: "142px", height: "auto" }} />
         </div>
 
-        <div style={{ textAlign: "center", fontSize: "12px", color: "#9ca3af", marginTop: "20px" }}>
-          Documento emitido con Ventax · ventax.app
-        </div>
-      </div>
-    </div>
+        <article style={{ display: "grid", gap: "14px", border: "1px solid #d7e5ea", borderRadius: "8px", background: "#ffffff", padding: "16px" }}>
+          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "12px" }}>
+            <div>
+              <h1 style={{ margin: "0 0 6px", fontSize: "26px", lineHeight: 1.12 }}>Recibo N° {nroStr}</h1>
+              <p style={{ margin: 0, color: "#65747b", overflowWrap: "anywhere" }}>
+                {data.fecha_cobro ? `Fecha de cobro: ${fmtFecha(data.fecha_cobro)}` : null}
+              </p>
+            </div>
+            <span style={{
+              flex: "0 0 auto",
+              borderRadius: "999px",
+              background: anulado ? "#fdecea" : "#e7f7ef",
+              color: anulado ? "#b42318" : "#087f5b",
+              padding: "7px 10px",
+              fontSize: "12px",
+              fontWeight: 900
+            }}>
+              {anulado ? "ANULADO" : "EMITIDO"}
+            </span>
+          </div>
+
+          <dl style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "10px", margin: 0 }}>
+            <div>
+              <dt style={{ color: "#65747b", fontSize: "12px", fontWeight: 800 }}>Recibido de</dt>
+              <dd style={{ margin: "2px 0 0", fontSize: "17px", fontWeight: 900, overflowWrap: "anywhere" }}>{data.pagador_nombre}</dd>
+            </div>
+            <div>
+              <dt style={{ color: "#65747b", fontSize: "12px", fontWeight: 800 }}>Forma de pago</dt>
+              <dd style={{ margin: "2px 0 0", fontSize: "17px", fontWeight: 900, overflowWrap: "anywhere" }}>
+                {data.forma_pago ? (FORMAS_PAGO_LABELS[data.forma_pago as ReciboFormaPago] ?? data.forma_pago) : "-"}
+              </dd>
+            </div>
+            <div style={{ gridColumn: "1 / -1" }}>
+              <dt style={{ color: "#65747b", fontSize: "12px", fontWeight: 800 }}>Concepto</dt>
+              <dd style={{ margin: "2px 0 0", fontSize: "17px", fontWeight: 900, overflowWrap: "anywhere" }}>{data.concepto}</dd>
+            </div>
+            {data.referencia_documento_numero_display ? (
+              <div style={{ gridColumn: "1 / -1" }}>
+                <dt style={{ color: "#65747b", fontSize: "12px", fontWeight: 800 }}>Referencia factura</dt>
+                <dd style={{ margin: "2px 0 0", fontSize: "17px", fontWeight: 900, overflowWrap: "anywhere" }}>N° {data.referencia_documento_numero_display}</dd>
+              </div>
+            ) : null}
+          </dl>
+
+          <div style={{ borderRadius: "8px", background: "#eef7fb", padding: "14px" }}>
+            <dt style={{ color: "#65747b", fontSize: "12px", fontWeight: 800 }}>Importe</dt>
+            <dd style={{ margin: "2px 0 0", fontSize: "26px", fontWeight: 900 }}>{data.importe != null ? formatGuaranies(data.importe) : ""}</dd>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "10px" }} className="public-doc-actions">
+            <a
+              href={pdfUrl}
+              target="_blank"
+              rel="noreferrer"
+              style={{ display: "grid", minHeight: "48px", placeItems: "center", borderRadius: "8px", border: "1px solid #07a7e1", background: "#07a7e1", color: "#ffffff", fontWeight: 900, lineHeight: 1.15, padding: "8px 12px", textDecoration: "none" }}
+            >
+              Ver recibo PDF
+            </a>
+            <a
+              href={xmlUrl}
+              style={{ display: "grid", minHeight: "48px", placeItems: "center", borderRadius: "8px", border: "1px solid #c6d9df", background: "#ffffff", color: "#006b86", fontWeight: 900, lineHeight: 1.15, padding: "8px 12px", textDecoration: "none" }}
+            >
+              Descargar documento electrónico
+            </a>
+          </div>
+          <p style={{ margin: 0, color: "#65747b" }}>
+            Documento firmado digitalmente conforme a la Ley N.º 6822/2021. Firma electrónica cualificada, con efecto legal equivalente a la firma manuscrita.
+          </p>
+        </article>
+      </section>
+    </main>
   );
 }
 
