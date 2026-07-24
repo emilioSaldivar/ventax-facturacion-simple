@@ -610,7 +610,8 @@ interface ReciboPublicaPayload {
   concepto?: string;
   importe?: number;
   forma_pago?: string;
-  factura_numero_display?: string | null;
+  referencia_documento_numero_display?: string | null;
+  estado?: "EMITIDO" | "ANULADO";
   emitido_at?: string | null;
 }
 
@@ -666,7 +667,12 @@ function ReciboPublicaView({ token }: { token: string }) {
         <div style={{ background: "#fff", borderRadius: "12px", border: "1px solid #e5e7eb", overflow: "hidden" }}>
           {/* Tipo + numero */}
           <div style={{ background: "#1e3a5f", color: "#fff", padding: "18px 20px" }}>
-            <div style={{ fontSize: "11px", letterSpacing: "1px", opacity: 0.7, textTransform: "uppercase" }}>Recibo de Dinero</div>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <div style={{ fontSize: "11px", letterSpacing: "1px", opacity: 0.7, textTransform: "uppercase" }}>Recibo de Dinero</div>
+              {data.estado === "ANULADO" ? (
+                <span style={{ background: "#dc2626", color: "#fff", fontSize: "11px", fontWeight: 700, padding: "3px 10px", borderRadius: "999px", letterSpacing: "0.5px" }}>ANULADO</span>
+              ) : null}
+            </div>
             <div style={{ fontSize: "22px", fontWeight: 700, marginTop: "4px" }}>N° {nroStr}</div>
             {data.fecha_cobro && (
               <div style={{ fontSize: "12px", opacity: 0.8, marginTop: "4px" }}>Fecha de cobro: {fmtFecha(data.fecha_cobro)}</div>
@@ -683,8 +689,8 @@ function ReciboPublicaView({ token }: { token: string }) {
           <div style={{ padding: "16px 20px", borderBottom: "1px solid #f3f4f6" }}>
             <div style={{ fontSize: "11px", color: "#9ca3af", textTransform: "uppercase", marginBottom: "4px" }}>Concepto</div>
             <div style={{ fontSize: "13px", color: "#374151" }}>{data.concepto}</div>
-            {data.factura_numero_display && (
-              <div style={{ fontSize: "12px", color: "#6b7280", marginTop: "4px" }}>Referencia factura: N° {data.factura_numero_display}</div>
+            {data.referencia_documento_numero_display && (
+              <div style={{ fontSize: "12px", color: "#6b7280", marginTop: "4px" }}>Referencia factura: N° {data.referencia_documento_numero_display}</div>
             )}
           </div>
 
@@ -6615,7 +6621,7 @@ const FORMAS_PAGO_LABELS: Record<ReciboFormaPago, string> = {
 interface ReciboRecord {
   id: string;
   numero: number | null;
-  estado: "BORRADOR" | "EMITIDO";
+  estado: "BORRADOR" | "EMITIDO" | "ANULADO";
   fecha_cobro: string;
   pagador_nombre: string;
   pagador_documento_tipo: string | null;
@@ -6624,9 +6630,10 @@ interface ReciboRecord {
   importe: number;
   forma_pago: ReciboFormaPago;
   referencia_bancaria: string | null;
-  factura_id: string | null;
-  factura_numero_display: string | null;
-  verification_token: string;
+  referencia_documento_uuid: string | null;
+  referencia_documento_numero_display: string | null;
+  anulacion_motivo: string | null;
+  verification_token: string | null;
   emitido_at: string | null;
   created_at: string;
 }
@@ -6893,6 +6900,27 @@ function RecibosView({
     })();
   };
 
+  const openXml = (r: ReciboRecord) => {
+    void (async () => {
+      try {
+        const res = await fetch(`/api/v1/recibos/${r.id}/xml`, {
+          headers: { Authorization: `Bearer ${accessToken ?? ""}` },
+        });
+        if (!res.ok) throw new Error("No se pudo descargar el documento electrónico.");
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const nroStr = r.numero != null ? String(r.numero).padStart(7, "0") : "borrador";
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `recibo-${nroStr}.xml`;
+        link.click();
+        URL.revokeObjectURL(url);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Error al descargar el documento electrónico.");
+      }
+    })();
+  };
+
   const deleteRecibo = async () => {
     if (!deleteTarget) return;
     setSaving(true);
@@ -7070,7 +7098,8 @@ function RecibosView({
           <div><dt>Forma de pago</dt><dd>{FORMAS_PAGO_LABELS[r.forma_pago]}</dd></div>
           <div><dt>Fecha cobro</dt><dd>{r.fecha_cobro}</dd></div>
           {r.referencia_bancaria ? <div><dt>Referencia</dt><dd>{r.referencia_bancaria}</dd></div> : null}
-          {r.factura_numero_display ? <div><dt>Factura ref.</dt><dd>{r.factura_numero_display}</dd></div> : null}
+          {r.referencia_documento_numero_display ? <div><dt>Factura ref.</dt><dd>{r.referencia_documento_numero_display}</dd></div> : null}
+          {r.anulacion_motivo ? <div><dt>Motivo de anulación</dt><dd>{r.anulacion_motivo}</dd></div> : null}
         </dl>
         {r.estado === "BORRADOR" ? (
           <div className="result-actions" style={{ marginTop: "12px" }}>
@@ -7098,6 +7127,7 @@ function RecibosView({
             </a>
             <div className="delivery-actions">
               <button className="secondary-action" onClick={() => openPdf(r)} type="button">Ver PDF</button>
+              <button className="secondary-action" onClick={() => openXml(r)} type="button">Descargar documento electrónico</button>
             </div>
           </div>
         )}
