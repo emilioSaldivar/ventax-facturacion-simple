@@ -98,6 +98,8 @@ export interface UpsertReciboFromFiscalInput {
 }
 
 export interface RecibosRepository {
+  /** Clave de consumidor propia del facturador (facturadores.fe_consumer_api_key), si tiene una asignada. */
+  getFacturadorApiKey(facturadorId: string): Promise<string | null>;
   upsertFromFiscal(input: UpsertReciboFromFiscalInput): Promise<ReciboRecord>;
   markDeleted(id: string, facturadorId: string): Promise<void>;
   findById(id: string, facturadorId: string): Promise<ReciboRecord | null>;

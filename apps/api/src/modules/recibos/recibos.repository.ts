@@ -42,6 +42,14 @@ function mapRow(row: Record<string, unknown>): ReciboRecord {
 }
 
 export class PgRecibosRepository implements RecibosRepository {
+  async getFacturadorApiKey(facturadorId: string): Promise<string | null> {
+    const { rows } = await pool.query<{ fe_consumer_api_key: string | null }>(
+      `SELECT fe_consumer_api_key FROM facturadores WHERE id = $1`,
+      [facturadorId]
+    );
+    return rows[0]?.fe_consumer_api_key ?? null;
+  }
+
   async upsertFromFiscal(input: UpsertReciboFromFiscalInput): Promise<ReciboRecord> {
     const { facturadorId, fiscal } = input;
     const numero = fiscal.numero != null ? Number(fiscal.numero) : null;

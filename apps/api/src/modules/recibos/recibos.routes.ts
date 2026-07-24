@@ -3,7 +3,10 @@ import { z } from "zod";
 import { requireAuth } from "../auth/auth.middleware.js";
 import { operationalContextRepository } from "../context/context.repository.js";
 import { getOperationalContext } from "../context/context.service.js";
-import { fiscalGateway } from "../fiscal-gateway/fiscal-gateway.client.js";
+import { fiscalGateway, createFiscalGateway } from "../fiscal-gateway/fiscal-gateway.client.js";
+import { buildFiscalGatewayConfig } from "../fiscal-gateway/fiscal-gateway.config.js";
+import type { FiscalGateway } from "../fiscal-gateway/fiscal-gateway.types.js";
+import { env } from "../../config/env.js";
 import { facturasRepository } from "../facturas/facturas.repository.js";
 import { validateRequest } from "../../shared/validation/validate-request.js";
 import { HttpError } from "../../shared/errors/http-error.js";
@@ -19,6 +22,18 @@ import {
   getReciboXml,
   listRecibos,
 } from "./recibos.service.js";
+
+/**
+ * Recibos delega cada operacion de escritura al backend fiscal (a diferencia de
+ * facturas, que solo lo hace al emitir), por lo que aca resolvemos la clave
+ * por-facturador (facturadores.fe_consumer_api_key) en cada request en vez de
+ * solo en el worker de outbox. Mismo mecanismo que server.ts usa para facturas
+ * (gatewayWithKey), aplicado de forma sincrona.
+ */
+async function resolveGateway(facturadorId: string): Promise<FiscalGateway> {
+  const apiKey = await recibosRepository.getFacturadorApiKey(facturadorId);
+  return apiKey ? createFiscalGateway({ ...buildFiscalGatewayConfig(env), apiKey }) : fiscalGateway;
+}
 
 export const recibosRouter = Router();
 
@@ -83,7 +98,7 @@ recibosRouter.post(
     try {
       const context = await getOperationalContext(req.user!.id, operationalContextRepository);
       const idempotencyKey = parseIdempotencyKey(req.get("idempotency-key"));
-      const recibo = await crearRecibo(context, req.body, recibosRepository, fiscalGateway, { idempotencyKey });
+      const recibo = await crearRecibo(context, req.body, recibosRepository, await resolveGateway(context.facturador.id), { idempotencyKey });
       res.status(201).json(recibo);
     } catch (error) { next(error); }
   }
@@ -126,7 +141,7 @@ recibosRouter.patch(
     try {
       const context = await getOperationalContext(req.user!.id, operationalContextRepository);
       const { reciboId } = req.params as z.infer<typeof reciboIdSchema>;
-      const recibo = await editarRecibo(reciboId, context, req.body, recibosRepository, fiscalGateway);
+      const recibo = await editarRecibo(reciboId, context, req.body, recibosRepository, await resolveGateway(context.facturador.id));
       res.json(recibo);
     } catch (error) { next(error); }
   }
@@ -140,7 +155,7 @@ recibosRouter.post(
     try {
       const context = await getOperationalContext(req.user!.id, operationalContextRepository);
       const { reciboId } = req.params as z.infer<typeof reciboIdSchema>;
-      const recibo = await emitirRecibo(reciboId, context, recibosRepository, fiscalGateway);
+      const recibo = await emitirRecibo(reciboId, context, recibosRepository, await resolveGateway(context.facturador.id));
       res.json(recibo);
     } catch (error) { next(error); }
   }
@@ -155,7 +170,7 @@ recibosRouter.post(
     try {
       const context = await getOperationalContext(req.user!.id, operationalContextRepository);
       const { reciboId } = req.params as z.infer<typeof reciboIdSchema>;
-      const recibo = await anularRecibo(reciboId, context, req.body, recibosRepository, fiscalGateway);
+      const recibo = await anularRecibo(reciboId, context, req.body, recibosRepository, await resolveGateway(context.facturador.id));
       res.json(recibo);
     } catch (error) { next(error); }
   }
@@ -169,7 +184,7 @@ recibosRouter.get(
     try {
       const context = await getOperationalContext(req.user!.id, operationalContextRepository);
       const { reciboId } = req.params as z.infer<typeof reciboIdSchema>;
-      const artifact = await getReciboPdf(reciboId, context, recibosRepository, fiscalGateway);
+      const artifact = await getReciboPdf(reciboId, context, recibosRepository, await resolveGateway(context.facturador.id));
       res.setHeader("Content-Type", artifact.content_type);
       res.setHeader("Content-Disposition", `attachment; filename="${artifact.filename}"`);
       res.send(artifact.body);
@@ -185,7 +200,7 @@ recibosRouter.get(
     try {
       const context = await getOperationalContext(req.user!.id, operationalContextRepository);
       const { reciboId } = req.params as z.infer<typeof reciboIdSchema>;
-      const artifact = await getReciboXml(reciboId, context, recibosRepository, fiscalGateway);
+      const artifact = await getReciboXml(reciboId, context, recibosRepository, await resolveGateway(context.facturador.id));
       res.setHeader("Content-Type", artifact.content_type);
       res.setHeader("Content-Disposition", `attachment; filename="${artifact.filename}"`);
       res.send(artifact.body);
@@ -201,7 +216,7 @@ recibosRouter.delete(
     try {
       const context = await getOperationalContext(req.user!.id, operationalContextRepository);
       const { reciboId } = req.params as z.infer<typeof reciboIdSchema>;
-      await eliminarRecibo(reciboId, context, recibosRepository, fiscalGateway);
+      await eliminarRecibo(reciboId, context, recibosRepository, await resolveGateway(context.facturador.id));
       res.status(204).send();
     } catch (error) { next(error); }
   }
@@ -240,7 +255,7 @@ recibosRouter.post(
           referencia_documento_numero_display: factura.numero_fiscal ?? null,
         },
         recibosRepository,
-        fiscalGateway
+        await resolveGateway(context.facturador.id)
       );
       res.status(201).json(recibo);
     } catch (error) { next(error); }

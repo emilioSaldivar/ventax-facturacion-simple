@@ -268,6 +268,19 @@ Analogo para `editarRecibo`, `eliminarRecibo`, `emitirRecibo`, `anularRecibo` �
 
 ---
 
+## Fase 12 — Correccion post-deploy: resolver clave por-facturador (2026-07-24)
+
+Al validar en staging se encontro que `recibos.routes.ts` llamaba siempre al singleton `fiscalGateway` (clave global `env.FE_API_KEY`), ignorando `facturadores.fe_consumer_api_key` — la clave especifica que cada facturador tiene registrada en `facturacion-electronica`. `facturas` no tiene este problema porque su unico camino de emision real es el outbox worker, que ya resuelve `gatewayWithKey(pending.facturadorApiKey)` (`server.ts:22`, `facturas.repository.ts:778,792`); `recibos` en cambio llama al gateway de forma sincrona en cada operacion (crear/editar/eliminar/emitir/anular/pdf/xml) y nunca pasaba por ese mecanismo.
+
+Correccion aplicada en `recibos.routes.ts`:
+- Nuevo metodo `RecibosRepository.getFacturadorApiKey(facturadorId)` → `SELECT fe_consumer_api_key FROM facturadores WHERE id = $1`.
+- Nueva funcion `resolveGateway(facturadorId)`: si el facturador tiene `fe_consumer_api_key`, construye un gateway con `createFiscalGateway({ ...buildFiscalGatewayConfig(env), apiKey })`; si no, usa el singleton `fiscalGateway` (clave global) como fallback.
+- Los 8 call-sites que antes pasaban el singleton `fiscalGateway` directamente ahora pasan `await resolveGateway(context.facturador.id)`.
+
+No se toco `facturas` ni el patron de outbox — el fix es local a `recibos`.
+
+---
+
 ## Archivos modificados/creados
 
 | Archivo | Tipo de cambio |
