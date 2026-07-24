@@ -143,12 +143,30 @@ interface ReadinessResponse {
   }>;
 }
 
+interface ApiValidationDetails {
+  formErrors?: string[];
+  fieldErrors?: Record<string, string[]>;
+}
+
 interface ApiErrorResponse {
   error?: {
     code?: string;
     message?: string;
+    details?: ApiValidationDetails;
   };
   message?: string;
+}
+
+function formatValidationDetails(details?: ApiValidationDetails): string {
+  if (!details) return "";
+  const parts: string[] = [];
+  if (details.formErrors?.length) parts.push(...details.formErrors);
+  if (details.fieldErrors) {
+    for (const [field, msgs] of Object.entries(details.fieldErrors)) {
+      if (msgs && msgs.length) parts.push(`${field}: ${msgs.join(", ")}`);
+    }
+  }
+  return parts.join(" | ");
 }
 
 class ApiClientError extends Error {
@@ -5451,7 +5469,9 @@ async function refreshSession(): Promise<AuthResponse> {
 async function readApiError(response: Response): Promise<string> {
   try {
     const body = (await response.json()) as ApiErrorResponse;
-    return body.error?.message ?? body.message ?? "Solicitud rechazada.";
+    const message = body.error?.message ?? body.message ?? "Solicitud rechazada.";
+    const detailsText = formatValidationDetails(body.error?.details);
+    return detailsText ? `${message} (${detailsText})` : message;
   } catch {
     return "No se pudo completar la solicitud.";
   }
@@ -5910,7 +5930,8 @@ function NotasView({
 
   async function saveForm(andEmit: boolean) {
     if (!cliente.nombre.trim()) { setError("El nombre del cliente es requerido."); return; }
-    if (andEmit && !formFilas.some(f => f.fila_tipo === "ITEM")) {
+    const filasUtiles = formFilas.filter(f => f.descripcion.trim() !== "");
+    if (andEmit && !filasUtiles.some(f => f.fila_tipo === "ITEM")) {
       setError("Se requiere al menos un item con precio para emitir.");
       return;
     }
@@ -5923,7 +5944,7 @@ function NotasView({
         cliente_ruc: cliente.documento.trim() || null,
         valido_hasta: formValidoHasta || null,
         observaciones: formObservaciones.trim() || null,
-        items: formFilas.map((f, i) => ({
+        items: filasUtiles.map((f, i) => ({
           orden: i + 1,
           fila_tipo: f.fila_tipo,
           descripcion: f.descripcion,

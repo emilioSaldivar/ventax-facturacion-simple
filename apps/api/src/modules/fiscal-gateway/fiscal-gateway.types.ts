@@ -275,6 +275,69 @@ export interface FiscalIdempotencyReconciliationResponse {
   raw: Record<string, unknown>;
 }
 
+export type ReciboEstadoFiscal = "BORRADOR" | "EMITIDO" | "ANULADO";
+export type ReciboPagadorDocumentoTipo = "RUC" | "CI" | "PASAPORTE" | "CEDULA_EXTRANJERA" | "NO_ESPECIFICADO" | null;
+export type ReciboFormaPagoFiscal = "EFECTIVO" | "TRANSFERENCIA" | "CHEQUE" | "TARJETA_CREDITO" | "TARJETA_DEBITO" | "OTRO";
+
+export interface FiscalCrearReciboRequest {
+  emisor_id: string;
+  fecha_cobro: string;
+  pagador_nombre: string;
+  pagador_documento_tipo?: ReciboPagadorDocumentoTipo;
+  pagador_documento?: string | null;
+  concepto: string;
+  importe: number;
+  moneda?: string;
+  forma_pago?: ReciboFormaPagoFiscal;
+  referencia_bancaria?: string | null;
+  referencia_documento_uuid?: string | null;
+  referencia_documento_numero_display?: string | null;
+  client_reference?: { idempotency_key: string };
+}
+
+export interface FiscalReciboResult {
+  id: string;
+  estado: ReciboEstadoFiscal;
+  numero: string | null;
+  verification_token: string | null;
+  fecha_cobro: string;
+  pagador_nombre: string;
+  pagador_documento_tipo: ReciboPagadorDocumentoTipo;
+  pagador_documento: string | null;
+  concepto: string;
+  importe: string;
+  moneda: string;
+  forma_pago: ReciboFormaPagoFiscal;
+  referencia_bancaria: string | null;
+  referencia_documento_numero_display: string | null;
+  xml_hash: string | null;
+  pdf_hash: string | null;
+  anulacion_motivo: string | null;
+  emitido_at: string | null;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+  raw: Record<string, unknown>;
+}
+
+export interface FiscalEditarReciboRequest {
+  reciboId: string;
+  patch: Partial<Omit<FiscalCrearReciboRequest, "emisor_id" | "client_reference">>;
+}
+
+export interface FiscalAnularReciboRequest {
+  reciboId: string;
+  motivo: string;
+}
+
+export interface FiscalReciboVerificacionResult {
+  valido: boolean;
+  estado?: ReciboEstadoFiscal;
+  fecha_emision?: string | null;
+  firmado_en?: string | null;
+  raw: Record<string, unknown>;
+}
+
 export interface FiscalGateway {
   health(): Promise<FiscalGatewayHealth>;
   emitFactura(request: FiscalEmitFacturaRequest): Promise<FiscalEmitFacturaResponse>;
@@ -326,6 +389,15 @@ export interface FiscalGateway {
     to: string;
     idempotencyKeys: string[];
   }): Promise<FiscalIdempotencyReconciliationResponse>;
+  crearRecibo(request: FiscalCrearReciboRequest): Promise<FiscalReciboResult>;
+  editarRecibo(request: FiscalEditarReciboRequest): Promise<FiscalReciboResult>;
+  eliminarRecibo(input: { reciboId: string }): Promise<void>;
+  emitirRecibo(input: { reciboId: string }): Promise<FiscalReciboResult>;
+  anularRecibo(request: FiscalAnularReciboRequest): Promise<FiscalReciboResult>;
+  getReciboPdf(input: { reciboId: string }): Promise<FiscalArtifactResponse>;
+  getReciboXml(input: { reciboId: string }): Promise<FiscalArtifactResponse>;
+  verificarRecibo(token: string): Promise<FiscalReciboVerificacionResult>;
+  verificarReciboPdf(token: string): Promise<FiscalArtifactResponse>;
 }
 
 export class FiscalGatewayError extends Error {

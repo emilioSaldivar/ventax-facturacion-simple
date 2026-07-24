@@ -1,0 +1,3498 @@
+openapi: 3.0.3
+info:
+  title: Facturación Electrónica SIFEN - MVP v0.1
+  version: 0.1.0
+  description: |
+    Servicio Node.js para SIFEN (Paraguay) conforme Manual Técnico v150.
+    MVP: Emisión FE (CONTADO/CREDITO), firma, QR, envío SYNC/Lote, eventos (cancelación/inutilización), consultas/listado.
+
+servers:
+  - url: /v1
+
+tags:
+  - name: System
+  - name: Emision
+  - name: Conciliacion
+    description: Conciliacion y cancelacion local por idempotency_key. Requiere API key de consumidor.
+  - name: Eventos
+  - name: Consultas
+  - name: Archivos
+  - name: Contrato Canónico
+    description: Endpoints por document_uuid (identidad estable). Recomendado para integraciones nuevas.
+  - name: Recibos
+    description: |
+      Recibo de dinero firmado digitalmente (Ley N.º 6822/2021). No es un DE de SIFEN,
+      nunca se transmite a DNIT. Ciclo BORRADOR -> EMITIDO (firma XMLDSig + PAdES) -> ANULADO.
+      Usa exclusivamente ApiConsumerKeyAuth (sin clave compartida) salvo los endpoints
+      publicos de verificacion, que no requieren autenticacion.
+
+security:
+  - ApiConsumerKeyAuth: []
+
+paths:
+  /health:
+    get:
+      tags: [System]
+      summary: Healthcheck
+      security: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status:
+                    type: string
+                    example: ok
+                  service:
+                    type: string
+                    example: facturacion-electronica
+                  db:
+                    type: boolean
+                    example: true
+
+  /factura:
+    post:
+      tags: [Emision]
+      summary: Emitir Factura Electrónica (CONTADO o CREDITO)
+      description: |
+        Crea/obtiene un DE idempotente, genera XML v150, firma, inserta QR (AA002).
+
+        **Autenticacion**: requiere API key de consumidor (`X-Api-Key`). La API key global queda retirada de este endpoint.
+
+        **Idempotencia**: `client_reference.idempotency_key` es **obligatorio**. Formato: `^[A-Za-z0-9_-]{8,80}$`.
+        La unicidad es compuesta: `consumer_id + emisor_id + env + idempotency_key`.
+        Si el consumidor reintenta con la misma clave, el sistema devuelve el documento existente con `idempotent: true` (HTTP 200) sin consumir nueva numeracion.
+
+        **Modos de envio**:
+        - `SYNC`: envio inmediato a SIFEN. Responde con estado fiscal final.
+        - `BATCH`: encola para envio por lote. HTTP 200 con `status: QUEUED_BATCH`.
+        - `AUTO`: intenta SYNC y ante falla tecnica o rechazo SIFEN 1264, cae a BATCH (HTTP 202).
+      security:
+        - ApiConsumerKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EmitirFacturaRequest"
+      responses:
+        "200":
+          description: |
+            Emitida/encolada correctamente (nueva emision), o retry idempotente recuperado.
+            Cuando `idempotent: true`, el documento ya existia y no se consumio nueva numeracion.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmitirFacturaResponse"
+        "202":
+          description: Documento aceptado localmente y encolado por fallback AUTO tecnico o rechazo SIFEN 1264.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmitirFacturaResponse"
+        "401":
+          description: API key ausente, invalida o consumidor inactivo.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Consumidor sin permiso FACTURA_EMIT o sin alcance sobre el emisor/env solicitado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Validacion de datos (incluye idempotency_key faltante o con formato invalido).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Error interno
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /nota-credito:
+    post:
+      tags: [Emision]
+      security:
+        - ApiKeyAuth: []
+      summary: Emitir Nota de Crédito Electrónica
+      description: |
+        Crea/obtiene una NCE idempotente, genera XML v150 con `C002=5`, firma, inserta QR (AA002)
+        y transmite segun `envio.mode`.
+
+        Para referencia electronica, el CDC asociado debe existir localmente y corresponder a una FE.
+        Para referencia impresa, se informan los datos del documento impreso tipo factura.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EmitirNotaCreditoRequest"
+      responses:
+        "200":
+          description: NCE emitida o encolada correctamente
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmitirNotaCreditoResponse"
+        "202":
+          description: NCE aceptada localmente y encolada por fallback AUTO
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmitirNotaCreditoResponse"
+        "409":
+          description: Documento ya existe o monto acumulado de NCE excede la FE asociada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Factura electronica referenciada no encontrada localmente
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Validacion de datos o referencia documental invalida
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Error interno
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /evento/cancelar:
+    post:
+      tags: [Eventos]
+      security:
+        - ApiKeyAuth: []
+      summary: Cancelar un DE (Factura) por CDC
+      description: |
+        Reglas MVP:
+        - Solo si el DE está aprobado (APPROVED / APPROVED_WITH_OBS).
+        - Validar ventana operativa de cancelación (48h desde aprobación en SIFEN para FE).
+        Envía evento a SIFEN y persiste resultado.
+        En backoffice, esta acción debe diferenciarse de `cancel-send`, que solo retira un documento de la cola batch antes de transmitirlo.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CancelarRequest"
+      responses:
+        "200":
+          description: Evento procesado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EventoResponse"
+        "404":
+          description: Documento no encontrado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Estado no permite cancelación / fuera de ventana
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Validación de datos
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /evento/inutilizacionnumfactura:
+    post:
+      tags: [Eventos]
+      security:
+        - ApiKeyAuth: []
+      summary: Inutilizar rango de numeración FE
+      description: |
+        Inutiliza un rango secuencial de numeración (hasta 1000).
+        Reglas MVP:
+        - motivo requerido (<=150 chars)
+        - rango secuencial válido
+        - no permitir inutilizar números ya utilizados por DE aprobados
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InutilizarRequest"
+      responses:
+        "200":
+          description: Evento procesado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EventoResponse"
+        "409":
+          description: Rango inválido / contiene utilizados / conflicto
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Validación de datos
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /consultar/comprobante/{cdc}:
+    get:
+      tags: [Consultas]
+      security:
+        - ApiKeyAuth: []
+      summary: Consultar comprobante por CDC (estado interno)
+      parameters:
+        - in: path
+          name: cdc
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: env
+          required: false
+          schema:
+            type: string
+            enum: [test, prod]
+          description: Ambiente persistido del documento cuando la base aloja mas de un ambiente.
+      responses:
+        "200":
+          description: Comprobante encontrado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ComprobanteResponse"
+        "404":
+          description: No encontrado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /consultar/comprobantexml/{cdc}:
+    get:
+      tags: [Consultas]
+      security:
+        - ApiKeyAuth: []
+      summary: Obtener XML por CDC (unsigned/signed/qr)
+      parameters:
+        - in: path
+          name: cdc
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: env
+          required: false
+          schema:
+            type: string
+            enum: [test, prod]
+          description: Ambiente persistido del documento cuando la base aloja mas de un ambiente.
+      responses:
+        "200":
+          description: XMLs
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ComprobanteXmlResponse"
+        "404":
+          description: No encontrado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /consultar/comprobanteSifen/{cdc}:
+    get:
+      tags: [Consultas]
+      security:
+        - ApiKeyAuth: []
+      summary: Consultar estado en SIFEN por CDC
+      description: |
+        Si refresh=true, consulta en SIFEN y actualiza cache.
+        Si refresh=false, devuelve el cache persistido.
+      parameters:
+        - in: path
+          name: cdc
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: env
+          required: false
+          schema:
+            type: string
+            enum: [test, prod]
+          description: Ambiente persistido del documento y destino de la consulta remota a SIFEN.
+        - in: query
+          name: refresh
+          required: false
+          schema:
+            type: boolean
+            default: false
+      responses:
+        "200":
+          description: Estado SIFEN
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SifenStatusResponse"
+        "404":
+          description: No encontrado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /consultar/{id}/facturalista/{numero}:
+    get:
+      tags: [Consultas]
+      security:
+        - ApiKeyAuth: []
+      summary: Listar facturas (compatibilidad DocuJSON)
+      description: |
+        Mantiene el path esperado: /consultar/{id}/facturalista/{numero}
+        Interpretación MVP:
+        - {id} = emisor_id o tenant_id (definir en implementación, por defecto emisor_id)
+        - {numero} = cursor/offset (int)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: numero
+          required: true
+          schema:
+            type: integer
+        - in: query
+          name: env
+          schema:
+            type: string
+            enum: [test, prod]
+          description: Ambiente persistido del documento cuando la base aloja mas de un ambiente.
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 50
+            minimum: 1
+            maximum: 200
+        - in: query
+          name: from
+          schema:
+            type: string
+            format: date
+        - in: query
+          name: to
+          schema:
+            type: string
+            format: date
+        - in: query
+          name: status
+          schema:
+            $ref: "#/components/schemas/DocumentStatus"
+        - in: query
+          name: q
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Lista paginada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListaFacturasResponse"
+
+  /consultar/evento/{cdc}:
+    get:
+      tags: [Consultas]
+      security:
+        - ApiKeyAuth: []
+      summary: Consultar eventos por CDC
+      parameters:
+        - in: path
+          name: cdc
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: env
+          required: false
+          schema:
+            type: string
+            enum: [test, prod]
+          description: Ambiente persistido del evento cuando la base aloja mas de un ambiente.
+      responses:
+        "200":
+          description: Eventos asociados al CDC
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EventosResponse"
+        "404":
+          description: No encontrado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /consultar/{id}/batch-pendientes:
+    get:
+      tags: [Consultas]
+      security:
+        - ApiKeyAuth: []
+      summary: Consultar cola y lotes pendientes por emisor
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: env
+          schema:
+            type: string
+            enum: [test, prod]
+        - in: query
+          name: tipoDocumento
+          schema:
+            type: string
+        - in: query
+          name: status
+          schema:
+            type: string
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 50
+            minimum: 1
+            maximum: 200
+        - in: query
+          name: offset
+          schema:
+            type: integer
+            default: 0
+            minimum: 0
+      responses:
+        "200":
+          description: Cola y lotes pendientes
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BatchPendientesResponse"
+
+  # ─── Batch Consulta MT150 — T002/T003 ────────────────────────────────────
+
+  /consultar/{id}/lotes:
+    get:
+      tags: [Consultas]
+      security:
+        - ApiKeyAuth: []
+      summary: Listar lotes de un facturador por rango de fechas
+      description: |
+        Listado paginado de lotes SIFEN de un facturador con filtros operativos.
+        No confundir `did` (identificador interno del sistema) con `sifen_protocol`
+        (`dProtConsLote` de SIFEN), que es el identificador de consulta real.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: RUC completo del facturador (emisor_id)
+          schema:
+            type: string
+        - name: env
+          in: query
+          schema:
+            type: string
+            enum: [test, prod]
+        - name: from
+          in: query
+          description: Inicio del rango temporal (ISO 8601)
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          description: Fin del rango temporal (ISO 8601)
+          schema:
+            type: string
+            format: date-time
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [CREATED, SENT, RECEIVED, PROCESSING, DONE, ERROR]
+        - name: tipoDocumento
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+            maximum: 200
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        "200":
+          description: Lista de lotes
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BatchListResponse"
+        "401":
+          description: API key inválida
+        "422":
+          description: Parámetros de query inválidos
+
+  /consultar/{id}/lotes/{protocol}:
+    get:
+      tags: [Consultas]
+      security:
+        - ApiKeyAuth: []
+      summary: Consulta puntual de lote por protocolo SIFEN (dProtConsLote)
+      description: |
+        Consulta un lote identificado por su `dProtConsLote` (protocolo SIFEN real).
+        Con `refresh=true`, ejecuta `setapi.consultaLote` con el protocolo real y persiste
+        el resultado usando el mismo parser MT150 del worker de polling.
+        **Throttling**: refresh omitido para lotes ya concluyentes (DONE/ERROR).
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: RUC completo del facturador (emisor_id)
+          schema:
+            type: string
+        - name: protocol
+          in: path
+          required: true
+          description: Protocolo SIFEN del lote (dProtConsLote retornado en recepción)
+          schema:
+            type: string
+        - name: env
+          in: query
+          schema:
+            type: string
+            enum: [test, prod]
+        - name: refresh
+          in: query
+          description: |
+            Si true, consulta SIFEN en tiempo real y persiste resultado.
+            Omitido automáticamente para lotes DONE/ERROR.
+          schema:
+            type: string
+            enum: ["true", "false"]
+            default: "false"
+      responses:
+        "200":
+          description: Detalle del lote con estado actual
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BatchByProtocolResponse"
+        "401":
+          description: API key inválida
+        "404":
+          description: Protocolo no encontrado para el facturador
+        "422":
+          description: Parámetros inválidos
+
+  /consultar/ruc/{ruc}:
+    get:
+      tags: [Consultas]
+      security:
+        - ApiKeyAuth: []
+      summary: Consultar RUC en SIFEN y devolver datos normalizados
+      parameters:
+        - in: path
+          name: ruc
+          required: true
+          schema:
+            type: string
+          description: RUC base (5-8 dígitos) o formato numero-dv.
+        - in: query
+          name: emisor_id
+          required: true
+          schema:
+            type: string
+          description: RUC completo del emisor configurado en FE (se usa para resolver credenciales).
+        - in: query
+          name: env
+          required: false
+          schema:
+            type: string
+            enum: [test, prod]
+      responses:
+        "200":
+          description: Resultado normalizado de consulta RUC
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConsultaRucNormalizedResponse"
+        "422":
+          description: Validación de parámetros o datos
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /files/xml/{cdc}:
+    get:
+      tags: [Archivos]
+      security:
+        - ApiKeyAuth: []
+      summary: Descargar XML final por CDC
+      description: |
+        Descarga el XML local del Documento Electronico.
+        Usa `xml_qr` como fuente primaria y `xml_signed` como fallback.
+      parameters:
+        - in: path
+          name: cdc
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: env
+          required: false
+          schema:
+            type: string
+            enum: [test, prod]
+          description: Ambiente persistido del documento cuando la base aloja mas de un ambiente.
+      responses:
+        "200":
+          description: XML descargable
+          headers:
+            Content-Disposition:
+              schema:
+                type: string
+              description: Attachment con nombre `<cdc>.xml`.
+          content:
+            application/xml:
+              schema:
+                type: string
+        "404":
+          description: No existe XML local asociado al CDC
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                notFound:
+                  value:
+                    error: xml_not_found
+        "500":
+          description: Fallo al descargar XML
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                generationFailed:
+                  value:
+                    error: xml_download_failed
+
+  /files/kude/{cdc}.pdf:
+    get:
+      tags: [Archivos]
+      security:
+        - ApiKeyAuth: []
+      summary: Descargar PDF KUDE por CDC
+      description: |
+        Genera y descarga un PDF KUDE desde el XML local del Documento Electronico.
+        Usa `facturacionelectronicapy-kude` y requiere Java disponible en runtime.
+        En instancias multi-facturador, usa el logo configurado en el emisor propietario del documento
+        (`emisores.logo_path`). Si el emisor no tiene logo configurado, el KUDE se genera sin imagen de logo.
+      parameters:
+        - in: path
+          name: cdc
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: env
+          required: false
+          schema:
+            type: string
+            enum: [test, prod]
+          description: Ambiente persistido del documento cuando la base aloja mas de un ambiente.
+      responses:
+        "200":
+          description: PDF KUDE descargable
+          headers:
+            Content-Disposition:
+              schema:
+                type: string
+              description: Attachment con nombre `<cdc>.pdf`.
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        "404":
+          description: No existe XML local asociado al CDC
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                notFound:
+                  value:
+                    error: kude_xml_not_found
+        "500":
+          description: Fallo al generar KUDE
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                generationFailed:
+                  value:
+                    error: kude_generation_failed
+
+  /files/ticket/{cdc}/raw:
+    get:
+      tags: [Archivos]
+      security:
+        - ApiKeyAuth: []
+      summary: Obtener ticket térmico crudo por CDC
+      description: |
+        Genera una salida de ticket térmico a partir del XML local del Documento Electrónico.
+
+        Modos soportados:
+        - sin `format`: devuelve ticket en `text/plain`
+        - con `format=escpos`: devuelve payload binario `ESC/POS` listo para impresora térmica
+      parameters:
+        - in: path
+          name: cdc
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: env
+          required: false
+          schema:
+            type: string
+            enum: [test, prod]
+          description: Ambiente persistido del documento cuando la base aloja mas de un ambiente.
+        - in: query
+          name: format
+          required: false
+          schema:
+            type: string
+            enum: [escpos]
+          description: Si vale `escpos`, retorna `application/octet-stream`. Si se omite, retorna `text/plain`.
+      responses:
+        "200":
+          description: Ticket generado correctamente
+          content:
+            text/plain:
+              schema:
+                type: string
+              examples:
+                rawTicket:
+                  summary: Ticket texto plano
+                  value: |
+                    80136968-1
+                    AWAPURA E.A.S. UNIPERSONAL
+                    3 de febrero
+                    VILLA ELISA
+                    Tel: 0981296077
+                    ------------------------------------------------
+                    Timbrado:         80136968
+                    Documento:        Factura electronica
+                    Numero:           001-001-0000953
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        "404":
+          description: No existe XML local asociado al CDC
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                notFound:
+                  value:
+                    error: raw_ticket_not_found
+                    message: Ticket crudo no encontrado
+        "500":
+          description: Fallo al transformar el XML a ticket térmico
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                generationFailed:
+                  value:
+                    error: raw_ticket_generation_failed
+                    message: No se pudo generar el ticket crudo
+
+# ─────────────────────────────────────────────────────────────
+# Contrato Canónico — TCC022/TCC023/TCC024/TCC025/TCC026/TCC027
+# Identidad principal: document_uuid (estable e inmutable)
+# Reemplaza los endpoints legacy centrados en CDC.
+# Ver docs/GUIA_MIGRACION_CONTRATO_CANONICO_v0.1.md para tabla de homologación.
+# ─────────────────────────────────────────────────────────────
+
+  /documentos/by-cdc/{cdc}:
+    get:
+      summary: Resolver CDC a documento canónico (TCC023)
+      description: |
+        Resuelve un CDC vigente o histórico al documento canónico correspondiente.
+        Indica si el CDC consultado es el vigente (`is_current=true`) o fue reemplazado.
+
+        **Uso operativo:** usar este endpoint cuando el sistema cliente almacenó un CDC
+        y necesita obtener el `document_uuid` canónico para migrar sus referencias.
+        No usar este endpoint como identidad primaria — usar `/documentos/{uuid}` en su lugar.
+
+        **Homólogo legacy:** `GET /consultar/comprobante/{cdc}`
+      tags: [Contrato Canónico]
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: cdc
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 44
+            maxLength: 44
+          description: CDC de 44 caracteres (vigente o histórico)
+        - name: env
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [test, prod]
+      responses:
+        "200":
+          description: CDC resuelto exitosamente
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ByCdcResponse"
+              examples:
+                cdcVigente:
+                  summary: CDC vigente
+                  value:
+                    document_uuid: "9f5c0b3f-6a6a-4d4b-9a31-2a9d0b0c4a11"
+                    document_id: "59"
+                    requested_cdc: "01050570161001001000000312026060212337391944"
+                    current_cdc: "01050570161001001000000312026060212337391944"
+                    is_current: true
+                    lineage_status: "ACTIVE"
+                    sifen_resolution: "APPROVED"
+                    status: "APPROVED"
+                    accepted_by_sifen: true
+                    nro_factura: "0000003"
+                    tipo_documento: "FE"
+                    emisor_id: "80136968-1"
+                    env: "prod"
+                    resolution_note: "CDC consultado es el vigente del documento."
+                cdcHistorico:
+                  summary: CDC histórico reemplazado
+                  value:
+                    document_uuid: "9f5c0b3f-6a6a-4d4b-9a31-2a9d0b0c4a11"
+                    document_id: "59"
+                    requested_cdc: "01050570161001001000000312026060213355779291"
+                    current_cdc: "01050570161001001000000312026060212337391944"
+                    is_current: false
+                    lineage_status: "SUPERSEDED"
+                    sifen_resolution: "REJECTED_OR_MISSING"
+                    status: "APPROVED"
+                    accepted_by_sifen: true
+                    nro_factura: "0000003"
+                    tipo_documento: "FE"
+                    emisor_id: "80136968-1"
+                    env: "prod"
+                    resolution_note: "CDC consultado es histórico. El CDC vigente es: 01050570161001001000000312026060212337391944."
+        "404":
+          description: CDC no encontrado en el sistema
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /documentos/{uuid}:
+    get:
+      summary: Consulta principal del documento por identidad canónica (TCC022)
+      description: |
+        Devuelve el estado completo del documento usando su identidad canónica estable.
+        Incluye `lineage_summary` con el resumen del historial CDC del documento.
+
+        **Uso operativo:** consulta principal para cualquier sistema que necesite el
+        estado del documento. Usar `document_uuid` obtenido de la respuesta de emisión
+        (`POST /factura`) o del lookup `GET /documentos/by-cdc/{cdc}`.
+
+        **Homólogo legacy:** `GET /consultar/comprobante/{cdc}` (centrado en CDC)
+      tags: [Contrato Canónico]
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: uuid
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: document_uuid canónico del documento
+        - name: env
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [test, prod]
+      responses:
+        "200":
+          description: Documento encontrado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DocumentoCanonicoResponse"
+              examples:
+                aprobado:
+                  summary: Documento aprobado por SIFEN
+                  value:
+                    document_uuid: "9f5c0b3f-6a6a-4d4b-9a31-2a9d0b0c4a11"
+                    document_id: "59"
+                    current_cdc: "01050570161001001000000312026060212337391944"
+                    nro_factura: "0000003"
+                    tipo_documento: "FE"
+                    establecimiento: "001"
+                    punto_expedicion: "001"
+                    numero: "0000003"
+                    status: "APPROVED"
+                    accepted_by_sifen: true
+                    fecha_emision: "2026-06-02T03:00:00.000Z"
+                    condicion_operacion: "CONTADO"
+                    emisor_id: "80136968-1"
+                    env: "prod"
+                    lineage_summary:
+                      active_cdc: "01050570161001001000000312026060212337391944"
+                      active_lineage_status: "ACTIVE"
+                      active_sifen_resolution: "APPROVED"
+                      total_cdc_entries: 2
+                      has_superseded: true
+                    sifen_last_checked_at: "2026-06-02T04:00:00.000Z"
+                    approved_at: "2026-06-02T03:05:00.000Z"
+                    created_at: "2026-06-02T03:00:00.000Z"
+                    updated_at: "2026-06-02T04:00:00.000Z"
+        "404":
+          description: Documento no encontrado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /documentos/{uuid}/xml:
+    get:
+      summary: XML estructurado del documento vigente (TCC024)
+      description: |
+        Devuelve el XML del documento vigente en formato estructurado JSON.
+        El XML corresponde al `current_cdc` del documento.
+
+        **Homólogo legacy:** `GET /consultar/comprobantexml/{cdc}`
+      tags: [Contrato Canónico]
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: uuid
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: env
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [test, prod]
+      responses:
+        "200":
+          description: XML del documento vigente
+          content:
+            application/json:
+              schema:
+                type: object
+                description: Respuesta de GetComprobanteXml (misma estructura que /consultar/comprobantexml/{cdc})
+        "404":
+          description: Documento no encontrado o sin CDC
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /documentos/{uuid}/sifen:
+    get:
+      summary: Estado SIFEN del documento vigente (TCC024)
+      description: |
+        Consulta el estado fiscal del documento ante SIFEN usando el `current_cdc`.
+        Admite `?refresh=true` para forzar consulta fresca contra SIFEN.
+
+        **Homólogo legacy:** `GET /consultar/comprobanteSifen/{cdc}`
+      tags: [Contrato Canónico]
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: uuid
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: env
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [test, prod]
+        - name: refresh
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [true, false]
+          description: "true para forzar consulta fresca contra SIFEN"
+      responses:
+        "200":
+          description: Estado SIFEN del documento
+          content:
+            application/json:
+              schema:
+                type: object
+                description: Respuesta de ConsultComprobanteSifen (misma estructura que /consultar/comprobanteSifen/{cdc})
+        "404":
+          description: Documento no encontrado o sin CDC
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /documentos/{uuid}/eventos:
+    get:
+      summary: Eventos del documento (cancelaciones, inutilizaciones) (TCC024)
+      description: |
+        Lista los eventos fiscales asociados al documento por su `current_cdc`.
+
+        **Homólogo legacy:** `GET /consultar/evento/{cdc}`
+      tags: [Contrato Canónico]
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: uuid
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: env
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [test, prod]
+      responses:
+        "200":
+          description: Eventos del documento
+          content:
+            application/json:
+              schema:
+                type: object
+                description: Respuesta de GetEventos (misma estructura que /consultar/evento/{cdc})
+        "404":
+          description: Documento no encontrado o sin CDC
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /documentos/{uuid}/lineage:
+    get:
+      summary: Linaje CDC del documento — trazabilidad completa (TCC026)
+      description: |
+        Expone el historial completo de CDC asociados al documento:
+        activo, históricos, aprobados, rechazados y su resolución SIFEN.
+
+        **Uso operativo:** usar para diagnóstico, auditoría y soporte cuando un
+        documento tuvo múltiples CDC (por revisión manual o reenvío).
+        Permite explicar incidentes tipo `document_id=59` donde el CDC aprobado
+        no era el CDC original.
+
+        **Sin homólogo en el contrato legacy** — capacidad nueva.
+      tags: [Contrato Canónico]
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: uuid
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: env
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [test, prod]
+      responses:
+        "200":
+          description: Linaje CDC del documento
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DocumentoLineageResponse"
+              examples:
+                conLinaje:
+                  summary: Documento con 2 CDC históricos
+                  value:
+                    document_uuid: "9f5c0b3f-6a6a-4d4b-9a31-2a9d0b0c4a11"
+                    document_id: "59"
+                    current_cdc: "01050570161001001000000312026060212337391944"
+                    status: "APPROVED"
+                    env: "prod"
+                    emisor_id: "80136968-1"
+                    lineage:
+                      - id: "1"
+                        cdc: "01050570161001001000000312026060213355779291"
+                        source_type: "INITIAL"
+                        lineage_status: "SUPERSEDED"
+                        sifen_resolution: "REJECTED_OR_MISSING"
+                        is_active: false
+                        sifen_code: "0420"
+                        sifen_message: "Documento no encontrado"
+                        revision_number: null
+                        approved_at: null
+                        last_checked_at: "2026-06-02T03:30:00.000Z"
+                        created_at: "2026-06-02T03:00:00.000Z"
+                      - id: "2"
+                        cdc: "01050570161001001000000312026060212337391944"
+                        source_type: "RESEND"
+                        lineage_status: "ACTIVE"
+                        sifen_resolution: "APPROVED"
+                        is_active: true
+                        sifen_code: "0260"
+                        sifen_message: "Aprobado"
+                        revision_number: 1
+                        approved_at: "2026-06-02T03:35:00.000Z"
+                        last_checked_at: "2026-06-02T04:00:00.000Z"
+                        created_at: "2026-06-02T03:10:00.000Z"
+        "404":
+          description: Documento no encontrado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /documentos/{uuid}/files/xml:
+    get:
+      summary: Descarga de XML binario por document_uuid (TCC025)
+      description: |
+        Descarga el XML firmado del documento vigente.
+
+        **Homólogo legacy:** `GET /files/xml/{cdc}`
+      tags: [Contrato Canónico]
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: uuid
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: env
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [test, prod]
+      responses:
+        "200":
+          description: XML firmado del documento
+          content:
+            application/xml:
+              schema:
+                type: string
+        "404":
+          description: XML no encontrado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /documentos/{uuid}/files/kude.pdf:
+    get:
+      summary: Descarga del KUDE PDF por document_uuid (TCC025)
+      description: |
+        Genera y descarga el KUDE en formato PDF del documento vigente.
+
+        **Homólogo legacy:** `GET /files/kude/{cdc}.pdf`
+      tags: [Contrato Canónico]
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: uuid
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: env
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [test, prod]
+      responses:
+        "200":
+          description: PDF del KUDE
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        "404":
+          description: XML no encontrado para generar KUDE
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /documentos/{uuid}/files/ticket/raw:
+    get:
+      summary: Ticket raw por document_uuid (TCC025)
+      description: |
+        Genera el ticket crudo (text/plain o escpos) del documento vigente.
+
+        **Homólogo legacy:** `GET /files/ticket/{cdc}/raw`
+      tags: [Contrato Canónico]
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: uuid
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: env
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [test, prod]
+        - name: format
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [escpos]
+          description: "Formato del ticket: sin valor = texto plano, escpos = bytes ESC/POS"
+      responses:
+        "200":
+          description: Ticket crudo generado
+          content:
+            text/plain:
+              schema:
+                type: string
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        "404":
+          description: Documento no encontrado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ─────────────────────────────────────────────────────────
+  # API CONSUMERS — ADMIN
+  # ─────────────────────────────────────────────────────────
+
+  /conciliacion/idempotency:
+    post:
+      tags: [Conciliacion]
+      summary: Conciliar batch de idempotency_keys
+      description: |
+        Permite al consumidor recuperar el `document_uuid` de transacciones cuya respuesta se perdio.
+        No ejecuta refresh SIFEN ni modifica documentos.
+
+        **Permiso requerido**: `IDEMPOTENCY_RECONCILE`.
+        **Rango maximo**: 7 dias. **Keys por request**: max 100.
+
+        Resultados posibles por item:
+        - `IMPACTED`: existe documento asociado. Incluye `document_uuid`.
+        - `NOT_IMPACTED`: no existe documento en el rango consultado.
+        - `DUPLICATE_CONFLICT`: multiples documentos para esa clave (requiere soporte).
+        - `INVALID_KEY`: el valor no cumple el formato.
+      security:
+        - ApiConsumerKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReconcileIdempotencyRequest"
+            example:
+              emisor_id: "80136968-1"
+              env: "prod"
+              from: "2026-06-01T00:00:00-04:00"
+              to: "2026-06-07T23:59:59-04:00"
+              idempotency_keys:
+                - "A1B2C3D4E5"
+                - "A1B2C3D4E6"
+      responses:
+        "200":
+          description: Resultado por clave
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReconcileIdempotencyResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /conciliacion/idempotency/cancel-send:
+    post:
+      tags: [Conciliacion]
+      summary: Cancelar envio local por idempotency_key
+      description: |
+        Cancela el envio local de un documento en estado `QUEUED_BATCH` identificado por `idempotency_key`,
+        siempre que no exista evidencia de transmision a SIFEN (`last_sent_at IS NULL`).
+
+        **No dispara evento fiscal SIFEN**. Solo revierte el documento a `DRAFT` localmente.
+        Use este endpoint cuando la respuesta original fue incierta y el consumidor necesita
+        cancelar antes de que el batch worker envie el documento.
+
+        **Permiso requerido**: `CANCEL_SEND`.
+
+        Resultados posibles:
+        - `CANCELLED_LOCAL`: documento revertido a DRAFT.
+        - `NOT_IMPACTED`: no existe documento para esa clave.
+        - HTTP 409 `INVALID_DOCUMENT_STATUS`: el documento no esta en `QUEUED_BATCH`.
+        - HTTP 409 `TRANSMISSION_EVIDENCE_DETECTED`: ya hay evidencia de transmision.
+        - HTTP 409 `DUPLICATE_CONFLICT`: multiples documentos (requiere soporte).
+      security:
+        - ApiConsumerKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CancelSendByIdempotencyRequest"
+            example:
+              emisor_id: "80136968-1"
+              env: "prod"
+              idempotency_key: "A1B2C3D4E5"
+              reason: "Consumidor cancelo la venta antes de confirmar recepcion."
+      responses:
+        "200":
+          description: Resultado de la operacion
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CancelSendByIdempotencyResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: Documento ineligible (estado invalido o evidencia de transmision)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /recibos:
+    post:
+      tags: [Recibos]
+      summary: Crear recibo de dinero (BORRADOR)
+      description: |
+        Crea un recibo de dinero en estado `BORRADOR`: mutable, sin numero ni firma.
+        No tiene validez legal hasta que se llame `POST /recibos/{id}/emitir`.
+
+        Fundamento legal: Ley N.º 6822/2021 (firma electronica cualificada). El recibo
+        **nunca se transmite a SIFEN/DNIT** — es una entidad independiente de los DE.
+      security:
+        - ApiConsumerKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReciboDineroInput"
+      responses:
+        "201":
+          description: Recibo creado en estado BORRADOR.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReciboDineroResult"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          description: Validacion de datos o `referencia_documento_uuid` invalido.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    get:
+      tags: [Recibos]
+      summary: Listar recibos del emisor
+      description: |
+        Soporta `updated_since` para sincronizacion incremental: la app consumidora puede
+        reconstruir su cache local consultando solo lo que cambio desde el ultimo `polling`.
+      security:
+        - ApiConsumerKeyAuth: []
+      parameters:
+        - name: emisor_id
+          in: query
+          required: true
+          schema:
+            type: string
+          description: RUC completo del emisor.
+        - name: estado
+          in: query
+          schema:
+            $ref: "#/components/schemas/ReciboEstado"
+        - name: updated_since
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: fecha_desde
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: fecha_hasta
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+      responses:
+        "200":
+          description: Listado paginado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReciboDineroListResult"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /recibos/{id}:
+    get:
+      tags: [Recibos]
+      summary: Detalle de un recibo (autenticado)
+      security:
+        - ApiConsumerKeyAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Detalle completo del recibo.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReciboDineroResult"
+        "404":
+          description: Recibo no encontrado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    patch:
+      tags: [Recibos]
+      summary: Editar un recibo en estado BORRADOR
+      security:
+        - ApiConsumerKeyAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReciboDineroPatch"
+      responses:
+        "200":
+          description: Recibo actualizado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReciboDineroResult"
+        "404":
+          description: Recibo no encontrado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: El recibo ya no esta en estado BORRADOR.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+    delete:
+      tags: [Recibos]
+      summary: Eliminar (soft delete) un recibo en estado BORRADOR
+      security:
+        - ApiConsumerKeyAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Recibo eliminado.
+        "404":
+          description: Recibo no encontrado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: El recibo ya no esta en estado BORRADOR.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /recibos/{id}/emitir:
+    post:
+      tags: [Recibos]
+      summary: Emitir (firmar) un recibo
+      description: |
+        Punto real de firma: asigna numero correlativo y `verification_token`, genera y firma
+        el XML (XMLDSig) y el PDF (PAdES) con el certificado `.p12` vigente del emisor, y
+        persiste todo de forma atomica. Si cualquier paso de firma falla, el recibo permanece
+        `BORRADOR` (no se consume numeracion).
+      security:
+        - ApiConsumerKeyAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Recibo EMITIDO, firmado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReciboDineroResult"
+        "404":
+          description: Recibo no encontrado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: El recibo ya fue emitido o anulado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Certificado del emisor no encontrado o vencido (`CERTIFICATE_NOT_FOUND` / `CERTIFICATE_EXPIRED`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Fallo de firma XML o PDF (`XML_SIGNATURE_FAILED` / `PDF_SIGNATURE_FAILED`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /recibos/{id}/anular:
+    post:
+      tags: [Recibos]
+      summary: Anular un recibo EMITIDO
+      description: |
+        Genera un nuevo recibo firmado ("recibo de anulacion") que referencia al original.
+        El XML/PDF del recibo original nunca se modifican; solo cambia su `estado`.
+      security:
+        - ApiConsumerKeyAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReciboAnularInput"
+      responses:
+        "200":
+          description: Recibo de anulacion, firmado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReciboDineroResult"
+        "404":
+          description: Recibo no encontrado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: El recibo esta en BORRADOR o ya fue anulado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /recibos/{id}/pdf:
+    get:
+      tags: [Recibos]
+      summary: Descargar PDF del recibo
+      description: |
+        Si el recibo esta `BORRADOR`, genera una vista previa no firmada bajo demanda
+        (numero mostrado como `-------`, sin QR funcional). Si esta `EMITIDO`/`ANULADO`,
+        devuelve el PDF firmado ya persistido (nunca se regenera).
+      security:
+        - ApiConsumerKeyAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: PDF del recibo.
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        "404":
+          description: Recibo no encontrado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /recibos/{id}/xml:
+    get:
+      tags: [Recibos]
+      summary: Descargar XML firmado del recibo
+      description: Solo disponible si el recibo esta `EMITIDO` (o `ANULADO`).
+      security:
+        - ApiConsumerKeyAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: XML firmado del recibo.
+          content:
+            application/xml:
+              schema:
+                type: string
+        "404":
+          description: Recibo no encontrado o aun en BORRADOR (sin XML firmado).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /verificar/recibo/{token}:
+    get:
+      tags: [Recibos]
+      summary: Verificacion publica de autenticidad (sin autenticacion)
+      description: |
+        Endpoint publico enlazado desde el QR del PDF. Deliberadamente no expone importe,
+        receptor ni concepto: solo confirma validez/estado del recibo.
+      security: []
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Resultado de la verificacion (recibo existente, `EMITIDO` o `ANULADO`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReciboVerificacionResult"
+        "404":
+          description: Token inexistente.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReciboVerificacionResult"
+
+  /verificar/recibo/{token}/pdf:
+    get:
+      tags: [Recibos]
+      summary: Descarga publica del PDF firmado (sin autenticacion)
+      security: []
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: PDF firmado.
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        "404":
+          description: Token inexistente o recibo aun BORRADOR.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+
+components:
+  securitySchemes:
+    ApiConsumerKeyAuth:
+      type: apiKey
+      in: header
+      name: X-Api-Key
+      description: |
+        Clave de consumidor, emitida individualmente por el proveedor del servicio (una por cliente/integracion).
+        Formato alternativo: `Authorization: Bearer <api_key>`.
+        Requerida para `POST /factura` y `POST /conciliacion/idempotency*`.
+        Tiene permisos y alcance de emisor/ambiente propios por consumidor — no puede operar fuera de su alcance asignado.
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-Api-Key
+      description: |
+        Clave global compartida (una sola clave para todos los consumidores), provista por el proveedor del servicio junto con la API key de consumidor.
+        Formato alternativo: `Authorization: Bearer <api_key>`.
+        Requerida hoy para los endpoints de consulta (`/consultar/*`, `/documentos/*`), archivos (`/files/*`) y eventos/nota de credito (`/evento/*`, `/nota-credito`).
+        Importante: esta clave no distingue por consumidor ni por emisor — cualquiera que la tenga puede consultar o accionar sobre documentos de cualquier emisor dado de alta en el servicio. Tratarla con el mismo cuidado que un secreto de administrador y no compartirla mas alla de lo necesario.
+
+  responses:
+    Unauthorized:
+      description: API key ausente, invalida o consumidor inactivo.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error: UNAUTHORIZED
+            message: API key invalida o consumidor inactivo
+    Forbidden:
+      description: Sin permiso funcional o sin alcance sobre el emisor/env.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error: FORBIDDEN
+            message: Permiso requerido - FACTURA_EMIT
+    ValidationError:
+      description: Payload invalido o parametros faltantes.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error: VALIDATION_ERROR
+            message: idempotency_key es requerido
+
+
+  schemas:
+    DocumentStatus:
+      type: string
+      description: Estado interno del DE
+      enum:
+        - DRAFT
+        - XML_GENERATED
+        - XML_SIGNED
+        - QR_ATTACHED
+        - TRANSMISSION_FAILED
+        - QUEUED_SYNC
+        - SENT_SYNC
+        - QUEUED_BATCH
+        - SENT_BATCH
+        - APPROVED
+        - APPROVED_WITH_OBS
+        - REJECTED
+        - CANCEL_REQUESTED
+        - CANCELLED
+        - VOID_REQUESTED
+        - VOIDED
+
+    EmitMode:
+      type: string
+      enum: [SYNC, BATCH, AUTO]
+
+    EmailDeliveryStatus:
+      type: string
+      description: Estado operativo de entrega de XML/KUDE al receptor. No representa aceptacion SIFEN.
+      enum: [NOT_APPLICABLE, PENDING, SENT, FAILED]
+
+    LocalArtifactStatus:
+      type: object
+      description: Artefactos locales generados antes o independientemente del despacho fiscal.
+      properties:
+        xml_unsigned:
+          type: boolean
+          description: Existe XML local sin firma.
+        xml_signed:
+          type: boolean
+          description: Existe XML firmado.
+        xml_qr:
+          type: boolean
+          description: Existe XML firmado con QR AA002.
+        kude_pdf:
+          type: boolean
+          description: Existe KUDE PDF local.
+        email_delivery:
+          $ref: "#/components/schemas/EmailDeliveryStatus"
+        email_sent_before_sifen_approval:
+          type: boolean
+          nullable: true
+          description: Indica si el correo operativo fue enviado cuando el DE aun no estaba aprobado por SIFEN.
+
+    BatchTransmissionInfo:
+      type: object
+      description: Datos de despacho por lote conforme MT150.
+      properties:
+        batch_id:
+          type: string
+          nullable: true
+        did:
+          type: string
+          nullable: true
+          description: "`dId` local secuencial por emisor/ambiente usado en `rEnvioLote`."
+        dProtConsLote:
+          type: string
+          nullable: true
+          description: Protocolo SIFEN retornado por `siRecepLoteDE`; debe usarse para `consultaLote`.
+        dCodRes:
+          type: string
+          nullable: true
+          description: Codigo de recepcion de lote; `0300` indica lote recibido con exito.
+        dMsgRes:
+          type: string
+          nullable: true
+          description: Mensaje de recepcion de lote.
+        dTpoProces:
+          type: string
+          nullable: true
+          description: Tiempo promedio de procesamiento informado por SIFEN para diferir polling.
+        result_code:
+          type: string
+          nullable: true
+          description: Codigo de consulta de lote; por ejemplo `0360`, `0361` o `0362`.
+        result_message:
+          type: string
+          nullable: true
+        status:
+          type: string
+          nullable: true
+          enum: [CREATED, RECEIVED, PROCESSING, DONE, ERROR]
+
+    CondicionOperacion:
+      type: string
+      enum: [CONTADO, CREDITO]
+
+    NumberingInstruction:
+      type: object
+      description: Metadata opcional para clientes externos que desean delegar la numeracion al servicio.
+      properties:
+        mode:
+          type: string
+          enum: [ONLINE]
+          default: ONLINE
+        authority:
+          type: string
+          description: Autoridad esperada para determinar el numero fiscal final.
+          enum: [SERVICE, CLIENT]
+          default: SERVICE
+        requested_document_number:
+          type: string
+          nullable: true
+          description: Numero sugerido por el cliente; el servicio puede conservarlo solo como auditoria.
+
+    ExternalClientReference:
+      type: object
+      description: Metadata opcional del sistema consumidor para trazabilidad e idempotencia.
+      properties:
+        source_system:
+          type: string
+          example: external-client
+        entity_type:
+          type: string
+          example: sale
+        entity_id:
+          type: string
+          example: "68"
+        request_id:
+          type: string
+          example: mov-136
+        idempotency_key:
+          type: string
+          example: mov-136
+        operational_series:
+          type: string
+          nullable: true
+          example: SERV
+          description: Serie comercial/operativa del sistema consumidor. No se copia automaticamente a `dSerieNum`.
+
+    ResolvedEmissionProfile:
+      type: object
+      nullable: true
+      description: Perfil operativo/fiscal resuelto por el servicio para la emision.
+      properties:
+        code:
+          type: string
+          example: SERV
+        description:
+          type: string
+          nullable: true
+          example: Servicios
+        actividadEconomicaCodigo:
+          type: string
+          example: "82110"
+        separation_strategy:
+          type: string
+          enum: [SHARED_SEQUENCE, FISCAL_SERIES, SEPARATE_EXPEDITION_POINT]
+          example: SHARED_SEQUENCE
+        serie_operativa:
+          type: string
+          nullable: true
+          example: SERV
+        serie_fiscal:
+          type: string
+          nullable: true
+          minLength: 2
+          maxLength: 2
+          example: AA
+          description: Serie fiscal SIFEN `C010 dSerieNum`, si aplica.
+
+    ResolvedTimbrado:
+      type: object
+      required: [timbrado, establecimiento, puntoExpedicion, documentoNro, fecIni]
+      properties:
+        timbrado:
+          type: string
+        establecimiento:
+          type: string
+          example: "001"
+        puntoExpedicion:
+          type: string
+          example: "001"
+        documentoNro:
+          type: string
+          example: "0001081"
+        fecIni:
+          type: string
+          format: date
+
+    EmitirFacturaRequest:
+      type: object
+      required:
+        - emisor_id
+        - actividadEconomicaCodigo
+        - timbrado
+        - receptor
+        - fecha
+        - condicionOperacion
+        - items
+        - envio
+      properties:
+        emisor_id:
+          type: string
+          example: "80136968-1"
+          description: RUC completo del emisor configurado en FE (`emisores.ruc_completo`, formato numero-dv). No usar el ID interno numerico de la tabla `emisores`.
+        actividadEconomicaCodigo:
+          type: string
+          example: "82110"
+          description: |
+            Codigo de actividad economica declarada/configurada para el emisor. Es obligatorio.
+            El servicio debe validarlo contra actividades activas del emisor y contra el perfil/boca de emision.
+            Este codigo no particiona por si solo la numeracion fiscal ni permite repetir numeros.
+        tipoTransaccion:
+          type: integer
+          enum: [1, 2, 3]
+          default: 1
+          description: |
+            Criterio de clasificacion fiscal para `iTipTra`:
+            - `1`: Venta de mercaderia
+            - `2`: Prestacion de servicios
+            - `3`: Mixto (mercaderia + servicios)
+            Si no se envia, FE aplica fallback a `1`.
+        emission_profile_code:
+          type: string
+          nullable: true
+          example: SERV
+          description: |
+            Codigo de perfil de emision configurado en FE. Permite resolver timbrado, punto, serie fiscal,
+            numerador y estrategia de separacion. Si se omite, FE solo puede usar un perfil default no ambiguo.
+        timbrado:
+          type: object
+          required: [timbrado, establecimiento, puntoExpedicion, documentoNro, fecIni]
+          properties:
+            timbrado:
+              type: string
+            establecimiento:
+              type: string
+              example: "001"
+            puntoExpedicion:
+              type: string
+              example: "001"
+            documentoNro:
+              type: string
+              example: "0000001"
+              description: |
+                Numero sugerido o referencial provisto por el cliente. En contratos con numeracion delegada,
+                el servicio puede usarlo solo como referencia y asignar el numero fiscal oficial desde su propio numerador.
+            fecIni:
+              type: string
+              format: date
+        numbering:
+          $ref: "#/components/schemas/NumberingInstruction"
+        client_reference:
+          $ref: "#/components/schemas/ExternalClientReference"
+        receptor:
+          type: object
+          required: [docNro, razonSocial]
+          properties:
+            tipoDocumento:
+              type: string
+              description: Tipo de documento del receptor. Si se omite, se asume `CI`.
+              enum: [CI, RUC, PASAPORTE, CEDULA_EXTRANJERA, CARNET_RESIDENCIA, INNOMINADO, TARJETA_DIPLOMATICA, NO_ESPECIFICADO]
+              default: CI
+            docNro:
+              type: string
+              description: Número de documento. Para `RUC` puede enviarse solo la base y complementar con `dv`, o el valor completo `base-dv`.
+            dv:
+              type: string
+              nullable: true
+              description: Dígito verificador del RUC. Usado cuando `tipoDocumento=RUC` y `docNro` no incluye guion.
+            razonSocial:
+              type: string
+            direccion:
+              type: string
+              nullable: true
+            telefono:
+              type: string
+              nullable: true
+              description: |
+                Telefono del receptor normalizado por FE a solo digitos.
+                Se eliminan espacios y caracteres especiales.
+                Si el valor normalizado supera 15 digitos, FE rechaza con `422`.
+            email:
+              type: string
+              format: email
+              nullable: true
+              description: Email del cliente final. Si existe, el backend fiscal intenta enviar XML y KUDE PDF.
+        fecha:
+          type: string
+          format: date-time
+        condicionOperacion:
+          type: object
+          required: [tipo]
+          properties:
+            tipo:
+              $ref: "#/components/schemas/CondicionOperacion"
+            pagos:
+              type: array
+              description: Solo para CONTADO. Para CREDITO debe ir vacío o ausente.
+              items:
+                type: object
+                required: [medio, monto]
+                properties:
+                  medio:
+                    type: string
+                    description: "Ej: EFECTIVO, TARJETA, TRANSFERENCIA, etc."
+                  monto:
+                    type: number
+                    format: double
+            credito:
+              $ref: "#/components/schemas/CreditoOperacion"
+        items:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [codigo, descripcion, cantidad, precioUnitario, ivaTipo]
+            properties:
+              codigo:
+                type: string
+              descripcion:
+                type: string
+              cantidad:
+                type: number
+                format: double
+              precioUnitario:
+                type: number
+                format: double
+                description: Precio unitario IVA incluido (según tu modelo actual)
+              ivaTipo:
+                type: string
+                enum: [IVA10, IVA5, EXENTO]
+                description: |
+                  Tipo de IVA del item segun MT v150.
+                  - IVA10: gravado tasa 10%
+                  - IVA5: gravado tasa 5%
+                  - EXENTO: exento de IVA
+        envio:
+          type: object
+          required: [mode]
+          properties:
+            mode:
+              $ref: "#/components/schemas/EmitMode"
+            sendNow:
+              type: boolean
+              default: true
+
+    EmitirFacturaResponse:
+      type: object
+      required: [document_id, cdc, nro_factura, status]
+      properties:
+        document_id:
+          type: string
+        cdc:
+          type: string
+        nro_factura:
+          type: string
+          example: "001-001-0000001"
+        timbrado:
+          $ref: "#/components/schemas/ResolvedTimbrado"
+        status:
+          $ref: "#/components/schemas/DocumentStatus"
+        delivery_mode:
+          type: string
+          nullable: true
+          enum: [SYNC, BATCH, AUTO_FALLBACK_BATCH]
+        email_status:
+          $ref: "#/components/schemas/EmailDeliveryStatus"
+          nullable: true
+          description: Resultado operativo del envio de XML y KUDE PDF al cliente final; no implica aceptacion SIFEN.
+        local_artifacts:
+          $ref: "#/components/schemas/LocalArtifactStatus"
+        batch:
+          $ref: "#/components/schemas/BatchTransmissionInfo"
+        number_source:
+          type: string
+          nullable: true
+          description: Autoridad que determino el numero fiscal final del documento.
+          enum: [SERVICE, CLIENT]
+        emission_profile:
+          $ref: "#/components/schemas/ResolvedEmissionProfile"
+        xml_qr:
+          type: string
+          nullable: true
+          description: XML final (firmado + QR AA002). Se puede omitir en prod si se usa storage externo.
+        sifen:
+          type: object
+          nullable: true
+          description: Resumen de respuesta de SIFEN si mode=SYNC
+          additionalProperties: true
+
+    CreditoOperacion:
+      oneOf:
+        - type: object
+          required: [modalidad, plazoDias]
+          properties:
+            modalidad:
+              type: string
+              enum: [PLAZO]
+            plazoDias:
+              type: integer
+              minimum: 1
+              example: 30
+        - type: object
+          required: [modalidad, cantidadCuotas]
+          properties:
+            modalidad:
+              type: string
+              enum: [CUOTAS]
+            cantidadCuotas:
+              type: integer
+              minimum: 1
+              example: 2
+            cuotas:
+              type: array
+              description: Detalle opcional para trazabilidad local y soporte de xmlgen si aplica.
+              items:
+                type: object
+                required: [monto, vencimiento]
+                properties:
+                  monto:
+                    type: number
+                    format: double
+                  vencimiento:
+                    type: string
+                    format: date
+                  moneda:
+                    type: string
+                    default: PYG
+
+    NotaCreditoReferencia:
+      oneOf:
+        - type: object
+          required: [tipo, cdc]
+          properties:
+            tipo:
+              type: string
+              enum: [ELECTRONICO]
+            cdc:
+              type: string
+              description: CDC de la Factura Electronica referenciada.
+        - type: object
+          required: [tipo, timbrado, establecimiento, puntoExpedicion, numero]
+          properties:
+            tipo:
+              type: string
+              enum: [IMPRESO]
+            timbrado:
+              type: string
+            establecimiento:
+              type: string
+              example: "001"
+            puntoExpedicion:
+              type: string
+              example: "001"
+            numero:
+              type: string
+              example: "0000001"
+            fecha:
+              type: string
+              format: date
+              nullable: true
+
+    EmitirNotaCreditoRequest:
+      type: object
+      required:
+        - emisor_id
+        - timbrado
+        - receptor
+        - fecha
+        - motivo
+        - referencia
+        - items
+        - envio
+      properties:
+        emisor_id:
+          type: string
+          example: "80136968-1"
+          description: RUC completo del emisor configurado en FE (`emisores.ruc_completo`, formato numero-dv). No usar el ID interno numerico de la tabla `emisores`.
+        timbrado:
+          type: object
+          required: [timbrado, establecimiento, puntoExpedicion, documentoNro, fecIni]
+          properties:
+            timbrado:
+              type: string
+            establecimiento:
+              type: string
+              example: "001"
+            puntoExpedicion:
+              type: string
+              example: "001"
+            documentoNro:
+              type: string
+              example: "0000001"
+            fecIni:
+              type: string
+              format: date
+        receptor:
+          type: object
+          required: [docNro, razonSocial]
+          properties:
+            tipoDocumento:
+              type: string
+              enum: [CI, RUC, PASAPORTE, CEDULA_EXTRANJERA, CARNET_RESIDENCIA, INNOMINADO, TARJETA_DIPLOMATICA, NO_ESPECIFICADO]
+              default: CI
+            docNro:
+              type: string
+              description: |
+                Numero de documento del receptor. Para `tipoDocumento=CI` debe ser numerico.
+                Para `tipoDocumento=RUC` debe informarse como `base-dv` o con `dv` separado.
+                Valores genericos como `S/D` no son validos para NCE.
+            dv:
+              type: string
+              nullable: true
+            razonSocial:
+              type: string
+            direccion:
+              type: string
+              nullable: true
+            telefono:
+              type: string
+              nullable: true
+        fecha:
+          type: string
+          format: date-time
+        motivo:
+          type: object
+          required: [codigo]
+          properties:
+            codigo:
+              type: integer
+              minimum: 1
+              description: Codigo de motivo de emision de la NCE segun catalogo SIFEN.
+        referencia:
+          $ref: "#/components/schemas/NotaCreditoReferencia"
+        items:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [codigo, descripcion, cantidad, precioUnitario, ivaTipo]
+            properties:
+              codigo:
+                type: string
+              descripcion:
+                type: string
+              cantidad:
+                type: number
+                format: double
+              precioUnitario:
+                type: number
+                format: double
+              ivaTipo:
+                type: string
+                enum: [IVA10, IVA5, EXENTO]
+                description: |
+                  Tipo de IVA del item segun MT v150.
+                  - IVA10: gravado tasa 10%
+                  - IVA5: gravado tasa 5%
+                  - EXENTO: exento de IVA
+        envio:
+          type: object
+          required: [mode]
+          properties:
+            mode:
+              $ref: "#/components/schemas/EmitMode"
+            sendNow:
+              type: boolean
+              default: true
+
+    EmitirNotaCreditoResponse:
+      type: object
+      required: [document_id, status, idempotent]
+      properties:
+        document_id:
+          type: string
+        cdc:
+          type: string
+          nullable: true
+        nro_documento:
+          type: string
+          nullable: true
+        status:
+          $ref: "#/components/schemas/DocumentStatus"
+        idempotent:
+          type: boolean
+        delivery_mode:
+          type: string
+          nullable: true
+          enum: [SYNC, BATCH, AUTO_FALLBACK_BATCH]
+        sifen:
+          type: object
+          nullable: true
+          additionalProperties: true
+
+    CancelarRequest:
+      type: object
+      required: [emisor_id, cdc, motivo]
+      properties:
+        emisor_id:
+          type: string
+          example: "80136968-1"
+          description: RUC completo del emisor configurado en FE (`emisores.ruc_completo`, formato numero-dv). No usar el ID interno numerico de la tabla `emisores`.
+        cdc:
+          type: string
+        motivo:
+          type: string
+          maxLength: 150
+
+    InutilizarRequest:
+      type: object
+      required: [emisor_id, establecimiento, puntoExpedicion, desdeNumero, hastaNumero, motivo]
+      properties:
+        emisor_id:
+          type: string
+          example: "80136968-1"
+          description: RUC completo del emisor configurado en FE (`emisores.ruc_completo`, formato numero-dv). No usar el ID interno numerico de la tabla `emisores`.
+        establecimiento:
+          type: string
+          example: "001"
+        puntoExpedicion:
+          type: string
+          example: "001"
+        desdeNumero:
+          type: string
+          example: "0000123"
+        hastaNumero:
+          type: string
+          example: "0000130"
+        motivo:
+          type: string
+          maxLength: 150
+
+    EventoResponse:
+      type: object
+      required: [event_id, status]
+      properties:
+        event_id:
+          type: string
+        status:
+          type: string
+          example: SENT
+        sifen:
+          type: object
+          nullable: true
+          additionalProperties: true
+        notification:
+          type: object
+          nullable: true
+          properties:
+            attempted:
+              type: boolean
+            sent:
+              type: boolean
+            reason:
+              type: string
+              nullable: true
+
+    ComprobanteResponse:
+      type: object
+      required: [cdc, nro_factura, status, fecha_emision, condicion_operacion]
+      properties:
+        document_id:
+          type: string
+        cdc:
+          type: string
+        nro_factura:
+          type: string
+        status:
+          $ref: "#/components/schemas/DocumentStatus"
+        fecha_emision:
+          type: string
+          format: date-time
+        condicion_operacion:
+          $ref: "#/components/schemas/CondicionOperacion"
+        receptor_doc:
+          type: string
+          nullable: true
+        receptor_nombre:
+          type: string
+          nullable: true
+        sifen_last_status:
+          type: object
+          nullable: true
+          additionalProperties: true
+        created_at:
+          type: string
+          format: date-time
+          nullable: true
+        updated_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    ComprobanteXmlResponse:
+      type: object
+      properties:
+        xml_unsigned:
+          type: string
+          nullable: true
+        xml_signed:
+          type: string
+          nullable: true
+        xml_qr:
+          type: string
+          nullable: true
+
+    BatchPendientesResponse:
+      type: object
+      required: [documents, batches]
+      properties:
+        documents:
+          type: array
+          items:
+            type: object
+            required: [document_id, status, tipo_documento]
+            properties:
+              document_id:
+                type: string
+              cdc:
+                type: string
+                nullable: true
+              nro_factura:
+                type: string
+                nullable: true
+              status:
+                $ref: "#/components/schemas/DocumentStatus"
+              fecha_emision:
+                type: string
+                nullable: true
+              tipo_documento:
+                type: string
+        batches:
+          type: array
+          items:
+            type: object
+            required: [batch_id, did, status, doc_count, tipo_documento]
+            properties:
+              batch_id:
+                type: string
+              did:
+                type: string
+                description: "`dId` local secuencial por emisor/ambiente. No debe usarse como protocolo de consulta SIFEN."
+              dProtConsLote:
+                type: string
+                nullable: true
+                description: Protocolo SIFEN retornado por `siRecepLoteDE`; requerido para consultar resultado de lote.
+              dCodRes:
+                type: string
+                nullable: true
+                description: Codigo de recepcion de lote; `0300` significa recibido con exito, `0301` lote no encolado.
+              dMsgRes:
+                type: string
+                nullable: true
+                description: Mensaje de recepcion de lote.
+              dTpoProces:
+                type: string
+                nullable: true
+                description: Tiempo promedio de procesamiento informado por SIFEN.
+              result_code:
+                type: string
+                nullable: true
+                description: Codigo de consulta de lote; por ejemplo `0360`, `0361` o `0362`.
+              result_message:
+                type: string
+                nullable: true
+              status:
+                type: string
+                enum: [CREATED, RECEIVED, PROCESSING, DONE, ERROR]
+              doc_count:
+                type: integer
+              tipo_documento:
+                type: string
+              created_at:
+                type: string
+                nullable: true
+              updated_at:
+                type: string
+                nullable: true
+
+    SifenStatusResponse:
+      type: object
+      required: [cdc, status]
+      properties:
+        cdc:
+          type: string
+        status:
+          type: object
+          additionalProperties: true
+        refreshed:
+          type: boolean
+          default: false
+
+    ConsultaRucNormalizedResponse:
+      type: object
+      required: [query, sifen, contribuyente]
+      properties:
+        query:
+          type: object
+          required: [ruc_input]
+          properties:
+            ruc_input:
+              type: string
+            ruc_consultado:
+              type: string
+              nullable: true
+        sifen:
+          type: object
+          required: [success]
+          properties:
+            result_code:
+              type: string
+              nullable: true
+            result_message:
+              type: string
+              nullable: true
+            success:
+              type: boolean
+            raw:
+              type: object
+              nullable: true
+              additionalProperties: true
+        contribuyente:
+          type: object
+          properties:
+            ruc:
+              type: string
+              nullable: true
+            dv:
+              type: string
+              nullable: true
+            ruc_completo:
+              type: string
+              nullable: true
+            razon_social:
+              type: string
+              nullable: true
+            estado_codigo:
+              type: string
+              nullable: true
+            estado_descripcion:
+              type: string
+              nullable: true
+            estado_normalizado:
+              type: string
+              nullable: true
+            es_facturador_electronico:
+              type: boolean
+              nullable: true
+
+    ListaFacturasResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ComprobanteResponse"
+        next:
+          type: integer
+          nullable: true
+          description: Cursor/offset para la siguiente página
+
+    EventosResponse:
+      type: object
+      required: [events]
+      properties:
+        events:
+          type: array
+          items:
+            type: object
+            required: [event_id, type, status, created_at]
+            properties:
+              event_id:
+                type: string
+              type:
+                type: string
+                enum: [CANCEL, VOID_RANGE]
+              status:
+                type: string
+              created_at:
+                type: string
+                format: date-time
+              response:
+                type: object
+                nullable: true
+                additionalProperties: true
+
+    ErrorResponse:
+      type: object
+      required: [error, message]
+      properties:
+        error:
+          type: string
+          example: VALIDATION_ERROR
+        message:
+          type: string
+        details:
+          type: object
+          nullable: true
+          additionalProperties: true
+
+
+    BatchItem:
+      type: object
+      description: Resumen de un lote SIFEN
+      properties:
+        batch_id:
+          type: string
+        emisor_id:
+          type: string
+        env:
+          type: string
+        tipo_documento:
+          type: string
+        did:
+          type: string
+          description: Identificador interno secuencial del lote (no el protocolo SIFEN)
+        doc_count:
+          type: integer
+        status:
+          type: string
+          enum: [CREATED, SENT, RECEIVED, PROCESSING, DONE, ERROR]
+        sifen_protocol:
+          type: string
+          nullable: true
+          description: dProtConsLote — protocolo SIFEN para consulta real
+        sifen_receive_code:
+          type: string
+          nullable: true
+        sifen_receive_message:
+          type: string
+          nullable: true
+        sifen_processing_time:
+          type: string
+          nullable: true
+        sifen_result_code:
+          type: string
+          nullable: true
+        sifen_result_message:
+          type: string
+          nullable: true
+        payload_size_bytes:
+          type: integer
+          nullable: true
+        poll_attempt_count:
+          type: integer
+        received_at:
+          type: string
+          format: date-time
+          nullable: true
+        last_polled_at:
+          type: string
+          format: date-time
+          nullable: true
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        document_uuid:
+          type: string
+          nullable: true
+          description: "Ola 0: siempre null. Populated en Ola 1 (TCC008+)."
+
+    BatchListResponse:
+      type: object
+      properties:
+        batches:
+          type: array
+          items:
+            $ref: "#/components/schemas/BatchItem"
+        next:
+          type: integer
+          nullable: true
+          description: Offset para la siguiente página, null si no hay más resultados
+
+    BatchDocumentResult:
+      type: object
+      properties:
+        cdc:
+          type: string
+          nullable: true
+        status:
+          type: string
+        sifen_code:
+          type: string
+          nullable: true
+        sifen_message:
+          type: string
+          nullable: true
+
+    BatchByProtocolResponse:
+      allOf:
+        - $ref: "#/components/schemas/BatchItem"
+        - type: object
+          properties:
+            refreshed:
+              type: boolean
+            skip_reason:
+              type: string
+              nullable: true
+            sifen_processing_summary:
+              nullable: true
+              type: object
+              properties:
+                code:
+                  type: string
+                  nullable: true
+                message:
+                  type: string
+                  nullable: true
+                status:
+                  type: string
+                  enum: [PROCESSING, DONE, ERROR]
+            document_results:
+              type: array
+              items:
+                $ref: "#/components/schemas/BatchDocumentResult"
+
+    # ── Contrato Canónico — TCC021/TCC022/TCC023/TCC026 ──────────────────
+
+    ByCdcResponse:
+      type: object
+      description: |
+        Respuesta del lookup `GET /documentos/by-cdc/{cdc}`.
+        Indica si el CDC consultado es vigente o histórico y provee la identidad canónica.
+      required:
+        - document_uuid
+        - document_id
+        - requested_cdc
+        - current_cdc
+        - is_current
+        - lineage_status
+        - sifen_resolution
+        - status
+        - accepted_by_sifen
+        - tipo_documento
+        - emisor_id
+        - env
+        - resolution_note
+      properties:
+        document_uuid:
+          type: string
+          format: uuid
+          description: Identidad canónica estable e inmutable del documento
+        document_id:
+          type: string
+          description: ID numérico interno del documento
+        requested_cdc:
+          type: string
+          description: CDC usado en la consulta
+        current_cdc:
+          type: string
+          nullable: true
+          description: CDC fiscal vigente del documento
+        is_current:
+          type: boolean
+          description: true si el CDC consultado es el vigente; false si fue reemplazado
+        lineage_status:
+          type: string
+          enum: [ACTIVE, SUPERSEDED, INCONSISTENT]
+          description: Condición del CDC consultado dentro del linaje del documento
+        sifen_resolution:
+          type: string
+          enum: [APPROVED, APPROVED_WITH_OBS, REJECTED_OR_MISSING, PENDING_CHECK]
+          description: Resolución fiscal conocida del CDC consultado
+        status:
+          type: string
+          description: Estado interno del documento
+        accepted_by_sifen:
+          type: boolean
+          description: true si el documento está aprobado por SIFEN
+        nro_factura:
+          type: string
+          nullable: true
+        tipo_documento:
+          type: string
+        emisor_id:
+          type: string
+        env:
+          type: string
+          enum: [test, prod]
+        resolution_note:
+          type: string
+          description: Texto explicativo del resultado de resolución
+
+    DocumentoCanonicoResponse:
+      type: object
+      description: |
+        Respuesta principal del contrato canónico (`GET /documentos/{uuid}`).
+        Incluye identidad canónica, estado fiscal vigente y resumen de linaje CDC.
+      required:
+        - document_uuid
+        - document_id
+        - tipo_documento
+        - establecimiento
+        - punto_expedicion
+        - numero
+        - status
+        - accepted_by_sifen
+        - emisor_id
+        - env
+        - lineage_summary
+        - created_at
+        - updated_at
+      properties:
+        document_uuid:
+          type: string
+          format: uuid
+          description: Identidad canónica estable e inmutable
+        document_id:
+          type: string
+        current_cdc:
+          type: string
+          nullable: true
+          description: CDC fiscal vigente (puede ser null si el documento aún no fue firmado)
+        nro_factura:
+          type: string
+          nullable: true
+        tipo_documento:
+          type: string
+        establecimiento:
+          type: string
+        punto_expedicion:
+          type: string
+        numero:
+          type: string
+        status:
+          $ref: "#/components/schemas/DocumentStatus"
+        accepted_by_sifen:
+          type: boolean
+        fecha_emision:
+          type: string
+          nullable: true
+        condicion_operacion:
+          type: string
+          nullable: true
+        emisor_id:
+          type: string
+        env:
+          type: string
+          enum: [test, prod]
+        lineage_summary:
+          $ref: "#/components/schemas/LineageSummary"
+        sifen_last_checked_at:
+          type: string
+          nullable: true
+        approved_at:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+        updated_at:
+          type: string
+
+    LineageSummary:
+      type: object
+      description: Resumen del linaje CDC del documento
+      properties:
+        active_cdc:
+          type: string
+          nullable: true
+        active_lineage_status:
+          type: string
+          nullable: true
+          enum: [ACTIVE, SUPERSEDED, INCONSISTENT]
+        active_sifen_resolution:
+          type: string
+          nullable: true
+          enum: [APPROVED, APPROVED_WITH_OBS, REJECTED_OR_MISSING, PENDING_CHECK]
+        total_cdc_entries:
+          type: integer
+          description: Total de entradas CDC en el linaje (incluye históricos)
+        has_superseded:
+          type: boolean
+          description: true si el documento tuvo al menos un CDC reemplazado
+
+    LineageEntryResponse:
+      type: object
+      description: Entrada individual del linaje CDC de un documento
+      required:
+        - id
+        - cdc
+        - source_type
+        - lineage_status
+        - sifen_resolution
+        - is_active
+        - created_at
+      properties:
+        id:
+          type: string
+        cdc:
+          type: string
+          description: CDC de 44 caracteres
+        source_type:
+          type: string
+          enum: [INITIAL, RESEND, RETRY_SAME_CDC, DERIVED, RECONCILED, BOOTSTRAP]
+          description: |
+            Origen del CDC en el linaje:
+            - INITIAL: primer CDC generado al emitir
+            - RESEND: nuevo CDC por reenvío con cambio de XML
+            - RETRY_SAME_CDC: reintento sin cambio de CDC
+            - DERIVED: documento derivado de otro
+            - RECONCILED: CDC promovido por reconciliación SIFEN
+            - BOOTSTRAP: entrada generada por migración histórica
+        lineage_status:
+          type: string
+          enum: [ACTIVE, SUPERSEDED, INCONSISTENT]
+          description: |
+            - ACTIVE: CDC vigente del documento
+            - SUPERSEDED: CDC reemplazado por uno posterior
+            - INCONSISTENT: no se pudo determinar el estado con evidencia suficiente
+        sifen_resolution:
+          type: string
+          enum: [APPROVED, APPROVED_WITH_OBS, REJECTED_OR_MISSING, PENDING_CHECK]
+        is_active:
+          type: boolean
+          description: true si es el CDC activo del documento
+        sifen_code:
+          type: string
+          nullable: true
+        sifen_message:
+          type: string
+          nullable: true
+        revision_number:
+          type: integer
+          nullable: true
+        approved_at:
+          type: string
+          nullable: true
+        last_checked_at:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+
+    DocumentoLineageResponse:
+      type: object
+      description: Trazabilidad completa de CDC de un documento
+      required:
+        - document_uuid
+        - document_id
+        - status
+        - env
+        - emisor_id
+        - lineage
+      properties:
+        document_uuid:
+          type: string
+          format: uuid
+        document_id:
+          type: string
+        current_cdc:
+          type: string
+          nullable: true
+        status:
+          type: string
+        env:
+          type: string
+          enum: [test, prod]
+        emisor_id:
+          type: string
+        lineage:
+          type: array
+          items:
+            $ref: "#/components/schemas/LineageEntryResponse"
+
+    # ─── API CONSUMERS ────────────────────────────────────────
+
+    ReconcileIdempotencyRequest:
+      type: object
+      required: [emisor_id, env, from, to, idempotency_keys]
+      properties:
+        emisor_id:
+          type: string
+          description: RUC completo del emisor.
+          example: "80136968-1"
+        env:
+          type: string
+          enum: [test, prod]
+        from:
+          type: string
+          format: date-time
+          description: Inicio del rango (ISO 8601 con offset). Requerido.
+          example: "2026-06-01T00:00:00-04:00"
+        to:
+          type: string
+          format: date-time
+          description: Fin del rango. Maximo 7 dias desde `from`.
+          example: "2026-06-07T23:59:59-04:00"
+        idempotency_keys:
+          type: array
+          minItems: 1
+          maxItems: 100
+          items:
+            type: string
+            pattern: "^[A-Za-z0-9_-]{8,80}$"
+
+    ReconcileIdempotencyItem:
+      type: object
+      required: [idempotency_key, result]
+      properties:
+        idempotency_key:
+          type: string
+        result:
+          type: string
+          enum: [IMPACTED, NOT_IMPACTED, DUPLICATE_CONFLICT, INVALID_KEY]
+        document_uuid:
+          type: string
+          format: uuid
+          nullable: true
+          description: Presente cuando `result=IMPACTED`.
+        document_id:
+          type: string
+          nullable: true
+        current_cdc:
+          type: string
+          nullable: true
+        status:
+          type: string
+          nullable: true
+        nro_factura:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+          nullable: true
+        message:
+          type: string
+          nullable: true
+          description: Presente cuando `result=NOT_IMPACTED`, `DUPLICATE_CONFLICT` o `INVALID_KEY`.
+
+    ReconcileIdempotencyResponse:
+      type: object
+      properties:
+        consumer:
+          type: object
+          properties:
+            id:
+              type: string
+            code:
+              type: string
+        emisor_id:
+          type: string
+        env:
+          type: string
+        from:
+          type: string
+          format: date-time
+        to:
+          type: string
+          format: date-time
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ReconcileIdempotencyItem"
+
+    CancelSendByIdempotencyRequest:
+      type: object
+      required: [emisor_id, env, idempotency_key, reason]
+      properties:
+        emisor_id:
+          type: string
+          example: "80136968-1"
+        env:
+          type: string
+          enum: [test, prod]
+        idempotency_key:
+          type: string
+          pattern: "^[A-Za-z0-9_-]{8,80}$"
+          example: "A1B2C3D4E5"
+        reason:
+          type: string
+          maxLength: 500
+          description: Motivo de la cancelacion local.
+          example: "Consumidor cancelo la venta antes de confirmar recepcion."
+
+    CancelSendByIdempotencyResponse:
+      type: object
+      properties:
+        result:
+          type: string
+          enum: [CANCELLED_LOCAL, NOT_IMPACTED, DUPLICATE_CONFLICT]
+        document_uuid:
+          type: string
+          format: uuid
+          nullable: true
+        document_id:
+          type: string
+          nullable: true
+        previous_status:
+          type: string
+          nullable: true
+        status:
+          type: string
+          nullable: true
+        message:
+          type: string
+          nullable: true
+    ReciboEstado:
+      type: string
+      enum: [BORRADOR, EMITIDO, ANULADO]
+
+    ReciboPagadorDocumentoTipo:
+      type: string
+      enum: [RUC, CI, PASAPORTE, CEDULA_EXTRANJERA, NO_ESPECIFICADO]
+      nullable: true
+
+    ReciboFormaPago:
+      type: string
+      enum: [EFECTIVO, TRANSFERENCIA, CHEQUE, TARJETA_CREDITO, TARJETA_DEBITO, OTRO]
+
+    ReciboDineroInput:
+      type: object
+      required: [emisor_id, fecha_cobro, pagador_nombre, concepto, importe]
+      properties:
+        emisor_id:
+          type: string
+          description: RUC completo del emisor.
+        fecha_cobro:
+          type: string
+          format: date
+        pagador_nombre:
+          type: string
+        pagador_documento_tipo:
+          $ref: "#/components/schemas/ReciboPagadorDocumentoTipo"
+        pagador_documento:
+          type: string
+          nullable: true
+        concepto:
+          type: string
+        importe:
+          type: number
+          minimum: 0
+          exclusiveMinimum: true
+        moneda:
+          type: string
+          default: PYG
+        forma_pago:
+          $ref: "#/components/schemas/ReciboFormaPago"
+        referencia_bancaria:
+          type: string
+          nullable: true
+        referencia_documento_uuid:
+          type: string
+          format: uuid
+          nullable: true
+          description: document_uuid de una factura de este mismo sistema (ej. cobro de credito). Opcional.
+        referencia_documento_numero_display:
+          type: string
+          nullable: true
+        client_reference:
+          type: object
+          properties:
+            idempotency_key:
+              type: string
+              pattern: "^[A-Za-z0-9_-]{8,80}$"
+
+    ReciboDineroPatch:
+      type: object
+      description: Todos los campos son opcionales; solo aplica sobre un recibo en estado BORRADOR.
+      properties:
+        fecha_cobro:
+          type: string
+          format: date
+        pagador_nombre:
+          type: string
+        pagador_documento_tipo:
+          $ref: "#/components/schemas/ReciboPagadorDocumentoTipo"
+        pagador_documento:
+          type: string
+          nullable: true
+        concepto:
+          type: string
+        importe:
+          type: number
+          minimum: 0
+          exclusiveMinimum: true
+        moneda:
+          type: string
+        forma_pago:
+          $ref: "#/components/schemas/ReciboFormaPago"
+        referencia_bancaria:
+          type: string
+          nullable: true
+        referencia_documento_uuid:
+          type: string
+          format: uuid
+          nullable: true
+        referencia_documento_numero_display:
+          type: string
+          nullable: true
+
+    ReciboAnularInput:
+      type: object
+      required: [motivo]
+      properties:
+        motivo:
+          type: string
+          maxLength: 500
+
+    ReciboDineroResult:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        estado:
+          $ref: "#/components/schemas/ReciboEstado"
+        numero:
+          type: string
+          nullable: true
+        verification_token:
+          type: string
+          format: uuid
+          nullable: true
+        fecha_cobro:
+          type: string
+          format: date
+        pagador_nombre:
+          type: string
+        pagador_documento_tipo:
+          $ref: "#/components/schemas/ReciboPagadorDocumentoTipo"
+        pagador_documento:
+          type: string
+          nullable: true
+        concepto:
+          type: string
+        importe:
+          type: string
+        moneda:
+          type: string
+        forma_pago:
+          $ref: "#/components/schemas/ReciboFormaPago"
+        referencia_bancaria:
+          type: string
+          nullable: true
+        referencia_documento_numero_display:
+          type: string
+          nullable: true
+        xml_hash:
+          type: string
+          nullable: true
+        pdf_hash:
+          type: string
+          nullable: true
+        anulacion_motivo:
+          type: string
+          nullable: true
+        emitido_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        deleted_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    ReciboDineroListResult:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ReciboDineroResult"
+        has_more:
+          type: boolean
+        page:
+          type: integer
+        limit:
+          type: integer
+
+    ReciboVerificacionResult:
+      type: object
+      description: |
+        Respuesta publica y deliberadamente limitada (sin autenticacion): nunca expone
+        importe, receptor ni concepto.
+      properties:
+        valido:
+          type: boolean
+        estado:
+          $ref: "#/components/schemas/ReciboEstado"
+        fecha_emision:
+          type: string
+          format: date
+          nullable: true
+        firmado_en:
+          type: string
+          format: date-time
+          nullable: true
+        motivo:
+          type: string
+          enum: [not_found, integrity_mismatch]

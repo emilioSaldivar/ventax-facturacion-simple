@@ -255,6 +255,40 @@ Nuevas clases o ajustes:
 
 ---
 
+## Fase 12 — Correccion: filtrar filas vacias + mostrar detalle de validacion (post-release)
+
+### 12.1 `NotasView.saveForm` (`apps/web-operacion/src/main.tsx`)
+
+Antes de construir `body.items`:
+
+```typescript
+const filasUtiles = formFilas.filter(f => f.descripcion.trim() !== "");
+```
+
+- Usar `filasUtiles` (no `formFilas`) para el `.map` que arma `items`, recalculando `orden` con el indice del array filtrado (`i + 1`).
+- Usar `filasUtiles` (no `formFilas`) en la validacion previa `andEmit && !formFilas.some(f => f.fila_tipo === "ITEM")`.
+- No se agrega validacion nueva de negocio (cantidad/precio obligatorios en `ITEM`); el unico invariante corregido es la descripcion vacia, que es lo que rompe el contrato Zod del backend.
+
+### 12.2 Cliente HTTP compartido (`apps/web-operacion/src/main.tsx`)
+
+- Extender `interface ApiErrorResponse` con:
+  ```typescript
+  error?: {
+    code?: string;
+    message?: string;
+    details?: { formErrors?: string[]; fieldErrors?: Record<string, string[]> };
+  };
+  ```
+- Agregar funcion `formatValidationDetails(details)` que concatena `formErrors` y cada entrada de `fieldErrors` como `"<campo>: <mensajes>"`.
+- Modificar `readApiError` para anexar el resultado de `formatValidationDetails` al mensaje base cuando exista contenido, entre parentesis. Sin detalle disponible, el comportamiento no cambia (mensaje generico actual).
+- No se toca el backend: `error-handler.ts` ya envia `details: error.flatten()` en el body de la respuesta; el gap era exclusivamente que el frontend lo descartaba.
+
+### Validacion
+
+- `npm run typecheck --workspace @facturacion-simple/web-operacion`
+- `npm run build --workspace @facturacion-simple/web-operacion`
+- Prueba manual/Playwright: crear presupuesto con una fila sin descripcion → guardar debe fallar client-side (fila descartada, sin error si quedan filas validas) o, si se fuerza un error de validacion distinto, el mensaje visible debe incluir el campo especifico.
+
 ## Archivos modificados
 
 | Archivo | Tipo de cambio |

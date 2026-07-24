@@ -28,7 +28,12 @@ import {
   type FiscalIdempotencyReconciliationItemResult,
   type FiscalIdempotencyReconciliationResponse,
   type FiscalRefreshStatusRequest,
-  type FiscalRefreshStatusResponse
+  type FiscalRefreshStatusResponse,
+  type FiscalCrearReciboRequest,
+  type FiscalReciboResult,
+  type FiscalEditarReciboRequest,
+  type FiscalAnularReciboRequest,
+  type FiscalReciboVerificacionResult
 } from "./fiscal-gateway.types";
 
 export function createFiscalGateway(config: FiscalGatewayConfig): FiscalGateway {
@@ -36,6 +41,8 @@ export function createFiscalGateway(config: FiscalGatewayConfig): FiscalGateway 
 }
 
 export class MockFiscalGateway implements FiscalGateway {
+  private readonly recibos = new Map<string, FiscalReciboResult>();
+
   constructor(private readonly config: FiscalGatewayConfig) {}
 
   async health(): Promise<FiscalGatewayHealth> {
@@ -358,6 +365,163 @@ export class MockFiscalGateway implements FiscalGateway {
       })),
       raw: { mode: "mock", emisor_id: input.emisorId }
     };
+  }
+
+  async crearRecibo(request: FiscalCrearReciboRequest): Promise<FiscalReciboResult> {
+    const id = crypto.randomUUID();
+    const now = new Date().toISOString();
+    const result: FiscalReciboResult = {
+      id,
+      estado: "BORRADOR",
+      numero: null,
+      verification_token: null,
+      fecha_cobro: request.fecha_cobro,
+      pagador_nombre: request.pagador_nombre,
+      pagador_documento_tipo: request.pagador_documento_tipo ?? null,
+      pagador_documento: request.pagador_documento ?? null,
+      concepto: request.concepto,
+      importe: request.importe.toFixed(2),
+      moneda: request.moneda ?? "PYG",
+      forma_pago: request.forma_pago ?? "EFECTIVO",
+      referencia_bancaria: request.referencia_bancaria ?? null,
+      referencia_documento_numero_display: request.referencia_documento_numero_display ?? null,
+      xml_hash: null,
+      pdf_hash: null,
+      anulacion_motivo: null,
+      emitido_at: null,
+      created_at: now,
+      updated_at: now,
+      deleted_at: null,
+      raw: { mode: "mock" }
+    };
+    this.recibos.set(id, result);
+    return result;
+  }
+
+  async editarRecibo(request: FiscalEditarReciboRequest): Promise<FiscalReciboResult> {
+    const existing = this.getMockRecibo(request.reciboId);
+    if (existing.estado !== "BORRADOR") {
+      throw mockReciboError(409, "RECIBO_NOT_EDITABLE", "El recibo ya no esta en estado BORRADOR.");
+    }
+    const updated: FiscalReciboResult = {
+      ...existing,
+      fecha_cobro: request.patch.fecha_cobro ?? existing.fecha_cobro,
+      pagador_nombre: request.patch.pagador_nombre ?? existing.pagador_nombre,
+      pagador_documento_tipo: request.patch.pagador_documento_tipo ?? existing.pagador_documento_tipo,
+      pagador_documento: request.patch.pagador_documento ?? existing.pagador_documento,
+      concepto: request.patch.concepto ?? existing.concepto,
+      importe: request.patch.importe !== undefined ? request.patch.importe.toFixed(2) : existing.importe,
+      moneda: request.patch.moneda ?? existing.moneda,
+      forma_pago: request.patch.forma_pago ?? existing.forma_pago,
+      referencia_bancaria: request.patch.referencia_bancaria ?? existing.referencia_bancaria,
+      referencia_documento_numero_display:
+        request.patch.referencia_documento_numero_display ?? existing.referencia_documento_numero_display,
+      updated_at: new Date().toISOString()
+    };
+    this.recibos.set(request.reciboId, updated);
+    return updated;
+  }
+
+  async eliminarRecibo(input: { reciboId: string }): Promise<void> {
+    const existing = this.getMockRecibo(input.reciboId);
+    if (existing.estado !== "BORRADOR") {
+      throw mockReciboError(409, "RECIBO_NOT_DELETABLE", "El recibo ya no esta en estado BORRADOR.");
+    }
+    this.recibos.set(input.reciboId, { ...existing, deleted_at: new Date().toISOString() });
+  }
+
+  async emitirRecibo(input: { reciboId: string }): Promise<FiscalReciboResult> {
+    const existing = this.getMockRecibo(input.reciboId);
+    if (existing.estado !== "BORRADOR") {
+      throw mockReciboError(409, "RECIBO_NOT_EMITTABLE", "El recibo no esta en estado BORRADOR.");
+    }
+    const digest = crypto.createHash("sha256").update(input.reciboId).digest("hex");
+    const now = new Date().toISOString();
+    const updated: FiscalReciboResult = {
+      ...existing,
+      estado: "EMITIDO",
+      numero: String(Number.parseInt(digest.slice(0, 6), 16) % 1_000_000),
+      verification_token: crypto.randomUUID(),
+      xml_hash: digest.slice(0, 32),
+      pdf_hash: digest.slice(32, 64),
+      emitido_at: now,
+      updated_at: now
+    };
+    this.recibos.set(input.reciboId, updated);
+    return updated;
+  }
+
+  async anularRecibo(request: FiscalAnularReciboRequest): Promise<FiscalReciboResult> {
+    const existing = this.getMockRecibo(request.reciboId);
+    if (existing.estado === "BORRADOR") {
+      throw mockReciboError(409, "RECIBO_NOT_ANULABLE", "Solo se puede anular un recibo emitido.");
+    }
+    if (existing.estado === "ANULADO") {
+      throw mockReciboError(409, "RECIBO_ALREADY_ANULADO", "El recibo ya fue anulado.");
+    }
+    const updated: FiscalReciboResult = {
+      ...existing,
+      estado: "ANULADO",
+      anulacion_motivo: request.motivo,
+      updated_at: new Date().toISOString()
+    };
+    this.recibos.set(request.reciboId, updated);
+    return updated;
+  }
+
+  async getReciboPdf(input: { reciboId: string }): Promise<FiscalArtifactResponse> {
+    const existing = this.getMockRecibo(input.reciboId);
+    return {
+      body: Buffer.from(`Mock recibo PDF ${existing.id} (${existing.estado})`, "utf8"),
+      content_type: "application/pdf",
+      filename: `recibo-${existing.numero ?? "borrador"}.pdf`
+    };
+  }
+
+  async getReciboXml(input: { reciboId: string }): Promise<FiscalArtifactResponse> {
+    const existing = this.getMockRecibo(input.reciboId);
+    if (existing.estado === "BORRADOR") {
+      throw mockReciboError(404, "XML_NOT_FOUND", "El recibo aun no fue emitido.");
+    }
+    return {
+      body: Buffer.from(`<?xml version="1.0" encoding="UTF-8"?><mockRecibo id="${escapeXml(existing.id)}"/>`, "utf8"),
+      content_type: "application/xml; charset=utf-8",
+      filename: `recibo-${existing.numero ?? "borrador"}.xml`
+    };
+  }
+
+  async verificarRecibo(token: string): Promise<FiscalReciboVerificacionResult> {
+    const found = [...this.recibos.values()].find((r) => r.verification_token === token);
+    if (!found || found.estado === "BORRADOR") {
+      return { valido: false, raw: { mode: "mock" } };
+    }
+    return {
+      valido: true,
+      estado: found.estado,
+      fecha_emision: found.emitido_at ? found.emitido_at.slice(0, 10) : null,
+      firmado_en: found.emitido_at,
+      raw: { mode: "mock" }
+    };
+  }
+
+  async verificarReciboPdf(token: string): Promise<FiscalArtifactResponse> {
+    const found = [...this.recibos.values()].find((r) => r.verification_token === token);
+    if (!found || found.estado === "BORRADOR") {
+      throw mockReciboError(404, "RECIBO_NOT_FOUND", "Token de verificacion invalido.");
+    }
+    return {
+      body: Buffer.from(`Mock recibo PDF publico ${found.id}`, "utf8"),
+      content_type: "application/pdf",
+      filename: `recibo-${found.numero ?? "borrador"}.pdf`
+    };
+  }
+
+  private getMockRecibo(id: string): FiscalReciboResult {
+    const existing = this.recibos.get(id);
+    if (!existing || existing.deleted_at) {
+      throw mockReciboError(404, "RECIBO_NOT_FOUND", "El recibo no existe.");
+    }
+    return existing;
   }
 }
 
@@ -769,6 +933,141 @@ export class RealFiscalGateway implements FiscalGateway {
     return mapFiscalIdempotencyReconciliationResponse(body, input.emisorId, input.env);
   }
 
+  async crearRecibo(request: FiscalCrearReciboRequest): Promise<FiscalReciboResult> {
+    const response = await this.fetchWithTimeout(`${this.config.baseUrl}/recibos`, {
+      method: "POST",
+      headers: { ...this.buildHeaders(), "content-type": "application/json" },
+      body: JSON.stringify(request)
+    });
+    const body = await readJson(response);
+    if (!response.ok) {
+      throw this.mapReciboError(response.status, body, "crear el recibo");
+    }
+    return mapFiscalReciboResponse(body);
+  }
+
+  async editarRecibo(request: FiscalEditarReciboRequest): Promise<FiscalReciboResult> {
+    const response = await this.fetchWithTimeout(
+      `${this.config.baseUrl}/recibos/${encodeURIComponent(request.reciboId)}`,
+      {
+        method: "PATCH",
+        headers: { ...this.buildHeaders(), "content-type": "application/json" },
+        body: JSON.stringify(request.patch)
+      }
+    );
+    const body = await readJson(response);
+    if (!response.ok) {
+      throw this.mapReciboError(response.status, body, "editar el recibo");
+    }
+    return mapFiscalReciboResponse(body);
+  }
+
+  async eliminarRecibo(input: { reciboId: string }): Promise<void> {
+    const response = await this.fetchWithTimeout(
+      `${this.config.baseUrl}/recibos/${encodeURIComponent(input.reciboId)}`,
+      { method: "DELETE", headers: this.buildHeaders() }
+    );
+    if (!response.ok) {
+      const body = await readJson(response);
+      throw this.mapReciboError(response.status, body, "eliminar el recibo");
+    }
+  }
+
+  async emitirRecibo(input: { reciboId: string }): Promise<FiscalReciboResult> {
+    const response = await this.fetchWithTimeout(
+      `${this.config.baseUrl}/recibos/${encodeURIComponent(input.reciboId)}/emitir`,
+      { method: "POST", headers: this.buildHeaders() }
+    );
+    const body = await readJson(response);
+    if (!response.ok) {
+      throw this.mapReciboError(response.status, body, "emitir el recibo");
+    }
+    return mapFiscalReciboResponse(body);
+  }
+
+  async anularRecibo(request: FiscalAnularReciboRequest): Promise<FiscalReciboResult> {
+    const response = await this.fetchWithTimeout(
+      `${this.config.baseUrl}/recibos/${encodeURIComponent(request.reciboId)}/anular`,
+      {
+        method: "POST",
+        headers: { ...this.buildHeaders(), "content-type": "application/json" },
+        body: JSON.stringify({ motivo: request.motivo })
+      }
+    );
+    const body = await readJson(response);
+    if (!response.ok) {
+      throw this.mapReciboError(response.status, body, "anular el recibo");
+    }
+    return mapFiscalReciboResponse(body);
+  }
+
+  async getReciboPdf(input: { reciboId: string }): Promise<FiscalArtifactResponse> {
+    return this.fetchArtifact(
+      `${this.config.baseUrl}/recibos/${encodeURIComponent(input.reciboId)}/pdf`,
+      "application/pdf",
+      `${input.reciboId}.pdf`
+    );
+  }
+
+  async getReciboXml(input: { reciboId: string }): Promise<FiscalArtifactResponse> {
+    return this.fetchArtifact(
+      `${this.config.baseUrl}/recibos/${encodeURIComponent(input.reciboId)}/xml`,
+      "application/xml",
+      `${input.reciboId}.xml`
+    );
+  }
+
+  async verificarRecibo(token: string): Promise<FiscalReciboVerificacionResult> {
+    const response = await this.fetchWithTimeout(
+      `${this.config.baseUrl}/verificar/recibo/${encodeURIComponent(token)}`,
+      { method: "GET", headers: { accept: "application/json" } }
+    );
+    const body = await readJson(response);
+    if (!response.ok && response.status !== 404) {
+      throw new FiscalGatewayError(
+        response.status === 408 || response.status === 504 ? "TIMEOUT" : "UPSTREAM_ERROR",
+        "Backend fiscal rechazo la verificacion del recibo.",
+        { status: response.status, body }
+      );
+    }
+    const data = body && typeof body === "object" ? (body as Record<string, unknown>) : {};
+    return {
+      valido: data.valido === true,
+      estado: data.estado as FiscalReciboResult["estado"] | undefined,
+      fecha_emision: (data.fecha_emision as string | null | undefined) ?? null,
+      firmado_en: (data.firmado_en as string | null | undefined) ?? null,
+      raw: data
+    };
+  }
+
+  async verificarReciboPdf(token: string): Promise<FiscalArtifactResponse> {
+    const response = await this.fetchWithTimeout(
+      `${this.config.baseUrl}/verificar/recibo/${encodeURIComponent(token)}/pdf`,
+      { method: "GET", headers: { accept: "application/pdf" } }
+    );
+    if (!response.ok) {
+      throw new FiscalGatewayError(
+        response.status === 408 || response.status === 504 ? "TIMEOUT" : "UPSTREAM_ERROR",
+        "Backend fiscal no entrego el PDF publico del recibo.",
+        { status: response.status }
+      );
+    }
+    const body = Buffer.from(await response.arrayBuffer());
+    return {
+      body,
+      content_type: response.headers.get("content-type") ?? "application/pdf",
+      filename: `recibo-${token}.pdf`
+    };
+  }
+
+  private mapReciboError(status: number, body: unknown, accion: string): FiscalGatewayError {
+    return new FiscalGatewayError(
+      status === 408 || status === 504 ? "TIMEOUT" : "UPSTREAM_ERROR",
+      `Backend fiscal rechazo ${accion}.`,
+      { status, body }
+    );
+  }
+
   private async fetchWithTimeout(url: string, init: RequestInit): Promise<Response> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.config.timeoutMs);
@@ -1123,6 +1422,38 @@ function isIdempotentDocumentConflict(status: number, body: unknown): boolean {
 
 function stringOrNull(value: unknown): string | null {
   return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+function mapFiscalReciboResponse(body: unknown): FiscalReciboResult {
+  if (!body || typeof body !== "object") {
+    throw new FiscalGatewayError("INVALID_RESPONSE", "Respuesta fiscal invalida para el recibo.", body);
+  }
+
+  const data = body as Record<string, unknown>;
+  return {
+    id: String(data.id),
+    estado: data.estado as FiscalReciboResult["estado"],
+    numero: stringOrNull(data.numero),
+    verification_token: stringOrNull(data.verification_token),
+    fecha_cobro: String(data.fecha_cobro),
+    pagador_nombre: String(data.pagador_nombre),
+    pagador_documento_tipo: (data.pagador_documento_tipo as FiscalReciboResult["pagador_documento_tipo"]) ?? null,
+    pagador_documento: stringOrNull(data.pagador_documento),
+    concepto: String(data.concepto),
+    importe: String(data.importe),
+    moneda: stringOrNull(data.moneda) ?? "PYG",
+    forma_pago: (data.forma_pago as FiscalReciboResult["forma_pago"]) ?? "EFECTIVO",
+    referencia_bancaria: stringOrNull(data.referencia_bancaria),
+    referencia_documento_numero_display: stringOrNull(data.referencia_documento_numero_display),
+    xml_hash: stringOrNull(data.xml_hash),
+    pdf_hash: stringOrNull(data.pdf_hash),
+    anulacion_motivo: stringOrNull(data.anulacion_motivo),
+    emitido_at: stringOrNull(data.emitido_at),
+    created_at: String(data.created_at),
+    updated_at: String(data.updated_at),
+    deleted_at: stringOrNull(data.deleted_at),
+    raw: data
+  };
 }
 
 function booleanOrNull(value: unknown): boolean | null {
@@ -1569,6 +1900,10 @@ function mapFiscalIdempotencyReconciliationResponse(
     }),
     raw: data
   };
+}
+
+function mockReciboError(status: number, code: string, message: string): FiscalGatewayError {
+  return new FiscalGatewayError("UPSTREAM_ERROR", message, { status, body: { error: code, message } });
 }
 
 function mapFetchError(error: unknown): FiscalGatewayError {

@@ -1,12 +1,58 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import {
-  createRecibo,
+  crearRecibo,
+  editarRecibo,
+  eliminarRecibo,
   emitirRecibo,
-  updateRecibo,
-  deleteRecibo,
+  anularRecibo,
   verificarRecibo,
 } from "../src/modules/recibos/recibos.service.js";
 import type { RecibosRepository, ReciboRecord } from "../src/modules/recibos/recibos.types.js";
+import { FiscalGatewayError, type FiscalGateway, type FiscalReciboResult } from "../src/modules/fiscal-gateway/fiscal-gateway.types.js";
+import type { OperationalContextResponse } from "../src/modules/context/context.types.js";
+
+const context: OperationalContextResponse = {
+  user: { id: "11111111-1111-4111-8111-111111111111", username: "operador", display_name: "Operador", role: "OPERADOR_FACTURACION" },
+  tenant: { id: "22222222-2222-4222-8222-222222222222", name: "Tenant Demo", status: "ACTIVE" },
+  facturador: { id: "f1", emisor_id: "80136968-1", razon_social: "Facturador Demo", ruc: "80136968-1" },
+  fiscal_context: {
+    establecimiento: "001",
+    punto_expedicion: "001",
+    perfil_emision_codigo: "SERV",
+    actividad_economica_codigo: "82110",
+    actividad_economica_descripcion: "Servicios administrativos",
+    timbrado: "80136968",
+    timbrado_inicio: "2025-12-30",
+    documento_nro: "0000000",
+    credito_plazo_dias: 30,
+  },
+};
+
+const makeFiscalResult = (overrides: Partial<FiscalReciboResult> = {}): FiscalReciboResult => ({
+  id: "r1",
+  estado: "BORRADOR",
+  numero: null,
+  verification_token: null,
+  fecha_cobro: "2026-06-25",
+  pagador_nombre: "Juan Perez",
+  pagador_documento_tipo: "CI",
+  pagador_documento: "1234567",
+  concepto: "Pago de servicio",
+  importe: "150000.00",
+  moneda: "PYG",
+  forma_pago: "EFECTIVO",
+  referencia_bancaria: null,
+  referencia_documento_numero_display: null,
+  xml_hash: null,
+  pdf_hash: null,
+  anulacion_motivo: null,
+  emitido_at: null,
+  created_at: "2026-06-25T00:00:00Z",
+  updated_at: "2026-06-25T00:00:00Z",
+  deleted_at: null,
+  raw: {},
+  ...overrides,
+});
 
 const makeRecibo = (overrides: Partial<ReciboRecord> = {}): ReciboRecord => ({
   id: "r1",
@@ -19,159 +65,231 @@ const makeRecibo = (overrides: Partial<ReciboRecord> = {}): ReciboRecord => ({
   pagador_documento: "1234567",
   concepto: "Pago de servicio",
   importe: 150000,
+  moneda: "PYG",
   forma_pago: "EFECTIVO",
   referencia_bancaria: null,
-  factura_id: null,
-  factura_numero_display: null,
-  verification_token: "tok-abc",
+  referencia_documento_uuid: null,
+  referencia_documento_numero_display: null,
+  external_ref: null,
+  idempotency_key: null,
+  xml_hash: null,
+  pdf_hash: null,
+  anulacion_motivo: null,
+  verification_token: null,
   emitido_at: null,
   created_at: "2026-06-25T00:00:00Z",
   updated_at: "2026-06-25T00:00:00Z",
   ...overrides,
 });
 
-const makeRepo = (): RecibosRepository => ({
-  create: vi.fn().mockResolvedValue(makeRecibo()),
-  findById: vi.fn().mockResolvedValue(makeRecibo()),
-  list: vi.fn().mockResolvedValue({ items: [], total: 0 }),
-  update: vi.fn().mockResolvedValue(makeRecibo()),
-  emitir: vi.fn().mockResolvedValue(makeRecibo({ estado: "EMITIDO", numero: 1, emitido_at: "2026-06-25T10:00:00Z" })),
-  softDelete: vi.fn().mockResolvedValue(undefined),
-  findByVerificationToken: vi.fn().mockResolvedValue(null),
-  listByFactura: vi.fn().mockResolvedValue([]),
-  getFacturadorParaPdf: vi.fn().mockResolvedValue(null),
-});
+function makeRepo(overrides: Partial<RecibosRepository> = {}): RecibosRepository {
+  return {
+    upsertFromFiscal: vi.fn(async ({ fiscal }) =>
+      makeRecibo({
+        estado: fiscal.estado,
+        numero: fiscal.numero != null ? Number(fiscal.numero) : null,
+        verification_token: fiscal.verification_token,
+        anulacion_motivo: fiscal.anulacion_motivo,
+        emitido_at: fiscal.emitido_at,
+      })
+    ),
+    markDeleted: vi.fn().mockResolvedValue(undefined),
+    findById: vi.fn().mockResolvedValue(makeRecibo()),
+    list: vi.fn().mockResolvedValue({ items: [], total: 0 }),
+    findByIdempotencyKey: vi.fn().mockResolvedValue(null),
+    findByVerificationToken: vi.fn().mockResolvedValue(null),
+    listByReferenciaDocumento: vi.fn().mockResolvedValue([]),
+    ...overrides,
+  };
+}
 
-describe("createRecibo", () => {
-  it("crea recibo con datos válidos", async () => {
+function makeGateway(overrides: Partial<FiscalGateway> = {}): FiscalGateway {
+  return {
+    crearRecibo: vi.fn().mockResolvedValue(makeFiscalResult()),
+    editarRecibo: vi.fn().mockResolvedValue(makeFiscalResult()),
+    eliminarRecibo: vi.fn().mockResolvedValue(undefined),
+    emitirRecibo: vi.fn().mockResolvedValue(makeFiscalResult({ estado: "EMITIDO", numero: "1", verification_token: "tok-abc" })),
+    anularRecibo: vi.fn().mockResolvedValue(makeFiscalResult({ estado: "ANULADO", numero: "1", anulacion_motivo: "Error" })),
+    getReciboPdf: vi.fn(),
+    getReciboXml: vi.fn(),
+    verificarRecibo: vi.fn().mockResolvedValue({ valido: false, raw: {} }),
+    verificarReciboPdf: vi.fn(),
+    ...overrides,
+  } as unknown as FiscalGateway;
+}
+
+describe("crearRecibo", () => {
+  it("crea recibo con datos validos delegando al gateway fiscal", async () => {
     const repo = makeRepo();
-    const result = await createRecibo("f1", {
+    const gateway = makeGateway();
+    const result = await crearRecibo(context, {
       fecha_cobro: "2026-06-25",
       pagador_nombre: "Juan Perez",
       concepto: "Pago de servicio",
       importe: 150000,
-    }, repo);
-    expect(repo.create).toHaveBeenCalledOnce();
+    }, repo, gateway);
+    expect(gateway.crearRecibo).toHaveBeenCalledOnce();
+    expect(repo.upsertFromFiscal).toHaveBeenCalledOnce();
     expect(result.id).toBe("r1");
   });
 
-  it("rechaza pagador_nombre vacío", async () => {
-    const repo = makeRepo();
-    await expect(createRecibo("f1", {
+  it("reusa el recibo existente si la idempotency-key ya se proceso (no llama al gateway)", async () => {
+    const repo = makeRepo({ findByIdempotencyKey: vi.fn().mockResolvedValue(makeRecibo({ id: "existing" })) });
+    const gateway = makeGateway();
+    const result = await crearRecibo(context, {
       fecha_cobro: "2026-06-25",
-      pagador_nombre: "",
-      concepto: "Pago",
-      importe: 100000,
-    }, repo)).rejects.toMatchObject({ statusCode: 400 });
+      pagador_nombre: "Juan Perez",
+      concepto: "Pago de servicio",
+      importe: 150000,
+    }, repo, gateway, { idempotencyKey: "RECIBO-2026-07-24-00123" });
+    expect(gateway.crearRecibo).not.toHaveBeenCalled();
+    expect(result.id).toBe("existing");
   });
 
-  it("rechaza concepto vacío", async () => {
+  it("rechaza pagador_nombre vacio sin llamar al gateway", async () => {
     const repo = makeRepo();
-    await expect(createRecibo("f1", {
-      fecha_cobro: "2026-06-25",
-      pagador_nombre: "Juan",
-      concepto: "",
-      importe: 100000,
-    }, repo)).rejects.toMatchObject({ statusCode: 400 });
+    const gateway = makeGateway();
+    await expect(crearRecibo(context, {
+      fecha_cobro: "2026-06-25", pagador_nombre: "", concepto: "Pago", importe: 100000,
+    }, repo, gateway)).rejects.toMatchObject({ statusCode: 400 });
+    expect(gateway.crearRecibo).not.toHaveBeenCalled();
   });
 
-  it("rechaza importe cero", async () => {
+  it("rechaza importe <= 0", async () => {
     const repo = makeRepo();
-    await expect(createRecibo("f1", {
-      fecha_cobro: "2026-06-25",
-      pagador_nombre: "Juan",
-      concepto: "Servicio",
-      importe: 0,
-    }, repo)).rejects.toMatchObject({ statusCode: 400 });
+    const gateway = makeGateway();
+    await expect(crearRecibo(context, {
+      fecha_cobro: "2026-06-25", pagador_nombre: "Juan", concepto: "Servicio", importe: 0,
+    }, repo, gateway)).rejects.toMatchObject({ statusCode: 400 });
   });
 
-  it("rechaza importe negativo", async () => {
+  it("mapea CERTIFICATE_NOT_FOUND del backend fiscal a 422", async () => {
     const repo = makeRepo();
-    await expect(createRecibo("f1", {
-      fecha_cobro: "2026-06-25",
-      pagador_nombre: "Juan",
-      concepto: "Servicio",
-      importe: -500,
-    }, repo)).rejects.toMatchObject({ statusCode: 400 });
+    const gateway = makeGateway({
+      crearRecibo: vi.fn().mockRejectedValue(
+        new FiscalGatewayError("UPSTREAM_ERROR", "rejected", { status: 422, body: { error: "CERTIFICATE_NOT_FOUND" } })
+      ),
+    });
+    await expect(crearRecibo(context, {
+      fecha_cobro: "2026-06-25", pagador_nombre: "Juan", concepto: "Servicio", importe: 1000,
+    }, repo, gateway)).rejects.toMatchObject({ statusCode: 422 });
+  });
+
+  it("mapea TIMEOUT del backend fiscal a 504", async () => {
+    const repo = makeRepo();
+    const gateway = makeGateway({
+      crearRecibo: vi.fn().mockRejectedValue(new FiscalGatewayError("TIMEOUT", "timeout")),
+    });
+    await expect(crearRecibo(context, {
+      fecha_cobro: "2026-06-25", pagador_nombre: "Juan", concepto: "Servicio", importe: 1000,
+    }, repo, gateway)).rejects.toMatchObject({ statusCode: 504 });
   });
 });
 
 describe("emitirRecibo", () => {
-  it("emite recibo en borrador", async () => {
+  it("emite un recibo en borrador", async () => {
     const repo = makeRepo();
-    const result = await emitirRecibo("r1", "f1", repo);
+    const gateway = makeGateway();
+    const result = await emitirRecibo("r1", context, repo, gateway);
+    expect(gateway.emitirRecibo).toHaveBeenCalledWith({ reciboId: "r1" });
     expect(result.estado).toBe("EMITIDO");
-    expect(result.numero).toBe(1);
   });
 
-  it("lanza 404 si no existe", async () => {
-    const repo = makeRepo();
-    (repo.findById as ReturnType<typeof vi.fn>).mockResolvedValue(null);
-    await expect(emitirRecibo("r1", "f1", repo)).rejects.toMatchObject({ statusCode: 404 });
+  it("lanza 404 si no existe en cache local", async () => {
+    const repo = makeRepo({ findById: vi.fn().mockResolvedValue(null) });
+    const gateway = makeGateway();
+    await expect(emitirRecibo("r1", context, repo, gateway)).rejects.toMatchObject({ statusCode: 404 });
   });
 
-  it("lanza 409 si ya emitido", async () => {
-    const repo = makeRepo();
-    (repo.findById as ReturnType<typeof vi.fn>).mockResolvedValue(makeRecibo({ estado: "EMITIDO", numero: 1 }));
-    await expect(emitirRecibo("r1", "f1", repo)).rejects.toMatchObject({ statusCode: 409 });
+  it("lanza 409 si ya esta emitido (sin llamar al gateway)", async () => {
+    const repo = makeRepo({ findById: vi.fn().mockResolvedValue(makeRecibo({ estado: "EMITIDO", numero: 1 })) });
+    const gateway = makeGateway();
+    await expect(emitirRecibo("r1", context, repo, gateway)).rejects.toMatchObject({ statusCode: 409 });
+    expect(gateway.emitirRecibo).not.toHaveBeenCalled();
   });
 });
 
-describe("updateRecibo", () => {
-  it("actualiza recibo en borrador", async () => {
+describe("editarRecibo", () => {
+  it("edita un recibo en borrador", async () => {
     const repo = makeRepo();
-    const result = await updateRecibo("r1", "f1", { concepto: "Nuevo concepto" }, repo);
-    expect(repo.update).toHaveBeenCalledOnce();
+    const gateway = makeGateway();
+    const result = await editarRecibo("r1", context, { concepto: "Nuevo concepto" }, repo, gateway);
+    expect(gateway.editarRecibo).toHaveBeenCalledOnce();
     expect(result).toBeDefined();
   });
 
   it("lanza 409 al modificar recibo emitido", async () => {
-    const repo = makeRepo();
-    (repo.findById as ReturnType<typeof vi.fn>).mockResolvedValue(makeRecibo({ estado: "EMITIDO", numero: 1 }));
-    await expect(updateRecibo("r1", "f1", { concepto: "x" }, repo)).rejects.toMatchObject({ statusCode: 409 });
+    const repo = makeRepo({ findById: vi.fn().mockResolvedValue(makeRecibo({ estado: "EMITIDO", numero: 1 })) });
+    const gateway = makeGateway();
+    await expect(editarRecibo("r1", context, { concepto: "x" }, repo, gateway)).rejects.toMatchObject({ statusCode: 409 });
   });
 
-  it("rechaza importe <= 0 en update", async () => {
+  it("rechaza importe <= 0 en edicion", async () => {
     const repo = makeRepo();
-    await expect(updateRecibo("r1", "f1", { importe: 0 }, repo)).rejects.toMatchObject({ statusCode: 400 });
+    const gateway = makeGateway();
+    await expect(editarRecibo("r1", context, { importe: 0 }, repo, gateway)).rejects.toMatchObject({ statusCode: 400 });
   });
 });
 
-describe("deleteRecibo", () => {
-  it("elimina recibo en borrador", async () => {
+describe("eliminarRecibo", () => {
+  it("elimina un recibo en borrador", async () => {
     const repo = makeRepo();
-    await expect(deleteRecibo("r1", "f1", repo)).resolves.toBeUndefined();
-    expect(repo.softDelete).toHaveBeenCalledOnce();
+    const gateway = makeGateway();
+    await expect(eliminarRecibo("r1", context, repo, gateway)).resolves.toBeUndefined();
+    expect(gateway.eliminarRecibo).toHaveBeenCalledWith({ reciboId: "r1" });
+    expect(repo.markDeleted).toHaveBeenCalledWith("r1", "f1");
   });
 
   it("lanza 409 al eliminar recibo emitido", async () => {
+    const repo = makeRepo({ findById: vi.fn().mockResolvedValue(makeRecibo({ estado: "EMITIDO", numero: 1 })) });
+    const gateway = makeGateway();
+    await expect(eliminarRecibo("r1", context, repo, gateway)).rejects.toMatchObject({ statusCode: 409 });
+  });
+});
+
+describe("anularRecibo", () => {
+  it("anula un recibo emitido", async () => {
+    const repo = makeRepo({ findById: vi.fn().mockResolvedValue(makeRecibo({ estado: "EMITIDO", numero: 1 })) });
+    const gateway = makeGateway();
+    const result = await anularRecibo("r1", context, { motivo: "Importe incorrecto" }, repo, gateway);
+    expect(gateway.anularRecibo).toHaveBeenCalledWith({ reciboId: "r1", motivo: "Importe incorrecto" });
+    expect(result.estado).toBe("ANULADO");
+  });
+
+  it("lanza 409 si esta en borrador", async () => {
     const repo = makeRepo();
-    (repo.findById as ReturnType<typeof vi.fn>).mockResolvedValue(makeRecibo({ estado: "EMITIDO", numero: 1 }));
-    await expect(deleteRecibo("r1", "f1", repo)).rejects.toMatchObject({ statusCode: 409 });
+    const gateway = makeGateway();
+    await expect(anularRecibo("r1", context, { motivo: "x" }, repo, gateway)).rejects.toMatchObject({ statusCode: 409 });
+  });
+
+  it("lanza 409 si ya fue anulado", async () => {
+    const repo = makeRepo({ findById: vi.fn().mockResolvedValue(makeRecibo({ estado: "ANULADO", numero: 1 })) });
+    const gateway = makeGateway();
+    await expect(anularRecibo("r1", context, { motivo: "x" }, repo, gateway)).rejects.toMatchObject({ statusCode: 409 });
   });
 });
 
 describe("verificarRecibo", () => {
-  it("retorna valido:true para recibo emitido", async () => {
-    const repo = makeRepo();
-    (repo.findByVerificationToken as ReturnType<typeof vi.fn>).mockResolvedValue(
-      makeRecibo({ estado: "EMITIDO", numero: 1, emitido_at: "2026-06-25T10:00:00Z" })
-    );
-    const result = await verificarRecibo("tok-abc", repo);
+  it("combina estado fiscal con datos comerciales de cache", async () => {
+    const repo = makeRepo({
+      findByVerificationToken: vi.fn().mockResolvedValue(
+        makeRecibo({ estado: "EMITIDO", numero: 1, importe: 150000, concepto: "Pago de servicio" })
+      ),
+    });
+    const gateway = makeGateway({
+      verificarRecibo: vi.fn().mockResolvedValue({ valido: true, estado: "EMITIDO", firmado_en: "2026-06-25T10:00:00Z", raw: {} }),
+    });
+    const result = await verificarRecibo("tok-abc", repo, gateway);
     expect(result.valido).toBe(true);
-    expect(result.recibo?.numero).toBe(1);
+    expect(result.numero).toBe(1);
+    expect(result.concepto).toBe("Pago de servicio");
   });
 
-  it("retorna valido:false para recibo borrador", async () => {
-    const repo = makeRepo();
-    (repo.findByVerificationToken as ReturnType<typeof vi.fn>).mockResolvedValue(makeRecibo());
-    const result = await verificarRecibo("tok-abc", repo);
+  it("no expone datos comerciales si el backend fiscal dice que no es valido (fail-closed)", async () => {
+    const repo = makeRepo({ findByVerificationToken: vi.fn().mockResolvedValue(makeRecibo({ estado: "EMITIDO" })) });
+    const gateway = makeGateway({ verificarRecibo: vi.fn().mockResolvedValue({ valido: false, raw: {} }) });
+    const result = await verificarRecibo("tok-abc", repo, gateway);
     expect(result.valido).toBe(false);
-  });
-
-  it("retorna valido:false si token no existe", async () => {
-    const repo = makeRepo();
-    const result = await verificarRecibo("tok-inexistente", repo);
-    expect(result.valido).toBe(false);
+    expect(result.concepto).toBeUndefined();
   });
 });

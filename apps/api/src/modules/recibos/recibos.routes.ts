@@ -3,21 +3,22 @@ import { z } from "zod";
 import { requireAuth } from "../auth/auth.middleware.js";
 import { operationalContextRepository } from "../context/context.repository.js";
 import { getOperationalContext } from "../context/context.service.js";
+import { fiscalGateway } from "../fiscal-gateway/fiscal-gateway.client.js";
 import { facturasRepository } from "../facturas/facturas.repository.js";
 import { validateRequest } from "../../shared/validation/validate-request.js";
-import { env } from "../../config/env.js";
-import { htmlToPdfBuffer } from "../../shared/pdf/pdf.service.js";
+import { HttpError } from "../../shared/errors/http-error.js";
 import { recibosRepository } from "./recibos.repository.js";
-import { buildReciboPdfHtml } from "./recibos.pdf.js";
 import {
-  createRecibo,
-  deleteRecibo,
+  anularRecibo,
+  crearRecibo,
+  editarRecibo,
+  eliminarRecibo,
   emitirRecibo,
   getRecibo,
+  getReciboPdf,
+  getReciboXml,
   listRecibos,
-  updateRecibo,
 } from "./recibos.service.js";
-import { HttpError } from "../../shared/errors/http-error.js";
 
 export const recibosRouter = Router();
 
@@ -29,20 +30,50 @@ const listQuerySchema = z.object({
   offset: z.coerce.number().int().min(0).default(0),
 });
 
+const pagadorDocumentoTipoSchema = z.enum(["RUC", "CI", "PASAPORTE", "CEDULA_EXTRANJERA", "NO_ESPECIFICADO"]);
+const formaPagoSchema = z.enum(["EFECTIVO", "TRANSFERENCIA", "CHEQUE", "TARJETA_CREDITO", "TARJETA_DEBITO", "OTRO"]);
+
 const createBodySchema = z.object({
   fecha_cobro: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   pagador_nombre: z.string().min(1),
-  pagador_documento_tipo: z.string().nullish(),
+  pagador_documento_tipo: pagadorDocumentoTipoSchema.nullish(),
   pagador_documento: z.string().nullish(),
   concepto: z.string().min(1),
   importe: z.number().positive(),
-  forma_pago: z.enum(["EFECTIVO", "TRANSFERENCIA", "CHEQUE", "TARJETA_CREDITO", "TARJETA_DEBITO", "OTRO"]).optional(),
+  moneda: z.string().min(1).optional(),
+  forma_pago: formaPagoSchema.optional(),
   referencia_bancaria: z.string().nullish(),
+  referencia_documento_uuid: z.string().uuid().nullish(),
+  referencia_documento_numero_display: z.string().nullish(),
 });
 
-const updateBodySchema = createBodySchema.partial().omit({ fecha_cobro: true }).extend({
-  fecha_cobro: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+const updateBodySchema = createBodySchema
+  .omit({ fecha_cobro: true, referencia_documento_uuid: true, referencia_documento_numero_display: true })
+  .partial()
+  .extend({
+    fecha_cobro: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  });
+
+const anularBodySchema = z.object({
+  motivo: z.string().min(1).max(500),
 });
+
+function parseIdempotencyKey(value: string | undefined): string | undefined {
+  const idempotencyKey = value?.trim();
+  if (!idempotencyKey) return undefined;
+
+  if (idempotencyKey.length < 8 || idempotencyKey.length > 120) {
+    throw new HttpError(400, "VALIDATION_ERROR", "Header Idempotency-Key debe tener entre 8 y 120 caracteres.");
+  }
+  if (!/^[A-Za-z0-9._:-]+$/.test(idempotencyKey)) {
+    throw new HttpError(
+      400,
+      "VALIDATION_ERROR",
+      "Header Idempotency-Key solo permite letras, numeros, punto, guion, guion bajo y dos puntos."
+    );
+  }
+  return idempotencyKey;
+}
 
 recibosRouter.post(
   "/recibos",
@@ -51,7 +82,8 @@ recibosRouter.post(
   async (req, res, next) => {
     try {
       const context = await getOperationalContext(req.user!.id, operationalContextRepository);
-      const recibo = await createRecibo(context.facturador.id, req.body, recibosRepository);
+      const idempotencyKey = parseIdempotencyKey(req.get("idempotency-key"));
+      const recibo = await crearRecibo(context, req.body, recibosRepository, fiscalGateway, { idempotencyKey });
       res.status(201).json(recibo);
     } catch (error) { next(error); }
   }
@@ -94,7 +126,7 @@ recibosRouter.patch(
     try {
       const context = await getOperationalContext(req.user!.id, operationalContextRepository);
       const { reciboId } = req.params as z.infer<typeof reciboIdSchema>;
-      const recibo = await updateRecibo(reciboId, context.facturador.id, req.body, recibosRepository);
+      const recibo = await editarRecibo(reciboId, context, req.body, recibosRepository, fiscalGateway);
       res.json(recibo);
     } catch (error) { next(error); }
   }
@@ -108,7 +140,22 @@ recibosRouter.post(
     try {
       const context = await getOperationalContext(req.user!.id, operationalContextRepository);
       const { reciboId } = req.params as z.infer<typeof reciboIdSchema>;
-      const recibo = await emitirRecibo(reciboId, context.facturador.id, recibosRepository);
+      const recibo = await emitirRecibo(reciboId, context, recibosRepository, fiscalGateway);
+      res.json(recibo);
+    } catch (error) { next(error); }
+  }
+);
+
+recibosRouter.post(
+  "/recibos/:reciboId/anular",
+  requireAuth,
+  validateRequest("params", reciboIdSchema),
+  validateRequest("body", anularBodySchema),
+  async (req, res, next) => {
+    try {
+      const context = await getOperationalContext(req.user!.id, operationalContextRepository);
+      const { reciboId } = req.params as z.infer<typeof reciboIdSchema>;
+      const recibo = await anularRecibo(reciboId, context, req.body, recibosRepository, fiscalGateway);
       res.json(recibo);
     } catch (error) { next(error); }
   }
@@ -122,15 +169,26 @@ recibosRouter.get(
     try {
       const context = await getOperationalContext(req.user!.id, operationalContextRepository);
       const { reciboId } = req.params as z.infer<typeof reciboIdSchema>;
-      const recibo = await getRecibo(reciboId, context.facturador.id, recibosRepository);
-      const facturador = await recibosRepository.getFacturadorParaPdf(context.facturador.id);
-      if (!facturador) throw new HttpError(500, "INTERNAL_ERROR", "Datos del facturador no encontrados.");
-      const html = await buildReciboPdfHtml(recibo, facturador, env.PUBLIC_APP_BASE_URL);
-      const pdf = await htmlToPdfBuffer(html);
-      const nroStr = recibo.numero != null ? String(recibo.numero).padStart(7, "0") : "borrador";
-      res.setHeader("Content-Type", "application/pdf");
-      res.setHeader("Content-Disposition", `attachment; filename="recibo-${nroStr}.pdf"`);
-      res.send(pdf);
+      const artifact = await getReciboPdf(reciboId, context, recibosRepository, fiscalGateway);
+      res.setHeader("Content-Type", artifact.content_type);
+      res.setHeader("Content-Disposition", `attachment; filename="${artifact.filename}"`);
+      res.send(artifact.body);
+    } catch (error) { next(error); }
+  }
+);
+
+recibosRouter.get(
+  "/recibos/:reciboId/xml",
+  requireAuth,
+  validateRequest("params", reciboIdSchema),
+  async (req, res, next) => {
+    try {
+      const context = await getOperationalContext(req.user!.id, operationalContextRepository);
+      const { reciboId } = req.params as z.infer<typeof reciboIdSchema>;
+      const artifact = await getReciboXml(reciboId, context, recibosRepository, fiscalGateway);
+      res.setHeader("Content-Type", artifact.content_type);
+      res.setHeader("Content-Disposition", `attachment; filename="${artifact.filename}"`);
+      res.send(artifact.body);
     } catch (error) { next(error); }
   }
 );
@@ -143,7 +201,7 @@ recibosRouter.delete(
     try {
       const context = await getOperationalContext(req.user!.id, operationalContextRepository);
       const { reciboId } = req.params as z.infer<typeof reciboIdSchema>;
-      await deleteRecibo(reciboId, context.facturador.id, recibosRepository);
+      await eliminarRecibo(reciboId, context, recibosRepository, fiscalGateway);
       res.status(204).send();
     } catch (error) { next(error); }
   }
@@ -169,8 +227,8 @@ recibosRouter.post(
       }
 
       const today = new Date().toISOString().slice(0, 10);
-      const recibo = await createRecibo(
-        context.facturador.id,
+      const recibo = await crearRecibo(
+        context,
         {
           fecha_cobro: today,
           pagador_nombre: factura.cliente.razon_social,
@@ -178,10 +236,11 @@ recibosRouter.post(
           pagador_documento: factura.cliente.documento ?? null,
           concepto: `Cobro de factura N° ${factura.numero_fiscal ?? documentoId}`,
           importe: factura.totals.total,
-          factura_id: documentoId,
-          factura_numero_display: factura.numero_fiscal ?? null,
+          referencia_documento_uuid: factura.document_uuid ?? null,
+          referencia_documento_numero_display: factura.numero_fiscal ?? null,
         },
-        recibosRepository
+        recibosRepository,
+        fiscalGateway
       );
       res.status(201).json(recibo);
     } catch (error) { next(error); }

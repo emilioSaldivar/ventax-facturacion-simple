@@ -1517,12 +1517,49 @@ paths:
         "409":
           $ref: "#/components/responses/Conflict"
 
+  /recibos/{reciboId}/anular:
+    parameters:
+      - $ref: "#/components/parameters/ReciboId"
+    post:
+      tags: [Recibos]
+      summary: Anular un recibo emitido (genera un recibo de anulacion firmado)
+      description: |
+        Solo aplica sobre un recibo EMITIDO. El XML/PDF firmado original no se modifica,
+        solo cambia su estado a ANULADO. Delegado a facturacion-electronica
+        (POST /v1/recibos/{id}/anular, Ley N.º 6822/2021).
+      security:
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReciboAnularRequest"
+      responses:
+        "200":
+          description: Recibo anulado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReciboRecord"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
   /recibos/{reciboId}/pdf:
     parameters:
       - $ref: "#/components/parameters/ReciboId"
     get:
       tags: [Recibos]
       summary: Descargar PDF del recibo
+      description: |
+        BORRADOR: vista previa sin firmar generada bajo demanda por facturacion-electronica.
+        EMITIDO/ANULADO: PDF firmado (PAdES) persistido, siempre los mismos bytes.
       security:
         - cookieAuth: []
       responses:
@@ -1530,6 +1567,28 @@ paths:
           description: PDF del recibo
           content:
             application/pdf:
+              schema:
+                type: string
+                format: binary
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /recibos/{reciboId}/xml:
+    parameters:
+      - $ref: "#/components/parameters/ReciboId"
+    get:
+      tags: [Recibos]
+      summary: Descargar XML firmado del recibo
+      description: Solo disponible si el recibo esta EMITIDO o ANULADO (XMLDSig, Ley N.º 6822/2021).
+      security:
+        - cookieAuth: []
+      responses:
+        "200":
+          description: XML firmado del recibo
+          content:
+            application/xml:
               schema:
                 type: string
                 format: binary
@@ -3398,10 +3457,10 @@ components:
         numero:
           type: integer
           nullable: true
-          description: Numero correlativo. Null mientras el recibo esta en BORRADOR.
+          description: Numero correlativo asignado por facturacion-electronica al emitir. Null mientras el recibo esta en BORRADOR.
         estado:
           type: string
-          enum: [BORRADOR, EMITIDO]
+          enum: [BORRADOR, EMITIDO, ANULADO]
         fecha_cobro:
           type: string
           format: date
@@ -3418,21 +3477,49 @@ components:
         importe:
           type: number
           format: double
+        moneda:
+          type: string
+          default: PYG
         forma_pago:
           $ref: "#/components/schemas/ReciboFormaPago"
         referencia_bancaria:
+          type: string
+          nullable: true
+        referencia_documento_uuid:
+          type: string
+          format: uuid
+          nullable: true
+          description: document_uuid de una factura propia que este recibo cobra (ver POST /facturas/{documentoId}/recibo).
+        referencia_documento_numero_display:
           type: string
           nullable: true
         factura_id:
           type: string
           format: uuid
           nullable: true
+          deprecated: true
+          description: Deprecado desde v0.5 — usar referencia_documento_uuid. Se conserva solo para recibos creados antes de v0.5.
         factura_numero_display:
           type: string
           nullable: true
+          deprecated: true
+          description: Deprecado desde v0.5 — usar referencia_documento_numero_display.
+        xml_hash:
+          type: string
+          nullable: true
+          description: Hash del XML firmado por facturacion-electronica (Ley N.º 6822/2021). Null mientras el recibo esta en BORRADOR.
+        pdf_hash:
+          type: string
+          nullable: true
+        anulacion_motivo:
+          type: string
+          nullable: true
+          description: Motivo capturado en POST /recibos/{reciboId}/anular. Null salvo que estado sea ANULADO.
         verification_token:
           type: string
           format: uuid
+          nullable: true
+          description: Asignado por facturacion-electronica al emitir. Null mientras el recibo esta en BORRADOR.
         emitido_at:
           type: string
           format: date-time
@@ -3478,9 +3565,19 @@ components:
           type: number
           format: double
           exclusiveMinimum: 0
+        moneda:
+          type: string
+          default: PYG
         forma_pago:
           $ref: "#/components/schemas/ReciboFormaPago"
         referencia_bancaria:
+          type: string
+          nullable: true
+        referencia_documento_uuid:
+          type: string
+          format: uuid
+          nullable: true
+        referencia_documento_numero_display:
           type: string
           nullable: true
 
@@ -3507,11 +3604,22 @@ components:
           type: number
           format: double
           exclusiveMinimum: 0
+        moneda:
+          type: string
         forma_pago:
           $ref: "#/components/schemas/ReciboFormaPago"
         referencia_bancaria:
           type: string
           nullable: true
+
+    ReciboAnularRequest:
+      type: object
+      required: [motivo]
+      properties:
+        motivo:
+          type: string
+          minLength: 1
+          maxLength: 500
 
     ReciboVerificacionResponse:
       type: object
@@ -3535,9 +3643,13 @@ components:
           format: double
         forma_pago:
           $ref: "#/components/schemas/ReciboFormaPago"
-        factura_numero_display:
+        referencia_documento_numero_display:
           type: string
           nullable: true
+        estado:
+          type: string
+          enum: [EMITIDO, ANULADO]
+          description: Estado real segun facturacion-electronica (fuente de verdad legal).
         emitido_at:
           type: string
           format: date-time

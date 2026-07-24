@@ -150,7 +150,7 @@ Parámetro `env` opcional (si se omite usa el default del servidor):
 Para cada CDC que el sistema consumidor tiene guardado:
 
 ```http
-GET /fcws/documentos/by-cdc/01050570161001001000000312026060212337391944
+GET /v1/documentos/by-cdc/01050570161001001000000312026060212337391944
 X-Api-Key: {api_key}
 ?env=prod
 ```
@@ -174,11 +174,11 @@ El consumidor persiste `document_uuid` junto a su registro interno. A partir de 
 
 Reemplazar:
 ```
-GET /fcws/consultar/comprobante/{cdc}
+GET /v1/consultar/comprobante/{cdc}
 ```
 Por:
 ```
-GET /fcws/documentos/{document_uuid}
+GET /v1/documentos/{document_uuid}
 ```
 
 ### Paso 4 — Dejar de usar CDC como identidad
@@ -192,7 +192,7 @@ Mantener `current_cdc` como dato fiscal informativo (para KUDE, XML, reportes), 
 Un cliente guardó el CDC original `CDC_VIEJO`. Soporte regeneró el documento y el nuevo CDC es `CDC_NUEVO`.
 
 ```http
-GET /fcws/documentos/by-cdc/CDC_VIEJO
+GET /v1/documentos/by-cdc/CDC_VIEJO
 ```
 
 ```json
@@ -219,7 +219,7 @@ El cliente interpreta:
 ## Escenario: Auditoría de Documento con Múltiples CDC
 
 ```http
-GET /fcws/documentos/9f5c0b3f-6a6a-4d4b-9a31-2a9d0b0c4a11/lineage
+GET /v1/documentos/9f5c0b3f-6a6a-4d4b-9a31-2a9d0b0c4a11/lineage
 ```
 
 ```json
@@ -269,7 +269,7 @@ Soporte puede explicar el incidente: el documento fue reenviado con un CDC nuevo
 
 ## Listado de Facturas — Campos Nuevos
 
-El endpoint de listado `GET /fcws/consultar/{id}/facturalista/{offset}` es retrocompatible pero ahora incluye `document_uuid` y `current_cdc` en cada item. Los consumidores pueden capturarlos directamente desde el listado para evitar llamadas adicionales a `by-cdc`.
+El endpoint de listado `GET /v1/consultar/{id}/facturalista/{offset}` es retrocompatible pero ahora incluye `document_uuid` y `current_cdc` en cada item. Los consumidores pueden capturarlos directamente desde el listado para evitar llamadas adicionales a `by-cdc`.
 
 ## Compatibilidad y Fase Transicional
 

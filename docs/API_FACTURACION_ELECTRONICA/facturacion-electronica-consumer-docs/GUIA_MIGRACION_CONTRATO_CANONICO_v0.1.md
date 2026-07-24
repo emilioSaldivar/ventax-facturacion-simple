@@ -29,7 +29,7 @@ CDC fiscal vigente del documento.
 
 CDC usado para una consulta por alias.
 
-- Aparece cuando el cliente consulta por `GET /fcws/documentos/by-cdc/{cdc}`.
+- Aparece cuando el cliente consulta por `GET /v1/documentos/by-cdc/{cdc}`.
 - Puede ser igual a `current_cdc` o un CDC historico.
 
 ### `lineage_status`
@@ -98,14 +98,14 @@ Las respuestas documentales nuevas deben exponer, como minimo:
 
 | Contrato actual | Contrato nuevo | Uso operativo |
 |---|---|---|
-| `GET /fcws/consultar/comprobante/{cdc}` | `GET /fcws/documentos/by-cdc/{cdc}` y luego `GET /fcws/documentos/{document_uuid}` | resolver CDC previo o vigente y consultar documento canónico |
-| `GET /fcws/consultar/comprobantexml/{cdc}` | `GET /fcws/documentos/by-cdc/{cdc}` y luego `GET /fcws/documentos/{document_uuid}/xml` | resolver identidad y obtener XML vigente |
-| `GET /fcws/consultar/comprobanteSifen/{cdc}` | `GET /fcws/documentos/by-cdc/{cdc}` y luego `GET /fcws/documentos/{document_uuid}/sifen` | resolver identidad y consultar estado SIFEN |
-| `GET /fcws/consultar/evento/{cdc}` | `GET /fcws/documentos/by-cdc/{cdc}` y luego `GET /fcws/documentos/{document_uuid}/eventos` | resolver identidad y consultar eventos del documento canónico |
-| `GET /fcws/files/xml/{cdc}` | `GET /fcws/documentos/by-cdc/{cdc}` y luego `GET /fcws/documentos/{document_uuid}/files/xml` | resolver identidad y descargar XML persistido |
-| `GET /fcws/files/kude/{cdc}.pdf` | `GET /fcws/documentos/by-cdc/{cdc}` y luego `GET /fcws/documentos/{document_uuid}/files/kude.pdf` | resolver identidad y descargar KUDE vigente |
-| `GET /fcws/files/ticket/{cdc}/raw` | `GET /fcws/documentos/by-cdc/{cdc}` y luego `GET /fcws/documentos/{document_uuid}/files/ticket/raw` | resolver identidad y descargar ticket raw vigente |
-| `GET /fcws/consultar/{id}/facturalista/{offset}` | `GET /fcws/consultar/{id}/facturalista/{offset}` (mismo endpoint, ahora incluye `document_uuid` y `current_cdc` en cada item) | migración en sitio; el listado canónico `/documentos` queda como aspiración de Ola 6 |
+| `GET /v1/consultar/comprobante/{cdc}` | `GET /v1/documentos/by-cdc/{cdc}` y luego `GET /v1/documentos/{document_uuid}` | resolver CDC previo o vigente y consultar documento canónico |
+| `GET /v1/consultar/comprobantexml/{cdc}` | `GET /v1/documentos/by-cdc/{cdc}` y luego `GET /v1/documentos/{document_uuid}/xml` | resolver identidad y obtener XML vigente |
+| `GET /v1/consultar/comprobanteSifen/{cdc}` | `GET /v1/documentos/by-cdc/{cdc}` y luego `GET /v1/documentos/{document_uuid}/sifen` | resolver identidad y consultar estado SIFEN |
+| `GET /v1/consultar/evento/{cdc}` | `GET /v1/documentos/by-cdc/{cdc}` y luego `GET /v1/documentos/{document_uuid}/eventos` | resolver identidad y consultar eventos del documento canónico |
+| `GET /v1/files/xml/{cdc}` | `GET /v1/documentos/by-cdc/{cdc}` y luego `GET /v1/documentos/{document_uuid}/files/xml` | resolver identidad y descargar XML persistido |
+| `GET /v1/files/kude/{cdc}.pdf` | `GET /v1/documentos/by-cdc/{cdc}` y luego `GET /v1/documentos/{document_uuid}/files/kude.pdf` | resolver identidad y descargar KUDE vigente |
+| `GET /v1/files/ticket/{cdc}/raw` | `GET /v1/documentos/by-cdc/{cdc}` y luego `GET /v1/documentos/{document_uuid}/files/ticket/raw` | resolver identidad y descargar ticket raw vigente |
+| `GET /v1/consultar/{id}/facturalista/{offset}` | `GET /v1/consultar/{id}/facturalista/{offset}` (mismo endpoint, ahora incluye `document_uuid` y `current_cdc` en cada item) | migración en sitio; el listado canónico `/documentos` queda como aspiración de Ola 6 |
 
 ## Advertencia: Endpoints Legacy y CDC Historicos Tras Reconciliacion
 
@@ -124,14 +124,14 @@ Señal de que un consumidor está afectado: empieza a recibir `404` en endpoints
 
 Acción inmediata:
 ```http
-GET /fcws/documentos/by-cdc/{cdc_viejo}
+GET /v1/documentos/by-cdc/{cdc_viejo}
 X-Api-Key: ...
 ```
 La respuesta incluye `document_uuid` y `current_cdc` — persistir ambos.
 
 ## Listado de Facturas — Campos Nuevos
 
-El endpoint de listado `GET /fcws/consultar/{id}/facturalista/{offset}` ahora incluye dos campos adicionales en cada item:
+El endpoint de listado `GET /v1/consultar/{id}/facturalista/{offset}` ahora incluye dos campos adicionales en cada item:
 
 ```json
 {
@@ -174,12 +174,12 @@ Regla operativa:
 ### Fase 2 - Cambio De Consultas Principales
 
 1. Reemplazar consultas por `CDC` con consultas por `document_uuid`.
-2. Usar `GET /fcws/documentos/{document_uuid}` para detalle documental.
+2. Usar `GET /v1/documentos/{document_uuid}` para detalle documental.
 3. Usar endpoints hijos para XML, SIFEN, eventos y archivos.
 
 ### Fase 3 - Resolucion De Historicos
 
-1. Para CDC ya almacenados, consultar `GET /fcws/documentos/by-cdc/{cdc}`.
+1. Para CDC ya almacenados, consultar `GET /v1/documentos/by-cdc/{cdc}`.
 2. Persistir el `document_uuid` devuelto.
 3. Si `requested_cdc` no coincide con `current_cdc`, actualizar el registro fiscal local del cliente.
 

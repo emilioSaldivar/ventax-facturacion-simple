@@ -375,6 +375,18 @@ Para implementar el `initialDraft`, se pasa como prop a `InvoiceView` desde el c
 
 ---
 
+## Correccion operativa — filas vacias en creacion (post-release)
+
+Hallazgo en produccion (2026-07-24): el operador recibia `400 La solicitud contiene datos invalidos` al presionar guardar/emitir un presupuesto, sin ninguna pista de cual campo fallaba. Causa raiz: `saveForm` en `NotasView` envia **todas** las filas de `formFilas` tal cual al backend, incluyendo filas agregadas por el operador (via boton `Agregar fila`) que quedaron sin `descripcion` completada. El contrato de `filaInputSchema` (`apps/api/src/modules/notas/notas.routes.ts`) exige `descripcion` no vacia (`min(1)` tras `trim()`) para **cualquier** `fila_tipo` (`CONTEXTO`, `ITEM`, `ITEM_SIN_PRECIO`). Una sola fila sin descripcion rechaza el presupuesto completo.
+
+Invariante que debe cumplir el frontend antes de enviar `POST /notas` o `PATCH /notas/:id`:
+
+- Toda fila con `descripcion` vacia (tras `trim()`) se considera "no utilizada" y se descarta del payload antes de construir `items`; no se envia al backend.
+- `orden` se recalcula de forma secuencial (`1..N`) sobre las filas que sobreviven al filtro, sin huecos.
+- La validacion "se requiere al menos un item para emitir" debe evaluarse sobre las filas ya filtradas, no sobre `formFilas` sin filtrar, para evitar que una fila `ITEM` vacia cuente como item valido.
+
+Ademas, cuando el backend igualmente rechaza una solicitud por `VALIDATION_ERROR` (otros campos: `cliente_nombre`, `valido_hasta`, `cantidad`, `precio_unitario`, `catalog_item_id`, etc.), la UI debe mostrar el detalle de campo devuelto por el backend (`error.details` = `ZodError.flatten()`) en vez de solo el mensaje generico `"La solicitud contiene datos invalidos."`. Esto aplica al cliente HTTP compartido (`createApiClient`/`readApiError` en `apps/web-operacion/src/main.tsx`), no solo al modulo de presupuestos, porque es el unico punto donde se interpreta `ApiErrorResponse` para toda la app.
+
 ## Fuera de alcance v0.2
 
 - Pagina HTML publica enriquecida (rica landing de verificacion).

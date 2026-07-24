@@ -7,7 +7,7 @@ import { notasRepository } from "../notas/notas.repository.js";
 import { buildNotaPdfHtml } from "../notas/notas.pdf.js";
 import { verificarNota } from "../notas/notas.service.js";
 import { recibosRepository } from "../recibos/recibos.repository.js";
-import { buildReciboPdfHtml } from "../recibos/recibos.pdf.js";
+import { fiscalGateway } from "../fiscal-gateway/fiscal-gateway.client.js";
 import { verificarRecibo } from "../recibos/recibos.service.js";
 
 const tokenParamsSchema = z.object({
@@ -97,24 +97,24 @@ verificacionRouter.get(
   async (req, res, next) => {
     try {
       const { token } = req.params as z.infer<typeof tokenParamsSchema>;
-      const result = await verificarRecibo(token, recibosRepository);
+      const result = await verificarRecibo(token, recibosRepository, fiscalGateway);
 
       if (!result.valido) {
         res.status(404).json({ valido: false });
         return;
       }
 
-      const r = result.recibo!;
       res.json({
         valido: true,
-        numero: r.numero,
-        fecha_cobro: r.fecha_cobro,
-        pagador_nombre: r.pagador_nombre,
-        concepto: r.concepto,
-        importe: r.importe,
-        forma_pago: r.forma_pago,
-        factura_numero_display: r.factura_numero_display,
-        emitido_at: r.emitido_at,
+        numero: result.numero,
+        fecha_cobro: result.fecha_cobro,
+        pagador_nombre: result.pagador_nombre,
+        concepto: result.concepto,
+        importe: result.importe,
+        forma_pago: result.forma_pago,
+        referencia_documento_numero_display: result.referencia_documento_numero_display,
+        estado: result.estado,
+        emitido_at: result.emitido_at,
       });
     } catch (error) {
       next(error);
@@ -122,33 +122,18 @@ verificacionRouter.get(
   }
 );
 
-// PDF público — no requiere autenticación
+// PDF público — no requiere autenticación. Passthrough del PDF firmado por facturacion-electronica.
 verificacionRouter.get(
   "/recibo/:token/pdf",
   validateRequest("params", tokenParamsSchema),
   async (req, res, next) => {
     try {
       const { token } = req.params as z.infer<typeof tokenParamsSchema>;
-      const recibo = await recibosRepository.findByVerificationToken(token);
+      const artifact = await fiscalGateway.verificarReciboPdf(token);
 
-      if (!recibo || recibo.estado !== "EMITIDO") {
-        res.status(404).json({ error: "NOT_FOUND" });
-        return;
-      }
-
-      const facturador = await recibosRepository.getFacturadorParaPdf(recibo.facturador_id);
-      if (!facturador) {
-        res.status(404).json({ error: "NOT_FOUND" });
-        return;
-      }
-
-      const html = await buildReciboPdfHtml(recibo, facturador, env.PUBLIC_APP_BASE_URL);
-      const pdf = await htmlToPdfBuffer(html);
-      const nroStr = recibo.numero != null ? String(recibo.numero).padStart(7, "0") : "borrador";
-
-      res.setHeader("Content-Type", "application/pdf");
-      res.setHeader("Content-Disposition", `inline; filename="recibo-${nroStr}.pdf"`);
-      res.send(pdf);
+      res.setHeader("Content-Type", artifact.content_type);
+      res.setHeader("Content-Disposition", `inline; filename="${artifact.filename}"`);
+      res.send(artifact.body);
     } catch (error) {
       next(error);
     }
