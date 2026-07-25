@@ -367,6 +367,10 @@ export class MockFiscalGateway implements FiscalGateway {
     };
   }
 
+  async getRecibo(id: string): Promise<FiscalReciboResult> {
+    return this.getMockRecibo(id);
+  }
+
   async crearRecibo(request: FiscalCrearReciboRequest): Promise<FiscalReciboResult> {
     const id = crypto.randomUUID();
     const now = new Date().toISOString();
@@ -946,6 +950,18 @@ export class RealFiscalGateway implements FiscalGateway {
       );
     }
     return mapFiscalIdempotencyReconciliationResponse(body, input.emisorId, input.env);
+  }
+
+  async getRecibo(id: string): Promise<FiscalReciboResult> {
+    const response = await this.fetchWithTimeout(
+      `${this.config.baseUrl}/recibos/${encodeURIComponent(id)}`,
+      { method: "GET", headers: this.buildHeaders() }
+    );
+    const body = await readJson(response);
+    if (!response.ok) {
+      throw this.mapReciboError(response.status, body, "consultar el recibo");
+    }
+    return mapFiscalReciboResponse(body);
   }
 
   async crearRecibo(request: FiscalCrearReciboRequest): Promise<FiscalReciboResult> {

@@ -7001,6 +7001,69 @@ function RecibosView({
     setQuickMenuReciboId(null);
   };
 
+  // Se define una sola vez y se incluye en cada "return" de subView (form/detail/list):
+  // eliminar y anular se pueden disparar tanto desde el detalle como desde la lista, y al
+  // haber "return" separados por subView, un modal que solo viviera en el return de la lista
+  // no se renderizaba cuando se abria desde el detalle (bug reportado por el usuario).
+  const modals = (
+    <>
+      {deleteTarget ? (
+        <div className="modal-backdrop" role="presentation">
+          <section className="modal-panel" aria-labelledby="recibo-delete-title" role="dialog" aria-modal="true">
+            <header>
+              <h3 id="recibo-delete-title">Eliminar recibo</h3>
+              <p className="muted">¿Eliminar el borrador de recibo para {deleteTarget.pagador_nombre}? Esta accion no se puede deshacer.</p>
+            </header>
+            {error ? <p className="form-error">{error}</p> : null}
+            <div className="result-actions">
+              <button className="secondary-action" disabled={saving} onClick={() => setDeleteTarget(null)} type="button">
+                Cancelar
+              </button>
+              <button className="danger-action" disabled={saving} onClick={() => void deleteRecibo()} type="button">
+                {saving ? "Eliminando..." : "Eliminar"}
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
+
+      {anularTarget ? (
+        <div className="modal-backdrop" role="presentation">
+          <section className="modal-panel" aria-labelledby="recibo-anular-title" role="dialog" aria-modal="true">
+            <header>
+              <p className="eyebrow">Confirmacion</p>
+              <h3 id="recibo-anular-title">Anular recibo</h3>
+              <p className="muted">
+                El recibo N° {anularTarget.numero != null ? String(anularTarget.numero).padStart(7, "0") : ""} para {anularTarget.pagador_nombre} quedara anulado.
+                Se genera un recibo de anulacion firmado; el original no se modifica.
+              </p>
+            </header>
+            <label className="credit-note-motivo">
+              Motivo
+              <textarea
+                autoFocus
+                maxLength={500}
+                rows={4}
+                value={anularMotivo}
+                onChange={(event) => setAnularMotivo(event.target.value)}
+                placeholder="Ej: Importe incorrecto, se emitio uno nuevo"
+              />
+            </label>
+            {error ? <p className="form-error">{error}</p> : null}
+            <div className="result-actions">
+              <button className="secondary-action" disabled={saving} onClick={() => setAnularTarget(null)} type="button">
+                Cancelar
+              </button>
+              <button className="danger-action" disabled={saving} onClick={() => void submitAnular()} type="button">
+                {saving ? "Anulando..." : "Anular recibo"}
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
+    </>
+  );
+
   if (subView === "form") {
     return (
       <div className="module-view">
@@ -7199,6 +7262,7 @@ function RecibosView({
             </div>
           </div>
         )}
+        {modals}
       </div>
     );
   }
@@ -7281,61 +7345,7 @@ function RecibosView({
         </div>
       )}
       <p className="muted" style={{ marginTop: "8px", fontSize: "11px" }}>{total} recibo(s) en total</p>
-
-      {deleteTarget ? (
-        <div className="modal-backdrop" role="presentation">
-          <section className="modal-panel" aria-labelledby="recibo-delete-title" role="dialog" aria-modal="true">
-            <header>
-              <h3 id="recibo-delete-title">Eliminar recibo</h3>
-              <p className="muted">¿Eliminar el borrador de recibo para {deleteTarget.pagador_nombre}? Esta accion no se puede deshacer.</p>
-            </header>
-            {error ? <p className="form-error">{error}</p> : null}
-            <div className="result-actions">
-              <button className="secondary-action" disabled={saving} onClick={() => setDeleteTarget(null)} type="button">
-                Cancelar
-              </button>
-              <button className="danger-action" disabled={saving} onClick={() => void deleteRecibo()} type="button">
-                {saving ? "Eliminando..." : "Eliminar"}
-              </button>
-            </div>
-          </section>
-        </div>
-      ) : null}
-
-      {anularTarget ? (
-        <div className="modal-backdrop" role="presentation">
-          <section className="modal-panel" aria-labelledby="recibo-anular-title" role="dialog" aria-modal="true">
-            <header>
-              <p className="eyebrow">Confirmacion</p>
-              <h3 id="recibo-anular-title">Anular recibo</h3>
-              <p className="muted">
-                El recibo N° {anularTarget.numero != null ? String(anularTarget.numero).padStart(7, "0") : ""} para {anularTarget.pagador_nombre} quedara anulado.
-                Se genera un recibo de anulacion firmado; el original no se modifica.
-              </p>
-            </header>
-            <label className="credit-note-motivo">
-              Motivo
-              <textarea
-                autoFocus
-                maxLength={500}
-                rows={4}
-                value={anularMotivo}
-                onChange={(event) => setAnularMotivo(event.target.value)}
-                placeholder="Ej: Importe incorrecto, se emitio uno nuevo"
-              />
-            </label>
-            {error ? <p className="form-error">{error}</p> : null}
-            <div className="result-actions">
-              <button className="secondary-action" disabled={saving} onClick={() => setAnularTarget(null)} type="button">
-                Cancelar
-              </button>
-              <button className="danger-action" disabled={saving} onClick={() => void submitAnular()} type="button">
-                {saving ? "Anulando..." : "Anular recibo"}
-              </button>
-            </div>
-          </section>
-        </div>
-      ) : null}
+      {modals}
     </div>
   );
 }

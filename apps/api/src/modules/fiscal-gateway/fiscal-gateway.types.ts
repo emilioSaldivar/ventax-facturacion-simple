@@ -393,6 +393,8 @@ export interface FiscalGateway {
     idempotencyKeys: string[];
   }): Promise<FiscalIdempotencyReconciliationResponse>;
   crearRecibo(request: FiscalCrearReciboRequest): Promise<FiscalReciboResult>;
+  /** GET /recibos/{id} — usado tras anular para releer el estado real del recibo original (ver seccion 16.9 de la guia: anular NO actualiza el original in-place, genera un documento nuevo separado). */
+  getRecibo(id: string): Promise<FiscalReciboResult>;
   editarRecibo(request: FiscalEditarReciboRequest): Promise<FiscalReciboResult>;
   eliminarRecibo(input: { reciboId: string }): Promise<void>;
   emitirRecibo(input: { reciboId: string }): Promise<FiscalReciboResult>;

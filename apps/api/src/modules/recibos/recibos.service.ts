@@ -240,8 +240,14 @@ export async function anularRecibo(
   }
 
   try {
-    const fiscalResult = await gateway.anularRecibo({ reciboId: id, motivo: input.motivo });
-    return repository.upsertFromFiscal({ facturadorId: context.facturador.id, fiscal: fiscalResult });
+    // El recibo de anulacion es un DOCUMENTO NUEVO y separado (ver SPEC seccion 6/8, guia
+    // fiscal 16.9): la respuesta de gateway.anularRecibo describe ese documento nuevo, no
+    // el recibo original actualizado. No se persiste ese documento nuevo como si fuera un
+    // recibo mas en nuestra cache/lista — solo se relee y sincroniza el estado real del
+    // recibo original (que pasa a ANULADO) via GET /recibos/{id}.
+    await gateway.anularRecibo({ reciboId: id, motivo: input.motivo });
+    const original = await gateway.getRecibo(id);
+    return repository.upsertFromFiscal({ facturadorId: context.facturador.id, fiscal: original });
   } catch (error) {
     throw mapFiscalGatewayError(error, "anular el recibo");
   }

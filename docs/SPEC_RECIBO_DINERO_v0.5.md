@@ -143,9 +143,11 @@ Los endpoints propios (`/api/v1/recibos*`) **no cambian de URL ni de forma de au
 | `POST /recibos/:id/emitir` | `POST /v1/recibos/{id}/emitir` — firma XML+PDF, asigna numero y `verification_token` |
 | `GET /recibos/:id/pdf` | **proxy** a `GET /v1/recibos/{id}/pdf` (BORRADOR: preview sin firmar generado por el backend fiscal bajo demanda; EMITIDO/ANULADO: bytes firmados persistidos) — **se elimina `recibos.pdf.ts`**, ya no generamos PDF localmente en ningun estado |
 | `GET /recibos/:id/xml` | **nuevo endpoint propio** — proxy a `GET /v1/recibos/{id}/xml` (solo disponible si `EMITIDO`/`ANULADO`) |
-| `POST /recibos/:id/anular` | **nuevo endpoint propio** — proxy a `POST /v1/recibos/{id}/anular`, requiere `motivo` (string, max 500) |
+| `POST /recibos/:id/anular` | **no es un simple proxy** — ver nota abajo |
 | `GET /verificar/recibo/:token` | ver seccion 7 (hibrido, no simple proxy) |
 | `GET /verificar/recibo/:token/pdf` | proxy a `GET /v1/verificar/recibo/{token}/pdf` (publico, sin auth) |
+
+**Nota critica sobre `POST /recibos/:id/anular` (corregida post-deploy, ver `RD5-029` en TASKS):** el backend fiscal genera un **documento nuevo y separado** ("recibo de anulacion", con su propio `id`/`numero`/PDF/XML firmados) que referencia al original — el original **nunca se actualiza in-place** por esa respuesta; el XML/PDF original no cambia, solo su `estado` interno pasa a `ANULADO`, verificable recien en una consulta posterior. Por eso `anularRecibo` en `recibos.service.ts` hace **dos** llamadas: `gateway.anularRecibo(...)` (dispara la anulacion y la firma del documento de anulacion en el backend fiscal) y luego `gateway.getRecibo(id)` (relee el estado real del ORIGINAL, ya en `ANULADO`) — se persiste unicamente ese segundo resultado en nuestra cache. **El documento de anulacion en si no se persiste como una fila nueva en `recibos_dinero`** ni aparece en el listado de `Cobros/Recibos` — existe y es auditable del lado de `facturacion-electronica`, pero mostrarlo en nuestra lista como si fuera un cobro nuevo (mismo importe, numeracion propia) confunde al operador y no corresponde a un ingreso real. Este comportamiento del backend fiscal (generar un documento de anulacion en vez de mutar el original) **no es configurable ni desactivable** — es el mecanismo de auditoria legal exigido por la Ley N.º 6822/2021, analogo a como una factura no se "deshace" sino que se cancela via nota de credito.
 
 ---
 

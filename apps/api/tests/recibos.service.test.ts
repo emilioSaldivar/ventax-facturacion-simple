@@ -111,6 +111,7 @@ function makeGateway(overrides: Partial<FiscalGateway> = {}): FiscalGateway {
     eliminarRecibo: vi.fn().mockResolvedValue(undefined),
     emitirRecibo: vi.fn().mockResolvedValue(makeFiscalResult({ estado: "EMITIDO", numero: "1", verification_token: "tok-abc" })),
     anularRecibo: vi.fn().mockResolvedValue(makeFiscalResult({ estado: "ANULADO", numero: "1", anulacion_motivo: "Error" })),
+    getRecibo: vi.fn().mockResolvedValue(makeFiscalResult({ estado: "ANULADO", numero: "1", anulacion_motivo: "Error" })),
     getReciboPdf: vi.fn(),
     getReciboXml: vi.fn(),
     verificarRecibo: vi.fn().mockResolvedValue({ valido: false, raw: {} }),
@@ -280,7 +281,26 @@ describe("anularRecibo", () => {
     const gateway = makeGateway();
     const result = await anularRecibo("r1", context, { motivo: "Importe incorrecto" }, repo, gateway);
     expect(gateway.anularRecibo).toHaveBeenCalledWith({ reciboId: "r1", motivo: "Importe incorrecto" });
+    expect(gateway.getRecibo).toHaveBeenCalledWith("r1");
     expect(result.estado).toBe("ANULADO");
+  });
+
+  it("persiste el estado real del recibo ORIGINAL (via getRecibo), no el documento nuevo que devuelve anularRecibo", async () => {
+    // El backend fiscal genera un documento de anulacion SEPARADO (con su propio id/numero) que
+    // referencia al original; la respuesta de anularRecibo describe ESE documento nuevo, no el
+    // original actualizado. Este test reproduce ese caso para evitar la regresion de crear un
+    // recibo "fantasma" en nuestra cache en vez de marcar ANULADO al original.
+    const repo = makeRepo({ findById: vi.fn().mockResolvedValue(makeRecibo({ id: "r1", estado: "EMITIDO", numero: 2 })) });
+    const gateway = makeGateway({
+      anularRecibo: vi.fn().mockResolvedValue(makeFiscalResult({ id: "doc-anulacion-99", estado: "EMITIDO", numero: "4" })),
+      getRecibo: vi.fn().mockResolvedValue(makeFiscalResult({ id: "r1", estado: "ANULADO", numero: "2", anulacion_motivo: "Importe incorrecto" })),
+    });
+    const result = await anularRecibo("r1", context, { motivo: "Importe incorrecto" }, repo, gateway);
+    expect(gateway.getRecibo).toHaveBeenCalledWith("r1");
+    expect(repo.upsertFromFiscal).toHaveBeenCalledWith(
+      expect.objectContaining({ fiscal: expect.objectContaining({ id: "r1", estado: "ANULADO", numero: "2" }) })
+    );
+    expect(result.numero).toBe(2); // numero del ORIGINAL (2), nunca el del documento de anulacion (4)
   });
 
   it("lanza 409 si esta en borrador", async () => {
