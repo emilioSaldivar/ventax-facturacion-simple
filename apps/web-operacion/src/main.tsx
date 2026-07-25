@@ -7283,39 +7283,57 @@ function RecibosView({
       <p className="muted" style={{ marginTop: "8px", fontSize: "11px" }}>{total} recibo(s) en total</p>
 
       {deleteTarget ? (
-        <div className="modal-scrim" role="dialog" aria-modal="true">
-          <div className="modal-card">
-            <h2>Eliminar recibo</h2>
-            <p>¿Eliminar el borrador de recibo para <strong>{deleteTarget.pagador_nombre}</strong>? Esta accion no se puede deshacer.</p>
-            {error ? <p className="error-banner">{error}</p> : null}
-            <div className="modal-actions">
-              <button type="button" className="ghost-action" onClick={() => setDeleteTarget(null)}>Cancelar</button>
-              <button type="button" className="danger-action" onClick={() => void deleteRecibo()} disabled={saving}>{saving ? "Eliminando…" : "Eliminar"}</button>
+        <div className="modal-backdrop" role="presentation">
+          <section className="modal-panel" aria-labelledby="recibo-delete-title" role="dialog" aria-modal="true">
+            <header>
+              <h3 id="recibo-delete-title">Eliminar recibo</h3>
+              <p className="muted">¿Eliminar el borrador de recibo para {deleteTarget.pagador_nombre}? Esta accion no se puede deshacer.</p>
+            </header>
+            {error ? <p className="form-error">{error}</p> : null}
+            <div className="result-actions">
+              <button className="secondary-action" disabled={saving} onClick={() => setDeleteTarget(null)} type="button">
+                Cancelar
+              </button>
+              <button className="danger-action" disabled={saving} onClick={() => void deleteRecibo()} type="button">
+                {saving ? "Eliminando..." : "Eliminar"}
+              </button>
             </div>
-          </div>
+          </section>
         </div>
       ) : null}
 
       {anularTarget ? (
-        <div className="modal-scrim" role="dialog" aria-modal="true">
-          <div className="modal-card">
-            <h2>Anular recibo</h2>
-            <p>El recibo N° {anularTarget.numero != null ? String(anularTarget.numero).padStart(7, "0") : ""} para <strong>{anularTarget.pagador_nombre}</strong> quedara anulado. Se genera un recibo de anulacion firmado; el original no se modifica.</p>
-            <label>
+        <div className="modal-backdrop" role="presentation">
+          <section className="modal-panel" aria-labelledby="recibo-anular-title" role="dialog" aria-modal="true">
+            <header>
+              <p className="eyebrow">Confirmacion</p>
+              <h3 id="recibo-anular-title">Anular recibo</h3>
+              <p className="muted">
+                El recibo N° {anularTarget.numero != null ? String(anularTarget.numero).padStart(7, "0") : ""} para {anularTarget.pagador_nombre} quedara anulado.
+                Se genera un recibo de anulacion firmado; el original no se modifica.
+              </p>
+            </header>
+            <label className="credit-note-motivo">
               Motivo
               <textarea
-                rows={3}
+                autoFocus
+                maxLength={500}
+                rows={4}
                 value={anularMotivo}
-                onChange={(e) => setAnularMotivo(e.target.value)}
+                onChange={(event) => setAnularMotivo(event.target.value)}
                 placeholder="Ej: Importe incorrecto, se emitio uno nuevo"
               />
             </label>
-            {error ? <p className="error-banner">{error}</p> : null}
-            <div className="modal-actions">
-              <button type="button" className="ghost-action" onClick={() => setAnularTarget(null)} disabled={saving}>Cancelar</button>
-              <button type="button" className="danger-action" onClick={() => void submitAnular()} disabled={saving}>{saving ? "Anulando…" : "Anular recibo"}</button>
+            {error ? <p className="form-error">{error}</p> : null}
+            <div className="result-actions">
+              <button className="secondary-action" disabled={saving} onClick={() => setAnularTarget(null)} type="button">
+                Cancelar
+              </button>
+              <button className="danger-action" disabled={saving} onClick={() => void submitAnular()} type="button">
+                {saving ? "Anulando..." : "Anular recibo"}
+              </button>
             </div>
-          </div>
+          </section>
         </div>
       ) : null}
     </div>
