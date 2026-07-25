@@ -6681,6 +6681,9 @@ function RecibosView({
   const [selectedRecibo, setSelectedRecibo] = useState<ReciboRecord | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ReciboRecord | null>(null);
+  const [quickMenuReciboId, setQuickMenuReciboId] = useState<string | null>(null);
+  const [anularTarget, setAnularTarget] = useState<ReciboRecord | null>(null);
+  const [anularMotivo, setAnularMotivo] = useState("");
 
   const [formPagadorNombre, setFormPagadorNombre] = useState("");
   const [formPagadorDocTipo, setFormPagadorDocTipo] = useState<DocumentoIdentidadTipo>("RUC");
@@ -6956,6 +6959,48 @@ function RecibosView({
     }
   };
 
+  const openAnularModal = (r: ReciboRecord) => {
+    setAnularTarget(r);
+    setAnularMotivo("");
+    setError(null);
+    setQuickMenuReciboId(null);
+  };
+
+  const submitAnular = async () => {
+    if (!anularTarget) return;
+    if (anularMotivo.trim().length < 3) {
+      setError("Ingrese un motivo de al menos 3 caracteres.");
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      const updated = await api.request<ReciboRecord>(`/recibos/${anularTarget.id}/anular`, {
+        method: "POST",
+        body: JSON.stringify({ motivo: anularMotivo.trim() }),
+      });
+      setAnularTarget(null);
+      await loadRecibos();
+      if (selectedRecibo?.id === updated.id) setSelectedRecibo(updated);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo anular el recibo.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const buildReciboPublicUrl = (r: ReciboRecord) => `${window.location.origin}/verificar/recibo/${r.verification_token}`;
+
+  const quickShare = (r: ReciboRecord) => {
+    window.open(buildReciboPublicUrl(r), "_blank", "noopener,noreferrer");
+    setQuickMenuReciboId(null);
+  };
+
+  const quickWhatsApp = (r: ReciboRecord) => {
+    window.open(`https://wa.me/?text=${encodeURIComponent(buildReciboPublicUrl(r))}`, "_blank", "noopener,noreferrer");
+    setQuickMenuReciboId(null);
+  };
+
   if (subView === "form") {
     return (
       <div className="module-view">
@@ -7148,6 +7193,9 @@ function RecibosView({
             <div className="delivery-actions">
               <button className="secondary-action" onClick={() => openPdf(r)} type="button">Ver PDF</button>
               <button className="secondary-action" onClick={() => openXml(r)} type="button">Descargar documento electrónico</button>
+              {r.estado === "EMITIDO" ? (
+                <button className="danger-action" onClick={() => openAnularModal(r)} type="button">Anular</button>
+              ) : null}
             </div>
           </div>
         )}
@@ -7183,9 +7231,50 @@ function RecibosView({
               </div>
               <div className="nota-card-actions">
                 <button type="button" className="ghost-action compact" onClick={() => { setSelectedRecibo(r); setWhatsappPhone(""); setSubView("detail"); }}>Ver</button>
-                {r.estado === "EMITIDO" ? (
-                  <button type="button" className="ghost-action compact" onClick={() => openPdf(r)}>PDF</button>
-                ) : null}
+                <div className="document-row-menu-wrapper">
+                  <button
+                    className="icon-menu-action"
+                    onClick={() => setQuickMenuReciboId((current) => (current === r.id ? null : r.id))}
+                    type="button"
+                  >
+                    ⋮
+                  </button>
+                  {quickMenuReciboId === r.id ? (
+                    <div className="client-row-menu" role="menu" aria-label={`Acciones para el recibo de ${r.pagador_nombre}`}>
+                      <button
+                        onClick={() => { setSelectedRecibo(r); setWhatsappPhone(""); setSubView("detail"); setQuickMenuReciboId(null); }}
+                        role="menuitem"
+                        type="button"
+                      >
+                        Ver detalle
+                      </button>
+                      {r.estado === "BORRADOR" ? (
+                        <>
+                          <button onClick={() => { openEdit(r); setQuickMenuReciboId(null); }} role="menuitem" type="button">Editar</button>
+                          <button onClick={() => { setQuickMenuReciboId(null); void emitirRecibo(r); }} role="menuitem" type="button">Emitir</button>
+                          <button
+                            className="destructive-item"
+                            onClick={() => { setDeleteTarget(r); setQuickMenuReciboId(null); }}
+                            role="menuitem"
+                            type="button"
+                          >
+                            Eliminar
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <button onClick={() => quickShare(r)} role="menuitem" type="button">Compartir</button>
+                          <button onClick={() => quickWhatsApp(r)} role="menuitem" type="button">WhatsApp</button>
+                          <button onClick={() => { setQuickMenuReciboId(null); openPdf(r); }} role="menuitem" type="button">Ver PDF</button>
+                          <button onClick={() => { setQuickMenuReciboId(null); openXml(r); }} role="menuitem" type="button">Descargar documento electrónico</button>
+                          {r.estado === "EMITIDO" ? (
+                            <button className="destructive-item" onClick={() => openAnularModal(r)} role="menuitem" type="button">Anular</button>
+                          ) : null}
+                        </>
+                      )}
+                    </div>
+                  ) : null}
+                </div>
               </div>
             </div>
           ))}
@@ -7202,6 +7291,29 @@ function RecibosView({
             <div className="modal-actions">
               <button type="button" className="ghost-action" onClick={() => setDeleteTarget(null)}>Cancelar</button>
               <button type="button" className="danger-action" onClick={() => void deleteRecibo()} disabled={saving}>{saving ? "Eliminando…" : "Eliminar"}</button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {anularTarget ? (
+        <div className="modal-scrim" role="dialog" aria-modal="true">
+          <div className="modal-card">
+            <h2>Anular recibo</h2>
+            <p>El recibo N° {anularTarget.numero != null ? String(anularTarget.numero).padStart(7, "0") : ""} para <strong>{anularTarget.pagador_nombre}</strong> quedara anulado. Se genera un recibo de anulacion firmado; el original no se modifica.</p>
+            <label>
+              Motivo
+              <textarea
+                rows={3}
+                value={anularMotivo}
+                onChange={(e) => setAnularMotivo(e.target.value)}
+                placeholder="Ej: Importe incorrecto, se emitio uno nuevo"
+              />
+            </label>
+            {error ? <p className="error-banner">{error}</p> : null}
+            <div className="modal-actions">
+              <button type="button" className="ghost-action" onClick={() => setAnularTarget(null)} disabled={saving}>Cancelar</button>
+              <button type="button" className="danger-action" onClick={() => void submitAnular()} disabled={saving}>{saving ? "Anulando…" : "Anular recibo"}</button>
             </div>
           </div>
         </div>
