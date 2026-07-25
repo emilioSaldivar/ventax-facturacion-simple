@@ -2117,6 +2117,33 @@
           "response": []
         },
         {
+          "name": "Descargar Documento Electronico (XML publico, sin auth)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/verificar/recibo/{{last_verification_token}}/xml",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "verificar",
+                "recibo",
+                "{{last_verification_token}}",
+                "xml"
+              ]
+            },
+            "description": "El \"documento electronico\" del recibo: el XML firmado (XMLDSig), fuente de verdad legal. Publico, sin autenticacion."
+          },
+          "response": []
+        },
+        {
           "name": "Anular Recibo",
           "request": {
             "method": "POST",

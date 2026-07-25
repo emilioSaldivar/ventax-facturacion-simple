@@ -1837,6 +1837,36 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /verificar/recibo/{token}/xml:
+    get:
+      tags: [Recibos]
+      summary: Descarga publica del documento electronico (XML firmado, sin autenticacion)
+      description: |
+        El "documento electronico" del recibo: el XML firmado con XMLDSig, fuente de verdad
+        legal de la que se deriva el PDF. Mismo criterio de disponibilidad que el PDF publico:
+        solo si el recibo esta EMITIDO/ANULADO.
+      security: []
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: XML firmado.
+          content:
+            application/xml:
+              schema:
+                type: string
+        "404":
+          description: Token inexistente o recibo aun BORRADOR.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
 
 components:
   securitySchemes:
@@ -3348,6 +3378,15 @@ components:
         referencia_documento_numero_display:
           type: string
           nullable: true
+        actividad_economica_codigo:
+          type: string
+          maxLength: 10
+          nullable: true
+          description: >-
+            Codigo de actividad economica del emisor bajo la cual se genera el recibo (ver
+            GET /consultar/ruc/{ruc}). Determina que logo/rubro se imprime en el PDF. Si se
+            omite, se usa la actividad principal del emisor. Debe ser una actividad activa y
+            declarada por el emisor, o la creacion falla con 422 ACTIVITY_NOT_AVAILABLE.
         client_reference:
           type: object
           properties:
@@ -3388,6 +3427,10 @@ components:
           nullable: true
         referencia_documento_numero_display:
           type: string
+          nullable: true
+        actividad_economica_codigo:
+          type: string
+          maxLength: 10
           nullable: true
 
     ReciboAnularInput:
@@ -3435,6 +3478,9 @@ components:
           type: string
           nullable: true
         referencia_documento_numero_display:
+          type: string
+          nullable: true
+        actividad_economica_codigo:
           type: string
           nullable: true
         xml_hash:
@@ -3496,3 +3542,14 @@ components:
         motivo:
           type: string
           enum: [not_found, integrity_mismatch]
+          nullable: true
+        pdf_url:
+          type: string
+          format: uri
+          nullable: true
+          description: Presente solo si el recibo existe. Descarga publica del PDF firmado.
+        xml_url:
+          type: string
+          format: uri
+          nullable: true
+          description: Presente solo si el recibo existe. Descarga publica del documento electronico (XML firmado).

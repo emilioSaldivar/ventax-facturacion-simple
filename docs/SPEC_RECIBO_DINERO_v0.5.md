@@ -91,13 +91,14 @@ Consecuencia de diseno: `recibos_dinero.id` en nuestra base **pasa a ser el mism
   "referencia_bancaria": "string | null",
   "referencia_documento_uuid": "uuid | null — document_uuid de una factura propia (reemplaza a factura_id)",
   "referencia_documento_numero_display": "string | null — reemplaza a factura_numero_display",
+  "actividad_economica_codigo": "string | null — resuelto automaticamente, ver nota abajo",
   "client_reference": { "idempotency_key": "generado internamente, no lo decide el cliente HTTP de nuestra API publica" }
 }
 ```
 
 **Campos nuevos respecto a v0.4:** `moneda`, `referencia_documento_uuid`, `referencia_documento_numero_display` (generalizan `factura_id`/`factura_numero_display`, que hoy solo podian referenciar una factura *local*; ahora referencian el `document_uuid` canonico, igual que hace `facturas` con documentos propios).
 
-**`emisor_id` y `idempotency_key` no son responsabilidad del consumidor final** de nuestra API (el operador de `web-operacion`, o cualquier consumidor de nuestra API SaaS): el backend SaaS los resuelve/genera igual que ya hace para `facturas` — `emisor_id` sale del `facturador` del contexto operativo autenticado; `idempotency_key` se deriva de un header `Idempotency-Key` opcional + `facturador.id` con el mismo esquema `sha256(...).slice(0,32)` que usa `facturas.service.ts` (`buildExternalRef`).
+**`emisor_id`, `idempotency_key` y `actividad_economica_codigo` no son responsabilidad del consumidor final** de nuestra API (el operador de `web-operacion`, o cualquier consumidor de nuestra API SaaS): el backend SaaS los resuelve/genera igual que ya hace para `facturas` — `emisor_id` sale del `facturador` del contexto operativo autenticado; `idempotency_key` se deriva de un header `Idempotency-Key` opcional + `facturador.id` con el mismo esquema `sha256(...).slice(0,32)` que usa `facturas.service.ts` (`buildExternalRef`); `actividad_economica_codigo` sale de `context.fiscal_context.actividad_economica_codigo` — el mismo valor que `facturas` ya usa para su propio `fiscal_context` (ver `RD5-025` en TASKS: bugfix post-deploy — `facturacion-electronica` usa este codigo para decidir que logo/rubro imprimir en el PDF firmado; si el facturador opera bajo una actividad no-principal y este campo no viaja, el PDF muestra el logo de la actividad principal por error).
 
 ### 4.1 Vincular un recibo a una factura propia (cobro de credito) — RD-010 actualizado
 

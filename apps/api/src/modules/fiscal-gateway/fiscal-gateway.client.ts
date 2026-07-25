@@ -385,6 +385,7 @@ export class MockFiscalGateway implements FiscalGateway {
       forma_pago: request.forma_pago ?? "EFECTIVO",
       referencia_bancaria: request.referencia_bancaria ?? null,
       referencia_documento_numero_display: request.referencia_documento_numero_display ?? null,
+      actividad_economica_codigo: request.actividad_economica_codigo ?? null,
       xml_hash: null,
       pdf_hash: null,
       anulacion_motivo: null,
@@ -416,6 +417,8 @@ export class MockFiscalGateway implements FiscalGateway {
       referencia_bancaria: request.patch.referencia_bancaria ?? existing.referencia_bancaria,
       referencia_documento_numero_display:
         request.patch.referencia_documento_numero_display ?? existing.referencia_documento_numero_display,
+      actividad_economica_codigo:
+        request.patch.actividad_economica_codigo ?? existing.actividad_economica_codigo,
       updated_at: new Date().toISOString()
     };
     this.recibos.set(request.reciboId, updated);
@@ -1477,6 +1480,7 @@ function mapFiscalReciboResponse(body: unknown): FiscalReciboResult {
     forma_pago: (data.forma_pago as FiscalReciboResult["forma_pago"]) ?? "EFECTIVO",
     referencia_bancaria: stringOrNull(data.referencia_bancaria),
     referencia_documento_numero_display: stringOrNull(data.referencia_documento_numero_display),
+    actividad_economica_codigo: stringOrNull(data.actividad_economica_codigo),
     xml_hash: stringOrNull(data.xml_hash),
     pdf_hash: stringOrNull(data.pdf_hash),
     anulacion_motivo: stringOrNull(data.anulacion_motivo),

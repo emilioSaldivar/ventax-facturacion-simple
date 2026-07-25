@@ -57,6 +57,8 @@ function mapFiscalGatewayError(error: unknown, accion: string): HttpError {
       return new HttpError(422, "VALIDATION_ERROR", "El facturador no tiene certificado digital valido cargado; contactar soporte.");
     case "INVALID_DOCUMENT_REFERENCE":
       return new HttpError(422, "VALIDATION_ERROR", "La factura referenciada no existe o no pertenece a este facturador.");
+    case "ACTIVITY_NOT_AVAILABLE":
+      return new HttpError(422, "VALIDATION_ERROR", "La actividad economica indicada no esta declarada/activa para este facturador.");
     default:
       return new HttpError(502, "INTERNAL_ERROR", `Backend fiscal rechazo ${accion}.`, {
         gateway_code: error.code,
@@ -73,6 +75,7 @@ function buildFiscalCrearReciboRequest(
 ) {
   return {
     emisor_id: context.facturador.emisor_id,
+    actividad_economica_codigo: context.fiscal_context.actividad_economica_codigo,
     fecha_cobro: input.fecha_cobro,
     pagador_nombre: input.pagador_nombre,
     pagador_documento_tipo: (input.pagador_documento_tipo ?? null) as ReciboPagadorDocumentoTipo,
@@ -165,6 +168,7 @@ export async function editarRecibo(
     const fiscalResult = await gateway.editarRecibo({
       reciboId: id,
       patch: {
+        actividad_economica_codigo: context.fiscal_context.actividad_economica_codigo,
         fecha_cobro: input.fecha_cobro,
         pagador_nombre: input.pagador_nombre,
         pagador_documento_tipo: input.pagador_documento_tipo as ReciboPagadorDocumentoTipo | undefined,

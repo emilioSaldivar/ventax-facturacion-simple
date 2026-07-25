@@ -814,6 +814,7 @@ Content-Type: application/json
 | `forma_pago` | `EFECTIVO \| TRANSFERENCIA \| CHEQUE \| TARJETA_CREDITO \| TARJETA_DEBITO \| OTRO` (default `EFECTIVO`) |
 | `referencia_documento_uuid` | opcional — `document_uuid` de una factura de este mismo sistema, si el recibo cobra esa factura (ver 16.4.1) |
 | `referencia_documento_numero_display` | opcional — texto libre para mostrar en el PDF (ej. número fiscal de la factura) |
+| `actividad_economica_codigo` | opcional — código de actividad económica del emisor (ver `GET /consultar/ruc/{ruc}`) bajo la cual se genera el recibo. Determina qué logo/rubro se imprime en el PDF. Si el emisor tiene una sola actividad, se puede omitir. Si el emisor tiene varias y no se envía, se usa la actividad **principal** — si el recibo corresponde a otra actividad, el PDF va a mostrar el logo equivocado. Un código que no está declarado y activo para el emisor responde `422 ACTIVITY_NOT_AVAILABLE`. |
 | `client_reference.idempotency_key` | opcional, mismo formato que en `/factura` (`^[A-Za-z0-9_-]{8,80}$`) |
 
 **Respuesta (201):**
@@ -930,14 +931,26 @@ expone importe, receptor ni concepto:
   "valido": true,
   "estado": "EMITIDO",
   "fecha_emision": "2026-07-24",
-  "firmado_en": "2026-07-24T15:03:11.000Z"
+  "firmado_en": "2026-07-24T15:03:11.000Z",
+  "pdf_url": "https://fe-api.tudominio.com/v1/verificar/recibo/{verification_token}/pdf",
+  "xml_url": "https://fe-api.tudominio.com/v1/verificar/recibo/{verification_token}/xml"
 }
 ```
 
-Token inexistente → `404 { "valido": false, "motivo": "not_found" }`.
+Token inexistente → `404 { "valido": false, "motivo": "not_found" }` (sin `pdf_url`/`xml_url`).
 
-También existe `GET /v1/verificar/recibo/{verification_token}/pdf` para descargar el PDF firmado
-públicamente, sin autenticación.
+**`pdf_url` y `xml_url` solo vienen presentes cuando el recibo existe.** Apuntan siempre al host
+real de esta API (no a `PUBLIC_BASE_URL`, que puede ser tu propio dominio si tenés tu propia
+pagina de verificación — ver 16.3). Si tu sistema tiene su propia página pública, usalos
+directamente en vez de reconstruir la URL vos mismo por convención.
+
+- `GET /v1/verificar/recibo/{verification_token}/pdf` — el PDF firmado (PAdES).
+- `GET /v1/verificar/recibo/{verification_token}/xml` — el **documento electrónico**: el XML
+  firmado (XMLDSig), la fuente de verdad legal de la que se deriva el PDF. Útil para que un
+  auditor o contador acceda al documento firmado en sí, no solo a su representación visual.
+
+Ambos, sin autenticación, con las mismas condiciones (solo disponibles si el recibo está
+`EMITIDO`/`ANULADO`).
 
 ### 16.9 Anular un Recibo
 

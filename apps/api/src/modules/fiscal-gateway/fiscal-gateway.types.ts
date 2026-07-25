@@ -281,6 +281,8 @@ export type ReciboFormaPagoFiscal = "EFECTIVO" | "TRANSFERENCIA" | "CHEQUE" | "T
 
 export interface FiscalCrearReciboRequest {
   emisor_id: string;
+  /** Si se omite, facturacion-electronica usa la actividad economica "principal" del emisor. */
+  actividad_economica_codigo?: string;
   fecha_cobro: string;
   pagador_nombre: string;
   pagador_documento_tipo?: ReciboPagadorDocumentoTipo;
@@ -310,6 +312,7 @@ export interface FiscalReciboResult {
   forma_pago: ReciboFormaPagoFiscal;
   referencia_bancaria: string | null;
   referencia_documento_numero_display: string | null;
+  actividad_economica_codigo: string | null;
   xml_hash: string | null;
   pdf_hash: string | null;
   anulacion_motivo: string | null;

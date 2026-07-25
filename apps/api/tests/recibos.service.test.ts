@@ -43,6 +43,7 @@ const makeFiscalResult = (overrides: Partial<FiscalReciboResult> = {}): FiscalRe
   forma_pago: "EFECTIVO",
   referencia_bancaria: null,
   referencia_documento_numero_display: null,
+  actividad_economica_codigo: null,
   xml_hash: null,
   pdf_hash: null,
   anulacion_motivo: null,
@@ -131,6 +132,32 @@ describe("crearRecibo", () => {
     expect(gateway.crearRecibo).toHaveBeenCalledOnce();
     expect(repo.upsertFromFiscal).toHaveBeenCalledOnce();
     expect(result.id).toBe("r1");
+  });
+
+  it("envia actividad_economica_codigo del contexto operativo (para que el PDF use el logo/rubro correcto)", async () => {
+    const repo = makeRepo();
+    const gateway = makeGateway();
+    await crearRecibo(context, {
+      fecha_cobro: "2026-06-25",
+      pagador_nombre: "Juan Perez",
+      concepto: "Pago de servicio",
+      importe: 150000,
+    }, repo, gateway);
+    expect(gateway.crearRecibo).toHaveBeenCalledWith(
+      expect.objectContaining({ actividad_economica_codigo: context.fiscal_context.actividad_economica_codigo })
+    );
+  });
+
+  it("mapea ACTIVITY_NOT_AVAILABLE del backend fiscal a 422", async () => {
+    const repo = makeRepo();
+    const gateway = makeGateway({
+      crearRecibo: vi.fn().mockRejectedValue(
+        new FiscalGatewayError("UPSTREAM_ERROR", "rejected", { status: 422, body: { error: "ACTIVITY_NOT_AVAILABLE" } })
+      ),
+    });
+    await expect(crearRecibo(context, {
+      fecha_cobro: "2026-06-25", pagador_nombre: "Juan", concepto: "Servicio", importe: 1000,
+    }, repo, gateway)).rejects.toMatchObject({ statusCode: 422 });
   });
 
   it("reusa el recibo existente si la idempotency-key ya se proceso (no llama al gateway)", async () => {
