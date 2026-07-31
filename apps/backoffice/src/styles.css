@@ -266,6 +266,26 @@ textarea {
 input:focus, select:focus, textarea:focus { border-color: var(--primary); }
 input:disabled, select:disabled, textarea:disabled { background: var(--bg); color: var(--muted); }
 
+.password-input { position: relative; display: flex; }
+.password-input input { padding-right: 40px; }
+.password-toggle {
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  transform: translateY(-50%);
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  border-radius: 6px;
+}
+.password-toggle:hover { color: var(--text); background: var(--bg); }
+.password-toggle:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+
 /* ─── Buttons ──────────────────────────────────────────────────────────────── */
 
 .btn {

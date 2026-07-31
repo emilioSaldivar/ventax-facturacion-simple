@@ -899,6 +899,24 @@ function App() {
   );
 }
 
+function EyeIcon({ crossed }: { crossed: boolean }) {
+  return (
+    <svg fill="none" height="18" viewBox="0 0 24 24" width="18" xmlns="http://www.w3.org/2000/svg">
+      <path
+        d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.6"
+      />
+      <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="1.6" />
+      {crossed ? (
+        <line stroke="currentColor" strokeLinecap="round" strokeWidth="1.6" x1="2" x2="22" y1="21" y2="3" />
+      ) : null}
+    </svg>
+  );
+}
+
 function LoginScreen({
   errorMessage,
   onLogin,
@@ -911,6 +929,7 @@ function LoginScreen({
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -949,14 +968,25 @@ function LoginScreen({
           </label>
           <label>
             Contrasena
-            <input
-              autoComplete="current-password"
-              name="password"
-              onChange={(event) => setPassword(event.target.value)}
-              required
-              type="password"
-              value={password}
-            />
+            <div className="password-input">
+              <input
+                autoComplete="current-password"
+                name="password"
+                onChange={(event) => setPassword(event.target.value)}
+                required
+                type={showPassword ? "text" : "password"}
+                value={password}
+              />
+              <button
+                aria-label={showPassword ? "Ocultar contrasena" : "Mostrar contrasena"}
+                className="password-toggle"
+                onClick={() => setShowPassword((value) => !value)}
+                tabIndex={-1}
+                type="button"
+              >
+                <EyeIcon crossed={showPassword} />
+              </button>
+            </div>
           </label>
 
           {errorMessage ? <p className="form-error">{errorMessage}</p> : null}
@@ -3485,10 +3515,9 @@ function CatalogView({
                   Precio
                   <input
                     inputMode="numeric"
-                    min="0"
-                    onChange={(event) => setDraft((current) => ({ ...current, precio_unitario: event.target.value }))}
+                    onChange={(event) => setDraft((current) => ({ ...current, precio_unitario: normalizeIntegerInput(event.target.value) }))}
                     required
-                    value={draft.precio_unitario}
+                    value={formatIntegerInput(draft.precio_unitario)}
                   />
                 </label>
                 <label>
@@ -4644,7 +4673,11 @@ function InvoiceEditor({
                     >
                       -
                     </button>
-                    <input inputMode="numeric" min="1" onChange={(event) => updateLine(activeLine.id, { cantidad: event.target.value })} value={activeLine.cantidad} />
+                    <input
+                      inputMode="numeric"
+                      onChange={(event) => updateLine(activeLine.id, { cantidad: normalizeIntegerInput(event.target.value) })}
+                      value={formatIntegerInput(activeLine.cantidad)}
+                    />
                     <button
                       aria-label="Sumar cantidad"
                       onClick={() => updateLine(activeLine.id, { cantidad: String((Number(activeLine.cantidad) || 0) + 1) })}
@@ -4663,12 +4696,12 @@ function InvoiceEditor({
                     onChange={(event) =>
                       updateLine(activeLine.id, {
                         catalogo_item_id: null,
-                        precio_unitario: normalizePriceInput(event.target.value),
+                        precio_unitario: normalizeIntegerInput(event.target.value),
                         lockedFromCatalog: false
                       })
                     }
                     placeholder="0"
-                    value={formatPriceInput(activeLine.precio_unitario)}
+                    value={formatIntegerInput(activeLine.precio_unitario)}
                   />
                 </label>
               </div>
@@ -5418,12 +5451,15 @@ function normalizeDocKey(value: string): string {
   return value.trim().toUpperCase().replace(/[^0-9A-Z]/g, "");
 }
 
-function normalizePriceInput(value: string): string {
+// Convencion del proyecto para campos numericos enteros (montos, cantidades): el input
+// muestra el valor con puntos de miles (es-PY) mientras se escribe, pero el estado de
+// React y el payload enviado al backend siempre son digitos/numero puro, sin puntos.
+function normalizeIntegerInput(value: string): string {
   return value.replace(/[^\d]/g, "");
 }
 
-function formatPriceInput(value: string): string {
-  const digits = normalizePriceInput(value);
+function formatIntegerInput(value: string): string {
+  const digits = normalizeIntegerInput(value);
   if (!digits) {
     return "";
   }
@@ -6418,13 +6454,17 @@ function NotasView({
                       Cantidad
                       <div className="quantity-stepper">
                         <button type="button" aria-label="Restar" onClick={() => updateFila(activeFila._id, { cantidad: String(Math.max(1, Number(activeFila.cantidad || 1) - 1)) })}>-</button>
-                        <input inputMode="numeric" min="1" value={activeFila.cantidad} onChange={e => updateFila(activeFila._id, { cantidad: e.target.value })} />
+                        <input
+                          inputMode="numeric"
+                          onChange={e => updateFila(activeFila._id, { cantidad: normalizeIntegerInput(e.target.value) })}
+                          value={formatIntegerInput(activeFila.cantidad)}
+                        />
                         <button type="button" aria-label="Sumar" onClick={() => updateFila(activeFila._id, { cantidad: String((Number(activeFila.cantidad) || 0) + 1) })}>+</button>
                       </div>
                     </label>
                     <label>
                       Precio (Gs.)
-                      <input inputMode="decimal" min="0" placeholder="0" value={formatPriceInput(activeFila.precio_unitario)} onChange={e => updateFila(activeFila._id, { precio_unitario: normalizePriceInput(e.target.value) })} />
+                      <input inputMode="decimal" min="0" placeholder="0" value={formatIntegerInput(activeFila.precio_unitario)} onChange={e => updateFila(activeFila._id, { precio_unitario: normalizeIntegerInput(e.target.value) })} />
                     </label>
                   </div>
 
@@ -7157,7 +7197,12 @@ function RecibosView({
             </label>
             <label>
               Importe (Gs.) *
-              <input type="number" min="1" value={formImporte} onChange={(e) => setFormImporte(e.target.value)} placeholder="0" />
+              <input
+                inputMode="numeric"
+                onChange={(e) => setFormImporte(normalizeIntegerInput(e.target.value))}
+                placeholder="0"
+                value={formatIntegerInput(formImporte)}
+              />
             </label>
             <label>
               Forma de pago

@@ -258,6 +258,24 @@ function buildBreadcrumb(view: AppView, navigate: (v: AppView) => void): Array<{
 
 // ─── LoginView ────────────────────────────────────────────────────────────────
 
+function EyeIcon({ crossed }: { crossed: boolean }) {
+  return (
+    <svg fill="none" height="18" viewBox="0 0 24 24" width="18" xmlns="http://www.w3.org/2000/svg">
+      <path
+        d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.6"
+      />
+      <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="1.6" />
+      {crossed ? (
+        <line stroke="currentColor" strokeLinecap="round" strokeWidth="1.6" x1="2" x2="22" y1="21" y2="3" />
+      ) : null}
+    </svg>
+  );
+}
+
 function LoginView({
   errorMessage,
   onLogin,
@@ -270,6 +288,7 @@ function LoginView({
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -294,7 +313,24 @@ function LoginView({
             <input type="text" value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" required />
           </FormField>
           <FormField label="Contraseña" required>
-            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" required />
+            <div className="password-input">
+              <input
+                type={showPassword ? "text" : "password"}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                autoComplete="current-password"
+                required
+              />
+              <button
+                aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
+                className="password-toggle"
+                onClick={() => setShowPassword((value) => !value)}
+                tabIndex={-1}
+                type="button"
+              >
+                <EyeIcon crossed={showPassword} />
+              </button>
+            </div>
           </FormField>
           {errorMessage ? <div className="error-msg">{errorMessage}</div> : null}
           <button className="btn btn-primary btn-wide" disabled={submitting} type="submit">
