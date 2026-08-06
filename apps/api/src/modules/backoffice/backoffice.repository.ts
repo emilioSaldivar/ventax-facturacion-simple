@@ -1,6 +1,7 @@
 import type { UserSummary } from "@facturacion-simple/shared";
 import { pool } from "../../db/pool";
 import { HttpError } from "../../shared/errors/http-error";
+import { deriveAccion, type DeriveAccionInput } from "../facturas/facturas.accion";
 import type {
   BackofficeActividadCreateInput,
   BackofficeActividadResponse,
@@ -67,6 +68,7 @@ interface TenantRow {
   slug: string;
   estado: string;
   activo: boolean;
+  email_administrativo: string | null;
   suscripcion_id: string | null;
   plan_codigo: string | null;
   plan_nombre: string | null;
@@ -187,6 +189,7 @@ function mapTenantRow(row: TenantRow): BackofficeTenantResponse {
     slug: row.slug,
     estado: row.estado,
     activo: row.activo,
+    email_administrativo: row.email_administrativo,
     suscripcion: row.suscripcion_id
       ? {
           id: row.suscripcion_id,
@@ -312,6 +315,7 @@ const TENANT_SELECT = `
     t.slug,
     t.estado,
     t.activo,
+    t.email_administrativo,
     ts.id as suscripcion_id,
     p.codigo as plan_codigo,
     p.nombre as plan_nombre,
@@ -557,11 +561,18 @@ export class PgBackofficeRepository implements BackofficeRepository {
   }
 
   async updateTenant(tenantId: string, input: BackofficeTenantUpdateInput): Promise<BackofficeTenantResponse | null> {
+    // email_administrativo es nullable y clearable: distinguimos "no enviado" (no tocar)
+    // de "enviado null" (limpiar) chequeando la presencia de la clave, no su valor.
+    const emailProvided = Object.prototype.hasOwnProperty.call(input, "email_administrativo");
     const result = await pool.query<{ id: string }>(
       `update tenants
-       set nombre = coalesce($2, nombre), estado = coalesce($3, estado), updated_at = now()
+       set
+         nombre = coalesce($2, nombre),
+         estado = coalesce($3, estado),
+         email_administrativo = case when $4 then $5 else email_administrativo end,
+         updated_at = now()
        where id = $1 and deleted_at is null returning id`,
-      [tenantId, input.nombre ?? null, input.estado ?? null]
+      [tenantId, input.nombre ?? null, input.estado ?? null, emailProvided, input.email_administrativo ?? null]
     );
     if (!result.rows[0]) return null;
     const row = await this.findTenantRow(tenantId);
@@ -679,6 +690,54 @@ export class PgBackofficeRepository implements BackofficeRepository {
       contextos_activos: parseInt(String(row.contextos_activos), 10),
       usuarios_operativos: parseInt(String(row.usuarios_operativos), 10)
     };
+  }
+
+  async getSaludFiscal(facturadorId: string): Promise<{ requiere_accion: number; requiere_soporte: number; en_proceso: number }> {
+    // Solo documentos en estados no terminales-exitosos pueden derivar en
+    // REQUIERE_ACCION/REQUIERE_SOPORTE/EN_PROCESO — EMITIDA/ANULADA/CANCELADO_LOCAL
+    // siempre son OK y quedan fuera sin necesidad de acotar por fecha.
+    const result = await pool.query<{
+      id: string;
+      tipo: DeriveAccionInput["tipo"];
+      estado: DeriveAccionInput["estado"];
+      document_uuid: string | null;
+      cdc: string | null;
+      numero_fiscal: string | null;
+      fiscal_status_raw: string | null;
+      sifen_result_code: string | null;
+      sifen_result_message: string | null;
+      sifen_last_checked_at: Date | null;
+      created_at: Date;
+    }>(
+      `select id, tipo, estado, document_uuid, cdc, numero_fiscal, fiscal_status_raw,
+              sifen_result_code, sifen_result_message, sifen_last_checked_at, created_at
+       from facturas_operativas
+       where facturador_id = $1
+         and deleted_at is null
+         and estado in ('RECHAZADA', 'ERROR_OPERATIVO', 'ERROR_TEMPORAL', 'PENDIENTE_SIFEN', 'EMITIENDO')`,
+      [facturadorId]
+    );
+
+    const counts = { requiere_accion: 0, requiere_soporte: 0, en_proceso: 0 };
+    for (const row of result.rows) {
+      const { accion } = deriveAccion({
+        id: row.id,
+        tipo: row.tipo,
+        estado: row.estado,
+        document_uuid: row.document_uuid,
+        cdc: row.cdc,
+        numero_fiscal: row.numero_fiscal,
+        fiscal_status_raw: row.fiscal_status_raw,
+        sifen_result_code: row.sifen_result_code,
+        sifen_result_message: row.sifen_result_message,
+        sifen_last_checked_at: row.sifen_last_checked_at ? row.sifen_last_checked_at.toISOString() : null,
+        created_at: row.created_at.toISOString()
+      });
+      if (accion === "REQUIERE_ACCION") counts.requiere_accion += 1;
+      else if (accion === "REQUIERE_SOPORTE") counts.requiere_soporte += 1;
+      else if (accion === "EN_PROCESO") counts.en_proceso += 1;
+    }
+    return counts;
   }
 
   // ── Establecimientos ──────────────────────────────────────────────────────

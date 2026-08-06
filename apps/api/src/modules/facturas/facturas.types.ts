@@ -80,6 +80,31 @@ export interface DeliverySummary {
   };
 }
 
+/**
+ * Estado de accion derivado (SPEC_BACKOFFICE_ALINEACION_FE_v0.2, seccion 2.4): capa
+ * "intuitiva" para que el operador sepa que hacer sin conocer los codigos SIFEN.
+ * Exactamente 4 valores — nunca mas, nunca menos (RN-V4).
+ */
+export type DocumentoAccion = "OK" | "EN_PROCESO" | "REQUIERE_ACCION" | "REQUIERE_SOPORTE";
+
+export interface DocumentoAccionSoportePayload {
+  documento_id: string;
+  document_uuid: string | null;
+  cdc: string | null;
+  numero_fiscal: string | null;
+  sifen_result_code: string | null;
+  sifen_result_message: string | null;
+  fiscal_status_raw: string | null;
+  created_at: string | null;
+}
+
+export interface DocumentoAccionDetalle {
+  titulo: string;
+  descripcion: string;
+  acciones_sugeridas: Array<"REINTENTAR" | "CORREGIR_REEMITIR" | "CREAR_NCE" | "CONTACTAR_SOPORTE">;
+  soporte_payload: DocumentoAccionSoportePayload | null;
+}
+
 export interface DocumentoResponse {
   id: string;
   document_uuid: string | null;
@@ -98,10 +123,21 @@ export interface DocumentoResponse {
   items: FacturaItemPreview[];
   totals: TaxTotals;
   fiscal_status: Record<string, unknown> | null;
+  /** Status crudo del backend fiscal en la ultima verificacion (APPROVED, QUEUED_BATCH, ...). */
+  fiscal_status_raw: string | null;
+  /** Codigo SIFEN estructurado de la ultima verificacion (dCodRes). */
+  sifen_result_code: string | null;
+  /** Mensaje SIFEN estructurado de la ultima verificacion (dMsgRes). */
+  sifen_result_message: string | null;
+  /** Ultima verificacion contra el backend fiscal (manual o automatica), ISO 8601. */
+  sifen_last_checked_at: string | null;
   documento_relacionado_id: string | null;
   nce_motivo: string | null;
   delivery: DeliverySummary;
   created_at: string | null;
+  /** Derivado en el service (deriveAccion), no persistido — ver DocumentoAccion. */
+  accion?: DocumentoAccion;
+  accion_detalle?: DocumentoAccionDetalle;
 }
 
 export interface DocumentoListFilters {
@@ -286,6 +322,18 @@ export interface PendingFiscalEmission {
   fiscalRequest: FiscalEmitFacturaRequest;
 }
 
+/** Documento en transito reclamado por el worker de verificacion fiscal (F9). */
+export interface PendingVerificacion {
+  documentoId: string;
+  facturadorId: string;
+  facturadorApiKey: string | null;
+  documentUuid: string;
+  estado: DocumentoEstado;
+  attempts: number;
+  accionNotificadaAt: string | null;
+  createdAt: string;
+}
+
 export interface FacturaRepository {
   findByIdempotencyKey(input: { facturadorId: string; idempotencyKey: string }): Promise<DocumentoResponse | null>;
   findById(input: { facturadorId: string; documentoId: string }): Promise<DocumentoResponse | null>;
@@ -297,7 +345,14 @@ export interface FacturaRepository {
     estado: DocumentoEstado;
     fiscalStatus: Record<string, unknown>;
     cdc?: string | null;
+    fiscalStatusRaw?: string | null;
+    sifenResultCode?: string | null;
+    sifenResultMessage?: string | null;
   }): Promise<DocumentoResponse | null>;
+  claimNextVerificacion(batchSize: number): Promise<PendingVerificacion[]>;
+  scheduleNextVerificacion(input: { documentoId: string; nextAt: Date | null; attempts: number }): Promise<void>;
+  markAccionNotificada(documentoId: string): Promise<void>;
+  getNotificationRecipients(facturadorId: string): Promise<string[]>;
   bulkUpdateDocumentUuidByCdc(items: Array<{ cdc: string; documentUuid: string }>): Promise<void>;
   createFromEmission(input: FacturaPersistInput): Promise<DocumentoResponse>;
   createQueuedEmission(input: FacturaQueuedPersistInput): Promise<DocumentoResponse>;

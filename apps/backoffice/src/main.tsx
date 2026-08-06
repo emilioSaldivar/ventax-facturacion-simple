@@ -10,9 +10,11 @@ import {
   createFacturador,
   updateFacturador,
   getFacturadorReadiness,
+  getFacturadorSaludFiscal,
   setFacturadorApiKey,
   type Facturador,
   type FacturadorReadiness,
+  type FacturadorSaludFiscal,
 } from "./api/facturadores";
 import {
   listEstablecimientos,
@@ -503,6 +505,7 @@ function TenantDetailView({ tenantId, onNavigate }: { tenantId: string; onNaviga
   const [editMode, setEditMode] = useState(false);
   const [nombre, setNombre] = useState("");
   const [estado, setEstado] = useState<"ACTIVO" | "SUSPENDIDO">("ACTIVO");
+  const [emailAdministrativo, setEmailAdministrativo] = useState("");
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -518,6 +521,7 @@ function TenantDetailView({ tenantId, onNavigate }: { tenantId: string; onNaviga
       setFacturadores(fs);
       setNombre(t.nombre);
       setEstado(t.estado as "ACTIVO" | "SUSPENDIDO");
+      setEmailAdministrativo(t.email_administrativo ?? "");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error cargando tenant.");
     } finally {
@@ -530,7 +534,11 @@ function TenantDetailView({ tenantId, onNavigate }: { tenantId: string; onNaviga
     setSaving(true);
     setError(null);
     try {
-      const updated = await updateTenant(tenantId, { nombre: nombre.trim() || undefined, estado });
+      const updated = await updateTenant(tenantId, {
+        nombre: nombre.trim() || undefined,
+        estado,
+        email_administrativo: emailAdministrativo.trim() || null
+      });
       setTenant(updated);
       setEditMode(false);
     } catch (err) {
@@ -573,6 +581,14 @@ function TenantDetailView({ tenantId, onNavigate }: { tenantId: string; onNaviga
                   <option value="SUSPENDIDO">SUSPENDIDO</option>
                 </select>
               </FormField>
+              <FormField label="Email administrativo">
+                <input
+                  onChange={(e) => setEmailAdministrativo(e.target.value)}
+                  placeholder="admin@cliente.com"
+                  type="email"
+                  value={emailAdministrativo}
+                />
+              </FormField>
             </div>
             <div className="form-actions">
               <button className="btn btn-primary" disabled={saving} onClick={() => void save()} type="button">
@@ -587,6 +603,7 @@ function TenantDetailView({ tenantId, onNavigate }: { tenantId: string; onNaviga
             <div className="detail-item"><dt>Plan</dt><dd>{tenant.suscripcion?.plan_codigo ?? "-"}</dd></div>
             <div className="detail-item"><dt>Plan nombre</dt><dd>{tenant.suscripcion?.plan_nombre ?? "-"}</dd></div>
             <div className="detail-item"><dt>Suscripcion estado</dt><dd>{tenant.suscripcion?.estado ?? "-"}</dd></div>
+            <div className="detail-item"><dt>Email administrativo</dt><dd>{tenant.email_administrativo ?? "-"}</dd></div>
             <div className="detail-item"><dt>ID</dt><dd className="monospace" style={{ fontSize: 11 }}>{tenant.id}</dd></div>
           </dl>
         )}
@@ -725,6 +742,7 @@ function FacturadorDetailView({
   const [apiKeyInput, setApiKeyInput] = useState("");
   const [apiKeySaving, setApiKeySaving] = useState(false);
   const [apiKeyOk, setApiKeyOk] = useState(false);
+  const [saludFiscal, setSaludFiscal] = useState<FacturadorSaludFiscal | null>(null);
 
   useEffect(() => {
     void load();
@@ -762,6 +780,12 @@ function FacturadorDetailView({
         })
       );
       setPuntosByEst(puntosMap);
+
+      try {
+        setSaludFiscal(await getFacturadorSaludFiscal(facturadorId));
+      } catch {
+        setSaludFiscal(null);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error cargando facturador.");
     } finally {
@@ -916,6 +940,25 @@ function FacturadorDetailView({
                 {apiKeySaving ? "Guardando..." : "Guardar"}
               </button>
             </div>
+          </div>
+
+          <div style={{ marginTop: 24, borderTop: "1px solid var(--border)", paddingTop: 20 }}>
+            <h3 style={{ margin: "0 0 12px", fontSize: 14, color: "var(--text-muted)" }}>Salud fiscal</h3>
+            {saludFiscal ? (
+              <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+                <span style={{ fontSize: 13, padding: "8px 14px", borderRadius: 6, background: "var(--danger-bg, #fdeceb)", color: "var(--danger, #b42318)" }}>
+                  {saludFiscal.requiere_soporte} requiere soporte
+                </span>
+                <span style={{ fontSize: 13, padding: "8px 14px", borderRadius: 6, background: "var(--warn-bg, #fff8e1)", color: "var(--warn, #7a5200)" }}>
+                  {saludFiscal.requiere_accion} requiere acción
+                </span>
+                <span style={{ fontSize: 13, padding: "8px 14px", borderRadius: 6, background: "var(--info-bg, #eaf6fb)", color: "var(--info, #0f5b78)" }}>
+                  {saludFiscal.en_proceso} en verificación
+                </span>
+              </div>
+            ) : (
+              <p className="muted" style={{ fontSize: 13 }}>No se pudo cargar la salud fiscal.</p>
+            )}
           </div>
         </div>
       ) : tab === "establecimientos" ? (

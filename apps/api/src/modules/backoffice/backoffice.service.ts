@@ -25,6 +25,7 @@ import type {
   BackofficePuntoUpdateInput,
   BackofficeReadinessResponse,
   BackofficeRepository,
+  BackofficeSaludFiscalResponse,
   BackofficeTenantCreateInput,
   BackofficeTenantListQuery,
   BackofficeTenantResponse,
@@ -214,6 +215,17 @@ export async function getFacturadorReadiness(
     checks.fiscal_backend_available;
 
   return { facturador_id: facturadorId, checks, ready };
+}
+
+export async function getFacturadorSaludFiscal(
+  facturadorId: string,
+  repository: BackofficeRepository
+): Promise<BackofficeSaludFiscalResponse> {
+  const facturador = await repository.getFacturador(facturadorId);
+  if (!facturador) throw new HttpError(404, "NOT_FOUND", "Facturador no encontrado.");
+
+  const counts = await repository.getSaludFiscal(facturadorId);
+  return { facturador_id: facturadorId, ...counts };
 }
 
 // ─── Establecimientos ─────────────────────────────────────────────────────────

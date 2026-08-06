@@ -15,6 +15,7 @@ export interface Tenant {
   slug: string;
   estado: string;
   activo: boolean;
+  email_administrativo: string | null;
   suscripcion: TenantSuscripcion | null;
 }
 
@@ -27,6 +28,7 @@ export interface TenantCreateInput {
 export interface TenantUpdateInput {
   nombre?: string;
   estado?: "ACTIVO" | "SUSPENDIDO";
+  email_administrativo?: string | null;
 }
 
 export function listTenants(q?: string): Promise<Tenant[]> {

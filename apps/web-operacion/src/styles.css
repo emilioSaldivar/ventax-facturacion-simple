@@ -10,6 +10,10 @@
   --color-success-bg: #e7f7ef;
   --color-warn: #9a3412;
   --color-warn-bg: #fff1e8;
+  --color-danger: #b42318;
+  --color-danger-bg: #fdeceb;
+  --color-info: #0f5b78;
+  --color-info-bg: #eaf6fb;
   --shadow-panel: 0 18px 60px rgb(24 36 42 / 0.12);
   color: var(--color-ink);
   background: var(--color-bg);
@@ -941,6 +945,52 @@ dd {
 .editor-alert.blocked {
   background: var(--color-warn-bg);
   color: var(--color-warn);
+}
+
+.accion-banner {
+  border-radius: 10px;
+  padding: 14px 16px;
+  display: grid;
+  gap: 8px;
+}
+
+.accion-banner-titulo {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.accion-banner-descripcion {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.accion-banner-acciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.accion-banner.ok {
+  background: var(--color-success-bg);
+  color: var(--color-success);
+}
+
+.accion-banner.en-proceso {
+  background: var(--color-info-bg);
+  color: var(--color-info);
+}
+
+.accion-banner.requiere-accion {
+  background: var(--color-warn-bg);
+  color: var(--color-warn);
+}
+
+.accion-banner.requiere-soporte {
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
 }
 
 .comprobante-section {

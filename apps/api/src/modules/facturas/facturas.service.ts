@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import { calculateDocumentTotals, type TaxInputLine } from "@facturacion-simple/shared";
 import { HttpError } from "../../shared/errors/http-error";
+import { deriveAccion } from "./facturas.accion";
 import type { ClienteRepository, ClienteResponse } from "../clientes/clientes.types";
 import type { OperationalContextResponse } from "../context/context.types";
 import {
@@ -125,10 +126,16 @@ export async function listDocumentos(
   filters: DocumentoListFilters,
   repository: FacturaRepository
 ): Promise<DocumentoListResponse> {
-  return repository.list({
+  const result = await repository.list({
     facturadorId: context.facturador.id,
     filters
   });
+  return { ...result, items: result.items.map(withAccion) };
+}
+
+function withAccion(documento: DocumentoResponse): DocumentoResponse {
+  const { accion, accion_detalle } = deriveAccion(documento);
+  return { ...documento, accion, accion_detalle };
 }
 
 export async function listNotaCreditoCandidates(
@@ -201,7 +208,7 @@ export async function getDocumentoById(
     throw new HttpError(404, "NOT_FOUND", "Documento no encontrado.");
   }
 
-  return documento;
+  return withAccion(documento);
 }
 
 export async function refreshDocumentoStatus(
@@ -210,7 +217,26 @@ export async function refreshDocumentoStatus(
   repository: FacturaRepository,
   gateway: FiscalGateway
 ): Promise<DocumentoResponse> {
-  const documento = await getDocumentoById(context, documentoId, repository);
+  const updated = await refreshFiscalStatusForDocumento(context.facturador.id, documentoId, repository, gateway);
+  return withAccion(updated);
+}
+
+/**
+ * Nucleo del refresh de estado fiscal, sin depender del contexto operativo de un
+ * usuario autenticado — usado tanto por el endpoint manual (refreshDocumentoStatus)
+ * como por el worker de verificacion automatica (F9), que solo tiene facturadorId
+ * y documentoId (SPEC_BACKOFFICE_ALINEACION_FE_v0.2, seccion 2.3 / D-2 del TASKS).
+ */
+export async function refreshFiscalStatusForDocumento(
+  facturadorId: string,
+  documentoId: string,
+  repository: FacturaRepository,
+  gateway: FiscalGateway
+): Promise<DocumentoResponse> {
+  const documento = await repository.findById({ facturadorId, documentoId });
+  if (!documento) {
+    throw new HttpError(404, "NOT_FOUND", "Documento no encontrado.");
+  }
 
   let documentUuid = documento.document_uuid;
 
@@ -249,11 +275,14 @@ export async function refreshDocumentoStatus(
         : undefined;
 
     const updated = await repository.updateFiscalStatus({
-      facturadorId: context.facturador.id,
+      facturadorId,
       documentoId,
       estado: refreshed.estado,
       fiscalStatus: mergeFiscalStatus(documento.fiscal_status, refreshed.raw),
-      cdc: cdcActualizado
+      cdc: cdcActualizado,
+      fiscalStatusRaw: refreshed.status_raw,
+      sifenResultCode: refreshed.result_code,
+      sifenResultMessage: refreshed.result_message
     });
 
     if (!updated) {
@@ -298,7 +327,7 @@ export async function retryDocumentoEmission(
     throw new HttpError(409, "CONFLICT", "El documento no tiene una emision fiscal recuperable en cola.");
   }
 
-  return retried;
+  return withAccion(retried);
 }
 
 export async function cancelDocumento(
@@ -342,7 +371,7 @@ export async function cancelDocumento(
       throw new HttpError(404, "NOT_FOUND", "Documento no encontrado.");
     }
 
-    return updated;
+    return withAccion(updated);
   } catch (error) {
     if (error instanceof FiscalGatewayError) {
       throw new HttpError(
@@ -740,14 +769,15 @@ export async function cancelDocumentoSend(
         action_result: response.action_result,
         reason_codes: response.reason_codes,
         cancel_send_comment: input?.comment ?? null
-      }
+      },
+      fiscalStatusRaw: response.status
     });
 
     if (!updated) {
       throw new HttpError(404, "NOT_FOUND", "Documento no encontrado al persistir cancelacion local.");
     }
 
-    return updated;
+    return withAccion(updated);
   } catch (error) {
     if (error instanceof FiscalGatewayError) {
       if (error.code === "TRANSMISSION_EVIDENCE_DETECTED") {
@@ -828,9 +858,9 @@ export async function emitNotaCreditoTotal(
 
     if (existing) {
       if (existing.estado === "PENDIENTE_SIFEN") {
-        return tryRefreshSilently(context, existing, repository, gateway);
+        return withAccion(await tryRefreshSilently(context, existing, repository, gateway));
       }
-      return existing;
+      return withAccion(existing);
     }
   }
 
@@ -878,7 +908,7 @@ export async function emitNotaCreditoTotal(
     }
   }
 
-  return repository.createNotaCreditoFromFactura({
+  const created = await repository.createNotaCreditoFromFactura({
     tenantId: context.tenant.id,
     facturadorId: context.facturador.id,
     userId: context.user.id,
@@ -891,6 +921,7 @@ export async function emitNotaCreditoTotal(
     fiscalError,
     estado
   });
+  return withAccion(created);
 }
 
 export async function emitFacturaAgainstFiscalGateway(
@@ -967,7 +998,7 @@ export async function enqueueFacturaEmission(
     });
 
     if (existing) {
-      return existing;
+      return withAccion(existing);
     }
   }
 
@@ -976,7 +1007,7 @@ export async function enqueueFacturaEmission(
   const externalRef = buildExternalRef(context, options.idempotencyKey);
   const fiscalRequest = buildFiscalEmitRequest(context, resolvedInput, preview, externalRef);
 
-  return repository.createQueuedEmission({
+  const created = await repository.createQueuedEmission({
     tenantId: context.tenant.id,
     facturadorId: context.facturador.id,
     userId: context.user.id,
@@ -986,6 +1017,7 @@ export async function enqueueFacturaEmission(
     preview,
     fiscalRequest
   });
+  return withAccion(created);
 }
 
 export async function processNextQueuedFiscalEmission(

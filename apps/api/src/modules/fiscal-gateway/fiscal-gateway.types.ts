@@ -68,6 +68,12 @@ export interface FiscalEmitFacturaResponse {
   cdc: string | null;
   numero_fiscal: string | null;
   estado: "EMITIDA" | "PENDIENTE_SIFEN" | "RECHAZADA";
+  /** Status crudo del backend fiscal (APPROVED, QUEUED_BATCH, REJECTED, ...) antes del mapeo a estado local. */
+  status_raw: string | null;
+  /** Codigo SIFEN estructurado (dCodRes / result_code), extraido del payload. */
+  result_code: string | null;
+  /** Mensaje SIFEN estructurado (dMsgRes / result_message), extraido del payload. */
+  result_message: string | null;
   fiscal_envio_modo?: FiscalEnvioModo;
   delivery_mode?: FiscalDeliveryMode | null;
   idempotent?: boolean | null;
@@ -85,6 +91,12 @@ export interface FiscalRefreshStatusRequest {
 export interface FiscalRefreshStatusResponse {
   estado: "EMITIDA" | "PENDIENTE_SIFEN" | "RECHAZADA" | "ANULADA";
   current_cdc: string | null;
+  /** Status crudo del backend fiscal antes del mapeo a estado local. */
+  status_raw: string | null;
+  /** Codigo SIFEN estructurado (dCodRes / result_code). */
+  result_code: string | null;
+  /** Mensaje SIFEN estructurado (dMsgRes / result_message). */
+  result_message: string | null;
   raw: Record<string, unknown>;
 }
 

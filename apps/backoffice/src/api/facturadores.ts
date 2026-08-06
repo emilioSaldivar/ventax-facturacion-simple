@@ -60,6 +60,17 @@ export function getFacturadorReadiness(id: string): Promise<FacturadorReadiness>
   return apiGet<FacturadorReadiness>(`/backoffice/facturadores/${id}/readiness`);
 }
 
+export interface FacturadorSaludFiscal {
+  facturador_id: string;
+  requiere_accion: number;
+  requiere_soporte: number;
+  en_proceso: number;
+}
+
+export function getFacturadorSaludFiscal(id: string): Promise<FacturadorSaludFiscal> {
+  return apiGet<FacturadorSaludFiscal>(`/backoffice/facturadores/${id}/salud-fiscal`);
+}
+
 export function setFacturadorApiKey(id: string, api_key: string): Promise<void> {
   return apiPut<void>(`/backoffice/facturadores/${id}/api-key`, { api_key });
 }

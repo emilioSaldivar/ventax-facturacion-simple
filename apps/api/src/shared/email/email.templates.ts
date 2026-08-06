@@ -192,6 +192,144 @@ export function adminEmailRequiredTemplate(username: string, displayName: string
   };
 }
 
+export interface AccionFiscalEmailContext {
+  documentoTipo: "FACTURA" | "NOTA_CREDITO";
+  numeroFiscal: string | null;
+  titulo: string;
+  descripcion: string;
+  appUrl: string;
+}
+
+/**
+ * Notificacion de "accion requerida" (SPEC_BACKOFFICE_ALINEACION_FE_v0.2, seccion 2.9):
+ * la verificacion fiscal automatica detecto una causa que el propio operador puede
+ * corregir (reintentar, corregir datos y reemitir, crear nota de credito).
+ */
+export function accionRequeridaTemplate(ctx: AccionFiscalEmailContext): EmailTemplate {
+  const nombreDoc = ctx.documentoTipo === "NOTA_CREDITO" ? "Nota de crédito" : "Factura";
+  const safeTitulo = escapeHtml(ctx.titulo);
+  const safeDescripcion = escapeHtml(ctx.descripcion);
+  const safeNumero = ctx.numeroFiscal ? escapeHtml(ctx.numeroFiscal) : "sin número asignado";
+
+  const html = buildLayout({
+    preheader: `${nombreDoc} ${safeNumero}: ${ctx.titulo}`,
+    headerContent: `
+      ${VENTAX_ISO_SVG}
+      <span style="color:#ffffff;font-size:17px;font-weight:bold;vertical-align:middle;margin-left:10px;letter-spacing:-0.3px;">${escapeHtml(BRAND_NAME)}</span>
+    `,
+    bodyContent: `
+      <p style="margin:0 0 6px 0;font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:0.8px;color:#f59e0b;">Requiere acción</p>
+      <p style="margin:0 0 20px 0;font-size:16px;color:#111827;">${nombreDoc} <strong>${safeNumero}</strong></p>
+      <p style="margin:0 0 12px 0;font-size:15px;font-weight:600;color:#111827;">${safeTitulo}</p>
+      <p style="margin:0 0 24px 0;font-size:14px;line-height:1.6;color:#4b5563;">${safeDescripcion}</p>
+      <table cellpadding="0" cellspacing="0" role="presentation" style="margin:0 auto;">
+        <tr>
+          <td style="border-radius:8px;background:${BRAND_COLOR};">
+            <a href="${ctx.appUrl}" style="display:inline-block;padding:12px 24px;font-size:14px;font-weight:600;color:#ffffff;text-decoration:none;">Abrir en Ventax</a>
+          </td>
+        </tr>
+      </table>
+    `
+  });
+
+  const text = [
+    `Requiere acción — ${nombreDoc} ${ctx.numeroFiscal ?? "sin número asignado"}`,
+    "",
+    ctx.titulo,
+    ctx.descripcion,
+    "",
+    `Abrir: ${ctx.appUrl}`,
+    "",
+    `— ${BRAND_NAME}`
+  ].join("\n");
+
+  return { subject: `[Ventax] ${nombreDoc} ${ctx.numeroFiscal ?? ""} requiere acción`.trim(), html, text };
+}
+
+export interface SoportePayloadContext {
+  documento_id: string;
+  document_uuid: string | null;
+  cdc: string | null;
+  numero_fiscal: string | null;
+  sifen_result_code: string | null;
+  sifen_result_message: string | null;
+  fiscal_status_raw: string | null;
+  created_at: string | null;
+}
+
+/**
+ * Notificacion de "requiere soporte": la causa no es resoluble por el operador. Incluye
+ * el bloque de datos que la guia de integracion FE pide al escalar (seccion 17).
+ */
+export function requiereSoporteTemplate(
+  ctx: AccionFiscalEmailContext & { soportePayload: SoportePayloadContext }
+): EmailTemplate {
+  const nombreDoc = ctx.documentoTipo === "NOTA_CREDITO" ? "Nota de crédito" : "Factura";
+  const safeTitulo = escapeHtml(ctx.titulo);
+  const safeDescripcion = escapeHtml(ctx.descripcion);
+  const safeNumero = ctx.numeroFiscal ? escapeHtml(ctx.numeroFiscal) : "sin número asignado";
+  const p = ctx.soportePayload;
+
+  const datosFilas: [string, string][] = [
+    ["documento_id", p.documento_id],
+    ["document_uuid", p.document_uuid ?? "-"],
+    ["cdc", p.cdc ?? "-"],
+    ["numero_fiscal", p.numero_fiscal ?? "-"],
+    ["sifen_result_code", p.sifen_result_code ?? "-"],
+    ["sifen_result_message", p.sifen_result_message ?? "-"],
+    ["fiscal_status_raw", p.fiscal_status_raw ?? "-"],
+    ["created_at", p.created_at ?? "-"]
+  ];
+
+  const html = buildLayout({
+    preheader: `${nombreDoc} ${safeNumero}: necesita revisión de soporte`,
+    headerContent: `
+      ${VENTAX_ISO_SVG}
+      <span style="color:#ffffff;font-size:17px;font-weight:bold;vertical-align:middle;margin-left:10px;letter-spacing:-0.3px;">${escapeHtml(BRAND_NAME)}</span>
+    `,
+    bodyContent: `
+      <p style="margin:0 0 6px 0;font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:0.8px;color:#dc2626;">Requiere soporte</p>
+      <p style="margin:0 0 20px 0;font-size:16px;color:#111827;">${nombreDoc} <strong>${safeNumero}</strong></p>
+      <p style="margin:0 0 12px 0;font-size:15px;font-weight:600;color:#111827;">${safeTitulo}</p>
+      <p style="margin:0 0 24px 0;font-size:14px;line-height:1.6;color:#4b5563;">${safeDescripcion}</p>
+      <table cellpadding="0" cellspacing="0" role="presentation" style="width:100%;background:#f9fafb;border-radius:8px;border:1px solid #e5e7eb;margin:0 0 24px 0;">
+        ${datosFilas
+          .map(
+            ([label, value]) => `
+          <tr>
+            <td style="padding:8px 16px;font-size:12px;color:#6b7280;border-bottom:1px solid #e5e7eb;">${escapeHtml(label)}</td>
+            <td style="padding:8px 16px;font-size:12px;color:#111827;font-family:'Courier New',monospace;border-bottom:1px solid #e5e7eb;">${escapeHtml(value)}</td>
+          </tr>`
+          )
+          .join("")}
+      </table>
+      <table cellpadding="0" cellspacing="0" role="presentation" style="margin:0 auto;">
+        <tr>
+          <td style="border-radius:8px;background:${BRAND_COLOR};">
+            <a href="${ctx.appUrl}" style="display:inline-block;padding:12px 24px;font-size:14px;font-weight:600;color:#ffffff;text-decoration:none;">Abrir en Ventax</a>
+          </td>
+        </tr>
+      </table>
+    `
+  });
+
+  const text = [
+    `Requiere soporte — ${nombreDoc} ${ctx.numeroFiscal ?? "sin número asignado"}`,
+    "",
+    ctx.titulo,
+    ctx.descripcion,
+    "",
+    "Datos para soporte:",
+    ...datosFilas.map(([label, value]) => `  ${label}: ${value}`),
+    "",
+    `Abrir: ${ctx.appUrl}`,
+    "",
+    `— ${BRAND_NAME}`
+  ].join("\n");
+
+  return { subject: `[Ventax] ${nombreDoc} ${ctx.numeroFiscal ?? ""} necesita revisión de soporte`.trim(), html, text };
+}
+
 function escapeHtml(str: string): string {
   return str
     .replace(/&/g, "&amp;")

@@ -7,6 +7,7 @@ import type {
   FacturaPersistInput,
   NotaCreditoPersistInput,
   PendingFiscalEmission,
+  PendingVerificacion,
   FacturaRepository,
   DocumentoResponse
 } from "./facturas.types";
@@ -27,6 +28,10 @@ interface FacturaRow {
   email_estado: DocumentoResponse["delivery"]["email_status"] | null;
   documento_relacionado_id: string | null;
   nce_motivo: string | null;
+  fiscal_status_raw: string | null;
+  sifen_result_code: string | null;
+  sifen_result_message: string | null;
+  sifen_last_checked_at: Date | null;
   created_at: Date;
 }
 
@@ -71,6 +76,10 @@ export class PgFacturaRepository implements FacturaRepository {
           email_estado,
           documento_relacionado_id,
           nce_motivo,
+          fiscal_status_raw,
+          sifen_result_code,
+          sifen_result_message,
+          sifen_last_checked_at,
           created_at
         from facturas_operativas
         where facturador_id = $1
@@ -108,6 +117,10 @@ export class PgFacturaRepository implements FacturaRepository {
           email_estado,
           documento_relacionado_id,
           nce_motivo,
+          fiscal_status_raw,
+          sifen_result_code,
+          sifen_result_message,
+          sifen_last_checked_at,
           created_at
         from facturas_operativas
         where facturador_id = $1
@@ -145,6 +158,10 @@ export class PgFacturaRepository implements FacturaRepository {
           email_estado,
           documento_relacionado_id,
           nce_motivo,
+          fiscal_status_raw,
+          sifen_result_code,
+          sifen_result_message,
+          sifen_last_checked_at,
           created_at
         from facturas_operativas
         where facturador_id = $1
@@ -187,6 +204,10 @@ export class PgFacturaRepository implements FacturaRepository {
           email_estado,
           documento_relacionado_id,
           nce_motivo,
+          fiscal_status_raw,
+          sifen_result_code,
+          sifen_result_message,
+          sifen_last_checked_at,
           created_at
         from facturas_operativas
         ${where}
@@ -220,6 +241,9 @@ export class PgFacturaRepository implements FacturaRepository {
     estado: DocumentoResponse["estado"];
     fiscalStatus: Record<string, unknown>;
     cdc?: string | null;
+    fiscalStatusRaw?: string | null;
+    sifenResultCode?: string | null;
+    sifenResultMessage?: string | null;
   }): Promise<DocumentoResponse | null> {
     const result = await pool.query<FacturaRow>(
       `
@@ -228,6 +252,10 @@ export class PgFacturaRepository implements FacturaRepository {
           estado = $3,
           fiscal_response_snapshot = $4::jsonb,
           cdc = coalesce($5, cdc),
+          fiscal_status_raw = coalesce($6, fiscal_status_raw),
+          sifen_result_code = coalesce($7, sifen_result_code),
+          sifen_result_message = coalesce($8, sifen_result_message),
+          sifen_last_checked_at = now(),
           updated_at = now()
         where facturador_id = $1
           and id = $2
@@ -248,9 +276,22 @@ export class PgFacturaRepository implements FacturaRepository {
           email_estado,
           documento_relacionado_id,
           nce_motivo,
+          fiscal_status_raw,
+          sifen_result_code,
+          sifen_result_message,
+          sifen_last_checked_at,
           created_at
       `,
-      [input.facturadorId, input.documentoId, input.estado, JSON.stringify(input.fiscalStatus), input.cdc ?? null]
+      [
+        input.facturadorId,
+        input.documentoId,
+        input.estado,
+        JSON.stringify(input.fiscalStatus),
+        input.cdc ?? null,
+        input.fiscalStatusRaw ?? null,
+        input.sifenResultCode ?? null,
+        input.sifenResultMessage ?? null
+      ]
     );
 
     const factura = result.rows[0];
@@ -287,11 +328,19 @@ export class PgFacturaRepository implements FacturaRepository {
             cdc,
             numero_fiscal,
             email_estado,
+            fiscal_status_raw,
+            sifen_result_code,
+            sifen_result_message,
+            sifen_last_checked_at,
+            verificacion_next_at,
             emitted_at
           )
           values (
             $1, $2, $3, 'FACTURA', $4, $5, $6, $7, $8::jsonb, $9::jsonb, $10::jsonb,
-            $11::jsonb, $12, $13, $14, $15, $16, now()
+            $11::jsonb, $12, $13, $14, $15, $16, $17, $18, $19,
+            case when $17::text is not null then now() end,
+            case when $5 in ('PENDIENTE_SIFEN', 'EMITIENDO') and $13::text is not null then now() + interval '5 minutes' end,
+            now()
           )
           returning
             id,
@@ -309,6 +358,10 @@ export class PgFacturaRepository implements FacturaRepository {
             email_estado,
             documento_relacionado_id,
             nce_motivo,
+            fiscal_status_raw,
+            sifen_result_code,
+            sifen_result_message,
+            sifen_last_checked_at,
             created_at
         `,
         [
@@ -327,7 +380,10 @@ export class PgFacturaRepository implements FacturaRepository {
           input.fiscalResponse?.document_uuid ?? null,
           input.fiscalResponse?.cdc ?? null,
           input.fiscalResponse?.numero_fiscal ?? null,
-          input.fiscalResponse?.email_status === "NOT_APPLICABLE" ? null : input.fiscalResponse?.email_status ?? null
+          input.fiscalResponse?.email_status === "NOT_APPLICABLE" ? null : input.fiscalResponse?.email_status ?? null,
+          input.fiscalResponse?.status_raw ?? null,
+          input.fiscalResponse?.result_code ?? null,
+          input.fiscalResponse?.result_message ?? null
         ]
       );
 
@@ -459,6 +515,10 @@ export class PgFacturaRepository implements FacturaRepository {
             email_estado,
             documento_relacionado_id,
             nce_motivo,
+            fiscal_status_raw,
+            sifen_result_code,
+            sifen_result_message,
+            sifen_last_checked_at,
             created_at
         `,
         [
@@ -602,11 +662,19 @@ export class PgFacturaRepository implements FacturaRepository {
             cdc,
             numero_fiscal,
             email_estado,
+            fiscal_status_raw,
+            sifen_result_code,
+            sifen_result_message,
+            sifen_last_checked_at,
+            verificacion_next_at,
             emitted_at
           )
           values (
             $1, $2, $3, 'NOTA_CREDITO', $4, $5, $6, $7, $8, $9, $10::jsonb, $11::jsonb, $12::jsonb,
-            $13::jsonb, $14, $15, $16, $17, $18, now()
+            $13::jsonb, $14, $15, $16, $17, $18, $19, $20, $21,
+            case when $19::text is not null then now() end,
+            case when $5 in ('PENDIENTE_SIFEN', 'EMITIENDO') and $15::text is not null then now() + interval '5 minutes' end,
+            now()
           )
           returning
             id,
@@ -624,6 +692,10 @@ export class PgFacturaRepository implements FacturaRepository {
             email_estado,
             documento_relacionado_id,
             nce_motivo,
+            fiscal_status_raw,
+            sifen_result_code,
+            sifen_result_message,
+            sifen_last_checked_at,
             created_at
         `,
         [
@@ -644,7 +716,10 @@ export class PgFacturaRepository implements FacturaRepository {
           input.fiscalResponse?.document_uuid ?? null,
           input.fiscalResponse?.cdc ?? null,
           input.fiscalResponse?.numero_fiscal ?? null,
-          input.fiscalResponse?.email_status === "NOT_APPLICABLE" ? null : input.fiscalResponse?.email_status ?? null
+          input.fiscalResponse?.email_status === "NOT_APPLICABLE" ? null : input.fiscalResponse?.email_status ?? null,
+          input.fiscalResponse?.status_raw ?? null,
+          input.fiscalResponse?.result_code ?? null,
+          input.fiscalResponse?.result_message ?? null
         ]
       );
 
@@ -794,6 +869,117 @@ export class PgFacturaRepository implements FacturaRepository {
     };
   }
 
+  async claimNextVerificacion(batchSize: number): Promise<PendingVerificacion[]> {
+    // Claim con lease: verificacion_next_at se corre 10 minutos al reclamar, asi un
+    // crash del worker a mitad de proceso no saca al documento de la agenda — se
+    // reintenta solo cuando expira el lease. scheduleNextVerificacion fija la agenda
+    // real (backoff) al terminar el procesamiento.
+    const result = await pool.query<{
+      id: string;
+      facturador_id: string;
+      fe_consumer_api_key: string | null;
+      document_uuid: string;
+      estado: DocumentoResponse["estado"];
+      verificacion_attempts: number;
+      accion_notificada_at: Date | null;
+      created_at: Date;
+    }>(
+      `
+        with next_jobs as (
+          select id, facturador_id
+          from facturas_operativas
+          where estado in ('PENDIENTE_SIFEN', 'EMITIENDO')
+            and deleted_at is null
+            and document_uuid is not null
+            and verificacion_next_at is not null
+            and verificacion_next_at <= now()
+          order by verificacion_next_at asc, created_at asc
+          limit $1
+          for update skip locked
+        )
+        update facturas_operativas f
+        set
+          verificacion_next_at = now() + interval '10 minutes',
+          verificacion_attempts = f.verificacion_attempts + 1,
+          updated_at = now()
+        from next_jobs
+        join facturadores fa on fa.id = next_jobs.facturador_id
+        where f.id = next_jobs.id
+        returning
+          f.id,
+          f.facturador_id,
+          fa.fe_consumer_api_key,
+          f.document_uuid,
+          f.estado,
+          f.verificacion_attempts,
+          f.accion_notificada_at,
+          f.created_at
+      `,
+      [batchSize]
+    );
+
+    return result.rows.map((row) => ({
+      documentoId: row.id,
+      facturadorId: row.facturador_id,
+      facturadorApiKey: row.fe_consumer_api_key,
+      documentUuid: row.document_uuid,
+      estado: row.estado,
+      attempts: row.verificacion_attempts,
+      accionNotificadaAt: row.accion_notificada_at ? row.accion_notificada_at.toISOString() : null,
+      createdAt: row.created_at.toISOString()
+    }));
+  }
+
+  async scheduleNextVerificacion(input: { documentoId: string; nextAt: Date | null; attempts: number }): Promise<void> {
+    await pool.query(
+      `
+        update facturas_operativas
+        set verificacion_next_at = $2, verificacion_attempts = $3, updated_at = now()
+        where id = $1
+      `,
+      [input.documentoId, input.nextAt, input.attempts]
+    );
+  }
+
+  async markAccionNotificada(documentoId: string): Promise<void> {
+    await pool.query(
+      `
+        update facturas_operativas
+        set accion_notificada_at = now(), updated_at = now()
+        where id = $1
+      `,
+      [documentoId]
+    );
+  }
+
+  async getNotificationRecipients(facturadorId: string): Promise<string[]> {
+    const result = await pool.query<{ email: string }>(
+      `
+        select distinct email from (
+          select u.email
+          from usuario_operacion_config c
+          join usuarios u on u.id = c.usuario_id
+          where c.facturador_id = $1
+            and c.activo = true
+            and c.deleted_at is null
+            and u.activo = true
+            and u.deleted_at is null
+            and u.email is not null
+          union
+          select t.email_administrativo as email
+          from facturadores fa
+          join tenants t on t.id = fa.tenant_id
+          where fa.id = $1
+            and t.email_administrativo is not null
+        ) recipients
+        where email is not null
+      `,
+      [facturadorId]
+    );
+
+    return result.rows.map((row) => row.email);
+  }
+
   async completePendingEmission(input: {
     outboxId: string;
     documentoId: string;
@@ -823,6 +1009,12 @@ export class PgFacturaRepository implements FacturaRepository {
             cdc = $6,
             numero_fiscal = $7,
             email_estado = $8,
+            fiscal_status_raw = $9,
+            sifen_result_code = $10,
+            sifen_result_message = $11,
+            sifen_last_checked_at = now(),
+            verificacion_next_at = case when $2 in ('PENDIENTE_SIFEN', 'EMITIENDO') then now() + interval '5 minutes' else null end,
+            verificacion_attempts = 0,
             emitted_at = now(),
             updated_at = now()
           where id = $1
@@ -843,6 +1035,10 @@ export class PgFacturaRepository implements FacturaRepository {
             email_estado,
             documento_relacionado_id,
             nce_motivo,
+            fiscal_status_raw,
+            sifen_result_code,
+            sifen_result_message,
+            sifen_last_checked_at,
             created_at
         `,
         [
@@ -853,7 +1049,10 @@ export class PgFacturaRepository implements FacturaRepository {
           input.response.document_uuid ?? null,
           input.response.cdc,
           input.response.numero_fiscal,
-          input.response.email_status === "NOT_APPLICABLE" ? null : input.response.email_status
+          input.response.email_status === "NOT_APPLICABLE" ? null : input.response.email_status,
+          input.response.status_raw ?? null,
+          input.response.result_code ?? null,
+          input.response.result_message ?? null
         ]
       );
 
@@ -918,6 +1117,10 @@ export class PgFacturaRepository implements FacturaRepository {
             email_estado,
             documento_relacionado_id,
             nce_motivo,
+            fiscal_status_raw,
+            sifen_result_code,
+            sifen_result_message,
+            sifen_last_checked_at,
             created_at
         `,
         [input.documentoId, input.estado, JSON.stringify(input.error)]
@@ -1002,6 +1205,10 @@ export class PgFacturaRepository implements FacturaRepository {
             email_estado,
             documento_relacionado_id,
             nce_motivo,
+            fiscal_status_raw,
+            sifen_result_code,
+            sifen_result_message,
+            sifen_last_checked_at,
             created_at
         `,
         [input.facturadorId, input.documentoId, JSON.stringify(retryStatus)]
@@ -1084,6 +1291,10 @@ export class PgFacturaRepository implements FacturaRepository {
             email_estado,
             documento_relacionado_id,
             nce_motivo,
+            fiscal_status_raw,
+            sifen_result_code,
+            sifen_result_message,
+            sifen_last_checked_at,
             created_at
         `,
         [input.facturadorId, input.documentoId, input.estado, JSON.stringify(input.fiscalStatus)]
@@ -1357,6 +1568,10 @@ function mapFacturaRow(row: FacturaRow, items: FacturaItemPreview[]): DocumentoR
     items,
     totals: row.totals_snapshot as DocumentoResponse["totals"],
     fiscal_status: fiscalStatus,
+    fiscal_status_raw: row.fiscal_status_raw,
+    sifen_result_code: row.sifen_result_code,
+    sifen_result_message: row.sifen_result_message,
+    sifen_last_checked_at: row.sifen_last_checked_at ? row.sifen_last_checked_at.toISOString() : null,
     documento_relacionado_id: row.documento_relacionado_id,
     nce_motivo: row.nce_motivo,
     delivery: {

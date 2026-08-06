@@ -50,6 +50,8 @@ export interface BackofficeTenantCreateInput {
 export interface BackofficeTenantUpdateInput {
   nombre?: string;
   estado?: "ACTIVO" | "SUSPENDIDO";
+  /** Destinatario de notificaciones administrativas (ej. accion fiscal requerida — SPEC_BACKOFFICE_ALINEACION_FE_v0.2 seccion 2.9). */
+  email_administrativo?: string | null;
 }
 
 export interface BackofficeFacturadorCreateInput {
@@ -168,6 +170,7 @@ export interface BackofficeTenantResponse {
   slug: string;
   estado: string;
   activo: boolean;
+  email_administrativo: string | null;
   suscripcion: BackofficeSuscripcionResponse | null;
 }
 
@@ -263,6 +266,19 @@ export interface BackofficeReadinessData {
   usuarios_operativos: number;
 }
 
+/**
+ * Contadores de salud fiscal por facturador (SPEC_BACKOFFICE_ALINEACION_FE_v0.2,
+ * seccion 2.7): cuantos documentos en transito/rechazados hoy caen en cada categoria
+ * de `accion` derivada (ver facturas.accion.ts). Da visibilidad a soporte sin entrar
+ * documento por documento.
+ */
+export interface BackofficeSaludFiscalResponse {
+  facturador_id: string;
+  requiere_accion: number;
+  requiere_soporte: number;
+  en_proceso: number;
+}
+
 export interface BackofficePlanResponse {
   id: string;
   codigo: string;
@@ -309,6 +325,7 @@ export interface BackofficeRepository {
   updateFacturador(facturadorId: string, input: BackofficeFacturadorUpdateInput): Promise<BackofficeFacturadorResponse | null>;
   setFacturadorApiKey(facturadorId: string, apiKey: string): Promise<void>;
   getReadinessData(facturadorId: string): Promise<BackofficeReadinessData | null>;
+  getSaludFiscal(facturadorId: string): Promise<Omit<BackofficeSaludFiscalResponse, "facturador_id">>;
 
   // Establecimientos
   createEstablecimiento(input: { facturadorId: string } & BackofficeEstablecimientoCreateInput): Promise<BackofficeEstablecimientoResponse>;

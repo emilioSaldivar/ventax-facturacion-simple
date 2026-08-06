@@ -67,6 +67,9 @@ export class MockFiscalGateway implements FiscalGateway {
       cdc,
       numero_fiscal: `${request.fiscal_context.establecimiento}-${request.fiscal_context.punto_expedicion}-${numeric}`,
       estado: "EMITIDA",
+      status_raw: "APPROVED",
+      result_code: "0260",
+      result_message: "Aprobado",
       fiscal_envio_modo: resolveFiscalEnvioModo(request.fiscal_context.fiscal_envio_modo),
       delivery_mode: "BATCH",
       batch: null,
@@ -95,6 +98,9 @@ export class MockFiscalGateway implements FiscalGateway {
       cdc,
       numero_fiscal: `${request.fiscal_context.establecimiento}-${request.fiscal_context.punto_expedicion}-${numeric}`,
       estado: "EMITIDA",
+      status_raw: "APPROVED",
+      result_code: "0260",
+      result_message: "Aprobado",
       fiscal_envio_modo: resolveFiscalEnvioModo(request.fiscal_context.fiscal_envio_modo),
       delivery_mode: "BATCH",
       batch: null,
@@ -116,6 +122,9 @@ export class MockFiscalGateway implements FiscalGateway {
     return {
       estado: "EMITIDA",
       current_cdc: null,
+      status_raw: "APPROVED",
+      result_code: "0260",
+      result_message: "Aprobado",
       raw: {
         mode: "mock",
         document_uuid: request.documentUuid,
@@ -1379,6 +1388,9 @@ function mapFiscalEmitResponse(body: unknown): FiscalEmitFacturaResponse {
     cdc: stringOrNull(data.cdc),
     numero_fiscal: stringOrNull(data.nro_factura) ?? buildNumeroFiscalFromTimbrado(timbrado),
     estado: mapDocumentStatusWithCode(status, fiscalCode),
+    status_raw: status,
+    result_code: fiscalCode,
+    result_message: findNestedStringValue(data, "dMsgRes") ?? stringOrNull(data.result_message),
     fiscal_envio_modo: mapFiscalEnvioModo(data),
     delivery_mode: mapDeliveryMode(data.delivery_mode),
     idempotent: booleanOrNull(data.idempotent),
@@ -1402,6 +1414,9 @@ function mapFiscalNotaCreditoResponse(body: unknown): FiscalEmitNotaCreditoRespo
     cdc: stringOrNull(data.cdc),
     numero_fiscal: stringOrNull(data.nro_documento) ?? stringOrNull(data.nro_factura),
     estado: mapDocumentStatusWithCode(stringOrNull(data.status), fiscalCode),
+    status_raw: stringOrNull(data.status),
+    result_code: fiscalCode,
+    result_message: findNestedStringValue(data, "dMsgRes") ?? stringOrNull(data.result_message),
     fiscal_envio_modo: mapFiscalEnvioModo(data),
     delivery_mode: mapDeliveryMode(data.delivery_mode),
     idempotent: booleanOrNull(data.idempotent),
@@ -1533,10 +1548,18 @@ function mapFiscalRefreshStatusCanonicoResponse(body: unknown): FiscalRefreshSta
     findNestedStringValue(data, "dCodRes") ??
     stringOrNull(data.result_code) ??
     stringOrNull((statusPayload as Record<string, unknown>).result_code);
+  const fiscalMessage =
+    stringOrNull(sifenStatus?.message) ??
+    findNestedStringValue(data, "dMsgRes") ??
+    stringOrNull(data.result_message) ??
+    stringOrNull((statusPayload as Record<string, unknown>).result_message);
 
   return {
     estado: mapRefreshDocumentStatusWithCode(status, fiscalCode),
     current_cdc: stringOrNull(data.current_cdc),
+    status_raw: status,
+    result_code: fiscalCode,
+    result_message: fiscalMessage,
     raw: data
   };
 }

@@ -76,7 +76,7 @@ type CondicionVenta = "CONTADO" | "CREDITO";
 type TipoTransaccionServicio = 1 | 2 | 3;
 type DocumentoIdentidadTipo = "RUC" | "CI" | "PASAPORTE" | "CEDULA_EXTRANJERA" | "NO_ESPECIFICADO";
 type TipoIva = "IVA_10" | "IVA_5" | "EXENTA";
-type DocumentoEstado = "EMITIENDO" | "EMITIDA" | "PENDIENTE_SIFEN" | "RECHAZADA" | "ERROR_OPERATIVO" | "ERROR_TEMPORAL" | "ANULADA";
+type DocumentoEstado = "EMITIENDO" | "EMITIDA" | "PENDIENTE_SIFEN" | "RECHAZADA" | "ERROR_OPERATIVO" | "ERROR_TEMPORAL" | "ANULADA" | "CANCELADO_LOCAL";
 type BeforeInstallPromptChoice = { outcome: "accepted" | "dismissed"; platform?: string };
 
 interface BeforeInstallPromptEvent extends Event {
@@ -224,6 +224,26 @@ interface FacturaPreviewResponse {
   };
 }
 
+type DocumentoAccion = "OK" | "EN_PROCESO" | "REQUIERE_ACCION" | "REQUIERE_SOPORTE";
+
+interface DocumentoAccionSoportePayload {
+  documento_id: string;
+  document_uuid: string | null;
+  cdc: string | null;
+  numero_fiscal: string | null;
+  sifen_result_code: string | null;
+  sifen_result_message: string | null;
+  fiscal_status_raw: string | null;
+  created_at: string | null;
+}
+
+interface DocumentoAccionDetalle {
+  titulo: string;
+  descripcion: string;
+  acciones_sugeridas: Array<"REINTENTAR" | "CORREGIR_REEMITIR" | "CREAR_NCE" | "CONTACTAR_SOPORTE">;
+  soporte_payload: DocumentoAccionSoportePayload | null;
+}
+
 interface DocumentoResponse {
   id: string;
   tipo: "FACTURA" | "NOTA_CREDITO";
@@ -241,6 +261,12 @@ interface DocumentoResponse {
   items: FacturaPreviewResponse["items"];
   totals: FacturaPreviewResponse["totals"];
   fiscal_status: Record<string, unknown> | null;
+  fiscal_status_raw?: string | null;
+  sifen_result_code?: string | null;
+  sifen_result_message?: string | null;
+  sifen_last_checked_at?: string | null;
+  accion?: DocumentoAccion;
+  accion_detalle?: DocumentoAccionDetalle;
   documento_relacionado_id: string | null;
   nce_motivo: string | null;
   delivery: {
@@ -2071,6 +2097,26 @@ function DocumentsView({
     }
   }
 
+  async function copySoportePayload(payload: DocumentoAccionSoportePayload) {
+    const lines = [
+      `Documento: ${payload.documento_id}`,
+      `document_uuid: ${payload.document_uuid ?? "-"}`,
+      `CDC: ${payload.cdc ?? "-"}`,
+      `Numero fiscal: ${payload.numero_fiscal ?? "-"}`,
+      `Codigo SIFEN: ${payload.sifen_result_code ?? "-"}`,
+      `Mensaje SIFEN: ${payload.sifen_result_message ?? "-"}`,
+      `Estado fiscal (raw): ${payload.fiscal_status_raw ?? "-"}`,
+      `Creado: ${payload.created_at ?? "-"}`
+    ];
+    const text = lines.join("\n");
+    try {
+      await navigator.clipboard.writeText(text);
+      setMessage("Datos copiados. Puede pegarlos al contactar a soporte.");
+    } catch {
+      setMessage(text);
+    }
+  }
+
   async function copyDetailLink() {
     if (!deliveryLink?.public_url) {
       return;
@@ -2334,7 +2380,7 @@ function DocumentsView({
             <article className="document-row document-row-rich" key={documento.id}>
               <button className="document-row-main" onClick={() => void openDetail(documento.id)} type="button">
                 <span>
-                  <strong>{`${getDocumentoStatusIcon(documento.estado)} ${formatDocumentoTipo(documento.tipo)} ${documento.numero_fiscal ?? "pendiente"}`}</strong>
+                  <strong title={documento.accion_detalle?.titulo}>{`${getDocumentoAccionIcon(documento)} ${formatDocumentoTipo(documento.tipo)} ${documento.numero_fiscal ?? "pendiente"}`}</strong>
                   <small>{documento.cliente.razon_social}</small>
                 </span>
                 <span>
@@ -2365,7 +2411,7 @@ function DocumentsView({
               type="button"
             >
               <span>
-                <strong>{`${getDocumentoStatusIcon(documento.estado)} ${documento.numero_fiscal ?? "Numero pendiente"}`}</strong>
+                <strong title={documento.accion_detalle?.titulo}>{`${getDocumentoAccionIcon(documento)} ${documento.numero_fiscal ?? "Numero pendiente"}`}</strong>
                 <small>{documento.cliente.razon_social}</small>
               </span>
               <span>
@@ -2429,10 +2475,43 @@ function DocumentsView({
                 </div>
               </section>
 
-              {getRecoverableMessage(selected) ? <p className="editor-alert blocked">{getRecoverableMessage(selected)}</p> : null}
-              {selected.estado === "RECHAZADA" ? (
-                <p className="editor-alert blocked">{getRejectedSifenMessage(selectedSifenSummary)}</p>
-              ) : null}
+              {selected.accion_detalle ? (
+                <div className={`accion-banner ${accionBannerClass(selected.accion)}`}>
+                  <p className="accion-banner-titulo">{selected.accion_detalle.titulo}</p>
+                  <p className="accion-banner-descripcion">{selected.accion_detalle.descripcion}</p>
+                  {selected.accion_detalle.acciones_sugeridas.length > 0 ? (
+                    <div className="accion-banner-acciones">
+                      {selected.accion_detalle.acciones_sugeridas.includes("REINTENTAR") ? (
+                        <button className="secondary-action" disabled={actionLoading} onClick={() => void retrySelectedEmission()} type="button">
+                          Reintentar
+                        </button>
+                      ) : null}
+                      {selected.accion_detalle.acciones_sugeridas.includes("CORREGIR_REEMITIR") ? (
+                        <button className="secondary-action" onClick={() => onGoTo?.("invoice")} type="button">
+                          Corregir y emitir de nuevo
+                        </button>
+                      ) : null}
+                      {selected.accion_detalle.acciones_sugeridas.includes("CREAR_NCE") ? (
+                        <button className="secondary-action" disabled={actionLoading || !canEmitNotaCredito(selected, documents)} onClick={() => void emitSelectedNotaCredito()} type="button">
+                          Crear nota de credito
+                        </button>
+                      ) : null}
+                      {selected.accion_detalle.acciones_sugeridas.includes("CONTACTAR_SOPORTE") && selected.accion_detalle.soporte_payload ? (
+                        <button className="secondary-action" onClick={() => void copySoportePayload(selected.accion_detalle!.soporte_payload!)} type="button">
+                          📋 Copiar datos para soporte
+                        </button>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </div>
+              ) : (
+                <>
+                  {getRecoverableMessage(selected) ? <p className="editor-alert blocked">{getRecoverableMessage(selected)}</p> : null}
+                  {selected.estado === "RECHAZADA" ? (
+                    <p className="editor-alert blocked">{getRejectedSifenMessage(selectedSifenSummary)}</p>
+                  ) : null}
+                </>
+              )}
               {emailStatus?.message ? <p className="editor-alert ready">{emailStatus.message}</p> : null}
 
               <div className="delivery-actions">
@@ -2501,9 +2580,14 @@ function DocumentsView({
               <details className="tech-block">
                 <summary>Opciones avanzadas</summary>
                 <div className="result-actions">
-                  <button className="secondary-action" disabled={actionLoading || !selected.cdc} onClick={() => void refreshSelectedStatus()} type="button">
-                    Verificar estado fiscal
-                  </button>
+                  <span>
+                    <button className="secondary-action" disabled={actionLoading || !selected.cdc} onClick={() => void refreshSelectedStatus()} type="button">
+                      Verificar estado fiscal
+                    </button>
+                    {selected.sifen_last_checked_at ? (
+                      <small className="muted"> Última verificación automática: {formatUltimaVerificacion(selected.sifen_last_checked_at)}</small>
+                    ) : null}
+                  </span>
                   <button className="secondary-action" disabled={actionLoading || !["PENDIENTE_SIFEN", "ERROR_TEMPORAL"].includes(selected.estado)} onClick={() => void retrySelectedEmission()} type="button">
                     Volver a verificar
                   </button>
@@ -4861,7 +4945,14 @@ function InvoiceEditor({
             </div>
           </div>
 
-          <p className="editor-alert blocked">{getSimpleDocumentoHint(emittedDocumento.estado, emittedDocumento.tipo)}</p>
+          {emittedDocumento.accion_detalle ? (
+            <div className={`accion-banner ${accionBannerClass(emittedDocumento.accion)}`}>
+              <p className="accion-banner-titulo">{emittedDocumento.accion_detalle.titulo}</p>
+              <p className="accion-banner-descripcion">{emittedDocumento.accion_detalle.descripcion}</p>
+            </div>
+          ) : (
+            <p className="editor-alert blocked">{getSimpleDocumentoHint(emittedDocumento.estado, emittedDocumento.tipo)}</p>
+          )}
           {emailStatus?.message ? <p className="editor-alert ready">{emailStatus.message}</p> : null}
 
           <div className="action-group">
@@ -5153,14 +5244,58 @@ function formatShortDate(value: string | null): string {
   return date.toLocaleDateString("es-PY");
 }
 
+function formatUltimaVerificacion(iso: string): string {
+  const diffMs = Date.now() - new Date(iso).getTime();
+  const diffMin = Math.round(diffMs / 60000);
+  if (diffMin < 1) return "hace instantes";
+  if (diffMin < 60) return `hace ${diffMin} min`;
+  const diffHours = Math.round(diffMin / 60);
+  if (diffHours < 24) return `hace ${diffHours} h`;
+  const diffDays = Math.round(diffHours / 24);
+  return `hace ${diffDays} d`;
+}
+
+function accionBannerClass(accion: DocumentoAccion | undefined): string {
+  switch (accion) {
+    case "OK":
+      return "ok";
+    case "EN_PROCESO":
+      return "en-proceso";
+    case "REQUIERE_ACCION":
+      return "requiere-accion";
+    case "REQUIERE_SOPORTE":
+      return "requiere-soporte";
+    default:
+      return "en-proceso";
+  }
+}
+
 function getDocumentoStatusIcon(value: DocumentoEstado): string {
   if (value === "EMITIDA") {
     return "🟢";
   }
-  if (value === "RECHAZADA" || value === "ERROR_OPERATIVO" || value === "ERROR_TEMPORAL" || value === "ANULADA") {
+  if (value === "RECHAZADA" || value === "ERROR_OPERATIVO" || value === "ERROR_TEMPORAL" || value === "ANULADA" || value === "CANCELADO_LOCAL") {
     return "🔴";
   }
   return "🟡";
+}
+
+// Semaforo por accion derivada (verificacion fiscal automatica): 4 colores que reflejan
+// que tiene que hacer el usuario, no el estado tecnico. Si el backend todavia no manda
+// `accion` (deploy parcial), cae al semaforo por estado de siempre.
+function getDocumentoAccionIcon(documento: DocumentoResponse): string {
+  switch (documento.accion) {
+    case "OK":
+      return "🟢";
+    case "EN_PROCESO":
+      return "🟡";
+    case "REQUIERE_ACCION":
+      return "🟠";
+    case "REQUIERE_SOPORTE":
+      return "🔴";
+    default:
+      return getDocumentoStatusIcon(documento.estado);
+  }
 }
 
 function formatIva(value: TipoIva): string {
@@ -5182,7 +5317,8 @@ function formatDocumentoEstado(value: DocumentoEstado, tipo?: DocumentoResponse[
     RECHAZADA: "Rechazada",
     ERROR_OPERATIVO: "Error operativo",
     ERROR_TEMPORAL: "Error temporal",
-    ANULADA: "Anulada"
+    ANULADA: "Anulada",
+    CANCELADO_LOCAL: "Cancelada antes de enviar"
   };
   return labels[value];
 }
@@ -5192,7 +5328,7 @@ function getSimpleDocumentoEstado(value: DocumentoEstado, tipo?: DocumentoRespon
   if (value === "EMITIDA") {
     return `🟢 ${nombre} emitida`;
   }
-  if (value === "RECHAZADA" || value === "ERROR_OPERATIVO" || value === "ERROR_TEMPORAL" || value === "ANULADA") {
+  if (value === "RECHAZADA" || value === "ERROR_OPERATIVO" || value === "ERROR_TEMPORAL" || value === "ANULADA" || value === "CANCELADO_LOCAL") {
     return "🔴 Requiere revision";
   }
   return `🟡 Procesando ${nombre.toLowerCase()}`;
@@ -5203,7 +5339,7 @@ function getSimpleDocumentoHint(value: DocumentoEstado, tipo?: DocumentoResponse
   if (value === "EMITIDA") {
     return `${nombre} lista para enviar por WhatsApp, compartir enlace o abrir PDF.`;
   }
-  if (value === "RECHAZADA" || value === "ERROR_OPERATIVO" || value === "ERROR_TEMPORAL" || value === "ANULADA") {
+  if (value === "RECHAZADA" || value === "ERROR_OPERATIVO" || value === "ERROR_TEMPORAL" || value === "ANULADA" || value === "CANCELADO_LOCAL") {
     return "El documento requiere revision antes de continuar.";
   }
   return `Estamos procesando la ${nombre.toLowerCase()}. Puede compartir el enlace al cliente.`;
@@ -5549,6 +5685,8 @@ function formatDocumentoEstadoSimple(value: DocumentoEstado, tipo?: DocumentoRes
       return `🟡 Procesando ${nombre.toLowerCase()}`;
     case "ANULADA":
       return "⚪ Anulada";
+    case "CANCELADO_LOCAL":
+      return "⚪ Cancelada antes de enviar";
     default:
       return "🔴 Requiere revision";
   }

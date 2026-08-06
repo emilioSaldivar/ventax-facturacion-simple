@@ -22,6 +22,7 @@ import {
   getEstablecimiento,
   getFacturador,
   getFacturadorReadiness,
+  getFacturadorSaludFiscal,
   getActividad,
   getPerfil,
   getPunto,
@@ -77,7 +78,8 @@ const tenantCreateSchema = z.object({
 
 const tenantUpdateSchema = z.object({
   nombre: z.string().trim().min(1).max(200).optional(),
-  estado: z.enum(["ACTIVO", "SUSPENDIDO"]).optional()
+  estado: z.enum(["ACTIVO", "SUSPENDIDO"]).optional(),
+  email_administrativo: z.string().trim().email().max(320).nullable().optional()
 }).refine((d) => Object.keys(d).length > 0, { message: "Al menos un campo requerido." });
 
 const facturadorCreateSchema = z.object({
@@ -295,6 +297,13 @@ backofficeRouter.get("/backoffice/facturadores/:id/readiness", ...auth, validate
   try {
     const { id } = req.params as unknown as z.infer<typeof uuidParam>;
     res.json(await getFacturadorReadiness(id, backofficeRepository, fiscalGateway));
+  } catch (e) { next(e); }
+});
+
+backofficeRouter.get("/backoffice/facturadores/:id/salud-fiscal", ...auth, validateRequest("params", uuidParam), async (req, res, next) => {
+  try {
+    const { id } = req.params as unknown as z.infer<typeof uuidParam>;
+    res.json(await getFacturadorSaludFiscal(id, backofficeRepository));
   } catch (e) { next(e); }
 });
 
