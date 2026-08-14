@@ -1,9 +1,10 @@
 import crypto from "node:crypto";
 import { calculateDocumentTotals, type TaxInputLine } from "@facturacion-simple/shared";
 import { HttpError } from "../../shared/errors/http-error";
+import { logger } from "../../shared/logging/logger";
 import { deriveAccion } from "./facturas.accion";
 import type { ClienteRepository, ClienteResponse } from "../clientes/clientes.types";
-import type { OperationalContextResponse } from "../context/context.types";
+import type { OperationalContextRepository, OperationalContextResponse } from "../context/context.types";
 import {
   FiscalGatewayError,
   type FiscalGateway,
@@ -108,7 +109,8 @@ async function resolveFacturaInputCliente(
       ...input.cliente,
       direccion: firstNonBlank(input.cliente.direccion, agendaCliente.direccion),
       telefono: firstNonBlank(input.cliente.telefono, agendaCliente.telefono),
-      email: firstNonBlank(input.cliente.email, agendaCliente.email)
+      email: firstNonBlank(input.cliente.email, agendaCliente.email),
+      naturaleza: input.cliente.naturaleza ?? agendaCliente.naturaleza
     }
   };
 }
@@ -989,7 +991,7 @@ export async function enqueueFacturaEmission(
   context: OperationalContextResponse,
   input: FacturaPreviewInput,
   repository: FacturaRepository,
-  options: { idempotencyKey?: string; clienteRepository?: ClienteRepository } = {}
+  options: { idempotencyKey?: string; clienteRepository?: ClienteRepository; contextRepository?: OperationalContextRepository } = {}
 ): Promise<DocumentoResponse> {
   if (options.idempotencyKey) {
     const existing = await repository.findByIdempotencyKey({
@@ -1017,7 +1019,29 @@ export async function enqueueFacturaEmission(
     preview,
     fiscalRequest
   });
+
+  await persistTipoTransaccionDefault(context, resolvedInput.tipo_transaccion, options.contextRepository);
+
   return withAccion(created);
+}
+
+async function persistTipoTransaccionDefault(
+  context: OperationalContextResponse,
+  tipoTransaccion: 1 | 2 | 3 | undefined,
+  contextRepository?: OperationalContextRepository
+): Promise<void> {
+  if (!contextRepository || !tipoTransaccion) {
+    return;
+  }
+
+  try {
+    await contextRepository.updateTipoTransaccionDefault(context.actividad_punto_perfil_id, tipoTransaccion);
+  } catch (error) {
+    logger.warn(
+      { err: error, actividadPuntoPerfilId: context.actividad_punto_perfil_id },
+      "No se pudo persistir tipo_transaccion_default (mejor esfuerzo, no afecta la factura encolada)"
+    );
+  }
 }
 
 export async function processNextQueuedFiscalEmission(

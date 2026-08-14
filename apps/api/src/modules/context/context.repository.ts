@@ -25,6 +25,8 @@ interface ContextRow {
   timbrado_inicio: Date;
   documento_nro: string;
   credito_plazo_dias: number;
+  tipo_transaccion_default: number;
+  actividad_punto_perfil_id: string;
 }
 
 interface ReadinessRow {
@@ -67,7 +69,9 @@ export class PgOperationalContextRepository implements OperationalContextReposit
           app.timbrado,
           app.timbrado_inicio,
           app.documento_nro,
-          app.credito_plazo_dias
+          app.credito_plazo_dias,
+          app.tipo_transaccion_default,
+          app.id as actividad_punto_perfil_id
         from usuarios u
         join tenants t on t.id = u.tenant_id
         left join usuario_roles ur on ur.usuario_id = u.id
@@ -161,9 +165,11 @@ export class PgOperationalContextRepository implements OperationalContextReposit
         timbrado_inicio: row.timbrado_inicio.toISOString().slice(0, 10),
         documento_nro: row.documento_nro,
         credito_plazo_dias: row.credito_plazo_dias,
+        tipo_transaccion_default: row.tipo_transaccion_default as 1 | 2 | 3,
         fiscal_envio_modo: "BATCH",
         batch_enabled: true
       },
+      actividad_punto_perfil_id: row.actividad_punto_perfil_id,
       display: {
         titulo_operativo: deriveTituloOperativo({
           actividadPerfilAlias: row.perfil_emision_alias,
@@ -263,6 +269,18 @@ export class PgOperationalContextRepository implements OperationalContextReposit
           : "Falta asociacion activa o configuracion de timbrado/numeracion/plazo credito."
       }
     ];
+  }
+
+  async updateTipoTransaccionDefault(actividadPuntoPerfilId: string, valor: 1 | 2 | 3): Promise<void> {
+    await pool.query(
+      `
+        update actividad_punto_perfiles
+        set tipo_transaccion_default = $2, updated_at = now()
+        where id = $1
+          and tipo_transaccion_default is distinct from $2
+      `,
+      [actividadPuntoPerfilId, valor]
+    );
   }
 }
 

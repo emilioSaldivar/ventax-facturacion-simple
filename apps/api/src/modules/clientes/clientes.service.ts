@@ -2,6 +2,7 @@ import { HttpError } from "../../shared/errors/http-error";
 import type { OperationalContextResponse } from "../context/context.types";
 import type {
   ClienteListResponse,
+  ClienteNaturaleza,
   ClienteRepository,
   ClienteResponse,
   ClienteSearchResult,
@@ -103,6 +104,7 @@ export async function autocompleteClienteFromDnit(
         apellido: string | null;
         codigo_dnit: string | null;
         estado: string | null;
+        naturaleza_sugerida: ClienteNaturaleza;
       };
     }
   | {
@@ -143,9 +145,35 @@ export async function autocompleteClienteFromDnit(
       nombre: result.item.nombre,
       apellido: result.item.apellido,
       codigo_dnit: result.item.codigo_dnit,
-      estado: result.item.estado
+      estado: result.item.estado,
+      naturaleza_sugerida: sugerirNaturaleza(resolvedIdentity.documento, result.item.razon_social)
     }
   };
+}
+
+const SUFIJOS_SOCIETARIOS = ["S.A.", "S.R.L.", "S.C.S.", "E.A.S.", "LTDA", "COOP", "S.A.E.C.A.", "SACI", "EIRL"];
+
+export function sugerirNaturaleza(ruc: string, razonSocial?: string | null): ClienteNaturaleza {
+  const rucSinDv = ruc.split("-")[0] ?? ruc;
+
+  if (isJuridicaByRuc(rucSinDv)) {
+    return "JURIDICA";
+  }
+
+  const razonSocialNormalizada = (razonSocial ?? "").toUpperCase().replace(/\./g, "");
+
+  if (!razonSocialNormalizada) {
+    return "FISICA";
+  }
+
+  const tieneSufijoSocietario = SUFIJOS_SOCIETARIOS.some((sufijo) => {
+    const sufijoNormalizado = sufijo.replace(/\./g, "");
+    return razonSocialNormalizada
+      .split(/\s+/)
+      .some((token) => token === sufijoNormalizado);
+  });
+
+  return tieneSufijoSocietario ? "JURIDICA" : "FISICA";
 }
 
 function resolveAutocompleteIdentity(
@@ -224,6 +252,7 @@ export function normalizeClienteInput(data: ClienteUpsertInput): ClienteUpsertIn
     razon_social: razonSocial,
     direccion: normalizeOptional(data.direccion),
     telefono: normalizeOptional(data.telefono),
-    email: normalizeOptional(data.email)
+    email: normalizeOptional(data.email),
+    naturaleza: data.naturaleza
   };
 }

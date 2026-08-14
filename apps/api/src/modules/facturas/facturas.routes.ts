@@ -2,7 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { requireAuth } from "../auth/auth.middleware";
 import { clienteRepository } from "../clientes/clientes.repository";
-import { documentoIdentidadTipos } from "../clientes/clientes.types";
+import { clienteNaturalezaTipos, documentoIdentidadTipos } from "../clientes/clientes.types";
 import { operationalContextRepository } from "../context/context.repository";
 import { getOperationalContext } from "../context/context.service";
 import { validateRequest } from "../../shared/validation/validate-request";
@@ -36,7 +36,7 @@ const documentoTipos = ["FACTURA", "NOTA_CREDITO"] as const;
 const documentoTiposOperativos = ["CONTADO", "CREDITO", "NOTA_CREDITO"] as const;
 const documentoEstados = ["EMITIENDO", "EMITIDA", "PENDIENTE_SIFEN", "RECHAZADA", "ERROR_OPERATIVO", "ERROR_TEMPORAL", "ANULADA", "CANCELADO_LOCAL"] as const;
 
-const facturaPreviewSchema = z.object({
+export const facturaPreviewSchema = z.object({
   condicion_venta: z.enum(condicionesVenta),
   tipo_transaccion: z.coerce.number().int().refine((value) => [1, 2, 3].includes(value), "tipo_transaccion invalido. Use 1, 2 o 3.").default(2),
   credito_plazo_dias: z.coerce.number().int().min(1).max(365).nullable().optional(),
@@ -47,7 +47,8 @@ const facturaPreviewSchema = z.object({
     razon_social: z.string().trim().min(1).max(240),
     direccion: z.string().trim().max(240).nullable().optional(),
     telefono: z.string().trim().max(60).nullable().optional(),
-    email: z.string().trim().email().max(240).nullable().optional()
+    email: z.string().trim().email().max(240).nullable().optional(),
+    naturaleza: z.enum(clienteNaturalezaTipos).nullable().optional()
   }),
   items: z
     .array(
@@ -469,7 +470,8 @@ facturasRouter.post("/facturas", requireAuth, validateRequest("body", facturaPre
     const idempotencyKey = parseIdempotencyKey(req.get("idempotency-key"));
     const result = await enqueueFacturaEmission(context, req.body, facturasRepository, {
       idempotencyKey,
-      clienteRepository
+      clienteRepository,
+      contextRepository: operationalContextRepository
     });
     res.status(201).json(result);
   } catch (error) {

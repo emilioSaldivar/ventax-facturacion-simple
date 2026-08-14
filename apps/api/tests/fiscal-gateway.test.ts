@@ -23,6 +23,7 @@ const request: FiscalEmitFacturaRequest = {
     timbrado_inicio: "2025-12-30",
     documento_nro: "0000000",
     credito_plazo_dias: 30,
+    tipo_transaccion_default: 2,
     fiscal_envio_modo: "BATCH",
     batch_enabled: true
   },
@@ -237,6 +238,76 @@ describe("fiscal gateway", () => {
     expect(calls[0]?.payload).not.toHaveProperty("condicionOperacion.credito");
   });
 
+  it("includes receptor naturaleza only when documento_tipo is RUC and the client has it set", async () => {
+    const calls: Array<{ payload: Record<string, unknown> }> = [];
+    const gateway = new RealFiscalGateway({
+      mode: "real",
+      baseUrl: "https://fe-api.ventax.app/fcws",
+      apiKey: "secret",
+      timeoutMs: 20000,
+      environment: "test",
+    });
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init: RequestInit) => {
+        calls.push({ payload: JSON.parse(String(init.body)) as Record<string, unknown> });
+        return new Response(
+          JSON.stringify({
+            document_id: "doc-naturaleza-juridica",
+            cdc: "J".repeat(44),
+            nro_factura: "001-002-0000012",
+            status: "APPROVED"
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        );
+      })
+    );
+
+    await gateway.emitFactura({
+      ...request,
+      cliente: { ...request.cliente, naturaleza: "JURIDICA" }
+    });
+
+    expect(calls[0]?.payload.receptor).toMatchObject({
+      naturaleza: "JURIDICA"
+    });
+  });
+
+  it("omits receptor naturaleza when documento_tipo is not RUC even if the client has it set", async () => {
+    const calls: Array<{ payload: Record<string, unknown> }> = [];
+    const gateway = new RealFiscalGateway({
+      mode: "real",
+      baseUrl: "https://fe-api.ventax.app/fcws",
+      apiKey: "secret",
+      timeoutMs: 20000,
+      environment: "test",
+    });
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init: RequestInit) => {
+        calls.push({ payload: JSON.parse(String(init.body)) as Record<string, unknown> });
+        return new Response(
+          JSON.stringify({
+            document_id: "doc-naturaleza-ci",
+            cdc: "K".repeat(44),
+            nro_factura: "001-002-0000013",
+            status: "APPROVED"
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        );
+      })
+    );
+
+    await gateway.emitFactura({
+      ...request,
+      cliente: { ...request.cliente, documento_tipo: "CI", documento: "1234567", naturaleza: "JURIDICA" }
+    });
+
+    expect(calls[0]?.payload.receptor).not.toHaveProperty("naturaleza");
+  });
+
   it("only sends sendNow for explicit SYNC emission mode", async () => {
     const calls: Array<{ payload: Record<string, unknown> }> = [];
     const gateway = new RealFiscalGateway({
@@ -428,6 +499,51 @@ describe("fiscal gateway", () => {
     expect(result.estado).toBe("PENDIENTE_SIFEN");
     expect(result.fiscal_envio_modo).toBe("BATCH");
     expect(result.delivery_mode).toBe("AUTO_FALLBACK_BATCH");
+  });
+
+  it("maps SYNC_FALLBACK_BATCH delivery mode without losing it as null", async () => {
+    const gateway = new RealFiscalGateway({
+      mode: "real",
+      baseUrl: "https://fe-api.ventax.app/fcws",
+      apiKey: "secret",
+      timeoutMs: 20000,
+      environment: "test"
+    });
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        new Response(
+          JSON.stringify({
+            document_id: "nce-sync-fallback",
+            cdc: "H".repeat(44),
+            nro_documento: "001-001-0000015",
+            status: "PENDING",
+            delivery_mode: "SYNC_FALLBACK_BATCH"
+          }),
+          { status: 202, headers: { "content-type": "application/json" } }
+        )
+      )
+    );
+
+    const result = await gateway.emitNotaCredito({
+      external_ref: "nce_sync_fallback",
+      facturador: request.facturador,
+      fiscal_context: { ...request.fiscal_context, fiscal_envio_modo: "SYNC" },
+      cliente: request.cliente,
+      items: request.items,
+      totals: request.totals,
+      motivo: "Devolucion total",
+      factura_referencia: {
+        documento_id: "66666666-6666-4666-8666-666666666666",
+        cdc: "F".repeat(44),
+        numero_fiscal: "001-001-0000010"
+      }
+    });
+
+    expect(result.estado).toBe("PENDIENTE_SIFEN");
+    expect(result.fiscal_envio_modo).toBe("BATCH");
+    expect(result.delivery_mode).toBe("SYNC_FALLBACK_BATCH");
   });
 
   it("maps fiscal code 0422 (CDC encontrado) as approved emission", async () => {

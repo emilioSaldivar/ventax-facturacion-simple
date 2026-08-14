@@ -1,6 +1,7 @@
 import { pool } from "../../db/pool";
 import type {
   ClienteListResponse,
+  ClienteNaturaleza,
   ClienteRepository,
   ClienteResponse,
   ClienteSearchResult,
@@ -17,6 +18,7 @@ interface ClienteRow {
   direccion: string | null;
   telefono: string | null;
   email: string | null;
+  naturaleza: ClienteNaturaleza;
   activo?: boolean;
   total_count?: string;
 }
@@ -100,6 +102,7 @@ export class PgClienteRepository implements ClienteRepository {
             fc.direccion,
             fc.telefono,
             fc.email::text as email,
+            fc.naturaleza,
             1 as priority
           from facturador_clientes fc
           join cliente_identidades ci on ci.id = fc.cliente_identidad_id
@@ -124,6 +127,7 @@ export class PgClienteRepository implements ClienteRepository {
             ci.direccion,
             ci.telefono,
             ci.email::text as email,
+            ci.naturaleza,
             2 as priority
           from cliente_identidades ci
           where ci.deleted_at is null
@@ -173,6 +177,7 @@ export class PgClienteRepository implements ClienteRepository {
           fc.direccion,
           fc.telefono,
           fc.email::text as email,
+          fc.naturaleza,
           fc.activo,
           count(*) over()::text as total_count
         from facturador_clientes fc
@@ -210,6 +215,7 @@ export class PgClienteRepository implements ClienteRepository {
           fc.direccion,
           fc.telefono,
           fc.email::text as email,
+          fc.naturaleza,
           fc.activo
         from facturador_clientes fc
         join cliente_identidades ci on ci.id = fc.cliente_identidad_id
@@ -247,9 +253,10 @@ export class PgClienteRepository implements ClienteRepository {
             razon_social,
             direccion,
             telefono,
-            email
+            email,
+            naturaleza
           )
-          values ($1, $2, $3, $4, $5, $6, $7)
+          values ($1, $2, $3, $4, $5, $6, $7, coalesce($8, 'FISICA'))
           on conflict (documento_tipo, documento_normalizado)
             where deleted_at is null
           do update set
@@ -258,6 +265,7 @@ export class PgClienteRepository implements ClienteRepository {
             direccion = coalesce(excluded.direccion, cliente_identidades.direccion),
             telefono = coalesce(excluded.telefono, cliente_identidades.telefono),
             email = coalesce(excluded.email, cliente_identidades.email),
+            naturaleza = coalesce($8, cliente_identidades.naturaleza),
             activo = true
           returning id
         `,
@@ -268,7 +276,8 @@ export class PgClienteRepository implements ClienteRepository {
           input.data.razon_social.trim(),
           input.data.direccion ?? null,
           input.data.telefono ?? null,
-          input.data.email ?? null
+          input.data.email ?? null,
+          input.data.naturaleza ?? null
         ]
       );
 
@@ -283,10 +292,11 @@ export class PgClienteRepository implements ClienteRepository {
             direccion,
             telefono,
             email,
+            naturaleza,
             created_by,
             updated_by
           )
-          values ($1, $2, $3, $4, $5, $6, $7, $8, $8)
+          values ($1, $2, $3, $4, $5, $6, $7, coalesce($8, 'FISICA'), $9, $9)
           on conflict (facturador_id, cliente_identidad_id)
             where deleted_at is null
           do update set
@@ -294,17 +304,19 @@ export class PgClienteRepository implements ClienteRepository {
             direccion = excluded.direccion,
             telefono = excluded.telefono,
             email = excluded.email,
+            naturaleza = coalesce($8, facturador_clientes.naturaleza),
             activo = true,
             updated_by = excluded.updated_by
           returning
             'AGENDA_FACTURADOR'::text as source,
             id as cliente_id,
-            $9::text as documento_tipo,
-            $10::text as documento,
+            $10::text as documento_tipo,
+            $11::text as documento,
             razon_social,
             direccion,
             telefono,
             email::text as email,
+            naturaleza,
             activo
         `,
         [
@@ -315,6 +327,7 @@ export class PgClienteRepository implements ClienteRepository {
           input.data.direccion ?? null,
           input.data.telefono ?? null,
           input.data.email ?? null,
+          input.data.naturaleza ?? null,
           input.userId,
           input.data.documento_tipo,
           input.data.documento.trim()
@@ -369,9 +382,10 @@ export class PgClienteRepository implements ClienteRepository {
             razon_social,
             direccion,
             telefono,
-            email
+            email,
+            naturaleza
           )
-          values ($1, $2, $3, $4, $5, $6, $7)
+          values ($1, $2, $3, $4, $5, $6, $7, coalesce($8, 'FISICA'))
           on conflict (documento_tipo, documento_normalizado)
             where deleted_at is null
           do update set
@@ -380,6 +394,7 @@ export class PgClienteRepository implements ClienteRepository {
             direccion = coalesce(excluded.direccion, cliente_identidades.direccion),
             telefono = coalesce(excluded.telefono, cliente_identidades.telefono),
             email = coalesce(excluded.email, cliente_identidades.email),
+            naturaleza = coalesce($8, cliente_identidades.naturaleza),
             activo = true
           returning id
         `,
@@ -390,7 +405,8 @@ export class PgClienteRepository implements ClienteRepository {
           input.data.razon_social.trim(),
           input.data.direccion ?? null,
           input.data.telefono ?? null,
-          input.data.email ?? null
+          input.data.email ?? null,
+          input.data.naturaleza ?? null
         ]
       );
 
@@ -403,6 +419,7 @@ export class PgClienteRepository implements ClienteRepository {
             direccion = $5,
             telefono = $6,
             email = $7,
+            naturaleza = coalesce($9, fc.naturaleza),
             activo = true,
             updated_by = $8
           from cliente_identidades ci
@@ -419,6 +436,7 @@ export class PgClienteRepository implements ClienteRepository {
             fc.direccion,
             fc.telefono,
             fc.email::text as email,
+            fc.naturaleza,
             fc.activo
         `,
         [
@@ -429,7 +447,8 @@ export class PgClienteRepository implements ClienteRepository {
           input.data.direccion ?? null,
           input.data.telefono ?? null,
           input.data.email ?? null,
-          input.userId
+          input.userId,
+          input.data.naturaleza ?? null
         ]
       );
 
@@ -474,7 +493,8 @@ function mapSearchRow(row: ClienteRow): ClienteSearchResult {
     razon_social: row.razon_social,
     direccion: row.direccion,
     telefono: row.telefono,
-    email: row.email
+    email: row.email,
+    naturaleza: row.naturaleza
   };
 }
 

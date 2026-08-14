@@ -43,8 +43,10 @@ const context: OperationalContextResponse = {
     timbrado: "80136968",
     timbrado_inicio: "2025-12-30",
     documento_nro: "0000000",
-    credito_plazo_dias: 30
-  }
+    credito_plazo_dias: 30,
+    tipo_transaccion_default: 2
+  },
+  actividad_punto_perfil_id: "55555555-5555-4555-8555-555555555555"
 };
 
 const otherFacturadorContext: OperationalContextResponse = {

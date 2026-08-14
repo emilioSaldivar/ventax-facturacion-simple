@@ -6,6 +6,7 @@ import {
   listClientes,
   normalizeClienteInput,
   searchClientes,
+  sugerirNaturaleza,
   updateCliente
 } from "../src/modules/clientes/clientes.service";
 import type {
@@ -44,8 +45,10 @@ const context: OperationalContextResponse = {
     timbrado: "80136968",
     timbrado_inicio: "2025-12-30",
     documento_nro: "0000000",
-    credito_plazo_dias: 30
-  }
+    credito_plazo_dias: 30,
+    tipo_transaccion_default: 2
+  },
+  actividad_punto_perfil_id: "55555555-5555-4555-8555-555555555555"
 };
 
 const otherFacturadorContext: OperationalContextResponse = {
@@ -67,6 +70,7 @@ const clienteResponse: ClienteResponse = {
   direccion: null,
   telefono: null,
   email: null,
+  naturaleza: "FISICA",
   activo: true
 };
 
@@ -435,8 +439,52 @@ describe("clientes service", () => {
       cliente: {
         documento_tipo: "RUC",
         documento: "80163532-2",
-        razon_social: "AML SOCIEDAD ANONIMA"
+        razon_social: "AML SOCIEDAD ANONIMA",
+        naturaleza_sugerida: "JURIDICA"
       }
     });
+  });
+
+  it("normalizes naturaleza through client input", () => {
+    const result = normalizeClienteInput({
+      documento_tipo: "RUC",
+      documento: "80000000-1",
+      razon_social: "Cliente Demo",
+      naturaleza: "JURIDICA"
+    });
+
+    expect(result.naturaleza).toBe("JURIDICA");
+  });
+
+  it("leaves naturaleza undefined when omitted so the repository applies its FISICA default", () => {
+    const result = normalizeClienteInput({
+      documento_tipo: "RUC",
+      documento: "80000000-1",
+      razon_social: "Cliente Demo"
+    });
+
+    expect(result.naturaleza).toBeUndefined();
+  });
+});
+
+describe("sugerirNaturaleza", () => {
+  it("suggests JURIDICA when RUC has more than 7 digits, regardless of razon_social", () => {
+    expect(sugerirNaturaleza("80163532-2", "Alguien sin sufijo")).toBe("JURIDICA");
+  });
+
+  it("suggests FISICA when RUC is short and razon_social has no societal suffix", () => {
+    expect(sugerirNaturaleza("1001210-9", "MILCIADES ANTONIO SILVERO IBAÑEZ")).toBe("FISICA");
+  });
+
+  it("suggests JURIDICA when RUC is short but razon_social carries a known societal suffix", () => {
+    expect(sugerirNaturaleza("1234567-8", "CAVALLARO S.A.")).toBe("JURIDICA");
+  });
+
+  it("suggests FISICA when razon_social is empty and RUC is short", () => {
+    expect(sugerirNaturaleza("1234567-8")).toBe("FISICA");
+  });
+
+  it("matches societal suffix as a whole token, not a substring", () => {
+    expect(sugerirNaturaleza("1234567-8", "FRANCISCO EIRLANDA GONZALEZ")).toBe("FISICA");
   });
 });

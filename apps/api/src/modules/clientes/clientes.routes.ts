@@ -6,7 +6,7 @@ import { operationalContextRepository } from "../context/context.repository";
 import { validateRequest } from "../../shared/validation/validate-request";
 import { clienteRepository } from "./clientes.repository";
 import { autocompleteClienteFromDnit, createCliente, deleteCliente, listClientes, searchClientes, updateCliente } from "./clientes.service";
-import { documentoIdentidadTipos } from "./clientes.types";
+import { clienteNaturalezaTipos, documentoIdentidadTipos } from "./clientes.types";
 
 const clienteUpsertSchema = z.object({
   documento_tipo: z.enum(documentoIdentidadTipos),
@@ -14,7 +14,8 @@ const clienteUpsertSchema = z.object({
   razon_social: z.string().trim().min(2).max(180),
   direccion: z.string().trim().max(220).nullable().optional(),
   telefono: z.string().trim().max(60).nullable().optional(),
-  email: z.string().trim().email().max(180).nullable().optional()
+  email: z.string().trim().email().max(180).nullable().optional(),
+  naturaleza: z.enum(clienteNaturalezaTipos).optional()
 });
 
 const searchQuerySchema = z.object({

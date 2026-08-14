@@ -1332,7 +1332,8 @@ function buildReceptor(cliente: FiscalEmitFacturaRequest["cliente"]): Record<str
     razonSocial: cliente.razon_social,
     direccion: cliente.direccion ?? null,
     telefono: cliente.telefono ?? null,
-    ...(email ? { email } : {})
+    ...(email ? { email } : {}),
+    ...(cliente.documento_tipo === "RUC" && cliente.naturaleza ? { naturaleza: cliente.naturaleza } : {})
   };
 }
 
@@ -1446,7 +1447,7 @@ function mapFiscalEnvioModo(data: Record<string, unknown>): "BATCH" | "SYNC" {
 }
 
 function mapDeliveryMode(value: unknown): FiscalDeliveryMode | null {
-  if (value === "SYNC" || value === "BATCH" || value === "AUTO_FALLBACK_BATCH") {
+  if (value === "SYNC" || value === "BATCH" || value === "AUTO_FALLBACK_BATCH" || value === "SYNC_FALLBACK_BATCH") {
     return value;
   }
 

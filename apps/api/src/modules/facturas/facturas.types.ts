@@ -1,5 +1,5 @@
 import type { TaxCalculatedLine, TaxTotals, TipoIva } from "@facturacion-simple/shared";
-import type { DocumentoIdentidadTipo } from "../clientes/clientes.types";
+import type { ClienteNaturaleza, DocumentoIdentidadTipo } from "../clientes/clientes.types";
 import type {
   FiscalDeliveryMode,
   FiscalEmitFacturaRequest,
@@ -21,6 +21,7 @@ export interface FacturaClienteInput {
   direccion?: string | null;
   telefono?: string | null;
   email?: string | null;
+  naturaleza?: ClienteNaturaleza | null;
 }
 
 export interface FacturaItemInput {

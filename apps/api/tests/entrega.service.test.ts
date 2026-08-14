@@ -46,9 +46,11 @@ const context: OperationalContextResponse = {
     timbrado_inicio: "2025-12-30",
     documento_nro: "0000000",
     credito_plazo_dias: 30,
+    tipo_transaccion_default: 2,
     fiscal_envio_modo: "BATCH",
     batch_enabled: true
-  }
+  },
+  actividad_punto_perfil_id: "55555555-5555-4555-8555-555555555555"
 };
 
 class FakeFacturaRepository implements FacturaRepository {

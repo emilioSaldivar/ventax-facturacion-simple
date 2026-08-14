@@ -126,6 +126,7 @@ interface OperationalContextResponse {
     timbrado_inicio: string;
     documento_nro: string;
     credito_plazo_dias: number;
+    tipo_transaccion_default?: TipoTransaccionServicio;
     fiscal_envio_modo?: "BATCH" | "SYNC";
     batch_enabled?: boolean | null;
   };
@@ -179,6 +180,8 @@ class ApiClientError extends Error {
   }
 }
 
+type ClienteNaturaleza = "FISICA" | "JURIDICA";
+
 interface FacturaClienteInput {
   cliente_id?: string | null;
   documento_tipo: DocumentoIdentidadTipo;
@@ -187,6 +190,7 @@ interface FacturaClienteInput {
   direccion?: string | null;
   telefono?: string | null;
   email?: string | null;
+  naturaleza?: ClienteNaturaleza | null;
 }
 
 interface FacturaItemInput {
@@ -254,7 +258,7 @@ interface DocumentoResponse {
   fiscal_document_id: string | null;
   external_ref: string | null;
   fiscal_envio_modo?: "BATCH" | "SYNC";
-  delivery_mode?: "SYNC" | "BATCH" | "AUTO_FALLBACK_BATCH" | null;
+  delivery_mode?: "SYNC" | "BATCH" | "AUTO_FALLBACK_BATCH" | "SYNC_FALLBACK_BATCH" | null;
   fiscal_idempotent?: boolean | null;
   batch?: Record<string, unknown> | null;
   cliente: FacturaClienteInput;
@@ -436,6 +440,7 @@ interface ClienteSearchResult {
   direccion: string | null;
   telefono: string | null;
   email: string | null;
+  naturaleza: ClienteNaturaleza;
 }
 
 interface ClienteResponse extends ClienteSearchResult {
@@ -460,6 +465,7 @@ interface DnitAutocompleteResponse {
     apellido: string | null;
     codigo_dnit: string | null;
     estado: string | null;
+    naturaleza_sugerida: ClienteNaturaleza;
   };
 }
 
@@ -2733,8 +2739,10 @@ function ClientesAgendaView({
     razon_social: "",
     direccion: "",
     telefono: "",
-    email: ""
+    email: "",
+    naturaleza: undefined
   });
+  const [naturalezaTouched, setNaturalezaTouched] = useState(false);
 
   useEffect(() => {
     void loadClientes();
@@ -2802,8 +2810,10 @@ function ClientesAgendaView({
         razon_social: cliente.razon_social,
         direccion: cliente.direccion,
         telefono: cliente.telefono,
-        email: cliente.email
+        email: cliente.email,
+        naturaleza: cliente.naturaleza
       });
+      setNaturalezaTouched(true);
     } else {
       setSelected(null);
       setDraft({
@@ -2812,8 +2822,10 @@ function ClientesAgendaView({
         razon_social: "",
         direccion: "",
         telefono: "",
-        email: ""
+        email: "",
+        naturaleza: undefined
       });
+      setNaturalezaTouched(false);
     }
     setEditorOpen(true);
   }
@@ -2838,8 +2850,10 @@ function ClientesAgendaView({
       razon_social: suggestion.razon_social,
       direccion: suggestion.direccion ?? current.direccion ?? "",
       telefono: suggestion.telefono ?? current.telefono ?? "",
-      email: suggestion.email ?? current.email ?? ""
+      email: suggestion.email ?? current.email ?? "",
+      naturaleza: suggestion.naturaleza
     }));
+    setNaturalezaTouched(true);
     setSearchSuggestions([]);
   }
 
@@ -2874,16 +2888,25 @@ function ClientesAgendaView({
         `/clientes/dnit/autocomplete?documento_tipo=${draft.documento_tipo}&documento=${encodeURIComponent(documento)}`
       );
       if (!result.found || !result.cliente) {
+        if (draft.documento_tipo === "RUC" && !naturalezaTouched) {
+          setDraft((current) => ({ ...current, naturaleza: sugerirNaturalezaPorLongitudRuc(documento) }));
+        }
         return;
       }
       setDraft((current) => ({
         ...current,
         documento_tipo: result.cliente?.documento_tipo ?? current.documento_tipo,
         documento: result.cliente?.documento ?? current.documento,
-        razon_social: result.cliente?.razon_social ?? current.razon_social
+        razon_social: result.cliente?.razon_social ?? current.razon_social,
+        naturaleza: !naturalezaTouched && result.cliente?.documento_tipo === "RUC"
+          ? result.cliente.naturaleza_sugerida
+          : current.naturaleza
       }));
     } catch {
       // No interrumpir carga manual cuando DNIT no esta disponible.
+      if (draft.documento_tipo === "RUC" && !naturalezaTouched) {
+        setDraft((current) => ({ ...current, naturaleza: sugerirNaturalezaPorLongitudRuc(documento) }));
+      }
     } finally {
       setAutocompleting(false);
     }
@@ -2899,7 +2922,8 @@ function ClientesAgendaView({
         razon_social: draft.razon_social.trim(),
         direccion: draft.direccion?.trim() || null,
         telefono: draft.telefono?.trim() || null,
-        email: draft.email?.trim() || null
+        email: draft.email?.trim() || null,
+        ...(draft.naturaleza ? { naturaleza: draft.naturaleza } : {})
       };
       const result = selected
         ? await api.request<ClienteResponse>(`/clientes/${selected.cliente_id}`, { method: "PATCH", body: JSON.stringify(payload) })
@@ -3075,6 +3099,22 @@ function ClientesAgendaView({
                 Nombre o razon social
                 <input value={draft.razon_social} onChange={(event) => setDraft((current) => ({ ...current, razon_social: event.target.value }))} />
               </label>
+              {draft.documento_tipo === "RUC" ? (
+                <label>
+                  Naturaleza
+                  <select
+                    value={draft.naturaleza ?? "FISICA"}
+                    onChange={(event) => {
+                      setNaturalezaTouched(true);
+                      setDraft((current) => ({ ...current, naturaleza: event.target.value as ClienteNaturaleza }));
+                    }}
+                  >
+                    <option value="FISICA">Fisica</option>
+                    <option value="JURIDICA">Juridica</option>
+                  </select>
+                  <small className="muted">Sugerido segun RUC/razon social, verificar con el cliente.</small>
+                </label>
+              ) : null}
               <label>
                 Telefono
                 <input value={draft.telefono ?? ""} onChange={(event) => setDraft((current) => ({ ...current, telefono: event.target.value }))} />
@@ -3701,7 +3741,9 @@ function InvoiceEditor({
   onBack: () => void;
 }) {
   const [condicionVenta, setCondicionVenta] = useState<CondicionVenta>("CONTADO");
-  const [tipoTransaccion, setTipoTransaccion] = useState<TipoTransaccionServicio>(2);
+  const [tipoTransaccion, setTipoTransaccion] = useState<TipoTransaccionServicio>(
+    context?.fiscal_context.tipo_transaccion_default ?? 2
+  );
   const [creditoPlazoDias, setCreditoPlazoDias] = useState<number>(context?.fiscal_context.credito_plazo_dias ?? 30);
   const [cliente, setCliente] = useState<FacturaClienteInput>({
     documento_tipo: "RUC",
@@ -3709,8 +3751,10 @@ function InvoiceEditor({
     razon_social: "",
     direccion: "",
     telefono: "",
-    email: ""
+    email: "",
+    naturaleza: undefined
   });
+  const [clienteNaturalezaTouched, setClienteNaturalezaTouched] = useState(false);
   const [lines, setLines] = useState<InvoiceLineDraft[]>(() => []);
   const [activeLineId, setActiveLineId] = useState<string | null>(null);
   const [expandedLineIds, setExpandedLineIds] = useState<Set<string>>(() => new Set());
@@ -4249,8 +4293,10 @@ function InvoiceEditor({
       razon_social: suggestion.razon_social,
       direccion: suggestion.direccion ?? "",
       telefono: suggestion.telefono ?? "",
-      email: suggestion.email ?? ""
+      email: suggestion.email ?? "",
+      naturaleza: suggestion.naturaleza
     });
+    setClienteNaturalezaTouched(true);
     setClienteMessage(suggestion.source === "AGENDA_FACTURADOR" ? "Cliente seleccionado de la agenda." : "Datos encontrados para agregar a tu agenda.");
     setClienteSuggestions([]);
     scrollSection(clientSectionRef);
@@ -4283,6 +4329,9 @@ function InvoiceEditor({
         if (result.message && result.ambiguous) {
           setClienteMessage(result.message);
         }
+        if (documentoTipo === "RUC" && !clienteNaturalezaTouched) {
+          setCliente((current) => ({ ...current, naturaleza: sugerirNaturalezaPorLongitudRuc(rawDocumento) }));
+        }
         return;
       }
 
@@ -4290,11 +4339,17 @@ function InvoiceEditor({
         ...current,
         documento_tipo: result.cliente?.documento_tipo ?? current.documento_tipo,
         documento: result.cliente?.documento ?? current.documento,
-        razon_social: result.cliente?.razon_social ?? current.razon_social
+        razon_social: result.cliente?.razon_social ?? current.razon_social,
+        naturaleza: !clienteNaturalezaTouched && result.cliente?.documento_tipo === "RUC"
+          ? result.cliente.naturaleza_sugerida
+          : current.naturaleza
       }));
       setClienteMessage("Nombre o razon social autocompletado.");
     } catch {
       // No interrumpir el flujo operativo cuando DNIT no esta disponible.
+      if (documentoTipo === "RUC" && !clienteNaturalezaTouched) {
+        setCliente((current) => ({ ...current, naturaleza: sugerirNaturalezaPorLongitudRuc(rawDocumento) }));
+      }
     } finally {
       setClienteAutocompleting(false);
     }
@@ -4311,7 +4366,8 @@ function InvoiceEditor({
         razon_social: cliente.razon_social,
         direccion: cliente.direccion || null,
         telefono: cliente.telefono || null,
-        email: cliente.email || null
+        email: cliente.email || null,
+        ...(cliente.naturaleza ? { naturaleza: cliente.naturaleza } : {})
       };
       const saved = cliente.cliente_id
         ? await api.request<ClienteResponse>(`/clientes/${cliente.cliente_id}`, {
@@ -4417,7 +4473,7 @@ function InvoiceEditor({
 
   function createNuevaFactura() {
     setCondicionVenta("CONTADO");
-    setTipoTransaccion(2);
+    setTipoTransaccion(context?.fiscal_context.tipo_transaccion_default ?? 2);
     setCreditoPlazoDias(context?.fiscal_context.credito_plazo_dias ?? 30);
     setCliente({
       documento_tipo: "RUC",
@@ -4425,8 +4481,10 @@ function InvoiceEditor({
       razon_social: "",
       direccion: "",
       telefono: "",
-      email: ""
+      email: "",
+      naturaleza: undefined
     });
+    setClienteNaturalezaTouched(false);
     setLines([]);
     setActiveLineId(null);
     setExpandedLineIds(new Set());
@@ -4569,7 +4627,8 @@ function InvoiceEditor({
                 inputMode={cliente.documento_tipo === "RUC" || cliente.documento_tipo === "CI" ? "numeric" : "text"}
                 onFocus={() => scrollSection(clientSectionRef)}
                 onBlur={() => void tryAutocompleteDnit()}
-                onChange={(event) =>
+                onChange={(event) => {
+                  setClienteNaturalezaTouched(false);
                   setCliente((current) => {
                     const nextDocumento = event.target.value;
                     if (nextDocumento === current.documento) {
@@ -4583,10 +4642,11 @@ function InvoiceEditor({
                       razon_social: "",
                       direccion: "",
                       telefono: "",
-                      email: ""
+                      email: "",
+                      naturaleza: undefined
                     };
-                  })
-                }
+                  });
+                }}
                 onKeyDown={(event) => {
                   if (event.key === "Enter" || event.key === "Tab") {
                     void tryAutocompleteDnit();
@@ -4619,6 +4679,22 @@ function InvoiceEditor({
             Nombre o razon social
             <input onFocus={() => scrollSection(clientSectionRef)} onChange={(event) => setCliente((current) => ({ ...current, razon_social: event.target.value }))} value={cliente.razon_social} />
           </label>
+          {cliente.documento_tipo === "RUC" ? (
+            <label>
+              Naturaleza
+              <select
+                value={cliente.naturaleza ?? "FISICA"}
+                onChange={(event) => {
+                  setClienteNaturalezaTouched(true);
+                  setCliente((current) => ({ ...current, naturaleza: event.target.value as ClienteNaturaleza }));
+                }}
+              >
+                <option value="FISICA">Fisica</option>
+                <option value="JURIDICA">Juridica</option>
+              </select>
+              <small className="muted">Sugerido segun RUC/razon social, verificar con el cliente.</small>
+            </label>
+          ) : null}
           <label>
             Direccion <small>(opcional)</small>
             <input onFocus={() => scrollSection(clientSectionRef)} onChange={(event) => setCliente((current) => ({ ...current, direccion: event.target.value }))} value={cliente.direccion ?? ""} />
@@ -5585,6 +5661,14 @@ function getRecoverableMessage(documento: DocumentoResponse): string | null {
 
 function normalizeDocKey(value: string): string {
   return value.trim().toUpperCase().replace(/[^0-9A-Z]/g, "");
+}
+
+// Unico fallback de naturaleza permitido en frontend (solo longitud de RUC): la sugerencia
+// combinada con sufijos societarios vive exclusivamente en el backend (naturaleza_sugerida),
+// para evitar heuristicas divergentes entre cliente y servidor.
+function sugerirNaturalezaPorLongitudRuc(documento: string): ClienteNaturaleza {
+  const rucSinDv = documento.trim().split("-")[0] ?? documento;
+  return /^\d+$/.test(rucSinDv) && rucSinDv.length > 7 ? "JURIDICA" : "FISICA";
 }
 
 // Convencion del proyecto para campos numericos enteros (montos, cantidades): el input

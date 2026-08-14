@@ -42,7 +42,7 @@ import {
   refreshDocumentoStatus
 } from "../src/modules/facturas/facturas.service";
 import { enqueueFacturaEmission, processNextQueuedFiscalEmission, retryDocumentoEmission } from "../src/modules/facturas/facturas.service";
-import type { OperationalContextResponse } from "../src/modules/context/context.types";
+import type { OperationalContextRepository, OperationalContextResponse } from "../src/modules/context/context.types";
 import type { ClienteRepository, ClienteResponse, ClienteSearchResult } from "../src/modules/clientes/clientes.types";
 import type {
   FacturaPersistInput,
@@ -81,9 +81,11 @@ const context: OperationalContextResponse = {
     timbrado_inicio: "2025-12-30",
     documento_nro: "0000000",
     credito_plazo_dias: 30,
+    tipo_transaccion_default: 2,
     fiscal_envio_modo: "BATCH",
     batch_enabled: true
-  }
+  },
+  actividad_punto_perfil_id: "55555555-5555-4555-8555-555555555555"
 };
 
 const otherFacturadorContext: OperationalContextResponse = {
@@ -326,6 +328,26 @@ class FakeClienteRepository implements ClienteRepository {
 
   async updateForFacturador(): Promise<ClienteResponse | null> {
     throw new Error("not implemented");
+  }
+}
+
+class FakeContextRepository implements OperationalContextRepository {
+  public calls: Array<{ actividadPuntoPerfilId: string; valor: 1 | 2 | 3 }> = [];
+  public shouldThrow = false;
+
+  async getOperationalContext(): Promise<OperationalContextResponse | null> {
+    throw new Error("not implemented");
+  }
+
+  async getReadinessChecks() {
+    throw new Error("not implemented");
+  }
+
+  async updateTipoTransaccionDefault(actividadPuntoPerfilId: string, valor: 1 | 2 | 3): Promise<void> {
+    if (this.shouldThrow) {
+      throw new Error("db unavailable");
+    }
+    this.calls.push({ actividadPuntoPerfilId, valor });
   }
 }
 
@@ -1337,6 +1359,7 @@ describe("facturas service", () => {
       direccion: "Direccion guardada",
       telefono: "0981000000",
       email: "guardado@example.com",
+      naturaleza: "JURIDICA",
       activo: true
     };
 
@@ -1363,17 +1386,115 @@ describe("facturas service", () => {
       cliente_id: "99999999-9999-4999-8999-999999999999",
       email: "guardado@example.com",
       telefono: "0981000000",
-      direccion: "Direccion guardada"
+      direccion: "Direccion guardada",
+      naturaleza: "JURIDICA"
     });
     expect(repo.lastQueuedInput?.fiscalRequest.cliente).toMatchObject({
       email: "guardado@example.com",
       telefono: "0981000000",
-      direccion: "Direccion guardada"
+      direccion: "Direccion guardada",
+      naturaleza: "JURIDICA"
     });
     expect(clientes.lastFindByIdInput).toEqual({
       clienteId: "99999999-9999-4999-8999-999999999999",
       facturadorId: context.facturador.id
     });
+  });
+
+  it("keeps explicit naturaleza from the request instead of the saved agenda value", async () => {
+    const repo = new FakeFacturaRepository();
+    const clientes = new FakeClienteRepository();
+    clientes.findByIdResponse = {
+      source: "AGENDA_FACTURADOR",
+      cliente_id: "99999999-9999-4999-8999-999999999999",
+      documento_tipo: "RUC",
+      documento: "80136968-1",
+      razon_social: "Cliente Demo",
+      direccion: null,
+      telefono: null,
+      email: null,
+      naturaleza: "FISICA",
+      activo: true
+    };
+
+    const result = await enqueueFacturaEmission(
+      context,
+      {
+        ...emitInput,
+        cliente: {
+          ...emitInput.cliente,
+          cliente_id: "99999999-9999-4999-8999-999999999999",
+          naturaleza: "JURIDICA"
+        }
+      },
+      repo,
+      {
+        idempotencyKey: "idem-async-client-naturaleza",
+        clienteRepository: clientes
+      }
+    );
+
+    expect(result.cliente).toMatchObject({ naturaleza: "JURIDICA" });
+  });
+
+  it("persists tipo_transaccion_default at enqueue time when a contextRepository is provided", async () => {
+    const repo = new FakeFacturaRepository();
+    const contextRepository = new FakeContextRepository();
+
+    await enqueueFacturaEmission(
+      context,
+      { ...emitInput, tipo_transaccion: 1 },
+      repo,
+      { idempotencyKey: "idem-tipo-transaccion-1", contextRepository }
+    );
+
+    expect(contextRepository.calls).toEqual([
+      { actividadPuntoPerfilId: context.actividad_punto_perfil_id, valor: 1 }
+    ]);
+  });
+
+  it("does not persist tipo_transaccion_default when no contextRepository is provided", async () => {
+    const repo = new FakeFacturaRepository();
+
+    const result = await enqueueFacturaEmission(context, { ...emitInput, tipo_transaccion: 3 }, repo, {
+      idempotencyKey: "idem-tipo-transaccion-no-repo"
+    });
+
+    expect(result.estado).toBe("EMITIENDO");
+  });
+
+  it("does not fail the queued emission when persisting tipo_transaccion_default throws", async () => {
+    const repo = new FakeFacturaRepository();
+    const contextRepository = new FakeContextRepository();
+    contextRepository.shouldThrow = true;
+
+    const result = await enqueueFacturaEmission(
+      context,
+      { ...emitInput, tipo_transaccion: 1 },
+      repo,
+      { idempotencyKey: "idem-tipo-transaccion-fails", contextRepository }
+    );
+
+    expect(result.estado).toBe("EMITIENDO");
+  });
+
+  it("does not revert tipo_transaccion_default when the async fiscal emission fails afterwards", async () => {
+    const repo = new FakeFacturaRepository();
+    const contextRepository = new FakeContextRepository();
+
+    await enqueueFacturaEmission(
+      context,
+      { ...emitInput, tipo_transaccion: 1 },
+      repo,
+      { idempotencyKey: "idem-tipo-transaccion-async-failure", contextRepository }
+    );
+
+    const gateway = new FakeFiscalGateway(new FiscalGatewayError("UPSTREAM_ERROR", "SIFEN rechazo el documento"));
+    await processNextQueuedFiscalEmission(repo, gateway);
+
+    expect(contextRepository.calls).toEqual([
+      { actividadPuntoPerfilId: context.actividad_punto_perfil_id, valor: 1 }
+    ]);
   });
 
   it("processes queued fiscal emission and completes document", async () => {

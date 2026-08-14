@@ -1,6 +1,9 @@
 export const documentoIdentidadTipos = ["RUC", "CI", "PASAPORTE", "CEDULA_EXTRANJERA", "NO_ESPECIFICADO"] as const;
 export type DocumentoIdentidadTipo = (typeof documentoIdentidadTipos)[number];
 
+export const clienteNaturalezaTipos = ["FISICA", "JURIDICA"] as const;
+export type ClienteNaturaleza = (typeof clienteNaturalezaTipos)[number];
+
 export interface ClienteUpsertInput {
   documento_tipo: DocumentoIdentidadTipo;
   documento: string;
@@ -8,6 +11,7 @@ export interface ClienteUpsertInput {
   direccion?: string | null;
   telefono?: string | null;
   email?: string | null;
+  naturaleza?: ClienteNaturaleza;
 }
 
 export interface ClienteSearchResult {
@@ -19,6 +23,7 @@ export interface ClienteSearchResult {
   direccion: string | null;
   telefono: string | null;
   email: string | null;
+  naturaleza: ClienteNaturaleza;
 }
 
 export interface ClienteResponse extends ClienteSearchResult {

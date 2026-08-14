@@ -2178,7 +2178,7 @@ components:
 
     FiscalContext:
       type: object
-      required: [establecimiento, punto_expedicion, perfil_emision_codigo, actividad_economica_codigo, timbrado, timbrado_inicio, documento_nro, credito_plazo_dias, fiscal_envio_modo]
+      required: [establecimiento, punto_expedicion, perfil_emision_codigo, actividad_economica_codigo, timbrado, timbrado_inicio, documento_nro, credito_plazo_dias, tipo_transaccion_default, fiscal_envio_modo]
       properties:
         establecimiento:
           type: string
@@ -2218,6 +2218,14 @@ components:
           type: integer
           minimum: 1
           example: 30
+        tipo_transaccion_default:
+          type: integer
+          enum: [1, 2, 3]
+          description: >-
+            Ultimo tipo de transaccion (1 Venta de mercaderia, 2 Prestacion de servicios,
+            3 Mixto) seleccionado al emitir una factura para este punto operativo. Se usa
+            como valor inicial del selector en la pantalla de factura; default 2.
+          example: 2
         fiscal_envio_modo:
           $ref: "#/components/schemas/FiscalEnvioModo"
         batch_enabled:
@@ -2255,7 +2263,7 @@ components:
 
     ClienteSearchResult:
       type: object
-      required: [source, documento, razon_social]
+      required: [source, documento, razon_social, naturaleza]
       properties:
         source:
           type: string
@@ -2278,6 +2286,8 @@ components:
         email:
           type: string
           nullable: true
+        naturaleza:
+          $ref: "#/components/schemas/ClienteNaturaleza"
 
     ClienteUpsertRequest:
       type: object
@@ -2298,6 +2308,9 @@ components:
         email:
           type: string
           nullable: true
+        naturaleza:
+          $ref: "#/components/schemas/ClienteNaturaleza"
+          description: Opcional; si se omite, el sistema asume `FISICA`.
 
     ClienteResponse:
       allOf:
@@ -2338,7 +2351,7 @@ components:
 
     DnitClienteData:
       type: object
-      required: [documento_tipo, documento, razon_social]
+      required: [documento_tipo, documento, razon_social, naturaleza_sugerida]
       properties:
         documento_tipo:
           type: string
@@ -2359,10 +2372,23 @@ components:
         estado:
           type: string
           nullable: true
+        naturaleza_sugerida:
+          $ref: "#/components/schemas/ClienteNaturaleza"
+          description: >-
+            Sugerencia no vinculante calculada por el backend (longitud de RUC y/o sufijo
+            societario en razon_social). El operador debe confirmarla o editarla, nunca se
+            guarda automaticamente.
 
     DocumentoIdentidadTipo:
       type: string
       enum: [RUC, CI, PASAPORTE, CEDULA_EXTRANJERA, NO_ESPECIFICADO]
+
+    ClienteNaturaleza:
+      type: string
+      enum: [FISICA, JURIDICA]
+      description: >-
+        Tipo de persona del receptor. Determina `iTiContRec` en el XML fiscal cuando
+        `documento_tipo` es `RUC`; sin efecto para otros tipos de documento. Default `FISICA`.
 
     CatalogoItem:
       type: object
@@ -2455,7 +2481,9 @@ components:
       description: |
         Modo de despacho efectivo retornado por `facturacion-electronica` para el documento emitido.
         `AUTO_FALLBACK_BATCH` indica que FE recibio solicitud con auto/fallback y despacho final por lote.
-      enum: [SYNC, BATCH, AUTO_FALLBACK_BATCH]
+        `SYNC_FALLBACK_BATCH` indica que se pidio `SYNC`/`AUTO` explicito para una Nota de Credito
+        y SIFEN lo rechazo (codigo 1264), por lo que FE reintenta y despacha por lote.
+      enum: [SYNC, BATCH, AUTO_FALLBACK_BATCH, SYNC_FALLBACK_BATCH]
 
     FacturaPreviewRequest:
       type: object
@@ -2509,6 +2537,9 @@ components:
           nullable: true
         email:
           type: string
+          nullable: true
+        naturaleza:
+          $ref: "#/components/schemas/ClienteNaturaleza"
           nullable: true
 
     FacturaItemInput:
