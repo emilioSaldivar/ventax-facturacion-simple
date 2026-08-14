@@ -46,6 +46,17 @@ A pedido explicito se reverifico si alguna fuente **ya cargada en este repositor
 
 **Conclusion**: se sostiene la conclusion original, no hay fuente autoritativa propia. Se incorpora la senal de sufijos societarios como refuerzo **combinado** de la sugerencia no vinculante (ver Alcance y Reglas De Negocio), no como reemplazo de la heuristica de longitud ni como fuente de verdad.
 
+## Nota De Terminologia SIFEN (2026-08-14)
+
+El Manual Tecnico SIFEN v150 (`documents_info/manual_150.md` en el repo `facturacion-electronica`) define **dos campos distintos** que no deben confundirse entre si:
+
+- `iNatRec` (D201) — "**Naturaleza** del receptor": `1=contribuyente`, `2=no contribuyente`. No es el campo que implementa este SPEC.
+- `iTiContRec` (D205) — "**Tipo de contribuyente**" del receptor: `1=Persona Fisica`, `2=Persona Juridica`. **Este es el campo real que implementa este SPEC**, obligatorio solo si `iNatRec=1`.
+
+El proveedor `facturacion-electronica` eligio la clave `naturaleza` en el contrato JSON hacia este SaaS para representar `iTiContRec` (confirmado en su documentacion de integracion), pero su propia UI interna usa el label "Tipo de contribuyente" (`frontend/src/modules/facturas/FacturaDetailPage.tsx`), no "Naturaleza". Es decir, el nombre `naturaleza` es una eleccion de nomenclatura del contrato de API del proveedor, no el termino oficial del manual SIFEN para este dato.
+
+**Decision para este SPEC**: se mantiene `naturaleza` como nombre de campo en base de datos, tipos y contrato API propio (`spec/openapi.yaml`), para no romper el contrato ya acordado con `facturacion-electronica` ni forzar una migracion de nombres sin necesidad real. El **label mostrado al operador en la UI es "Tipo de Persona"** (mas natural para el usuario final que "Tipo de Contribuyente", termino tecnico del manual, y evita el choque semantico con el "Naturaleza" real del manual SIFEN). Ver `docs/PLAN_RECEPTOR_NATURALEZA_CONTRATO_FE_v0.1.md`, seccion "Sugerencia No Vinculante En UI".
+
 ## Alcance
 
 Incluye:

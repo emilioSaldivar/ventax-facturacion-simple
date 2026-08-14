@@ -52,7 +52,7 @@ Backend, `apps/api/src/modules/clientes/clientes.service.ts` (junto a `isJuridic
 
 Frontend, `apps/web-operacion/src/main.tsx`, en el formulario de alta/edicion de cliente (`draft` de cliente, cerca de los flujos de autocompletado DNIT existentes):
 
-- agregar selector `naturaleza` (radio/select con opciones "Fisica"/"Juridica"), visible solo cuando `documento_tipo === 'RUC'`;
+- agregar selector para el campo `naturaleza` (radio/select con opciones "Fisica"/"Juridica"), label visible en UI **"Tipo de Persona"** (ver "Nota de Terminologia SIFEN" en el SPEC — el nombre del campo en codigo/API sigue siendo `naturaleza` para no romper el contrato con el proveedor, solo el label mostrado al operador difiere), visible solo cuando `documento_tipo === 'RUC'`;
 - al recibir `naturaleza_sugerida` de la respuesta de autocompletado DNIT, o al tipear manualmente un RUC/razon_social que dispare la heuristica de backend (requiere una llamada liviana de re-evaluacion, o replicar solo el chequeo de longitud de RUC en frontend como fallback inmediato mientras se espera la respuesta del backend — a definir en TASKS), prellenar `naturaleza=JURIDICA` como sugerencia editable con copy "Sugerido segun RUC/razon social, verificar con el cliente";
 - el prellenado nunca se guarda solo; el operador debe confirmar/tocar el campo o continuar con el default de la sugerencia, igual que hoy pasa con nombre/razon social sugeridos.
 

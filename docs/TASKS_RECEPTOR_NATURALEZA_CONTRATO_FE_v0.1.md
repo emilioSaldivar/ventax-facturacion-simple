@@ -13,6 +13,8 @@
 - `PLAN`: DONE
 - `TASKS`: DONE — implementacion completa y validada (backend, frontend, tests, Postgres real, navegador real).
 
+**Nota post-cierre (2026-08-14)**: el label de UI se renombro de "Naturaleza" a "**Tipo de Persona**" tras verificar contra el Manual Tecnico SIFEN v150 que "Naturaleza" ya designa otro campo (`iNatRec`, contribuyente/no-contribuyente); el campo implementado aqui corresponde a `iTiContRec` ("Tipo de contribuyente" en el manual). Ver "Nota De Terminologia SIFEN" en el `SPEC`. El nombre de campo en codigo/DB/API (`naturaleza`) no cambio — solo el label visible al operador. Las evidencias de RNC-011/RNC-014 mas abajo describen capturas tomadas cuando el label todavia decia "Naturaleza"; el comportamiento funcional verificado (aparicion condicional, sugerencia, valores) es identico con el label actual.
+
 ## Matriz
 
 | ID | Fase | Tarea | Estado | Criterio de aceptacion |
