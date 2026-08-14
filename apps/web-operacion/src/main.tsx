@@ -1450,7 +1450,8 @@ function OperationHome({
           razon_social: cliente.razon_social,
           direccion: cliente.direccion ?? "",
           telefono: cliente.telefono ?? "",
-          email: cliente.email ?? ""
+          email: cliente.email ?? "",
+          naturaleza: cliente.naturaleza
         }
       });
     }, 0);
@@ -3101,7 +3102,7 @@ function ClientesAgendaView({
               </label>
               {draft.documento_tipo === "RUC" ? (
                 <label>
-                  Naturaleza
+                  Tipo de Persona
                   <select
                     value={draft.naturaleza ?? "FISICA"}
                     onChange={(event) => {
@@ -3853,8 +3854,10 @@ function InvoiceEditor({
       razon_social: clientePrefillRequest.cliente.razon_social ?? "",
       direccion: clientePrefillRequest.cliente.direccion ?? "",
       telefono: clientePrefillRequest.cliente.telefono ?? "",
-      email: clientePrefillRequest.cliente.email ?? ""
+      email: clientePrefillRequest.cliente.email ?? "",
+      naturaleza: clientePrefillRequest.cliente.naturaleza
     });
+    setClienteNaturalezaTouched(true);
     setClienteSuggestions([]);
     setClienteMessage(`Cliente cargado desde agenda: ${clientePrefillRequest.cliente.razon_social}.`);
     lastAppliedClientePrefillIdRef.current = clientePrefillRequest.request_id;
@@ -4681,7 +4684,7 @@ function InvoiceEditor({
           </label>
           {cliente.documento_tipo === "RUC" ? (
             <label>
-              Naturaleza
+              Tipo de Persona
               <select
                 value={cliente.naturaleza ?? "FISICA"}
                 onChange={(event) => {
