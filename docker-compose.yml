@@ -97,6 +97,7 @@ services:
       DNIT_CRON_DAY: ${DNIT_CRON_DAY:-05}
       DNIT_CRON_HOUR: ${DNIT_CRON_HOUR:-3}
       DNIT_CRON_MINUTE: ${DNIT_CRON_MINUTE:-0}
+      DNIT_CRON_ENABLED: ${DNIT_CRON_ENABLED:-true}
       DNIT_RUN_ON_START: ${DNIT_RUN_ON_START:-false}
     depends_on:
       postgres:

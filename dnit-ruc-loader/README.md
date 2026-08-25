@@ -79,8 +79,29 @@ Si usas `docker compose`, el servicio `dnit-ruc-loader-cron` crea la regla al in
 Opcional:
 
 - `DNIT_RUN_ON_START=true` para ejecutar una importacion inicial al levantar el contenedor.
+- `DNIT_CRON_ENABLED=false` para no instalar el cron en ese ambiente.
 
 El contenedor `dnit-ruc-loader-cron` reutiliza `${APP_ENV_FILE}` del deploy principal, por lo que toma la misma `DATABASE_URL` del ambiente (`.env.local`, `.env.staging`, `.env.production`, etc.).
+
+## Deshabilitar el cron por ambiente
+
+Por defecto (`DNIT_CRON_ENABLED=true`) el contenedor instala la regla mensual y
+ejecuta `crond`. Con cualquier otro valor:
+
+- no escribe `/etc/crontabs/root`;
+- no arranca `crond`;
+- queda `Up` pero ocioso, disponible para `docker exec` y cargas manuales.
+
+Se usa para que un solo ambiente tenga la carga automatica. En la VPS, staging
+corre con `DNIT_CRON_ENABLED=false` y produccion conserva el cron mensual,
+porque ambos deploys comparten el mismo directorio de datos del host y dos
+corridas simultaneas se pisan los ZIP/TXT.
+
+Carga manual del ambiente sin cron:
+
+```bash
+APP_ENV_FILE=.env.staging bash scripts/deploy-loader.sh --load-now
+```
 
 ## Deploy aislado del loader
 
