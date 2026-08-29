@@ -20,8 +20,10 @@
 | --- | --- | --- | --- | --- |
 | RCF-001 | SDD | Crear cadena SPEC/PLAN/TASKS de esta iniciativa | DONE | Documentos alineados y referenciados desde `docs/BACKLOG.md` |
 | RCF-002 | Verificacion | Mapear la topologia real de red en la VPS y el estandar declarado por `facturacion-electronica` | DONE | `ventax_fiscal_prod`/`_test`, sus miembros actuales y el alias `facturacion-electronica` confirmados por inspeccion directa |
-| RCF-003 | Config | Actualizar `.env.production.example` y `.env.staging.example` del repo con los nuevos defaults documentados | PENDIENTE | `FE_DOCKER_NETWORK` y `FE_API_BASE_URL` reflejan el estandar en ambos ejemplos |
+| RCF-003 | Config | Actualizar `.env.production.example` y `.env.staging.example` del repo con los nuevos defaults documentados | DONE | `FE_DOCKER_NETWORK` y `FE_API_BASE_URL` reflejan el estandar en ambos ejemplos |
+| RCF-003b | Backend/infra | `scripts/deploy.sh`: agregar `ensure_service_on_fiscal_network`, verificacion idempotente post-`up -d` (conecta solo si falta, nunca falla el deploy) | DONE | Probado localmente contra un contenedor y una red Docker real: primera corrida conecta, segunda detecta "ya conectado" sin error |
 | RCF-004 | VPS staging | Editar `.env.staging` real en la VPS y redeploy solo de staging | PENDIENTE | `docker inspect` muestra el `api` de staging unido a `ventax_fiscal_test` |
+| RCF-004b | VPS staging | Redeploy una segunda vez, sin cambios, inmediatamente despues | PENDIENTE | El segundo deploy loguea "ya esta conectado" para `ventax_fiscal_test`, sin error ni reconexion |
 | RCF-005 | VPS staging | Verificar alcance real desde dentro del contenedor: DNS + TCP + HTTP 200 | PENDIENTE | Evidencia de los tres chequeos registrada en este documento |
 | RCF-006 | VPS staging | Prueba funcional de extremo a extremo (accion real que dependa del gateway fiscal) | PENDIENTE | 200/OK real en logs, no solo alcance de red |
 | RCF-007 | VPS produccion | Editar `.env.production` real en la VPS y redeploy solo de produccion | PENDIENTE | `docker inspect` muestra el `api` de produccion unido a `ventax_fiscal_prod` |

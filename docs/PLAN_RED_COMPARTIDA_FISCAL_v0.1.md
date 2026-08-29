@@ -54,17 +54,45 @@ Estos archivos no se versionan (viven solo en el servidor); el cambio se aplica
 por edicion directa, sin volcar secretos ni URLs internas al repo mas alla de
 los ejemplos genericos del paso 1.
 
-### 3) Redeploy y reconexion de red
+### 3) Redeploy resiliente: verificacion idempotente, no solo `up -d`
 
-Cambiar `FE_DOCKER_NETWORK` no reconecta un contenedor que ya esta corriendo: la
-lista de redes de un servicio se aplica al crear el contenedor. Se requiere
-`docker compose up -d` (lo que ya hace `scripts/deploy.sh`) para que el `api` se
-una a la red nueva. Un simple restart no alcanza.
+Requisito explicito del usuario (2026-08-29): el redeploy debe autoconectar el
+servicio a la red correcta sin intervencion manual, sin fallar si ya esta
+conectado, y sin depender de si Compose decide o no recrear el contenedor al
+cambiar `FE_DOCKER_NETWORK`.
+
+`scripts/deploy.sh` agrega, despues de `docker compose up -d`, la funcion
+`ensure_service_on_fiscal_network`:
+
+1. Resuelve el contenedor real del servicio con
+   `docker compose ps -q api` (no un nombre hardcodeado: sobrevive a
+   `--project-name` distinto por ambiente y a un `scale`).
+2. Si `FE_DOCKER_NETWORK` esta vacio o es `bridge` (el default del compose,
+   sin red fiscal configurada), no hace nada.
+3. Si la red declarada todavia no existe en el host, lo loguea y sigue sin
+   fallar el deploy (la crea `facturacion-electronica`, no este repo — RF-6 de
+   su SPEC).
+4. Inspecciona `NetworkSettings.Networks` del contenedor real. Si ya aparece la
+   red objetivo, no hace nada (idempotente: dos deploys seguidos no fallan por
+   "ya conectado" ni duplican trabajo). Si no aparece, `docker network connect`.
+
+Esto cubre tanto el caso en que `up -d` ya recreo el contenedor con la red nueva
+(el paso 4 lo detecta conectado y no hace nada) como el caso en que no lo hizo
+(el paso 4 lo conecta). "Conectar la instancia correcta" para cada ambiente sale
+gratis: el mismo codigo corre para staging y produccion, y la diferencia la
+pone `FE_DOCKER_NETWORK` de cada `.env.*` (`ventax_fiscal_test` /
+`ventax_fiscal_prod`).
+
+Validado localmente (2026-08-29) contra un contenedor real y una red Docker
+descartable: primera corrida conecta, segunda corrida detecta "ya conectado" y
+no produce error ni reconexion.
 
 Orden por ambiente, cada uno aislado del otro:
 
 1. Editar `.env.staging`, redeploy solo de staging
    (`APP_ENV_FILE=.env.staging bash scripts/deploy.sh`), verificar (paso 4).
+   Correr el deploy una segunda vez inmediatamente despues, sin cambios, para
+   confirmar la idempotencia contra el entorno real.
 2. Con staging verificado, repetir en produccion.
 
 ### 4) Verificacion de alcance (no silenciosa)
