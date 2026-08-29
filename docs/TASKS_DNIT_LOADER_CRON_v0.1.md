@@ -6,6 +6,10 @@
 - `docs/SPEC_DNIT_LOADER_CRON_v0.1.md`
 - `docs/PLAN_DNIT_LOADER_CRON_v0.1.md`
 
+## Estado General
+
+Iniciativa CERRADA (2026-08-24/25). Commit `71c6f41` (emilioSaldivar, 2026-08-24 21:41:56 -0300), pusheado a `origin/master` y desplegado en staging.
+
 ## Matriz
 
 | ID | Fase | Tarea | Estado | Criterio de aceptacion |
@@ -17,8 +21,8 @@
 | DLC-005 | QA local | Validar los tres casos del flag sobre la imagen construida | DONE | `true`, ausente y `false` se comportan segun SPEC |
 | DLC-006 | QA local | Validar que `DNIT_RUN_ON_START=true` funciona con cron apagado | DONE | La carga inicial se dispara aunque no haya cron |
 | DLC-007 | Operacion VPS | Capturar estado previo de cron en staging y produccion | DONE | Queda registrada la salida de `crontab -l` de ambos |
-| DLC-008 | Operacion VPS | Setear `DNIT_CRON_ENABLED=false` en `.env.staging` y redeployar solo el loader de staging | PENDING | Staging sin regla de cron, sin tocar api/frontend/postgres |
-| DLC-009 | Operacion VPS | Verificar que produccion conserva cron y datos intactos | PENDING | `crontab -l` de prod sin cambios y `count(*)` de la tabla igual al previo |
+| DLC-008 | Operacion VPS | Setear `DNIT_CRON_ENABLED=false` en `.env.staging` y redeployar solo el loader de staging | DONE | Staging sin regla de cron, sin tocar api/frontend/postgres |
+| DLC-009 | Operacion VPS | Verificar que produccion conserva cron y datos intactos | DONE | `crontab -l` de prod sin cambios y `count(*)` de la tabla igual al previo |
 | DLC-010 | Backlog | Registrar los defectos fuera de alcance detectados en la verificacion | DONE | `docs/BACKLOG.md` lista fuente obsoleta, data dir compartido, lineas invalidas y ventana de lock |
 
 ## Orden de ejecucion
@@ -51,3 +55,9 @@
   - Staging (`ventax-facturacion-simple-dnit-ruc-loader-cron-1`): `/etc/crontabs/root` = `0 3 05 * * /app/scripts/run.sh`, PID 1 = `crond`.
   - Produccion (`ventax-facturacion-simple-prod-dnit-ruc-loader-cron-1`): `/etc/crontabs/root` = `0 3 05 * * /app/scripts/run.sh` (identica regla, confirma la concurrencia descrita en el SPEC), PID 1 = `crond`.
   - Baseline de datos de produccion (para comparar despues del cambio, criterio de aceptacion 5): `dnit_ruc_contribuyentes` = 1.995.012 filas.
+- 2026-08-24/25: `DLC-008` y `DLC-009` completados (ejecutados directamente por el usuario, verificados en esta sesion contra el VPS real):
+  - Commit `71c6f41` pusheado a `origin/master` y llevado al checkout del VPS.
+  - Staging redeployado: `ventax-facturacion-simple-api-1` con `APP_VERSION=71c6f41` (creado 2026-08-25T00:44:34Z); healthcheck `GET /api/v1/health` responde `{"status":"ok",...}`.
+  - `.env.staging` en el VPS con `DNIT_CRON_ENABLED=false`.
+  - Verificado en el contenedor `ventax-facturacion-simple-dnit-ruc-loader-cron-1`: `/etc/crontabs/root` ya NO tiene la regla `0 3 05 * * /app/scripts/run.sh` (solo quedan las tareas periodicas default de Alpine), PID 1 = `tail` (no `crond`) — exactamente el comportamiento esperado por el SPEC (criterio de aceptacion 2).
+  - Produccion verificada intacta: `ventax-facturacion-simple-prod-api-1` sigue en `APP_VERSION=9fe452f` (no redeployada, por decision explicita); `ventax-facturacion-simple-prod-dnit-ruc-loader-cron-1` conserva `/etc/crontabs/root` = `0 3 05 * * /app/scripts/run.sh` con `crond` corriendo (identico a la linea base de `DLC-007`); `dnit_ruc_contribuyentes` sigue en 1.995.012 filas (criterio de aceptacion 4 y 5 cumplidos).

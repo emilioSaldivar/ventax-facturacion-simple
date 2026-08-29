@@ -33,7 +33,6 @@ if (env.FE_VERIFY_WORKER_ENABLED) {
   startVerificacionFiscalWorker({
     repository: facturasRepository,
     gateway: fiscalGateway,
-    gatewayWithKey: (apiKey) => createFiscalGateway({ ...gatewayConfig, apiKey }),
     intervalMs: env.FE_VERIFY_WORKER_INTERVAL_MS,
     batchSize: env.FE_VERIFY_BATCH_SIZE
   });

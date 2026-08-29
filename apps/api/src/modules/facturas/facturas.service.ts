@@ -3,6 +3,7 @@ import { calculateDocumentTotals, type TaxInputLine } from "@facturacion-simple/
 import { HttpError } from "../../shared/errors/http-error";
 import { logger } from "../../shared/logging/logger";
 import { deriveAccion } from "./facturas.accion";
+import { notifyAccionRequerida } from "./facturas.notificaciones";
 import type { ClienteRepository, ClienteResponse } from "../clientes/clientes.types";
 import type { OperationalContextRepository, OperationalContextResponse } from "../context/context.types";
 import {
@@ -1044,6 +1045,30 @@ async function persistTipoTransaccionDefault(
   }
 }
 
+/**
+ * Backoff del worker de emision fiscal pre-emision (SPEC_CONTROL_REINTENTOS_EMISION_v0.1,
+ * incidente AWAPURA 2026-08-14/24): indexado por attempts (1-based, ya incrementado por
+ * claimNextPendingEmission antes de fallar). El primer valor (60s) preserva el
+ * comportamiento anterior para el caso mas comun (fallo aislado que se autorresuelve).
+ */
+const EMISION_BACKOFF_SECONDS = [
+  60, // intento 1 -> 1m
+  5 * 60, // intento 2 -> 5m
+  15 * 60, // intento 3 -> 15m
+  30 * 60, // intento 4 -> 30m
+  60 * 60, // intento 5 -> 1h
+  2 * 60 * 60, // intento 6 -> 2h
+  4 * 60 * 60, // intento 7 -> 4h
+  6 * 60 * 60 // intento 8+ -> 6h (se repite hasta el corte)
+];
+
+const HORAS_CORTE_REINTENTO_EMISION = 24;
+
+function nextEmisionBackoffSeconds(attempts: number): number {
+  const index = Math.min(Math.max(attempts, 1), EMISION_BACKOFF_SECONDS.length) - 1;
+  return EMISION_BACKOFF_SECONDS[index] ?? EMISION_BACKOFF_SECONDS[EMISION_BACKOFF_SECONDS.length - 1]!;
+}
+
 export async function processNextQueuedFiscalEmission(
   repository: FacturaRepository,
   gateway: FiscalGateway,
@@ -1067,21 +1092,39 @@ export async function processNextQueuedFiscalEmission(
     });
   } catch (error) {
     if (error instanceof FiscalGatewayError) {
-      const retryAfterSeconds = 60;
-      return repository.failPendingEmission({
+      const ageMs = Date.now() - new Date(pending.documentoCreatedAt).getTime();
+      const cutover = ageMs >= HORAS_CORTE_REINTENTO_EMISION * 60 * 60 * 1000;
+      const retryAfterSeconds = nextEmisionBackoffSeconds(pending.attempts);
+
+      const updated = await repository.failPendingEmission({
         outboxId: pending.outboxId,
         documentoId: pending.documentoId,
-        estado: error.code === "TIMEOUT" ? "PENDIENTE_SIFEN" : "ERROR_TEMPORAL",
+        outboxEstado: cutover ? "FAILED_PERM" : "FAILED_TEMP",
+        estado: cutover ? "ERROR_TEMPORAL" : error.code === "TIMEOUT" ? "PENDIENTE_SIFEN" : "ERROR_TEMPORAL",
         error: {
           code: error.code,
           message: error.message,
           details: error.details ?? null,
-          recoverable: true,
-          retry_after_seconds: retryAfterSeconds,
-          suggested_action: error.code === "TIMEOUT" ? "REFRESH_OR_RETRY" : "RETRY_EMISSION"
+          recoverable: !cutover,
+          retry_after_seconds: cutover ? null : retryAfterSeconds,
+          suggested_action: cutover ? "CONTACTAR_SOPORTE" : error.code === "TIMEOUT" ? "REFRESH_OR_RETRY" : "RETRY_EMISSION"
         },
         retryAfterSeconds
       });
+
+      if (updated && !pending.accionNotificadaAt) {
+        const { accion, accion_detalle } = deriveAccion(updated);
+        if (accion === "REQUIERE_ACCION" || accion === "REQUIERE_SOPORTE") {
+          try {
+            await notifyAccionRequerida(pending.facturadorId, updated, accion_detalle, accion === "REQUIERE_SOPORTE", repository);
+          } catch (notifyError) {
+            logger.error({ err: notifyError, documentoId: pending.documentoId }, "outbox emision: fallo al notificar accion requerida");
+          }
+          await repository.markAccionNotificada(pending.documentoId);
+        }
+      }
+
+      return updated;
     }
     throw error;
   }

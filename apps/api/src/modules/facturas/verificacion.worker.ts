@@ -28,17 +28,31 @@ function nextBackoffMs(attempts: number): number {
   return BACKOFF_MS[index] ?? BACKOFF_MS[BACKOFF_MS.length - 1]!;
 }
 
+/**
+ * El backend fiscal autentica con dos sistemas de clave disjuntos, sin fallback en
+ * ninguna direccion (SPEC_ALINEACION_CLAVE_VERIFICACION_FISCAL_v0.1):
+ *
+ * - clave COMPARTIDA (`FE_API_KEY`, middleware `requireApiKey`): `/documentos/*`,
+ *   `/consultar/*`, `/files/*`, `/evento/*`, `/nota-credito`;
+ * - clave de CONSUMIDOR (`facturadores.fe_consumer_api_key`, middleware
+ *   `requireApiConsumer` + permisos): `/factura`, `/conciliacion/*`, `/recibos/*`.
+ *
+ * Este worker solo golpea rutas del primer grupo (`/documentos/:uuid/sifen` y, cuando
+ * el documento no tiene `document_uuid` local, `/documentos/by-cdc/:cdc`), asi que usa
+ * el gateway de clave compartida — el mismo que ya usa el refresh manual. Mandar la
+ * clave de consumidor aca devuelve `401 API key invalida`: tener el permiso
+ * `SIFEN_STATUS_READ` no habilita estas rutas porque pertenece al otro sistema.
+ */
 export function startVerificacionFiscalWorker(options: {
   repository: FacturaRepository;
   gateway: FiscalGateway;
-  gatewayWithKey: (apiKey: string) => FiscalGateway;
   intervalMs: number;
   batchSize: number;
 }): () => void {
   let running = false;
 
   async function processOne(item: PendingVerificacion): Promise<void> {
-    const gateway = item.facturadorApiKey ? options.gatewayWithKey(item.facturadorApiKey) : options.gateway;
+    const gateway = options.gateway;
 
     let resultingEstado = item.estado;
     try {

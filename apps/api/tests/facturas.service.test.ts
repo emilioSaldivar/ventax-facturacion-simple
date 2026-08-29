@@ -50,7 +50,8 @@ import type {
   FacturaRepository,
   DocumentoResponse,
   NotaCreditoPersistInput,
-  PendingFiscalEmission
+  PendingFiscalEmission,
+  PendingVerificacion
 } from "../src/modules/facturas/facturas.types";
 
 const context: OperationalContextResponse = {
@@ -117,6 +118,9 @@ class FakeFacturaRepository implements FacturaRepository {
   public lastRetryInput: Parameters<FacturaRepository["retryPendingEmission"]>[0] | null = null;
   public lastCancelInput: Parameters<FacturaRepository["cancelDocumento"]>[0] | null = null;
   public lastNotaCreditoInput: NotaCreditoPersistInput | null = null;
+  public markAccionNotificadaCalls: string[] = [];
+  public notificationRecipients: string[] = [];
+  public failPendingEmissionCreatedAt: string | null = null;
   public auditEvents: Array<{
     facturadorId: string;
     documentoId: string;
@@ -255,6 +259,22 @@ class FakeFacturaRepository implements FacturaRepository {
     return this.pendingEmission;
   }
 
+  async claimNextVerificacion(): Promise<PendingVerificacion[]> {
+    return [];
+  }
+
+  async scheduleNextVerificacion(): Promise<void> {
+    // no-op in tests
+  }
+
+  async markAccionNotificada(documentoId: string): Promise<void> {
+    this.markAccionNotificadaCalls.push(documentoId);
+  }
+
+  async getNotificationRecipients(): Promise<string[]> {
+    return this.notificationRecipients;
+  }
+
   async completePendingEmission(input: Parameters<FacturaRepository["completePendingEmission"]>[0]): Promise<DocumentoResponse | null> {
     this.lastCompletedInput = input;
     return buildDocumento({
@@ -272,7 +292,8 @@ class FakeFacturaRepository implements FacturaRepository {
     return buildDocumento({
       id: input.documentoId,
       estado: input.estado,
-      fiscal_status: input.error
+      fiscal_status: input.error,
+      ...(this.failPendingEmissionCreatedAt ? { created_at: this.failPendingEmissionCreatedAt } : {})
     });
   }
 
@@ -1512,7 +1533,10 @@ describe("facturas service", () => {
       outboxId: "88888888-8888-4888-8888-888888888888",
       documentoId: "77777777-7777-4777-8777-777777777777",
       facturadorId: context.facturador.id,
-      fiscalRequest
+      fiscalRequest,
+      attempts: 1,
+      documentoCreatedAt: new Date().toISOString(),
+      accionNotificadaAt: null
     };
     const gateway = new FakeFiscalGateway({
       fiscal_document_id: "mock-async",
@@ -1580,7 +1604,10 @@ describe("facturas service", () => {
         cliente: emitInput.cliente,
         items: previewFactura(context, emitInput).items,
         totals: previewFactura(context, emitInput).totals
-      }
+      },
+      attempts: 1,
+      documentoCreatedAt: new Date().toISOString(),
+      accionNotificadaAt: null
     };
     const gateway = new FakeFiscalGateway(new FiscalGatewayError("TIMEOUT", "Timeout fiscal"));
 
@@ -1614,7 +1641,10 @@ describe("facturas service", () => {
         cliente: emitInput.cliente,
         items: previewFactura(context, emitInput).items,
         totals: previewFactura(context, emitInput).totals
-      }
+      },
+      attempts: 1,
+      documentoCreatedAt: new Date().toISOString(),
+      accionNotificadaAt: null
     };
     const gateway = new FakeFiscalGateway(new FiscalGatewayError("UPSTREAM_ERROR", "SIFEN no disponible"));
 
@@ -1622,6 +1652,7 @@ describe("facturas service", () => {
 
     expect(result?.estado).toBe("ERROR_TEMPORAL");
     expect(repo.lastFailedInput).toMatchObject({
+      outboxEstado: "FAILED_TEMP",
       estado: "ERROR_TEMPORAL",
       error: {
         code: "UPSTREAM_ERROR",
@@ -1631,6 +1662,129 @@ describe("facturas service", () => {
         suggested_action: "RETRY_EMISSION"
       }
     });
+  });
+
+  function pendingEmissionAt(overrides: Partial<PendingFiscalEmission>): PendingFiscalEmission {
+    return {
+      outboxId: "88888888-8888-4888-8888-888888888888",
+      documentoId: "77777777-7777-4777-8777-777777777777",
+      facturadorId: context.facturador.id,
+      fiscalRequest: {
+        external_ref: "fac-queued",
+        condicion_venta: "CONTADO",
+        facturador: context.facturador,
+        fiscal_context: context.fiscal_context,
+        cliente: emitInput.cliente,
+        items: previewFactura(context, emitInput).items,
+        totals: previewFactura(context, emitInput).totals
+      },
+      attempts: 1,
+      documentoCreatedAt: new Date().toISOString(),
+      accionNotificadaAt: null,
+      ...overrides
+    };
+  }
+
+  it.each([
+    [1, 60],
+    [2, 5 * 60],
+    [3, 15 * 60],
+    [4, 30 * 60],
+    [5, 60 * 60],
+    [6, 2 * 60 * 60],
+    [7, 4 * 60 * 60],
+    [8, 6 * 60 * 60],
+    [9, 6 * 60 * 60]
+  ])("computes growing backoff for attempt %i -> %i seconds", async (attempts, expectedRetryAfterSeconds) => {
+    const repo = new FakeFacturaRepository();
+    repo.pendingEmission = pendingEmissionAt({ attempts });
+    const gateway = new FakeFiscalGateway(new FiscalGatewayError("UPSTREAM_ERROR", "SIFEN no disponible"));
+
+    await processNextQueuedFiscalEmission(repo, gateway);
+
+    expect(repo.lastFailedInput).toMatchObject({
+      outboxEstado: "FAILED_TEMP",
+      retryAfterSeconds: expectedRetryAfterSeconds
+    });
+  });
+
+  it("cuts over to FAILED_PERM once the document is 24h or older, marking the error as non recoverable", async () => {
+    const repo = new FakeFacturaRepository();
+    repo.pendingEmission = pendingEmissionAt({
+      attempts: 40,
+      documentoCreatedAt: new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString()
+    });
+    const gateway = new FakeFiscalGateway(new FiscalGatewayError("UPSTREAM_ERROR", "SIFEN no disponible"));
+
+    const result = await processNextQueuedFiscalEmission(repo, gateway);
+
+    expect(result?.estado).toBe("ERROR_TEMPORAL");
+    expect(repo.lastFailedInput).toMatchObject({
+      outboxEstado: "FAILED_PERM",
+      estado: "ERROR_TEMPORAL",
+      error: {
+        recoverable: false,
+        retry_after_seconds: null,
+        suggested_action: "CONTACTAR_SOPORTE"
+      }
+    });
+  });
+
+  it("forces ERROR_TEMPORAL (not PENDIENTE_SIFEN) on cutover even for a TIMEOUT error", async () => {
+    const repo = new FakeFacturaRepository();
+    repo.pendingEmission = pendingEmissionAt({
+      attempts: 40,
+      documentoCreatedAt: new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString()
+    });
+    const gateway = new FakeFiscalGateway(new FiscalGatewayError("TIMEOUT", "Timeout fiscal"));
+
+    const result = await processNextQueuedFiscalEmission(repo, gateway);
+
+    expect(result?.estado).toBe("ERROR_TEMPORAL");
+    expect(repo.lastFailedInput).toMatchObject({
+      outboxEstado: "FAILED_PERM",
+      estado: "ERROR_TEMPORAL"
+    });
+  });
+
+  it("notifies accion requerida once a failed document is older than the 1h threshold and accion_notificada_at is null", async () => {
+    const repo = new FakeFacturaRepository();
+    repo.notificationRecipients = ["ops@example.com"];
+    // 2h, inequivoco por encima del umbral de 1h (evita el borde exacto del default de buildDocumento).
+    repo.failPendingEmissionCreatedAt = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+    repo.pendingEmission = pendingEmissionAt({ accionNotificadaAt: null });
+    const gateway = new FakeFiscalGateway(new FiscalGatewayError("UPSTREAM_ERROR", "SIFEN no disponible"));
+
+    await processNextQueuedFiscalEmission(repo, gateway);
+
+    expect(repo.markAccionNotificadaCalls).toEqual(["77777777-7777-4777-8777-777777777777"]);
+  });
+
+  it("does not notify again when accion_notificada_at is already set", async () => {
+    const repo = new FakeFacturaRepository();
+    repo.notificationRecipients = ["ops@example.com"];
+    repo.pendingEmission = pendingEmissionAt({ accionNotificadaAt: new Date().toISOString() });
+    const gateway = new FakeFiscalGateway(new FiscalGatewayError("UPSTREAM_ERROR", "SIFEN no disponible"));
+
+    await processNextQueuedFiscalEmission(repo, gateway);
+
+    expect(repo.markAccionNotificadaCalls).toHaveLength(0);
+  });
+
+  it("does not fail the emission handling when notifying accion requerida throws", async () => {
+    const repo = new FakeFacturaRepository();
+    repo.notificationRecipients = ["ops@example.com"];
+    repo.failPendingEmissionCreatedAt = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+    repo.getNotificationRecipients = async () => {
+      throw new Error("smtp down");
+    };
+    repo.pendingEmission = pendingEmissionAt({ accionNotificadaAt: null });
+    const gateway = new FakeFiscalGateway(new FiscalGatewayError("UPSTREAM_ERROR", "SIFEN no disponible"));
+
+    const result = await processNextQueuedFiscalEmission(repo, gateway);
+
+    expect(result?.estado).toBe("ERROR_TEMPORAL");
+    expect(repo.markAccionNotificadaCalls).toEqual(["77777777-7777-4777-8777-777777777777"]);
   });
 
   it("emits credit invoice without creating collection state", async () => {

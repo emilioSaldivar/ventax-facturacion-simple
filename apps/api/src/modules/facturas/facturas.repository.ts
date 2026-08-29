@@ -54,6 +54,9 @@ interface PendingFiscalEmissionRow {
   facturador_id: string;
   fe_consumer_api_key: string | null;
   fiscal_request_snapshot: unknown;
+  attempts: number;
+  documento_created_at: Date;
+  accion_notificada_at: Date | null;
 }
 
 export class PgFacturaRepository implements FacturaRepository {
@@ -851,7 +854,10 @@ export class PgFacturaRepository implements FacturaRepository {
           f.id as documento_id,
           f.facturador_id,
           fa.fe_consumer_api_key,
-          f.fiscal_request_snapshot
+          f.fiscal_request_snapshot,
+          o.attempts as attempts,
+          f.created_at as documento_created_at,
+          f.accion_notificada_at as accion_notificada_at
       `
     );
 
@@ -865,7 +871,10 @@ export class PgFacturaRepository implements FacturaRepository {
       documentoId: row.documento_id,
       facturadorId: row.facturador_id,
       facturadorApiKey: (row.fe_consumer_api_key as string | null) ?? null,
-      fiscalRequest: row.fiscal_request_snapshot as PendingFiscalEmission["fiscalRequest"]
+      fiscalRequest: row.fiscal_request_snapshot as PendingFiscalEmission["fiscalRequest"],
+      attempts: row.attempts,
+      documentoCreatedAt: row.documento_created_at.toISOString(),
+      accionNotificadaAt: row.accion_notificada_at ? row.accion_notificada_at.toISOString() : null
     };
   }
 
@@ -877,7 +886,6 @@ export class PgFacturaRepository implements FacturaRepository {
     const result = await pool.query<{
       id: string;
       facturador_id: string;
-      fe_consumer_api_key: string | null;
       document_uuid: string;
       estado: DocumentoResponse["estado"];
       verificacion_attempts: number;
@@ -903,12 +911,10 @@ export class PgFacturaRepository implements FacturaRepository {
           verificacion_attempts = f.verificacion_attempts + 1,
           updated_at = now()
         from next_jobs
-        join facturadores fa on fa.id = next_jobs.facturador_id
         where f.id = next_jobs.id
         returning
           f.id,
           f.facturador_id,
-          fa.fe_consumer_api_key,
           f.document_uuid,
           f.estado,
           f.verificacion_attempts,
@@ -921,7 +927,6 @@ export class PgFacturaRepository implements FacturaRepository {
     return result.rows.map((row) => ({
       documentoId: row.id,
       facturadorId: row.facturador_id,
-      facturadorApiKey: row.fe_consumer_api_key,
       documentUuid: row.document_uuid,
       estado: row.estado,
       attempts: row.verificacion_attempts,
@@ -1071,6 +1076,7 @@ export class PgFacturaRepository implements FacturaRepository {
   async failPendingEmission(input: {
     outboxId: string;
     documentoId: string;
+    outboxEstado: "FAILED_TEMP" | "FAILED_PERM";
     estado: DocumentoResponse["estado"];
     error: Record<string, unknown>;
     retryAfterSeconds: number;
@@ -1083,14 +1089,14 @@ export class PgFacturaRepository implements FacturaRepository {
         `
           update factura_emision_outbox
           set
-            estado = 'FAILED_TEMP',
+            estado = $4,
             locked_at = null,
             next_attempt_at = now() + ($2::text || ' seconds')::interval,
             last_error = $3::jsonb,
             updated_at = now()
           where id = $1
         `,
-        [input.outboxId, input.retryAfterSeconds, JSON.stringify(input.error)]
+        [input.outboxId, input.retryAfterSeconds, JSON.stringify(input.error), input.outboxEstado]
       );
 
       const result = await client.query<FacturaRow>(

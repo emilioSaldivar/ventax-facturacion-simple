@@ -2,7 +2,7 @@ import { resolveCausaSifen, type AccionSugerida } from "./sifen-causa-catalogo";
 import type { DocumentoAccion, DocumentoAccionDetalle, DocumentoResponse } from "./facturas.types";
 
 const DIAS_VENCIMIENTO_VERIFICACION = 30;
-const HORAS_PERSISTENCIA_ERROR_TEMPORAL = 24;
+const HORAS_PERSISTENCIA_ERROR_TEMPORAL = 1;
 
 /**
  * Campos minimos que deriveAccion necesita — cualquier DocumentoResponse los cumple
@@ -35,6 +35,13 @@ export type DeriveAccionInput = Pick<
  * El contador de reintentos del outbox (factura_emision_outbox.attempts) no forma parte
  * de DocumentoResponse — usamos la antiguedad del documento (created_at) como proxy de
  * persistencia en su lugar, igual que para el vencimiento de PENDIENTE_SIFEN.
+ *
+ * HORAS_PERSISTENCIA_ERROR_TEMPORAL=1 (SPEC_CONTROL_REINTENTOS_EMISION_v0.1, incidente
+ * AWAPURA 2026-08-14/24): decision de negocio del 2026-08-24 de alertar rapido en vez de
+ * esperar 24h — con reintentos frecuentes, seguir fallando pasada 1 hora ya es una senal
+ * fuerte de que no se va a autorresolver. Este mismo umbral gobierna tanto el badge que ve
+ * el operador como el disparo de la notificacion por correo desde el worker de outbox
+ * (processNextQueuedFiscalEmission en facturas.service.ts).
  */
 export function deriveAccion(documento: DeriveAccionInput): { accion: DocumentoAccion; accion_detalle: DocumentoAccionDetalle } {
   const ageMs = documento.created_at ? Date.now() - new Date(documento.created_at).getTime() : 0;

@@ -321,13 +321,21 @@ export interface PendingFiscalEmission {
   facturadorId: string;
   facturadorApiKey: string | null;
   fiscalRequest: FiscalEmitFacturaRequest;
+  attempts: number;
+  documentoCreatedAt: string;
+  accionNotificadaAt: string | null;
 }
 
-/** Documento en transito reclamado por el worker de verificacion fiscal (F9). */
+/**
+ * Documento en transito reclamado por el worker de verificacion fiscal (F9).
+ *
+ * No lleva la clave de consumidor del facturador a proposito: las rutas de consulta de
+ * estado del backend fiscal exigen la clave compartida
+ * (SPEC_ALINEACION_CLAVE_VERIFICACION_FISCAL_v0.1).
+ */
 export interface PendingVerificacion {
   documentoId: string;
   facturadorId: string;
-  facturadorApiKey: string | null;
   documentUuid: string;
   estado: DocumentoEstado;
   attempts: number;
@@ -367,6 +375,7 @@ export interface FacturaRepository {
   failPendingEmission(input: {
     outboxId: string;
     documentoId: string;
+    outboxEstado: "FAILED_TEMP" | "FAILED_PERM";
     estado: DocumentoEstado;
     error: Record<string, unknown>;
     retryAfterSeconds: number;

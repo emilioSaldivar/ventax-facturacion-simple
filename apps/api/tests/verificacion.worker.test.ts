@@ -52,7 +52,6 @@ function buildPendingVerificacion(overrides: Partial<PendingVerificacion> = {}):
   return {
     documentoId: "doc-1",
     facturadorId: "fact-1",
-    facturadorApiKey: null,
     documentUuid: "11111111-1111-4111-8111-111111111111",
     estado: "PENDIENTE_SIFEN",
     attempts: 1,
@@ -129,7 +128,6 @@ describe("verificacion fiscal worker", () => {
     const stop = startVerificacionFiscalWorker({
       repository: repo as unknown as FacturaRepository,
       gateway: gateway as unknown as FiscalGateway,
-      gatewayWithKey: () => gateway as unknown as FiscalGateway,
       intervalMs: 100000,
       batchSize: 10
     });
@@ -156,7 +154,6 @@ describe("verificacion fiscal worker", () => {
     const stop = startVerificacionFiscalWorker({
       repository: repo as unknown as FacturaRepository,
       gateway: gateway as unknown as FiscalGateway,
-      gatewayWithKey: () => gateway as unknown as FiscalGateway,
       intervalMs: 100000,
       batchSize: 10
     });
@@ -183,7 +180,6 @@ describe("verificacion fiscal worker", () => {
     const stop = startVerificacionFiscalWorker({
       repository: repo as unknown as FacturaRepository,
       gateway: gateway as unknown as FiscalGateway,
-      gatewayWithKey: () => gateway as unknown as FiscalGateway,
       intervalMs: 100000,
       batchSize: 10
     });
@@ -203,7 +199,6 @@ describe("verificacion fiscal worker", () => {
     const stop = startVerificacionFiscalWorker({
       repository: repo as unknown as FacturaRepository,
       gateway: gateway as unknown as FiscalGateway,
-      gatewayWithKey: () => gateway as unknown as FiscalGateway,
       intervalMs: 100000,
       batchSize: 10
     });
@@ -235,7 +230,6 @@ describe("verificacion fiscal worker", () => {
     const stop = startVerificacionFiscalWorker({
       repository: repo as unknown as FacturaRepository,
       gateway: gateway as unknown as FiscalGateway,
-      gatewayWithKey: () => gateway as unknown as FiscalGateway,
       intervalMs: 100000,
       batchSize: 10
     });
@@ -255,7 +249,6 @@ describe("verificacion fiscal worker", () => {
     const stop = startVerificacionFiscalWorker({
       repository: repo as unknown as FacturaRepository,
       gateway: gateway as unknown as FiscalGateway,
-      gatewayWithKey: () => gateway as unknown as FiscalGateway,
       intervalMs: 100000,
       batchSize: 10
     });
@@ -281,7 +274,6 @@ describe("verificacion fiscal worker", () => {
     const stop = startVerificacionFiscalWorker({
       repository: repo as unknown as FacturaRepository,
       gateway: gateway as unknown as FiscalGateway,
-      gatewayWithKey: () => gateway as unknown as FiscalGateway,
       intervalMs: 100000,
       batchSize: 10
     });
@@ -308,7 +300,6 @@ describe("verificacion fiscal worker", () => {
     const stop = startVerificacionFiscalWorker({
       repository: repo as unknown as FacturaRepository,
       gateway: gateway as unknown as FiscalGateway,
-      gatewayWithKey: () => gateway as unknown as FiscalGateway,
       intervalMs: 100000,
       batchSize: 10
     });
@@ -317,5 +308,48 @@ describe("verificacion fiscal worker", () => {
 
     expect(sendEmailMock).not.toHaveBeenCalled();
     expect(repo.markAccionNotificadaCalls).toHaveLength(0);
+  });
+
+  // SPEC_ALINEACION_CLAVE_VERIFICACION_FISCAL_v0.1: las rutas de consulta de estado del
+  // backend fiscal (`/documentos/*`) exigen la clave COMPARTIDA. Usar la clave de
+  // consumidor del facturador devuelve 401 y dejo 44 documentos varados en produccion.
+  // Este test falla si alguien vuelve a introducir una seleccion de gateway por clave.
+  it("usa siempre el gateway de clave compartida, nunca una clave por facturador", async () => {
+    const repo = new FakeRepository();
+    repo.findByIdResponse = buildDocumento({ estado: "PENDIENTE_SIFEN" });
+    repo.claimQueue = [buildPendingVerificacion({ facturadorId: "fact-con-clave-propia" })];
+
+    const sharedGateway = new FakeGateway({
+      estado: "EMITIDA",
+      current_cdc: null,
+      status_raw: "APPROVED",
+      result_code: "0260",
+      result_message: "Aprobado",
+      raw: {}
+    });
+    const sharedSpy = vi.spyOn(sharedGateway, "refreshFacturaStatus");
+    const gatewayWithKeySpy = vi.fn(() => sharedGateway as unknown as FiscalGateway);
+
+    const stop = startVerificacionFiscalWorker({
+      repository: repo as unknown as FacturaRepository,
+      gateway: sharedGateway as unknown as FiscalGateway,
+      intervalMs: 100000,
+      batchSize: 10,
+      // Se pasa a proposito una fabrica de gateway por clave: el worker no debe tener
+      // ninguna ruta de codigo que la consuma.
+      ...({ gatewayWithKey: gatewayWithKeySpy } as unknown as Record<string, never>)
+    });
+    stop();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    expect(sharedSpy).toHaveBeenCalledTimes(1);
+    expect(gatewayWithKeySpy).not.toHaveBeenCalled();
+  });
+
+  // El tipo `PendingVerificacion` no debe volver a transportar la clave de consumidor:
+  // sin ese dato, la seleccion por facturador no puede reintroducirse por accidente.
+  it("el trabajo reclamado no transporta la clave de consumidor del facturador", () => {
+    const item = buildPendingVerificacion();
+    expect(Object.keys(item)).not.toContain("facturadorApiKey");
   });
 });
