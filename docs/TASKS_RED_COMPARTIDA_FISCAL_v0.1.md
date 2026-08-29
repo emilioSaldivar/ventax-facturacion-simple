@@ -53,4 +53,23 @@
 
 ## Evidencia
 
-_(a completar durante la implementacion)_
+- 2026-08-29: `RCF-003b` implementado y luego corregido tras un fallo real
+  encontrado en staging (no detectable por lectura de codigo ni por la prueba
+  local inicial, que usaba un contenedor y una red de prueba sin pasar por
+  `--env-file`):
+  - Primera version leia `${FE_DOCKER_NETWORK:-}` directamente del entorno del
+    script. `--env-file` de `docker compose` solo alimenta la sustitucion de
+    variables **dentro** de Compose; nunca exporta esas variables al proceso
+    bash que invoca `docker compose`. Resultado: `network_name` siempre vacio,
+    la funcion tomaba la rama "sin red configurada" y salia **en silencio**
+    (esa rama no logueaba nada) — el primer redeploy de staging con la red
+    nueva paso sin errores pero sin conectar nada por esta via (el `api` quedo
+    igual conectado porque Compose recreo el contenedor con la red nueva desde
+    su propia resolucion interna, no por esta funcion).
+  - Corregido: el nombre de red se resuelve con
+    `docker compose "${COMPOSE_ARGS[@]}" config`, que expone el valor
+    realmente resuelto por Compose (`networks.fiscal_gateway.name`), extraido
+    con `awk`. Validado localmente en dos casos: sin `FE_DOCKER_NETWORK`
+    seteado (resuelve al default del `.env` local) y forzado por variable de
+    shell (resuelve al valor forzado) — ambos casos devuelven el valor
+    correcto.

@@ -34,6 +34,13 @@ docker compose "${COMPOSE_ARGS[@]}" up -d
 # conecta si hace falta — dos corridas seguidas de `deploy.sh` no deben conectar
 # dos veces ni fallar por "ya conectado".
 #
+# El nombre de red se resuelve con `docker compose config` (no leyendo
+# $FE_DOCKER_NETWORK del shell): `--env-file` solo alimenta la sustitucion de
+# variables DENTRO de Compose, nunca exporta esas variables al proceso de este
+# script. Leer `$FE_DOCKER_NETWORK` aca directamente siempre daria vacio y la
+# funcion se saltearia en silencio — es exactamente el bug que este comentario
+# documenta para que no se reintroduzca.
+#
 # No es fatal a proposito: si la red compartida todavia no existe (host nuevo,
 # facturacion-electronica no desplegado todavia) o el nombre configurado esta
 # mal, este stack sigue arriba igual — la crea/mantiene facturacion-electronica,
@@ -41,7 +48,9 @@ docker compose "${COMPOSE_ARGS[@]}" up -d
 # puede pasar es que quede sin intentar la conexion en silencio.
 ensure_service_on_fiscal_network() {
   local service="$1"
-  local network_name="${FE_DOCKER_NETWORK:-}"
+  local network_name
+  network_name=$(docker compose "${COMPOSE_ARGS[@]}" config 2>/dev/null \
+    | awk '/^  fiscal_gateway:/{f=1; next} f && /^    name:/{print $2; exit}')
 
   if [[ -z "$network_name" || "$network_name" == "bridge" ]]; then
     return 0
