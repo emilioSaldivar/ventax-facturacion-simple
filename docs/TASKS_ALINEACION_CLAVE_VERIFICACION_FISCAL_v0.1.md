@@ -10,7 +10,7 @@
 
 - `SPEC`: DONE (verificado contra la VPS el 2026-08-28)
 - `PLAN`: DONE
-- `TASKS`: IMPLEMENTADO Y VALIDADO EN LOCAL. ACV-003 a ACV-009 DONE, ACV-010 parcial. Pendiente deploy (ACV-011/ACV-012).
+- `TASKS`: DESPLEGADO Y VERIFICADO EN PRODUCCION. ACV-001 a ACV-010, ACV-012 DONE. ACV-011 salteado por decision del usuario. Pendiente ACV-013/ACV-014.
 
 Incidente activo en produccion al abrir esta iniciativa: la verificacion fiscal
 automatica falla al 100% desde al menos `2026-08-26T05:55Z`.
@@ -28,9 +28,9 @@ automatica falla al 100% desde al menos `2026-08-26T05:55Z`.
 | ACV-007 | QA | Ajustar fakes de `PendingVerificacion` en los tests existentes al nuevo shape | DONE | Suite del workspace `api` sin errores de compilacion en tests |
 | ACV-008 | QA | Test de no-regresion: con un facturador que tiene `fe_consumer_api_key`, el worker debe usar el gateway compartido | DONE | El test falla si se restaura la seleccion por clave de facturador; en verde con la correccion |
 | ACV-009 | QA | Suite completa del workspace `api` comparada contra la linea base de fallos preexistentes | DONE | Cero regresiones respecto de la linea base (6 fallos preexistentes conocidos), confirmado con `git stash` sobre el commit base |
-| ACV-010 | QA real | Validar contra el backend fiscal real que el camino corregido responde 200 sobre un documento en `PENDIENTE_SIFEN` | PARCIAL — mitad local DONE, mitad contra backend fiscal real pendiente de ACV-011 | Evidencia de la llamada y su codigo HTTP registrada en este documento |
-| ACV-011 | Deploy staging | Desplegar en staging con `bash scripts/deploy.sh` y verificar una verificacion real de punta a punta | PENDIENTE | Log de `fe-test` con 200 en `/documentos/:uuid/sifen` proveniente del worker; sin 401 nuevos |
-| ACV-012 | Deploy produccion | Desplegar en produccion y observar el primer ciclo completo del worker | PENDIENTE | Sin `401` nuevos en los logs del api; la cola de 44 documentos drena (estado terminal o `sifen_last_checked_at` actualizado); emision y recibos sin regresion |
+| ACV-010 | QA real | Validar contra el backend fiscal real que el camino corregido responde 200 sobre un documento en `PENDIENTE_SIFEN` | DONE| Evidencia de la llamada y su codigo HTTP registrada en este documento |
+| ACV-011 | Deploy staging | Desplegar en staging con `bash scripts/deploy.sh` y verificar una verificacion real de punta a punta | SALTEADO — deploy directo a produccion por decision explicita del usuario | Log de `fe-test` con 200 en `/documentos/:uuid/sifen` proveniente del worker; sin 401 nuevos |
+| ACV-012 | Deploy produccion | Desplegar en produccion y observar el primer ciclo completo del worker | DONE | Sin `401` nuevos en los logs del api; la cola de 44 documentos drena (estado terminal o `sifen_last_checked_at` actualizado); emision y recibos sin regresion |
 | ACV-013 | Backlog | Registrar las dos iniciativas derivadas: rediseño de clave-por-ruta en el cliente fiscal, y recuperacion de los 101 documentos retirados por el corte de 30 dias | PENDIENTE | Ambas filas presentes en `docs/BACKLOG.md` |
 | ACV-014 | Cierre | Repasar SPEC/PLAN/TASKS contra lo realmente implementado y desplegado | PENDIENTE | Documentos sin desviaciones sin documentar |
 
@@ -156,3 +156,46 @@ automatica falla al 100% desde al menos `2026-08-26T05:55Z`.
     prueba `clave-de-consumidor-de-prueba`; el valor previo no se capturo antes de
     sobrescribirlo. Afecta solo a la base de desarrollo local, no a staging ni a
     produccion.
+- 2026-08-29: `ACV-011` salteado deliberadamente. El usuario decidio ir directo a
+  produccion (staging no reproducia el incidente con volumen suficiente para
+  aportar señal adicional; el fix ya estaba validado contra Postgres real y
+  contra un servidor que replica el auth real del backend fiscal en `ACV-010`).
+- 2026-08-29: `ACV-012` completado — deploy real a produccion y verificacion end
+  to end contra el backend fiscal real.
+  - Baseline pre-deploy capturado: prod en `9fe452f`, 44 documentos
+    `PENDIENTE_SIFEN` en cola de verificacion.
+  - `git pull --ff-only` en la VPS: `71c6f41` -> `d0990cf` (fast-forward limpio).
+  - `APP_ENV_FILE=.env.production bash scripts/deploy.sh`: build y up exitosos.
+    `ventax-facturacion-simple-prod-api-1` con `APP_VERSION=d0990cf`, `healthy`.
+    Migraciones sin cambios (30, `verificacion_fiscal`). Cron DNIT de produccion
+    intacto (`0 3 05 * * /app/scripts/run.sh`, `crond` corriendo) — no se toco,
+    tal como exige `DLC-009`. Red del `api` sin cambios
+    (`fe-prod_default`) — la migracion de red es una iniciativa separada
+    (`docs/TASKS_RED_COMPARTIDA_FISCAL_v0.1.md`), deliberadamente secuenciada
+    despues de este deploy.
+  - Healthcheck publico verificado desde dentro de la VPS (el `curl` directo
+    desde esta sesion fue bloqueado por el WAF de Cloudflare, ruido no
+    relacionado al deploy): `{"status":"ok",...}` via nginx local y directo al
+    contenedor.
+  - Verificacion real, no sintetica: se adelanto `verificacion_next_at` de UN
+    documento real de la cola (`38d8b841-2b1b-4059-8508-91b9a05901d6`,
+    3 intentos previos, todos fallidos con 401) para que el siguiente tick del
+    worker (intervalo 30s) lo tomara. Resultado: `PENDIENTE_SIFEN` ->
+    **`EMITIDA`**, `sifen_result_code: "0422"`, CDC confirmado,
+    `verificacion_next_at: null` (retirado de la agenda por estado terminal).
+    La llamada real de `ventax-facturacion-simple-prod-api-1` a `fe-prod-api-1`
+    para `/documentos/{uuid}/sifen` registro **`status_code: 200`** en los logs
+    de `fe-prod-api-1` — cero 401 nuevos en produccion desde el deploy.
+  - Hallazgo no anticipado en el SPEC/PLAN: el backoff acumulado durante el
+    incidente dejo a los 43 documentos restantes de la cola con
+    `verificacion_next_at` agendado lejos en el futuro (10 en la ventana
+    06:00-07:00 UTC de hoy, 22 recien a las 2026-08-30 00:00 UTC, ~21h despues
+    del deploy) — consecuencia esperable de RN-V3 ("un fallo... se reprograma
+    igual con el mismo backoff"), no un defecto de esta correccion. El criterio
+    de aceptacion 3 del SPEC ("la cola... baja") se cumple por diseño del
+    sistema, pero no de forma inmediata.
+  - Decision del usuario ante ese hallazgo: **no intervenir** los datos de los
+    43 documentos restantes (se descarto adelantar `verificacion_next_at` de
+    forma masiva). Drenan solos, en el peor caso hasta el 2026-08-30 ~00:00 UTC.
+    Este documento queda como referencia si en el futuro se decide revisar el
+    estado final de esa cola.
