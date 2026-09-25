@@ -169,7 +169,7 @@ Nullable por prudencia: `usuario_id` es `not null`, pero un usuario borrado lóg
 
 ## Fase 2 — Migración de esquema
 
-`db/migrations/0032_segmentacion_perfil_emision.sql`, aditiva y sin backfill (el backfill va en su propio paso, fase 3, para poder correrlo y verificarlo por separado).
+`db/migrations/0033_segmentacion_perfil_emision.sql`, aditiva y sin backfill (el backfill va en su propio paso, fase 3, para poder correrlo y verificarlo por separado).
 
 ```sql
 -- Perfil de emisión (nullable en las cuatro: ver PLAN §1.1)
@@ -205,7 +205,7 @@ create index notas_comerciales_facturador_perfil_idx
 
 ## Fase 3 — Backfill
 
-`db/migrations/0033_segmentacion_backfill.sql`, separado del esquema para poder inspeccionar el resultado antes de seguir, y escrito de forma **idempotente** (solo toca filas con la columna en `null`).
+`db/migrations/0034_segmentacion_backfill.sql`, separado del esquema para poder inspeccionar el resultado antes de seguir, y escrito de forma **idempotente** (solo toca filas con la columna en `null`).
 
 ### 3.1 Facturas — perfil desde el snapshot
 
@@ -352,7 +352,7 @@ Mismo patrón, con dos particularidades:
 
 ### 7.1 Modelo
 
-`db/migrations/0034_rol_consulta_facturador.sql`:
+`db/migrations/0035_rol_consulta_facturador.sql`:
 
 ```sql
 alter table roles drop constraint roles_codigo_check;
