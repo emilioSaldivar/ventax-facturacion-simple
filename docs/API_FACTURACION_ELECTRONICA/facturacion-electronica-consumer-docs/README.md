@@ -6,7 +6,7 @@ Este paquete contiene solo contratos de integración. No incluye backoffice, adm
 
 **Última actualización:** 2026-07-24. Base path de la API: `/v1`.
 
-> **Nota de vendoring (nuevo_repo):** este `README.md`, `GUIA_INTEGRACION_CONSUMIDORES_v0.2.md`,
+> **Nota de vendoring (nuevo_repo):** este `README.md`, `GUIA_INTEGRACION_CONSUMIDORES.md`,
 > `openapi.consumidor-v0.3.yaml`, `facturacion-electronica-consumidor-v0.3.postman_collection.json`,
 > `facturacion-electronica-mvp.postman_environment.json`, `GUIA_MIGRACION_CONTRATO_CANONICO_v0.1.md`
 > y `OPERACION_CONTRATO_CANONICO_v0.1.md` se copiaron el 2026-07-24 desde
@@ -29,7 +29,7 @@ Este paquete contiene solo contratos de integración. No incluye backoffice, adm
 | `openapi.yaml` | Contrato OpenAPI 3.0 filtrado — solo los 39 endpoints que un consumidor externo puede usar, con la autenticación real de cada uno. |
 | `facturacion-electronica-mvp.postman_collection.json` | Colección Postman con esos mismos endpoints, lista para importar. |
 | `facturacion-electronica-mvp.postman_environment.json` | Environment de ejemplo (sin credenciales reales) con las dos claves y variables de prueba. |
-| `GUIA_INTEGRACION_CONSUMIDORES_v0.2.md` | Guía completa (v0.3): autenticación, emisión de FE/NCE, cancelación, inutilización, idempotencia, conciliación, permisos, recibos de dinero firmados, escenarios frecuentes. **Empezar por acá.** |
+| `GUIA_INTEGRACION_CONSUMIDORES.md` | Guía completa (v0.3): autenticación, emisión de FE/NCE, cancelación, inutilización, idempotencia, conciliación, permisos, recibos de dinero firmados, escenarios frecuentes. **Empezar por acá.** |
 | `OPERACION_CONTRATO_CANONICO_v0.1.md` | Cómo usar el contrato canónico por `document_uuid` (identidad estable del documento). |
 | `GUIA_MIGRACION_CONTRATO_CANONICO_v0.1.md` | Cómo migrar de consultas por CDC a consultas por `document_uuid`. |
 
@@ -42,7 +42,7 @@ La API usa hoy **dos claves distintas, no intercambiables**. Ambas viajan en el 
 | **Clave de consumidor** | Individual por consumidor. Tiene permisos propios y alcance limitado a los emisores/ambientes asignados. | `POST /factura`, `POST /conciliacion/idempotency`, `POST /conciliacion/idempotency/cancel-send`, todo `/recibos/*` |
 | **Clave compartida** | Una sola clave global para todos los consumidores del sistema. No valida permisos ni alcance por emisor. | `POST /nota-credito`, `POST /evento/cancelar`, `POST /evento/inutilizacionnumfactura`, todo `GET /consultar/*`, `GET /documentos/*`, `GET /files/*` |
 
-Cualquier consumidor que quiera usar la API completa necesita **ambas** claves. El detalle completo, incluyendo por qué existen dos mecanismos y las implicancias de seguridad de la clave compartida, está en la sección 2 de `GUIA_INTEGRACION_CONSUMIDORES_v0.2.md`.
+Cualquier consumidor que quiera usar la API completa necesita **ambas** claves. El detalle completo, incluyendo por qué existen dos mecanismos y las implicancias de seguridad de la clave compartida, está en la sección 2 de `GUIA_INTEGRACION_CONSUMIDORES.md`.
 
 No compartir ninguna de las dos claves por correo, ni incluirlas en repositorios, logs o URLs.
 

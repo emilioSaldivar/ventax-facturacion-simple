@@ -1,8 +1,16 @@
 # Guía de Integración para Consumidores API — Facturación Electrónica SIFEN
 
-**Versión:** 0.3 (agrega Recibos de Dinero Firmados)
-**Fecha:** 2026-07-24
+**Versión:** 0.7 (mapa definitivo de autenticación por endpoint)
+**Fecha:** 2026-08-29
 **Aplica a:** integraciones externas (POS, ERP, ecommerce, sistemas de ventas)
+
+> **Novedad v0.7 (2026-08-29, solo documentación — sin cambio de comportamiento):** se agregó la **sección 23** con el mapa exhaustivo de qué clave exige cada endpoint, verificado uno por uno contra el código en producción, más el diagnóstico de cada mensaje de `401`. Se aclara además que `DOCUMENTO_READ` y `SIFEN_STATUS_READ` pueden figurar concedidos a tu consumidor pero **ninguna ruta los verifica todavía**. La red de co-locación de `prod` (`ventax_fiscal_prod`) quedó **aprovisionada y verificada** el 2026-08-29, con aislamiento comprobado respecto de `test`. La sección 22.5 aclara además quién hace qué: el deploy del servicio garantiza que la red exista, y **unir tu contenedor es tuyo** — con dos formas documentadas.
+
+> **Novedad v0.6:** la sección 22.5 (co-locación) ahora incluye una tabla fija de `CONSUMER_NETWORK_NAME` por ambiente — `ventax_fiscal_test` / `ventax_fiscal_prod`, mismo alias `facturacion-electronica` en los dos — en vez de mostrarlos como "ejemplo". El ambiente `test` ya está aprovisionado y verificado en vivo (`docker network create` + deploy real + `wget` al alias desde un contenedor de prueba, todos con resultado `200`); `prod` quedó aprovisionado y verificado el 2026-08-29 (aislamiento entre ambientes comprobado en las dos direcciones). Sin cambios de contrato HTTP.
+
+> **Novedad v0.5:** se agrega la sección 22.5, **Co-locación**, para consumidores que corren como contenedor Docker en el mismo host físico o VPS que este servicio. Es una ruta de red alternativa —evita salir a internet para volver a entrar por la dirección pública—, no un endpoint ni un campo de contrato nuevo. Requiere coordinación explícita con el administrador (no es autoservicio); si no corrés en el mismo host, esta sección no te aplica y seguís usando 22.1-22.4 sin cambios. Incluye una advertencia verificada: si más de un consumidor comparte la misma red de co-locación, quedan alcanzables entre sí, no solo con este servicio.
+
+> **Novedad v0.4:** se agregan las secciones 18 (**Naturaleza del Receptor**) y 19 (**Numeración `SERVICE` vs `CLIENT`**). Ambos campos ya existían y funcionaban en el sistema — lo que faltaba era su documentación en esta guía y, en el caso de `receptor.naturaleza`, su presencia en el `openapi.yaml` de este paquete (ya corregida). **No hay ningún cambio de comportamiento del servicio en esta versión**: si tu integración ya funciona, no requiere cambios. La sección 19.1 documenta una advertencia importante sobre omitir el objeto `numbering`.
 
 > **Corrección importante respecto a versiones previas de esta guía:** el sistema hoy usa **dos claves distintas**, no una sola API key universal con permisos por consumidor. Ver la sección 2 antes de integrar. Esta corrección aplica al contenido de las secciones 2, 6, 7, 8 y 13.
 
@@ -32,7 +40,7 @@ El sistema usa hoy **dos mecanismos de autenticación distintos, no intercambiab
 
 | Clave | Qué es | Endpoints que la requieren |
 |---|---|---|
-| **Clave de consumidor** (`consumer_api_key`) | Individual por consumidor. Tiene permisos propios (`FACTURA_EMIT`, `IDEMPOTENCY_RECONCILE`, `CANCEL_SEND`) y alcance limitado a los emisores/ambientes que te asignaron. | `POST /v1/factura`, `POST /v1/conciliacion/idempotency`, `POST /v1/conciliacion/idempotency/cancel-send` |
+| **Clave de consumidor** (`consumer_api_key`) | Individual por consumidor. Tiene permisos propios (`FACTURA_EMIT`, `IDEMPOTENCY_RECONCILE`, `CANCEL_SEND`, `RECIBO_WRITE`, `RECIBO_READ`, `RECIBO_VOID`) y alcance limitado a los emisores/ambientes que te asignaron. | `POST /v1/factura`, `POST /v1/conciliacion/idempotency`, `POST /v1/conciliacion/idempotency/cancel-send`, y todo `/v1/recibos*` (ver sección 16) |
 | **Clave compartida** (`shared_api_key`) | Una sola clave global, compartida entre **todos** los consumidores del sistema. No tiene permisos por consumidor ni alcance por emisor: quien la tiene puede consultar, descargar o accionar sobre documentos de **cualquier** emisor dado de alta en el servicio. | `POST /v1/nota-credito`, `POST /v1/evento/cancelar`, `POST /v1/evento/inutilizacionnumfactura`, todo `GET /v1/consultar/*`, `GET /v1/documentos/*`, `GET /v1/files/*` |
 
 Ambas viajan en el **mismo header**, `X-Api-Key` (o `Authorization: Bearer <key>`) — la diferencia está en qué valor corresponde a cada endpoint, no en el nombre del header.
@@ -1026,3 +1034,554 @@ Para obtener o rotar una API key, configurar permisos o emisores asignados, o es
 
 - Contactar al responsable de integración del servicio.
 - Proporcionar: código del consumidor (`consumer_code`), `idempotency_key` o `document_uuid` afectado y rango de fechas.
+
+---
+
+## 18. Naturaleza del Receptor (`receptor.naturaleza`)
+
+Aplica a `POST /v1/factura` y `POST /v1/nota-credito`.
+
+Cuando el receptor es un **contribuyente con RUC**, el sistema informa a SIFEN si se trata de una persona física o jurídica (Manual Técnico SIFEN v150, campo `iTiContRec`).
+
+| Valor | Significado | Se envía a SIFEN como |
+|---|---|---|
+| `FISICA` | Persona física con RUC | `tipoContribuyente: 1` |
+| `JURIDICA` | Persona jurídica (empresa, S.A., S.R.L., etc.) | `tipoContribuyente: 2` |
+
+```json
+"receptor": {
+  "tipoDocumento": "RUC",
+  "docNro": "80012345",
+  "dv": "6",
+  "razonSocial": "EMPRESA COMPRADORA SA",
+  "naturaleza": "JURIDICA"
+}
+```
+
+Reglas:
+
+- El campo es **opcional**. Si se omite, se asume `FISICA`.
+- **Solo tiene efecto cuando `tipoDocumento` es `RUC`.** Para receptores con `CI`, `PASAPORTE` u otros tipos, el campo se ignora — esos documentos no llevan tipo de contribuyente en el XML.
+- Se recomienda informarlo explícitamente siempre que el receptor sea una empresa. El valor viaja dentro del documento electrónico firmado: una vez que SIFEN aprueba el DE, el dato es inmutable y corregirlo requiere cancelación (dentro de las 48h) o una nota de crédito.
+
+> **Nota de versiones:** este campo se agregó después de la primera versión del contrato. Los documentos emitidos antes de su incorporación no lo persistieron y el sistema los reporta como `FISICA`.
+
+---
+
+## 19. Numeración: `SERVICE` vs `CLIENT`
+
+El objeto `numbering` del request de emisión define **quién asigna el número de comprobante**.
+
+| `authority` | Quién asigna el número | `timbrado.documentoNro` |
+|---|---|---|
+| `SERVICE` | El servicio, automáticamente desde el numerador configurado para tu emisor | No se envía |
+| `CLIENT` | Tu sistema | **Obligatorio** |
+
+```json
+"numbering": { "authority": "SERVICE" }
+```
+
+### 19.1 Advertencia: omitir `numbering` no equivale a `SERVICE`
+
+El esquema OpenAPI declara `default: SERVICE` para `authority`. Ese default **solo aplica si el objeto `numbering` está presente** y se omite únicamente ese campo:
+
+```json
+"numbering": { }                          →  authority = SERVICE
+"numbering": { "authority": "SERVICE" }   →  authority = SERVICE
+// sin la clave "numbering" en el request →  authority = CLIENT
+```
+
+Si omitís el objeto `numbering` por completo, el sistema asume `CLIENT` y **rechaza el request con `422`** indicando que falta `timbrado.documentoNro`.
+
+**Recomendación: enviá siempre `numbering` de forma explícita.** Es una línea y elimina la ambigüedad por completo.
+
+### 19.2 Campos relacionados
+
+- `numbering.requested_document_number`: número sugerido por tu sistema. El servicio puede conservarlo solo como dato de auditoría; no garantiza que sea el número fiscal final.
+- `client_reference.operational_series`: serie operativa propia de tu sistema, independiente de la serie fiscal. Es informativa y no altera la numeración fiscal.
+
+El correlativo fiscal no debe asumirse bajo control del cliente salvo acuerdo específico de integración (ver sección 15).
+
+---
+
+## 20. Actividad Económica y Perfil de Emisión
+
+### 20.1 `actividadEconomicaCodigo`
+
+Código de actividad económica del **emisor** (no del receptor) con el que se emite el documento. Es el código asignado por la DNIT/SET al facturador.
+
+```json
+{
+  "emisor_id": "80136968-1",
+  "actividadEconomicaCodigo": "47111",
+  "timbrado": { }
+}
+```
+
+Reglas:
+
+- Es **opcional**. Si el emisor tiene una sola actividad económica registrada, podés omitirlo.
+- Si el emisor tiene **varias** actividades y lo omitís, se aplica la actividad marcada como **principal**.
+- Informalo explícitamente cuando factures por una actividad que no es la principal.
+- Los códigos válidos para tu emisor te los provee el administrador (ver sección 4 y el archivo de configuración exportada, sección 21).
+
+El mismo concepto aplica a los recibos de dinero bajo el nombre `actividad_economica_codigo` (sección 16.4).
+
+### 20.2 `emission_profile_code`
+
+Un **perfil de emisión** es una combinación preconfigurada de actividad económica + establecimiento + punto de expedición + tipo de documento. Existe para emisores cuya configuración fiscal admite más de una combinación válida.
+
+```json
+{
+  "emisor_id": "80136968-1",
+  "emission_profile_code": "PERFIL-01",
+  "timbrado": { }
+}
+```
+
+Reglas:
+
+- Es **opcional**. Si tu emisor tiene un solo perfil configurado —o ninguno— no necesitás enviarlo.
+- Si tu emisor tiene **varios perfiles activos**, enviarlo es la forma de indicar con cuál emitir.
+- Los códigos de perfil disponibles para tu emisor figuran en el archivo de configuración exportada (sección 21). Si no sabés si tu emisor usa perfiles, consultá al administrador.
+
+### 20.3 `tipoTransaccion`
+
+Tipo de transacción del documento, según catálogo SIFEN.
+
+| Valor | Uso |
+|---|---|
+| `1` | Venta de mercadería (valor por defecto) |
+| `2` | Prestación de servicios |
+| `3` | Mixto (venta de mercadería y servicios) |
+
+Es **opcional**; si se omite se asume `1`. Es un dato de la transacción, no de tu configuración: lo decidís por operación, no lo recibís del administrador.
+
+---
+
+## 21. Configuración Fiscal Exportada
+
+El administrador puede entregarte un archivo (`JSON` o `YAML`) con toda la configuración fiscal de tu emisor ya validada en el sistema. Sirve para parametrizar tu integración sin tener que pedir cada dato por separado.
+
+### 21.1 Cómo leer el archivo
+
+Cada dato viene acompañado de la referencia a la sección de esta guía donde se explica su uso:
+
+```json
+{
+  "contrato": {
+    "version": { "valor": "v0.1", "referencia": "GUIA_INTEGRACION_CONSUMIDORES.md#21-configuración-fiscal-exportada" },
+    "generado_en": { "valor": "2026-09-24T22:38:24.522Z", "referencia": "GUIA_INTEGRACION_CONSUMIDORES.md#214-importante-es-una-foto-no-un-contrato-permanente" }
+  },
+  "emisor": {
+    "emisor_id": { "valor": "80136968-1", "referencia": "GUIA_INTEGRACION_CONSUMIDORES.md#4-lo-que-el-administrador-configura-para-vos" }
+  }
+}
+```
+
+- `valor`: el dato que tenés que configurar en tu sistema.
+- `referencia`: dónde, en esta guía, se explica cómo y cuándo usarlo.
+
+**Ejemplo completo, tomado de una exportación real** (RUC y datos de contacto
+reemplazados por valores de ejemplo; la estructura y todas las claves son
+exactamente las que devuelve el sistema — verificado 2026-09-24, ver
+`spec/openapi.yaml#/components/schemas/ExportConfiguracionConsumidorPayload`
+para el esquema formal):
+
+```json
+{
+  "contrato": {
+    "version": { "valor": "v0.1", "referencia": "..." },
+    "generado_en": { "valor": "2026-09-24T22:38:24Z", "referencia": "..." },
+    "guia_referencia": "GUIA_INTEGRACION_CONSUMIDORES.md",
+    "aviso_vigencia": { "valor": "Esta configuracion es una foto...", "referencia": "..." }
+  },
+  "servicio": {
+    "base_url": { "valor": "https://fe-api.ejemplo.com", "referencia": "..." },
+    "base_path": { "valor": "/v1", "referencia": "..." },
+    "ambiente_esperado": { "valor": "test", "referencia": "..." },
+    "url_verificada": { "valor": true, "referencia": "..." }
+  },
+  "emisor": {
+    "emisor_id": { "valor": "80044279-2", "referencia": "..." },
+    "razon_social": { "valor": "MI EMPRESA SRL", "referencia": "..." },
+    "nombre_fantasia": { "valor": null, "referencia": "..." },
+    "ambiente": { "valor": "test", "referencia": "..." }
+  },
+  "actividades_economicas": [
+    { "codigo": { "valor": "47591", "referencia": "..." }, "descripcion": { "valor": "Comercio al por menor de electrodomésticos y accesorios", "referencia": "..." }, "es_principal": { "valor": true, "referencia": "..." } },
+    { "codigo": { "valor": "46460", "referencia": "..." }, "descripcion": { "valor": "Comercio al por mayor de muebles y artículos de iluminación", "referencia": "..." }, "es_principal": { "valor": false, "referencia": "..." } }
+  ],
+  "establecimientos": [
+    {
+      "codigo": { "valor": "001", "referencia": "..." },
+      "denominacion": { "valor": "MATRIZ", "referencia": "..." },
+      "direccion": { "valor": "Calle Ejemplo 123, ASUNCION, ASUNCION, CAPITAL", "referencia": "..." },
+      "puntos_expedicion": [
+        { "codigo": { "valor": "001", "referencia": "..." }, "descripcion": { "valor": "Caja principal", "referencia": "..." } }
+      ]
+    }
+  ],
+  "timbrados": [
+    { "numero": { "valor": "80044279", "referencia": "..." }, "fecha_inicio": { "valor": "2026-09-17", "referencia": "..." }, "fecha_fin": { "valor": null, "referencia": "..." }, "vigente": { "valor": true, "referencia": "..." } }
+  ],
+  "perfiles_emision": {
+    "requerido": { "valor": true, "referencia": "..." },
+    "items": [
+      {
+        "codigo": { "valor": "AC46460-E001-P001-FE-GRP2", "referencia": "..." },
+        "descripcion": { "valor": "Grupo de 2 actividades, MATRIZ 001-001", "referencia": "..." },
+        "actividad_codigo": { "valor": "46460", "referencia": "..." },
+        "establecimiento_codigo": { "valor": "001", "referencia": "..." },
+        "punto_codigo": { "valor": "001", "referencia": "..." },
+        "tipo_documento": { "valor": "1", "referencia": "..." },
+        "grupo_actividades": [
+          { "codigo": { "valor": "46460", "referencia": "..." }, "descripcion": { "valor": "Comercio al por mayor de muebles y artículos de iluminación", "referencia": "..." } },
+          { "codigo": { "valor": "47711", "referencia": "..." }, "descripcion": { "valor": "Comercio al por menor de prendas de vestir", "referencia": "..." } }
+        ]
+      }
+    ]
+  },
+  "numeracion": {
+    "autoridad": { "valor": "SERVICE", "referencia": "..." },
+    "documento_nro_requerido": { "valor": false, "referencia": "..." },
+    "serie_fiscal": { "valor": null, "referencia": "..." },
+    "rango_min": { "valor": null, "referencia": "..." },
+    "rango_max": { "valor": null, "referencia": "..." }
+  },
+  "envio": {
+    "modos_habilitados": { "valor": ["SYNC", "BATCH", "AUTO"], "referencia": "..." }
+  },
+  "tipos_documento_habilitados": { "valor": ["FE"], "referencia": "..." },
+  "consumidor": [
+    {
+      "nombre": { "valor": "mi-sistema-001 — Mi Sistema de Ventas", "referencia": "..." },
+      "permisos": { "valor": ["FACTURA_EMIT", "DOCUMENTO_READ"], "referencia": "..." },
+      "alcance": { "valor": [{ "emisor_id": "80044279-2", "env": "test", "activo": true }], "referencia": "..." }
+    }
+  ]
+}
+```
+
+(Los `"referencia": "..."` de arriba son solo para no repetir la misma URL
+decenas de veces en este ejemplo; en el archivo real cada uno trae la ancla
+completa, como en el primer ejemplo de esta sección.)
+
+### 21.2 Qué contiene
+
+| Bloque | Contenido |
+|---|---|
+| `emisor` | `emisor_id`, razón social, nombre de fantasía, ambiente (`test`/`prod`) |
+| `actividades_economicas` | códigos, descripciones y cuál es la principal (sección 20.1) |
+| `establecimientos` | códigos, denominación, dirección y sus puntos de expedición |
+| `timbrados` | número, fecha de inicio, fecha de fin y cuál está vigente |
+| `perfiles_emision` | códigos de perfil disponibles, si son obligatorios (sección 20.2) y, por perfil, el grupo de actividades económicas que va a declarar el XML (sección 25) |
+| `numeracion` | autoridad (`SERVICE`/`CLIENT`), serie fiscal y rango válido (sección 19) |
+| `envio` | modos de envío habilitados para tu emisor (sección 5.4) |
+| `tipos_documento_habilitados` | qué documentos podés emitir (FE, NCE) |
+| `consumidor` | tu nombre de consumidor, permisos concedidos y emisores/ambientes asignados (sección 13) |
+
+### 21.3 Qué NO contiene
+
+El archivo **nunca incluye secretos** y es seguro guardarlo en tu sistema de configuración:
+
+- no incluye API keys (ni la de consumidor ni la compartida);
+- no incluye el certificado digital, su contraseña ni su ubicación;
+- no incluye el CSC (código de seguridad del contribuyente).
+
+Esos elementos los administra el proveedor del servicio y nunca se comparten.
+
+### 21.4 Importante: es una foto, no un contrato permanente
+
+El archivo refleja la configuración **en el momento indicado en `contrato.generado_en`**. Queda desactualizado si el administrador:
+
+- carga un timbrado nuevo (recambio anual);
+- agrega o desactiva un establecimiento o punto de expedición;
+- cambia la autoridad de numeración;
+- modifica tus permisos o los emisores asignados.
+
+**No cablees estos valores como constantes permanentes.** Ante cualquier cambio de configuración fiscal, pedí una exportación nueva. Un timbrado vencido en tu sistema produce rechazos de SIFEN.
+
+---
+
+## 22. A Qué Dirección Conectarse
+
+El archivo de configuración exportada (sección 21) incluye un bloque `servicio` con la dirección del servicio al que tenés que apuntar:
+
+```yaml
+servicio:
+  base_url:
+    valor: https://fe.ejemplo.com.py
+  base_path:
+    valor: /v1
+  ambiente_esperado:
+    valor: prod
+  url_verificada:
+    valor: true
+```
+
+### 22.1 Cómo armar la URL de un endpoint
+
+Concatenás `base_url` + `base_path` + la ruta del endpoint que figura en esta guía:
+
+```
+base_url        https://fe.ejemplo.com.py
+base_path       /v1
+endpoint        /factura
+─────────────────────────────────────────────
+URL final       https://fe.ejemplo.com.py/v1/factura
+```
+
+Lo mismo para cualquier otro: `/nota-credito`, `/evento/cancelar`, `/consultar/comprobante/{cdc}`, `/documentos/{document_uuid}`, `/recibos`, etc.
+
+Configurá **solo `base_url` en tu sistema**, y derivá el resto. Así, si algún día cambia el host, tenés un único lugar que tocar.
+
+### 22.2 `ambiente_esperado` y el alcance de tu clave
+
+`ambiente_esperado` te dice contra qué ambiente está configurado ese emisor: `test` (homologación SIFEN) o `prod` (producción).
+
+Tu clave de consumidor tiene un alcance por emisor **y por ambiente** (sección 4). Ambos tienen que coincidir: si el archivo dice `prod` pero tu clave está asignada solo a `test`, vas a recibir `403` al intentar emitir. Ante esa combinación, consultá al administrador antes de seguir.
+
+### 22.3 Si el archivo dice `url_verificada: false`
+
+Ese campo indica si un administrador **configuró deliberadamente** la dirección de la API y si ese valor es utilizable. **No** indica que la dirección responda: nada comprueba alcanzabilidad.
+
+**No integres contra esa dirección sin confirmarla.** El campo `aviso` que acompaña al archivo te dice cuál de los motivos aplica. El más frecuente es que el administrador todavía no configuró la variable específica de la API, y el archivo trajo una dirección de respaldo que **puede apuntar a otro servicio** — en ese caso vas a recibir `401` o `404` aunque tu clave sea perfectamente válida. Es un síntoma engañoso: parece un problema de credenciales y es un problema de dirección.
+
+Cuando vale `true`, la dirección fue configurada explícitamente como la de esta API y podés usarla tal cual.
+
+Detalle completo de los motivos en la sección 24.
+
+### 22.4 Autenticación: la dirección no alcanza
+
+Saber a dónde conectarte no te autentica. Seguís necesitando tus claves, que **nunca viajan en el archivo exportado** (sección 21.3) y se entregan por un canal aparte. Revisá la sección 2 para el modelo de dos claves y cuál corresponde a cada endpoint.
+
+### 22.5 Si tu sistema corre en el mismo servidor que este servicio (co-locación)
+
+Todo lo anterior (22.1-22.4) asume que le llegás a este servicio por su dirección pública. Hay un caso distinto: si tu sistema corre en **el mismo host físico o VPS**, la dirección pública es la ruta más lenta y menos confiable posible — sale de tu contenedor, cruza a internet, vuelve a entrar por el mismo servidor. En un caso real medido, esa ruta agregaba **~50 segundos por venta** (timeout + reintentos) contra **~476 ms** conectando directo.
+
+Este es un caso de infraestructura, no un contrato HTTP nuevo: no hay endpoints, campos ni autenticación distintos. Es exclusivamente sobre *cómo llega tu contenedor al nuestro* cuando ambos están en la misma máquina.
+
+**Cuándo aplica.** Solo si tu sistema y este servicio corren como contenedores Docker en el mismo host, administrados por el mismo proveedor de infraestructura. Si no estás seguro, no aplica — usá 22.1-22.4.
+
+**Qué necesitás pedirle al administrador.** Esto no lo armás vos solo: requiere que el administrador aprovisione una red Docker compartida en el host y te confirme dos datos:
+
+| Dato | Para qué |
+|---|---|
+| Nombre de la red compartida | Unir tu contenedor a la misma red Docker que el servicio. Es **distinto por ambiente** — ver tabla abajo |
+| Alias de red del servicio | El nombre que resolvés dentro de esa red — **no** el nombre del contenedor real (`fe-test-api-1`), que cambia con un redeploy o un `scale` |
+
+**Nombre de red por ambiente — valor fijo, no varía por consumidor.** Todo consumidor co-locado en un mismo host se une a la misma red por ambiente (más abajo en esta sección se explica qué implica eso cuando hay más de uno):
+
+| Ambiente | `CONSUMER_NETWORK_NAME` | Alias del servicio | Estado |
+|---|---|---|---|
+| `test` (homologación) | `ventax_fiscal_test` | `facturacion-electronica` | **Operativo**, verificado en vivo el 2026-08-20 |
+| `prod` (producción) | `ventax_fiscal_prod` | `facturacion-electronica` | Aprovisionada y verificada desde 2026-08-29 |
+
+El alias es **el mismo string en los dos ambientes** — `facturacion-electronica:8080` siempre. Lo que determina a qué ambiente llegás es la red a la que tu contenedor está unido, no la URL. Si tu clave de consumidor está asignada a `test` (sección 4), unite a `ventax_fiscal_test`; si está en `prod`, a `ventax_fiscal_prod`. Unirte a la red que no corresponde a tu clave no te da acceso — vas a recibir `403` igual, pero confirmalo con el administrador antes de asumir cuál te toca.
+
+Con esos dos datos, en tu propio `docker-compose.yml` (o equivalente):
+
+```yaml
+services:
+  tu-servicio:
+    # ... tu configuración normal ...
+    networks:
+      default:                # no la saques: sin esto perdés tu propia red interna
+      consumer_net:
+        # nada más que unirte
+
+networks:
+  consumer_net:
+    external: true
+    name: ventax_fiscal_test   # o ventax_fiscal_prod, según el ambiente de tu clave — ver tabla arriba
+```
+
+Y tu variable de conexión pasa a ser el alias, no una IP ni el nombre de contenedor:
+
+```
+http://facturacion-electronica:8080/v1
+```
+
+**Quién hace qué.** Desde el 2026-08-29 la red la garantiza el propio deploy del servicio de facturación: si no existe, la crea. Las dos redes (`ventax_fiscal_test` y `ventax_fiscal_prod`) ya están operativas. Lo que **no** hace el servicio es unir tu contenedor: eso lo hacés vos, desde tu propio stack.
+
+| Responsabilidad | De quién |
+|---|---|
+| Que la red exista | del servicio de facturación (automático en cada deploy) |
+| Que la API esté unida con el alias `facturacion-electronica` | del servicio de facturación |
+| Que **tu** contenedor se una a la red | **tuya** |
+
+Podés unirte de dos formas. La primera es la recomendada, porque sobrevive a que recrees tu contenedor:
+
+```yaml
+# en tu propio docker-compose
+networks:
+  ventax_fiscal:
+    external: true
+    name: ventax_fiscal_prod
+services:
+  api:
+    networks: [default, ventax_fiscal]
+```
+
+```bash
+# alternativa, sobre un contenedor ya corriendo — se pierde si lo recreás
+docker network connect ventax_fiscal_prod <tu_contenedor>
+```
+
+**Por qué sigue sin ser autoservicio del todo.** Necesitás que el administrador te confirme el nombre exacto de la red que te corresponde por ambiente. Un nombre equivocado, o unirte a la red de `prod` cuando tu sistema es de `test`, te conecta al ambiente que no corresponde — verificá explícitamente con el administrador a cuál te uniste antes de emitir el primer documento real.
+
+**Qué NO cambia.** Seguís necesitando tu API key (22.4) y seguís respetando el modelo de dos claves (sección 2). La co-locación te da una ruta de red más corta; no te da acceso ni permisos que no tuvieras ya. Si además tenés consumidores tuyos que **no** están en este host, seguí usando `base_url`/`base_path` del archivo exportado (22.1) para esos — el alias de red compartida solo resuelve desde adentro de esa red Docker, no es una URL pública.
+
+**Si hay más de un consumidor co-locado en la misma red — leé esto antes de integrarte.** Verificamos con una prueba directa (dos contenedores en la misma red Docker) que dos consumidores unidos a la **misma** red compartida quedan alcanzables **entre sí**, no solo cada uno con `facturacion-electronica`. Es el comportamiento estándar de cualquier red Docker con más de un miembro — no algo específico ni exclusivo de este servicio, y no es una falla de diseño, pero sí algo que tenés que saber antes de unirte:
+
+- No expongas en el contenedor que unís a esta red nada que no quieras que otro consumidor co-locado pueda alcanzar directamente.
+- Si vas a compartir la red con otro sistema que no controlás vos (por ejemplo, otro proveedor con infraestructura en el mismo host), consultalo explícitamente con el administrador de este servicio antes de integrarte. Puede coordinar una red dedicada por consumidor en lugar de una compartida entre varios, si tu caso lo amerita.
+- Esto es exclusivamente sobre la red de co-locación (22.5). No aplica si conectás por `base_url` (22.1) — esa ruta no te expone a otros consumidores en ningún caso.
+
+**Referencia técnica completa** (para quien administra tu infraestructura, no para el día a día de integración): `docs/OPERACION_GIT_DEPLOY.md` y `docs/SPEC_RED_COMPARTIDA_CONSUMIDORES_v0.1.md` del repositorio de este servicio.
+
+---
+
+## 23. Mapa Definitivo de Autenticación por Endpoint
+
+**Agregada el 2026-08-29.** La sección 2 explica el modelo de las dos claves; esta sección es
+la referencia exhaustiva, verificada endpoint por endpoint contra el código desplegado en
+producción y comprobada con llamadas reales.
+
+**No hay cambio de comportamiento.** El servicio siempre funcionó así. Esta sección corrige
+documentación que en algunos artefactos declaraba la clave equivocada; no requiere que
+modifiques tu integración, salvo que hoy estés recibiendo `401` en consultas.
+
+### Clave de consumidor
+
+| Método | Endpoint | Permiso |
+|---|---|---|
+| `POST` | `/v1/factura` | `FACTURA_EMIT` |
+| `POST` | `/v1/conciliacion/idempotency` | `IDEMPOTENCY_RECONCILE` |
+| `POST` | `/v1/conciliacion/idempotency/cancel-send` | `CANCEL_SEND` |
+| `POST` | `/v1/recibos` | `RECIBO_WRITE` |
+| `PATCH` | `/v1/recibos/{id}` | `RECIBO_WRITE` |
+| `POST` | `/v1/recibos/{id}/emitir` | `RECIBO_WRITE` |
+| `DELETE` | `/v1/recibos/{id}` | `RECIBO_WRITE` |
+| `POST` | `/v1/recibos/{id}/anular` | `RECIBO_VOID` |
+| `GET` | `/v1/recibos` | `RECIBO_READ` |
+| `GET` | `/v1/recibos/{id}` | `RECIBO_READ` |
+| `GET` | `/v1/recibos/{id}/pdf` | `RECIBO_READ` |
+| `GET` | `/v1/recibos/{id}/xml` | `RECIBO_READ` |
+
+### Clave compartida
+
+`POST /v1/nota-credito`, `POST /v1/evento/cancelar`,
+`POST /v1/evento/inutilizacionnumfactura`, y **todos** los `GET` de
+`/v1/documentos/*` (incluido `/by-cdc/{cdc}` y los `/files/*`), `/v1/consultar/*`
+y `/v1/files/*`. Son 25 endpoints. Ninguno verifica permisos ni alcance por emisor.
+
+### Sin autenticación
+
+`GET /v1/health` y `/v1/verificar/recibo/{token}` (más `/pdf` y `/xml`).
+
+### Los permisos de lectura todavía no hacen nada
+
+`DOCUMENTO_READ` y `SIFEN_STATUS_READ` pueden figurar concedidos a tu consumidor, pero
+**ninguna ruta los verifica**. Tenerlos no habilita a consultar con la clave de consumidor:
+las consultas siguen exigiendo la clave compartida. Están declarados para una migración
+futura que todavía no se hizo.
+
+### Diagnóstico rápido de `401`
+
+| Mensaje | Causa |
+|---|---|
+| `API key requerida` | Falta el header por completo. |
+| `API key invalida` | Endpoint de clave compartida; mandaste otra clave (casi siempre la de consumidor). |
+| `API key invalida o consumidor inactivo` | Endpoint de clave de consumidor; mandaste la compartida, o tu consumidor está inactivo. |
+
+Si tu integración emite facturas sin problema pero falla al consultar el estado, es
+exactamente este caso: estás usando la clave de consumidor en un endpoint que espera la
+compartida.
+
+---
+
+## 24. `url_verificada` en detalle: qué significa cada motivo
+
+Sección agregada porque el significado de `url_verificada` se precisó. **No hay cambio de
+comportamiento:** el archivo exportado tiene los mismos campos, en el mismo lugar, con los mismos
+tipos. Lo que cambió es *cuándo* el sistema se anima a decir `true`, y que ahora el `aviso` te dice
+el motivo concreto en vez de un texto genérico. Si tu integración ya funciona, no tenés que tocar
+nada.
+
+### 24.1 Qué afirma y qué no afirma
+
+`url_verificada: true` afirma **una** cosa: que un administrador configuró deliberadamente la
+dirección de esta API y que el valor es utilizable tal cual.
+
+**No** afirma que la dirección responda. Nadie hace una prueba de conexión al exportar el archivo,
+así que un `true` no te garantiza que el servicio esté arriba ni que tu red lo alcance.
+
+### 24.2 Los motivos de `url_verificada: false`
+
+| Situación | Qué pasó | Qué hacer |
+|---|---|---|
+| **No se configuró la dirección de la API** | El archivo trae una dirección de respaldo, tomada de una variable que existe para los links públicos de verificación de recibos. Esa dirección **puede ser la de otro servicio** (por ejemplo, la página propia de otro integrador) | Pedile al administrador la URL real de la API. **No** integres contra la dirección del archivo |
+| **No es `https://`** | La dirección quedó vacía, mal formada o en `http://` | Pedí la dirección definitiva |
+| **Es un valor por defecto de desarrollo** | El archivo se exportó desde una instalación que no tiene configurada su URL pública | Pedí la dirección definitiva |
+| **Ya termina en `/v1`** | La dirección incluye el prefijo de versión, que vos también agregás por `base_path`. Concatenar ambos da `.../v1/v1/factura` | Avisale al administrador. Mientras tanto, **no** le agregues `base_path` a esa dirección |
+
+### 24.3 El síntoma que más cuesta diagnosticar
+
+Si estás recibiendo **`401` con una clave que sabés que es válida**, revisá la dirección antes que
+la credencial.
+
+Un `401` producido por pegarle al host equivocado es indistinguible de un `401` por clave revocada:
+la respuesta la genera otro servicio, no esta API, así que ni siquiera aparece en nuestros logs.
+Verificá que la dirección que estás usando sea la que corresponde a la API — el `base_url` del
+archivo más el `base_path`, y que el archivo diga `url_verificada: true`.
+
+Una comprobación de 5 segundos que descarta el caso: pedile `GET {base_url}{base_path}/health` a la
+dirección que estás usando. Si no responde un JSON de esta API, el problema es la dirección, no tu
+clave.
+
+---
+
+## 25. Grupo de Actividades Económicas por Perfil de Emisión
+
+### 25.1 `grupo_actividades` en el archivo exportado
+
+Un documento electrónico puede declarar **más de una actividad económica** en el XML (hasta 9, según el Manual Técnico SIFEN v150). Esto es distinto de tener varios perfiles: es un mismo perfil de emisión el que, al emitir, agrega varios bloques de actividad económica en un mismo documento.
+
+Si tu emisor tiene esto configurado, cada perfil en `perfiles_emision.items[]` (sección 21) incluye `grupo_actividades`, un array con las actividades que va a llevar el XML **en el orden en que van a aparecer**:
+
+```json
+{
+  "perfiles_emision": {
+    "items": [
+      {
+        "codigo": "COBR",
+        "actividad_codigo": {
+          "valor": "82910",
+          "referencia": "GUIA_INTEGRACION_CONSUMIDORES.md#202-emission_profile_code"
+        },
+        "grupo_actividades": {
+          "valor": [
+            { "codigo": "82910", "descripcion": "Actividades de agencias de cobro y oficinas de crédito" },
+            { "codigo": "82110", "descripcion": "Servicios de administración de oficinas" }
+          ],
+          "referencia": "GUIA_INTEGRACION_CONSUMIDORES.md#251-grupo_actividades-en-el-archivo-exportado"
+        }
+      }
+    ]
+  }
+}
+```
+
+La primera actividad de `grupo_actividades` **siempre coincide con `actividad_codigo`** del mismo perfil: es la que determina tu logo, tu nombre de fantasía y el formato del KUDE (ticket o A4), igual que hoy. Las siguientes son actividades adicionales que se agregan al XML pero no afectan la presentación del documento.
+
+### 25.2 Es informativo — no cambia lo que enviás
+
+**No tenés que enviar ni elegir nada nuevo.** Seguís mandando `emission_profile_code` (sección 20.2) exactamente igual que antes; el grupo de actividades lo resuelve el sistema del lado del administrador, no vos. Este campo existe solo para que sepas de antemano qué actividades va a llevar el XML de un perfil determinado, sin tener que emitir un documento y leerlo para averiguarlo.
+
+Si tu emisor no tiene grupos configurados, `grupo_actividades` viene con una sola actividad (la misma que `actividad_codigo`) o el campo puede no aparecer, según la versión del archivo — tratalo siempre como opcional.
+
+### 25.3 Compatibilidad
+
+Esta sección y el campo `grupo_actividades` son **aditivos**: agregar un grupo de actividades a un perfil existente no cambia `emission_profile_code`, no cambia ningún otro campo del contrato de emisión, y no rompe ninguna integración que ya esté funcionando. Un perfil sin grupo configurado emite exactamente el mismo XML que antes de que existiera esta funcionalidad.
