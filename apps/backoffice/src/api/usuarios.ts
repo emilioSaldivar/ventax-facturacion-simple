@@ -22,6 +22,16 @@ export interface BackofficeUser {
   operation_config: UserOperationConfig | null;
 }
 
+/** Configuracion operativa dentro del alta (alta guiada): sin tenant_id, se deriva del usuario. */
+export interface OperationConfigInlineInput {
+  facturador_id: string;
+  emisor_id: string;
+  establecimiento: string;
+  punto_expedicion: string;
+  perfil_emision_codigo: string;
+  actividad_economica_codigo: string;
+}
+
 export interface UserCreateInput {
   tenant_id: string;
   username: string;
@@ -29,6 +39,8 @@ export interface UserCreateInput {
   display_name?: string | null;
   role: BackofficeUser["role"];
   temporary_password?: string | null;
+  /** Opcional: sin este bloque el alta se comporta igual que antes. */
+  operation_config?: OperationConfigInlineInput;
 }
 
 export interface UserUpdateInput {

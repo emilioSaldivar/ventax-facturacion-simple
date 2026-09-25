@@ -1,4 +1,5 @@
 import type { UserSummary } from "@facturacion-simple/shared";
+import type { PoolClient } from "pg";
 import { pool } from "../../db/pool";
 import { HttpError } from "../../shared/errors/http-error";
 import { deriveAccion, type DeriveAccionInput } from "../facturas/facturas.accion";
@@ -403,6 +404,7 @@ export class PgBackofficeRepository implements BackofficeRepository {
     displayName: string | null;
     passwordHash: string;
     role: UserSummary["role"];
+    operationConfig?: Omit<BackofficeOperationConfigInput, "tenant_id"> | null;
   }): Promise<Omit<BackofficeUserResponse, "temporary_password">> {
     const client = await pool.connect();
     try {
@@ -419,11 +421,37 @@ export class PgBackofficeRepository implements BackofficeRepository {
          where codigo = $2 and activo = true and deleted_at is null`,
         [userId, input.role]
       );
+
+      // Alta guiada: el contexto operativo se crea en la MISMA transaccion. Si no resuelve,
+      // el usuario NO queda creado a medias (CA-14).
+      if (input.operationConfig) {
+        const match = await this.resolveOperationConfigTarget(client, {
+          userId,
+          tenantId: input.tenantId,
+          data: input.operationConfig
+        });
+        if (!match) {
+          await client.query("rollback");
+          throw new HttpError(
+            400,
+            "VALIDATION_ERROR",
+            "Contexto operativo no encontrado para el facturador indicado."
+          );
+        }
+        // El usuario es nuevo: no hay configuracion previa que desactivar.
+        await client.query(
+          `insert into usuario_operacion_config (tenant_id, usuario_id, facturador_id, actividad_punto_perfil_id, activo)
+           values ($1, $2, $3, $4, true)`,
+          [match.tenant_id, userId, match.facturador_id, match.actividad_punto_perfil_id]
+        );
+      }
+
       const row = await this.findUserRow(userId, client);
       await client.query("commit");
       return mapUserRow(row!);
     } catch (error) {
-      await client.query("rollback");
+      // Si el rollback ya se ejecuto (contexto que no resuelve), este es un no-op seguro.
+      await client.query("rollback").catch(() => undefined);
       if (isUniqueViolation(error)) throw new HttpError(409, "CONFLICT", "Username ya existe.");
       throw error;
     } finally {
@@ -457,23 +485,42 @@ export class PgBackofficeRepository implements BackofficeRepository {
     }
   }
 
+  /**
+   * Resuelve el contexto operativo a partir de los CODIGOS del archivo/formulario.
+   * Extraido de `assignOperationConfig` para reusarlo desde `createUser` sin duplicar la query.
+   */
+  private async resolveOperationConfigTarget(
+    client: PoolClient,
+    input: { userId: string; tenantId: string; data: Omit<BackofficeOperationConfigInput, "tenant_id"> }
+  ): Promise<{ tenant_id: string; facturador_id: string; actividad_punto_perfil_id: string } | null> {
+    const resolved = await client.query<{ tenant_id: string; facturador_id: string; actividad_punto_perfil_id: string }>(
+      `select u.tenant_id, f.id as facturador_id, app.id as actividad_punto_perfil_id
+       from usuarios u
+       join facturadores f on f.id = $3 and f.tenant_id = u.tenant_id and f.tenant_id = $2 and f.emisor_id = $4 and f.activo = true and f.deleted_at is null
+       join actividad_punto_perfiles app on app.facturador_id = f.id and app.tenant_id = f.tenant_id and app.activo = true and app.deleted_at is null
+       join facturador_establecimientos e on e.id = app.establecimiento_id and e.codigo = $5 and e.activo = true and e.deleted_at is null
+       join facturador_puntos_expedicion p on p.id = app.punto_expedicion_id and p.codigo = $6 and p.activo = true and p.deleted_at is null
+       join facturador_perfiles_emision pe on pe.id = app.perfil_emision_id and pe.codigo = $7 and pe.activo = true and pe.deleted_at is null
+       join facturador_actividades a on a.id = app.actividad_id and a.codigo = $8 and a.activo = true and a.deleted_at is null
+       where u.id = $1 and u.tenant_id = $2 and u.activo = true and u.deleted_at is null limit 1`,
+      [
+        input.userId, input.tenantId, input.data.facturador_id, input.data.emisor_id,
+        input.data.establecimiento, input.data.punto_expedicion,
+        input.data.perfil_emision_codigo, input.data.actividad_economica_codigo
+      ]
+    );
+    return resolved.rows[0] ?? null;
+  }
+
   async assignOperationConfig(input: { userId: string; data: BackofficeOperationConfigInput }): Promise<BackofficeOperationConfigResponse | null> {
     const client = await pool.connect();
     try {
       await client.query("begin");
-      const resolved = await client.query<{ usuario_id: string; tenant_id: string; facturador_id: string; actividad_punto_perfil_id: string }>(
-        `select u.id as usuario_id, u.tenant_id, f.id as facturador_id, app.id as actividad_punto_perfil_id
-         from usuarios u
-         join facturadores f on f.id = $3 and f.tenant_id = u.tenant_id and f.tenant_id = $2 and f.emisor_id = $4 and f.activo = true and f.deleted_at is null
-         join actividad_punto_perfiles app on app.facturador_id = f.id and app.tenant_id = f.tenant_id and app.activo = true and app.deleted_at is null
-         join facturador_establecimientos e on e.id = app.establecimiento_id and e.codigo = $5 and e.activo = true and e.deleted_at is null
-         join facturador_puntos_expedicion p on p.id = app.punto_expedicion_id and p.codigo = $6 and p.activo = true and p.deleted_at is null
-         join facturador_perfiles_emision pe on pe.id = app.perfil_emision_id and pe.codigo = $7 and pe.activo = true and pe.deleted_at is null
-         join facturador_actividades a on a.id = app.actividad_id and a.codigo = $8 and a.activo = true and a.deleted_at is null
-         where u.id = $1 and u.tenant_id = $2 and u.activo = true and u.deleted_at is null limit 1`,
-        [input.userId, input.data.tenant_id, input.data.facturador_id, input.data.emisor_id, input.data.establecimiento, input.data.punto_expedicion, input.data.perfil_emision_codigo, input.data.actividad_economica_codigo]
-      );
-      const match = resolved.rows[0];
+      const match = await this.resolveOperationConfigTarget(client, {
+        userId: input.userId,
+        tenantId: input.data.tenant_id,
+        data: input.data
+      });
       if (!match) { await client.query("rollback"); return null; }
       await client.query(
         `update usuario_operacion_config set activo = false, updated_at = now() where usuario_id = $1 and activo = true and deleted_at is null`,
@@ -482,7 +529,7 @@ export class PgBackofficeRepository implements BackofficeRepository {
       await client.query(
         `insert into usuario_operacion_config (tenant_id, usuario_id, facturador_id, actividad_punto_perfil_id, activo)
          values ($1, $2, $3, $4, true)`,
-        [match.tenant_id, match.usuario_id, match.facturador_id, match.actividad_punto_perfil_id]
+        [match.tenant_id, input.userId, match.facturador_id, match.actividad_punto_perfil_id]
       );
       const row = await this.findOperationConfigRow(input.userId, client);
       await client.query("commit");

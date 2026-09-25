@@ -2,12 +2,21 @@ import type { UserSummary } from "@facturacion-simple/shared";
 
 // ─── Usuarios (existentes) ────────────────────────────────────────────────────
 
+/**
+ * Configuracion operativa dentro del alta de usuario. Misma forma que
+ * `BackofficeOperationConfigInput` menos `tenant_id`, que se deriva del usuario que se crea
+ * (PLAN_IMPORT_CONFIG_FACTURADOR_v0.1 seccion 10.3).
+ */
+export type BackofficeOperationConfigInlineInput = Omit<BackofficeOperationConfigInput, "tenant_id">;
+
 export interface BackofficeUserCreateInput {
   username: string;
   email: string;
   display_name?: string | null;
   role: UserSummary["role"];
   temporary_password?: string | null;
+  /** Opcional y retrocompatible: sin este bloque el comportamiento es el previo. */
+  operation_config?: BackofficeOperationConfigInlineInput | null;
   // tenant_id se pasa como primer argumento a createBackofficeUser, no dentro de este objeto
 }
 
@@ -299,6 +308,8 @@ export interface BackofficeRepository {
     displayName: string | null;
     passwordHash: string;
     role: UserSummary["role"];
+    /** Cuando viene, se resuelve y se inserta en la MISMA transaccion (CA-13, CA-14). */
+    operationConfig?: BackofficeOperationConfigInlineInput | null;
   }): Promise<Omit<BackofficeUserResponse, "temporary_password">>;
   resetPassword(input: {
     userId: string;

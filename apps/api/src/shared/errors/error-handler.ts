@@ -32,6 +32,20 @@ export const errorHandler: ErrorRequestHandler = (error, req, res, _next) => {
     return;
   }
 
+  // Cuerpo mayor al limite de express.json: es un caso esperable del import de
+  // configuracion, no un error interno. Sin esto cae en el INTERNAL_ERROR generico.
+  if (typeof error === "object" && error !== null && (error as { type?: string }).type === "entity.too.large") {
+    const body: ApiErrorResponse = {
+      error: {
+        code: "PAYLOAD_TOO_LARGE",
+        message: "El archivo supera el tamano maximo permitido.",
+        requestId
+      }
+    };
+    res.status(413).json(body);
+    return;
+  }
+
   req.log.error({ err: error }, "Unhandled API error");
 
   const body: ApiErrorResponse = {

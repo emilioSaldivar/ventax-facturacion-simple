@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import "./styles.css";
 
 import { apiLogin, ApiError, getToken, setToken } from "./api/client";
+import { postImportApply, postImportPreview, type ActividadOpcion, type ContextoDiff, type EntidadDiff, type Hallazgo, type ImportApplyResponse, type ImportDiff, type ImportTarget } from "./api/import";
 import { listTenants, getTenant, createTenant, updateTenant, type Tenant } from "./api/tenants";
 import {
   listFacturadores,
@@ -70,8 +71,9 @@ type AppView =
   | { tag: "actividad-create"; facturadorId: string; tenantId: string }
   | { tag: "perfil-create"; facturadorId: string; tenantId: string }
   | { tag: "contexto-create"; facturadorId: string; tenantId: string }
+  | { tag: "facturador-import"; tenantId?: string }
   | { tag: "usuarios-list" }
-  | { tag: "usuario-create" }
+  | { tag: "usuario-create"; tenantId?: string; facturadorId?: string }
   | { tag: "usuario-detail"; userId: string };
 
 type NavSection = "tenants" | "usuarios";
@@ -188,10 +190,12 @@ function App() {
         <PerfilCreateView facturadorId={view.facturadorId} tenantId={view.tenantId} onNavigate={navigate} />
       ) : view.tag === "contexto-create" ? (
         <ContextoCreateView facturadorId={view.facturadorId} tenantId={view.tenantId} onNavigate={navigate} />
+      ) : view.tag === "facturador-import" ? (
+        <FacturadorImportView tenantId={view.tenantId} onNavigate={navigate} />
       ) : view.tag === "usuarios-list" ? (
         <UsersListView onNavigate={navigate} />
       ) : view.tag === "usuario-create" ? (
-        <UserCreateView onNavigate={navigate} />
+        <UserCreateView tenantId={view.tenantId} facturadorId={view.facturadorId} onNavigate={navigate} />
       ) : view.tag === "usuario-detail" ? (
         <UserDetailView userId={view.userId} onNavigate={navigate} />
       ) : null}
@@ -201,6 +205,10 @@ function App() {
 
 function buildBreadcrumb(view: AppView, navigate: (v: AppView) => void): Array<{ label: string; onClick?: () => void }> {
   if (view.tag === "tenants-list") return [{ label: "Tenants" }];
+  if (view.tag === "facturador-import") return [
+    { label: "Tenants", onClick: () => navigate({ tag: "tenants-list" }) },
+    { label: "Importar configuracion FE" },
+  ];
   if (view.tag === "tenant-create") return [
     { label: "Tenants", onClick: () => navigate({ tag: "tenants-list" }) },
     { label: "Nuevo tenant" },
@@ -374,6 +382,9 @@ function TenantsListView({ onNavigate }: { onNavigate: (v: AppView) => void }) {
         <h1 className="panel-title">Tenants</h1>
         <button className="btn btn-primary" onClick={() => onNavigate({ tag: "tenant-create" })} type="button">
           + Nuevo tenant
+        </button>
+        <button className="btn" onClick={() => onNavigate({ tag: "facturador-import" })} type="button" data-testid="nav-import">
+          Importar configuracion FE
         </button>
       </div>
       <div className="panel">
@@ -1836,6 +1847,396 @@ function ContextoCreateView({
 
 // ─── UsersListView ────────────────────────────────────────────────────────────
 
+
+// ─── Import de configuracion FE ───────────────────────────────────────────────
+
+function accionChipClass(accion: string): string {
+  if (accion === "CREAR") return "diff-chip diff-chip-crear";
+  if (accion === "ACTUALIZAR") return "diff-chip diff-chip-actualizar";
+  return "diff-chip diff-chip-sin-cambios";
+}
+
+function valorLegible(v: unknown): string {
+  if (v === null || v === undefined) return "—";
+  if (typeof v === "string") return v;
+  return JSON.stringify(v);
+}
+
+function CamposDiff({ campos }: { campos: Array<{ campo: string; actual: unknown; nuevo: unknown }> }) {
+  if (campos.length === 0) return null;
+  return (
+    <table className="diff-tabla">
+      <thead>
+        <tr><th>Campo</th><th>Actual</th><th>Nuevo</th></tr>
+      </thead>
+      <tbody>
+        {campos.map((c) => (
+          <tr key={c.campo}>
+            <td data-label="Campo">{c.campo}</td>
+            <td data-label="Actual" className="diff-actual">{valorLegible(c.actual)}</td>
+            <td data-label="Nuevo" className="diff-nuevo">{valorLegible(c.nuevo)}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+function EntidadesDiff({ titulo, items }: { titulo: string; items: EntidadDiff[] }) {
+  if (items.length === 0) return null;
+  return (
+    <section className="panel" aria-label={titulo}>
+      <h3>{titulo}</h3>
+      {items.map((e) => (
+        <article key={e.codigo} className="diff-item">
+          <header>
+            <span className={accionChipClass(e.accion)}>{e.accion.replace("_", " ")}</span>
+            <strong className="monospace">{e.codigo}</strong>
+          </header>
+          <CamposDiff campos={e.campos} />
+        </article>
+      ))}
+    </section>
+  );
+}
+
+function HallazgosLista({ titulo, items, tono, colapsado }: { titulo: string; items: Hallazgo[]; tono: string; colapsado?: boolean }) {
+  if (items.length === 0) return null;
+  const cuerpo = (
+    <ul className="hallazgo-lista">
+      {items.map((h, i) => (
+        <li key={`${h.codigo}-${i}`} className={`hallazgo-item hallazgo-${tono}`}>
+          <strong>{h.codigo}</strong>
+          <span>{h.mensaje}</span>
+          {h.ruta ? <code className="hallazgo-ruta">{h.ruta}</code> : null}
+          {h.sugerencia ? <em className="hallazgo-sugerencia">{h.sugerencia}</em> : null}
+        </li>
+      ))}
+    </ul>
+  );
+  if (colapsado) {
+    return (
+      <details className="panel">
+        <summary>{titulo} ({items.length})</summary>
+        {cuerpo}
+      </details>
+    );
+  }
+  return (
+    <section className="panel" aria-label={titulo}>
+      <h3>{titulo} ({items.length})</h3>
+      {cuerpo}
+    </section>
+  );
+}
+
+function FacturadorImportView({ tenantId, onNavigate }: { tenantId?: string; onNavigate: (v: AppView) => void }) {
+  type Paso = "archivo" | "destino" | "preview" | "resultado";
+  const [paso, setPaso] = useState<Paso>("archivo");
+  const [archivo, setArchivo] = useState<{ filename: string; content: string; format: "json" | "yaml" | "auto"; size: number } | null>(null);
+  const [tenants, setTenants] = useState<Tenant[]>([]);
+  const [planes, setPlanes] = useState<Plan[]>([]);
+  const [modo, setModo] = useState<"EXISTENTE" | "NUEVO">(tenantId ? "EXISTENTE" : "EXISTENTE");
+  const [tenantSel, setTenantSel] = useState(tenantId ?? "");
+  const [nombre, setNombre] = useState("");
+  const [slug, setSlug] = useState("");
+  const [planCodigo, setPlanCodigo] = useState("");
+  const [diff, setDiff] = useState<ImportDiff | null>(null);
+  const [resultado, setResultado] = useState<ImportApplyResponse | null>(null);
+  const [overrides, setOverrides] = useState<Record<string, string>>({});
+  const [actividadOverrides, setActividadOverrides] = useState<Record<string, string>>({});
+  const [forzarAmbiente, setForzarAmbiente] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    void listTenants().then(setTenants).catch(() => undefined);
+    void listPlanes().then((p) => {
+      setPlanes(p);
+      if (p[0]) setPlanCodigo(p[0].codigo);
+    }).catch(() => undefined);
+  }, []);
+
+  async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const content = await file.text();
+    const format: "json" | "yaml" | "auto" = /\.ya?ml$/i.test(file.name) ? "yaml" : /\.json$/i.test(file.name) ? "json" : "auto";
+    setArchivo({ filename: file.name, content, format, size: file.size });
+    setError(null);
+
+    // Precarga del destino solo para JSON: no se agrega un parser YAML al bundle.
+    if (format === "json") {
+      try {
+        const doc = JSON.parse(content) as Record<string, any>;
+        const razon = doc?.emisor?.razon_social?.valor ?? doc?.emisor?.razon_social;
+        if (typeof razon === "string" && razon.length > 0) {
+          setNombre(razon);
+          setSlug(razon.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60));
+        }
+      } catch { /* la precarga es best-effort */ }
+    }
+    setPaso("destino");
+  }
+
+  function target(): ImportTarget {
+    return modo === "EXISTENTE"
+      ? { mode: "EXISTENTE", tenant_id: tenantSel }
+      : { mode: "NUEVO", nombre, slug, plan_codigo: planCodigo };
+  }
+
+  async function previsualizar() {
+    if (!archivo) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const d = await postImportPreview({ filename: archivo.filename, format: archivo.format, content: archivo.content, target: target() });
+      setDiff(d);
+      setOverrides(Object.fromEntries(d.contextos.filter((c) => c.documento_nro_editable).map((c) => [c.clave.perfil, c.documento_nro_sugerido])));
+      setActividadOverrides(
+        Object.fromEntries(d.contextos.filter((c) => c.actividad_editable).map((c) => [c.clave.perfil, c.actividad_codigo]))
+      );
+      setForzarAmbiente(false);
+      setPaso("preview");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "No se pudo previsualizar el archivo.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function aplicar() {
+    if (!archivo || !diff) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await postImportApply({
+        filename: archivo.filename,
+        format: archivo.format,
+        content: archivo.content,
+        target: target(),
+        preview_token: diff.preview_token,
+        permitir_ambiente_distinto: forzarAmbiente,
+        documento_nro_overrides: overrides,
+        actividad_overrides: actividadOverrides,
+      });
+      setResultado(r);
+      setPaso("resultado");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "No se pudo aplicar el import.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const tieneAmbienteDistinto = diff?.bloqueantes.some((b) => b.codigo === "AMBIENTE_DISTINTO") ?? false;
+  const puedeAplicar = Boolean(diff && (diff.puede_aplicar || (tieneAmbienteDistinto && forzarAmbiente && diff.bloqueantes.length === 1)));
+
+  return (
+    <div className="view" data-testid="import-view">
+      <header className="view-header">
+        <h2>Importar configuracion FE</h2>
+        <p className="muted">Subi el archivo exportado por facturacion-electronica. Nada se aplica hasta que confirmes.</p>
+      </header>
+
+      <ol className="import-pasos" aria-label="Pasos del import">
+        <li className={paso === "archivo" ? "activo" : "hecho"}>1. Archivo</li>
+        <li className={paso === "destino" ? "activo" : paso === "archivo" ? "" : "hecho"}>2. Destino</li>
+        <li className={paso === "preview" ? "activo" : paso === "resultado" ? "hecho" : ""}>3. Revision</li>
+        <li className={paso === "resultado" ? "activo" : ""}>4. Resultado</li>
+      </ol>
+
+      {error ? <p className="form-error" data-testid="import-error">{error}</p> : null}
+
+      {paso === "archivo" ? (
+        <section className="panel">
+          <FormField label="Archivo de configuracion (.json o .yaml)" required>
+            <input type="file" accept=".json,.yaml,.yml" onChange={(e) => void onFile(e)} data-testid="import-file" />
+          </FormField>
+        </section>
+      ) : null}
+
+      {paso === "destino" && archivo ? (
+        <section className="panel">
+          <p className="muted">
+            Archivo: <strong>{archivo.filename}</strong> ({Math.ceil(archivo.size / 1024)} KB, formato {archivo.format})
+          </p>
+          <FormField label="Destino" required>
+            <label className="radio-inline">
+              <input type="radio" checked={modo === "EXISTENTE"} onChange={() => setModo("EXISTENTE")} /> Tenant existente
+            </label>
+            <label className="radio-inline">
+              <input type="radio" checked={modo === "NUEVO"} onChange={() => setModo("NUEVO")} /> Crear tenant nuevo
+            </label>
+          </FormField>
+
+          {modo === "EXISTENTE" ? (
+            <FormField label="Tenant" required>
+              <select value={tenantSel} onChange={(e) => setTenantSel(e.target.value)} data-testid="import-tenant">
+                <option value="">Seleccionar tenant...</option>
+                {tenants.map((t) => <option key={t.id} value={t.id}>{t.nombre} ({t.slug})</option>)}
+              </select>
+            </FormField>
+          ) : (
+            <>
+              <FormField label="Nombre del tenant" required>
+                <input value={nombre} onChange={(e) => setNombre(e.target.value)} />
+              </FormField>
+              <FormField label="Slug" required>
+                <input value={slug} onChange={(e) => setSlug(e.target.value)} />
+              </FormField>
+              <FormField label="Plan" required>
+                <select value={planCodigo} onChange={(e) => setPlanCodigo(e.target.value)}>
+                  {planes.map((p) => <option key={p.codigo} value={p.codigo}>{p.nombre}</option>)}
+                </select>
+              </FormField>
+            </>
+          )}
+
+          <div className="form-actions">
+            <button type="button" onClick={() => setPaso("archivo")}>Cambiar archivo</button>
+            <button
+              type="button"
+              className="primary"
+              disabled={busy || (modo === "EXISTENTE" ? !tenantSel : !nombre || !slug || !planCodigo)}
+              onClick={() => void previsualizar()}
+              data-testid="import-preview-btn"
+            >
+              {busy ? "Analizando..." : "Ver que va a pasar"}
+            </button>
+          </div>
+        </section>
+      ) : null}
+
+      {paso === "preview" && diff ? (
+        <>
+          <section className={`panel import-banner ${diff.puede_aplicar ? "ok" : "bloqueado"}`} data-testid="import-banner">
+            <h3>{diff.puede_aplicar ? "Listo para aplicar" : `${diff.bloqueantes.length} problema(s) impiden aplicar`}</h3>
+            <p className="muted">
+              Crear {diff.resumen.crear} · Actualizar {diff.resumen.actualizar} · Sin cambios {diff.resumen.sin_cambios} · Sin tocar {diff.resumen.no_tocados}
+            </p>
+            {diff.timbrado_elegido ? (
+              <p className="muted">
+                Timbrado <strong>{diff.timbrado_elegido.numero}</strong> (desde {diff.timbrado_elegido.fecha_inicio ?? "—"}) — {diff.timbrado_elegido.motivo}
+              </p>
+            ) : null}
+          </section>
+
+          <HallazgosLista titulo="Bloqueantes" items={diff.bloqueantes} tono="bloqueante" />
+          <HallazgosLista titulo="Advertencias" items={diff.advertencias} tono="advertencia" />
+
+          <section className="panel" aria-label="Facturador">
+            <h3>Facturador</h3>
+            <article className="diff-item">
+              <header>
+                <span className={accionChipClass(diff.facturador.accion)}>{diff.facturador.accion.replace("_", " ")}</span>
+                <strong className="monospace">{diff.facturador.emisor_id}</strong>
+              </header>
+              <CamposDiff campos={diff.facturador.campos} />
+            </article>
+          </section>
+
+          <EntidadesDiff titulo="Establecimientos" items={diff.establecimientos} />
+          <EntidadesDiff titulo="Puntos de expedicion" items={diff.puntos} />
+          <EntidadesDiff titulo="Actividades economicas" items={diff.actividades} />
+          <EntidadesDiff titulo="Perfiles de emision" items={diff.perfiles} />
+
+          <section className="panel" aria-label="Contextos operativos">
+            <h3>Contextos operativos</h3>
+            {diff.contextos.map((c: ContextoDiff) => (
+              <article key={c.clave.perfil} className={`diff-item ${c.usuarios_asignados > 0 ? "diff-item-en-uso" : ""}`}>
+                <header>
+                  <span className={accionChipClass(c.accion)}>{c.accion.replace("_", " ")}</span>
+                  <strong className="monospace">{c.clave.perfil}</strong>
+                  <span className="muted">
+                    Act {c.clave.actividad} · Est {c.clave.establecimiento} · Punto {c.clave.punto}
+                  </span>
+                </header>
+                {c.usuarios_asignados > 0 ? (
+                  <p className="hallazgo-item hallazgo-advertencia">
+                    {c.usuarios_asignados} usuario(s) operando con este contexto.
+                  </p>
+                ) : null}
+                {c.actividad_editable ? (
+                  <FormField label="Actividad economica del contexto">
+                    <select
+                      value={actividadOverrides[c.clave.perfil] ?? c.actividad_codigo}
+                      onChange={(e) => setActividadOverrides({ ...actividadOverrides, [c.clave.perfil]: e.target.value })}
+                      data-testid={`import-actividad-${c.clave.perfil}`}
+                    >
+                      {c.actividad_opciones.map((a: ActividadOpcion) => (
+                        <option key={a.codigo} value={a.codigo}>
+                          {a.codigo} — {a.descripcion ?? "sin descripcion"}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="muted">
+                      Este perfil no fija actividad: FE la deja a eleccion. El contexto queda fijado en la elegida;
+                      si despues hace falta otra, se agrega un contexto nuevo.
+                    </p>
+                  </FormField>
+                ) : null}
+                {c.documento_nro_editable ? (
+                  <FormField label="Numero inicial de documento">
+                    <input
+                      value={overrides[c.clave.perfil] ?? c.documento_nro_sugerido}
+                      onChange={(e) => setOverrides({ ...overrides, [c.clave.perfil]: e.target.value })}
+                      pattern="[0-9]{7}"
+                      maxLength={7}
+                      data-testid={`import-docnro-${c.clave.perfil}`}
+                    />
+                  </FormField>
+                ) : (
+                  <p className="muted">Numeracion existente preservada.</p>
+                )}
+                <CamposDiff campos={c.campos} />
+              </article>
+            ))}
+          </section>
+
+          <HallazgosLista titulo="Datos del archivo que no se importan" items={diff.ignorados} tono="ignorado" colapsado />
+
+          {tieneAmbienteDistinto ? (
+            <section className="panel import-banner bloqueado">
+              <label className="radio-inline">
+                <input type="checkbox" checked={forzarAmbiente} onChange={(e) => setForzarAmbiente(e.target.checked)} data-testid="import-forzar-ambiente" />
+                Entiendo que estoy importando configuracion de otro ambiente y quiero continuar.
+              </label>
+            </section>
+          ) : null}
+
+          <div className="form-actions">
+            <button type="button" onClick={() => setPaso("destino")}>Volver</button>
+            <button type="button" className="primary" disabled={!puedeAplicar || busy} onClick={() => void aplicar()} data-testid="import-apply-btn">
+              {busy ? "Aplicando..." : "Aplicar cambios"}
+            </button>
+          </div>
+        </>
+      ) : null}
+
+      {paso === "resultado" && resultado ? (
+        <section className="panel import-banner ok" data-testid="import-resultado">
+          <h3>Importacion aplicada</h3>
+          <p className="muted">
+            {resultado.resumen.crear} creados · {resultado.resumen.actualizar} actualizados
+          </p>
+          <ul className="hallazgo-lista">
+            {resultado.proximos_pasos.map((p) => <li key={p} className="hallazgo-item">{p}</li>)}
+          </ul>
+          <div className="form-actions">
+            <button type="button" className="primary" onClick={() => onNavigate({ tag: "usuario-create", tenantId: resultado.tenant_id, facturadorId: resultado.facturador_id })} data-testid="import-crear-usuario">
+              Crear usuario operativo
+            </button>
+            <button type="button" onClick={() => onNavigate({ tag: "facturador-detail", facturadorId: resultado.facturador_id, tenantId: resultado.tenant_id })}>
+              Ver facturador
+            </button>
+          </div>
+        </section>
+      ) : null}
+    </div>
+  );
+}
+
 function UsersListView({ onNavigate }: { onNavigate: (v: AppView) => void }) {
   const [users, setUsers] = useState<BackofficeUser[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1906,9 +2307,22 @@ function UsersListView({ onNavigate }: { onNavigate: (v: AppView) => void }) {
 
 // ─── UserCreateView ───────────────────────────────────────────────────────────
 
-function UserCreateView({ onNavigate }: { onNavigate: (v: AppView) => void }) {
+function UserCreateView({
+  tenantId: tenantIdInicial,
+  facturadorId: facturadorIdInicial,
+  onNavigate,
+}: {
+  tenantId?: string;
+  facturadorId?: string;
+  onNavigate: (v: AppView) => void;
+}) {
   const [tenants, setTenants] = useState<Tenant[]>([]);
-  const [tenantId, setTenantId] = useState("");
+  const [tenantId, setTenantId] = useState(tenantIdInicial ?? "");
+  // Alta guiada: si venimos del import, facturador y perfil ya estan resueltos.
+  const [config, setConfig] = useState<OperationConfigValue>({
+    facturadorId: facturadorIdInicial ?? "",
+    contextoId: "",
+  });
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [displayName, setDisplayName] = useState("");
@@ -1927,6 +2341,19 @@ function UserCreateView({ onNavigate }: { onNavigate: (v: AppView) => void }) {
     setSubmitting(true);
     setError(null);
     try {
+      // Los codigos salen del contexto elegido: la UI nunca los compone a mano.
+      const operationConfig =
+        config.contexto && config.facturador
+          ? {
+              facturador_id: config.facturador.id,
+              emisor_id: config.facturador.emisor_id,
+              establecimiento: config.contexto.establecimiento.codigo,
+              punto_expedicion: config.contexto.punto_expedicion.codigo,
+              perfil_emision_codigo: config.contexto.perfil_emision.codigo,
+              actividad_economica_codigo: config.contexto.actividad.codigo,
+            }
+          : undefined;
+
       const u = await createUser({
         tenant_id: tenantId,
         username: username.trim(),
@@ -1934,6 +2361,7 @@ function UserCreateView({ onNavigate }: { onNavigate: (v: AppView) => void }) {
         display_name: displayName.trim() || null,
         role,
         temporary_password: password.trim() || null,
+        ...(operationConfig ? { operation_config: operationConfig } : {}),
       });
       setCreated(u);
     } catch (err) {
@@ -1974,7 +2402,16 @@ function UserCreateView({ onNavigate }: { onNavigate: (v: AppView) => void }) {
         {error ? <div className="error-msg">{error}</div> : null}
         <form className="form" onSubmit={(e) => void submit(e)}>
           <FormField label="Tenant" required>
-            <select value={tenantId} onChange={(e) => setTenantId(e.target.value)} required>
+            <select
+              value={tenantId}
+              onChange={(e) => {
+                setTenantId(e.target.value);
+                setConfig({ facturadorId: "", contextoId: "" });
+              }}
+              disabled={Boolean(tenantIdInicial)}
+              required
+              data-testid="user-tenant"
+            >
               <option value="">Seleccionar tenant...</option>
               {tenants.map((t) => <option key={t.id} value={t.id}>{t.nombre} ({t.slug})</option>)}
             </select>
@@ -2004,8 +2441,21 @@ function UserCreateView({ onNavigate }: { onNavigate: (v: AppView) => void }) {
               <input type="text" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="dejar vacio para generar automaticamente" />
             </FormField>
           </div>
+          <fieldset className="panel" style={{ marginTop: 8 }} data-testid="user-operacion">
+            <legend>Configuracion operativa (opcional)</legend>
+            <p className="muted">
+              Elegi el facturador y su perfil de emision. Todo sale de listas: no hay datos fiscales para tipear.
+            </p>
+            <OperationConfigPicker
+              tenantId={tenantId}
+              value={config}
+              onChange={setConfig}
+              facturadorLocked={Boolean(facturadorIdInicial)}
+            />
+          </fieldset>
+
           <div className="form-actions">
-            <button className="btn btn-primary" disabled={submitting} type="submit">{submitting ? "Creando..." : "Crear usuario"}</button>
+            <button className="btn btn-primary" disabled={submitting} type="submit" data-testid="user-submit">{submitting ? "Creando..." : "Crear usuario"}</button>
             <button className="btn" onClick={() => onNavigate({ tag: "usuarios-list" })} type="button">Cancelar</button>
           </div>
         </form>
@@ -2014,13 +2464,143 @@ function UserCreateView({ onNavigate }: { onNavigate: (v: AppView) => void }) {
   );
 }
 
-// ─── UserDetailView ───────────────────────────────────────────────────────────
+// ─── Alta guiada: selector de facturador y perfil ─────────────────────────────
+//
+// El alias operativo que muestra este selector lo completa el import desde la descripcion
+// del perfil, asi que despues de importar se leen nombres y no codigos.
 
 function contextoLabel(c: Contexto): string {
   const alias = c.alias_operativo ?? c.actividad.alias_operativo;
   if (alias) return alias;
   return `Est:${c.establecimiento.codigo} · Punto:${c.punto_expedicion.codigo} · Act:${c.actividad.codigo} · Perfil:${c.perfil_emision.codigo}`;
 }
+
+interface OperationConfigValue {
+  facturadorId: string;
+  contextoId: string;
+  facturador?: Facturador;
+  contexto?: Contexto;
+}
+
+function OperationConfigPicker({
+  tenantId,
+  value,
+  onChange,
+  facturadorLocked,
+  onSinContextos,
+}: {
+  tenantId: string;
+  value: OperationConfigValue;
+  onChange: (v: OperationConfigValue) => void;
+  facturadorLocked?: boolean;
+  onSinContextos?: () => void;
+}) {
+  const [facturadores, setFacturadores] = useState<Facturador[]>([]);
+  const [contextos, setContextos] = useState<Contexto[]>([]);
+  const [loadingF, setLoadingF] = useState(false);
+  const [loadingC, setLoadingC] = useState(false);
+
+  useEffect(() => {
+    if (!tenantId) {
+      setFacturadores([]);
+      return;
+    }
+    setLoadingF(true);
+    void listFacturadores(tenantId)
+      .then((f) => {
+        setFacturadores(f);
+        // Autoseleccion: con un solo facturador no hay nada que elegir.
+        if (f.length === 1 && !value.facturadorId) {
+          onChange({ facturadorId: f[0]!.id, contextoId: "", facturador: f[0] });
+        }
+      })
+      .catch(() => setFacturadores([]))
+      .finally(() => setLoadingF(false));
+  }, [tenantId]);
+
+  useEffect(() => {
+    if (!value.facturadorId) {
+      setContextos([]);
+      return;
+    }
+    setLoadingC(true);
+    void listContextos(value.facturadorId)
+      .then((c) => {
+        const activos = c.filter((x) => x.activo);
+        setContextos(activos);
+        if (activos.length === 0) onSinContextos?.();
+        if (activos.length === 1 && !value.contextoId) {
+          onChange({ ...value, contextoId: activos[0]!.id, contexto: activos[0] });
+        }
+      })
+      .catch(() => setContextos([]))
+      .finally(() => setLoadingC(false));
+  }, [value.facturadorId]);
+
+  const facturadorSel = facturadores.find((f) => f.id === value.facturadorId);
+
+  return (
+    <>
+      <FormField label="Facturador" required>
+        {facturadorLocked && facturadorSel ? (
+          <p className="monospace">{facturadorSel.razon_social} — {facturadorSel.emisor_id}</p>
+        ) : (
+          <select
+            value={value.facturadorId}
+            onChange={(e) => {
+              const f = facturadores.find((x) => x.id === e.target.value);
+              onChange({ facturadorId: e.target.value, contextoId: "", facturador: f });
+            }}
+            disabled={!tenantId || loadingF}
+            data-testid="picker-facturador"
+          >
+            <option value="">
+              {!tenantId ? "Seleccionar tenant primero..." : loadingF ? "Cargando..." : "Seleccionar facturador..."}
+            </option>
+            {facturadores.map((f) => (
+              <option key={f.id} value={f.id}>{f.razon_social} — {f.emisor_id}</option>
+            ))}
+          </select>
+        )}
+      </FormField>
+
+      <FormField label="Perfil de emision" required>
+        {value.facturadorId && !loadingC && contextos.length === 0 ? (
+          <p className="muted" data-testid="picker-sin-contextos">
+            Este facturador no tiene perfiles configurados. Importa su configuracion o creale un contexto operativo.
+          </p>
+        ) : (
+          <select
+            value={value.contextoId}
+            onChange={(e) => {
+              const c = contextos.find((x) => x.id === e.target.value);
+              onChange({ ...value, contextoId: e.target.value, contexto: c });
+            }}
+            disabled={!value.facturadorId || loadingC}
+            data-testid="picker-contexto"
+          >
+            <option value="">
+              {!value.facturadorId ? "Seleccionar facturador primero..." : loadingC ? "Cargando..." : "Seleccionar perfil..."}
+            </option>
+            {contextos.map((c) => <option key={c.id} value={c.id}>{contextoLabel(c)}</option>)}
+          </select>
+        )}
+      </FormField>
+
+      {value.contexto && facturadorSel ? (
+        <dl className="detail-grid" style={{ marginTop: 8, opacity: 0.75 }} data-testid="picker-resumen">
+          <div className="detail-item"><dt>Emisor</dt><dd className="monospace">{facturadorSel.emisor_id}</dd></div>
+          <div className="detail-item"><dt>Establecimiento</dt><dd>{value.contexto.establecimiento.codigo}</dd></div>
+          <div className="detail-item"><dt>Punto</dt><dd>{value.contexto.punto_expedicion.codigo}</dd></div>
+          <div className="detail-item"><dt>Actividad</dt><dd>{value.contexto.actividad.codigo}</dd></div>
+          <div className="detail-item"><dt>Perfil</dt><dd className="monospace">{value.contexto.perfil_emision.codigo}</dd></div>
+        </dl>
+      ) : null}
+    </>
+  );
+}
+
+// ─── UserDetailView ───────────────────────────────────────────────────────────
 
 function UserDetailView({ userId, onNavigate }: { userId: string; onNavigate: (v: AppView) => void }) {
   const [user, setUser] = useState<BackofficeUser | null>(null);

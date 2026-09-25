@@ -5,6 +5,8 @@ import { fiscalGateway } from "../fiscal-gateway/fiscal-gateway.client";
 import { validateRequest } from "../../shared/validation/validate-request";
 import { HttpError } from "../../shared/errors/http-error";
 import { backofficeRepository } from "./backoffice.repository";
+import { importRepository } from "./import/import.repository";
+import { applyFacturadorImport, previewFacturadorImport } from "./import/import.service";
 import {
   assignBackofficeOperationConfig,
   createBackofficeUser,
@@ -165,13 +167,25 @@ const contextoUpdateSchema = z.object({
   activo: z.boolean().optional()
 }).refine((d) => Object.keys(d).length > 0, { message: "Al menos un campo requerido." });
 
+// Misma forma que operationConfigSchema menos tenant_id, que se deriva del usuario creado.
+const userOperationConfigInlineSchema = z.object({
+  facturador_id: z.string().uuid(),
+  emisor_id: z.string().trim().min(1).max(120),
+  establecimiento: z.string().trim().regex(/^[0-9]{3}$/),
+  punto_expedicion: z.string().trim().regex(/^[0-9]{3}$/),
+  perfil_emision_codigo: z.string().trim().min(1).max(80),
+  actividad_economica_codigo: z.string().trim().min(1).max(40)
+});
+
 const userCreateSchema = z.object({
   tenant_id: z.string().uuid(),
   username: z.string().trim().min(3).max(120),
   email: z.string().trim().email().max(180),
   display_name: z.string().trim().min(1).max(180).nullable().optional(),
   role: z.enum(roles),
-  temporary_password: z.string().trim().min(10).max(120).nullable().optional()
+  temporary_password: z.string().trim().min(10).max(120).nullable().optional(),
+  // Opcional: sin este bloque el alta se comporta exactamente como antes (CA-12).
+  operation_config: userOperationConfigInlineSchema.optional()
 });
 
 const userUpdateSchema = z.object({
@@ -192,6 +206,32 @@ const operationConfigSchema = z.object({
   punto_expedicion: z.string().trim().regex(/^[0-9]{3}$/),
   perfil_emision_codigo: z.string().trim().min(1).max(40),
   actividad_economica_codigo: z.string().trim().min(1).max(40)
+});
+
+const importArchivoSchema = z.object({
+  filename: z.string().trim().min(1).max(255),
+  format: z.enum(["json", "yaml", "auto"]).default("auto"),
+  content: z.string().min(1).max(512_000, "Archivo demasiado grande (max 500 KB).")
+});
+
+const importTargetSchema = z.discriminatedUnion("mode", [
+  z.object({ mode: z.literal("EXISTENTE"), tenant_id: z.string().uuid() }),
+  z.object({
+    mode: z.literal("NUEVO"),
+    nombre: z.string().trim().min(1).max(200),
+    slug: z.string().trim().min(2).max(80),
+    plan_codigo: z.string().trim().min(1).max(60)
+  })
+]);
+
+const importPreviewSchema = importArchivoSchema.extend({ target: importTargetSchema });
+
+const importApplySchema = importPreviewSchema.extend({
+  preview_token: z.string().trim().regex(/^[0-9a-f]{64}$/),
+  permitir_ambiente_distinto: z.boolean().default(false),
+  documento_nro_overrides: z.record(z.string().regex(/^[0-9]{7}$/, "documento_nro debe ser 7 digitos.")).default({}),
+  // Actividad elegida por perfil, para los contextos sin actividad fija (SPEC v0.2 seccion 6.3).
+  actividad_overrides: z.record(z.string().trim().min(1).max(40)).default({})
 });
 
 // ─── Middlewares ──────────────────────────────────────────────────────────────
@@ -256,6 +296,26 @@ backofficeRouter.patch("/backoffice/tenants/:tenantId", ...auth, validateRequest
 });
 
 // ── Facturadores ──────────────────────────────────────────────────────────────
+
+// ─── Import de configuracion FE ───────────────────────────────────────────────
+// Preview responde 200 aun con bloqueantes (`puede_aplicar: false`): el operador ve el
+// informe completo de una vez. El 400 queda para un archivo que no es el contrato.
+
+backofficeRouter.post("/backoffice/facturadores/import/preview", ...auth, validateRequest("body", importPreviewSchema), async (req, res, next) => {
+  try {
+    res.json(await previewFacturadorImport(req.body, { repository: importRepository }));
+  } catch (error) {
+    next(error);
+  }
+});
+
+backofficeRouter.post("/backoffice/facturadores/import/apply", ...auth, validateRequest("body", importApplySchema), async (req, res, next) => {
+  try {
+    res.json(await applyFacturadorImport(req.body, req.user!.id, { repository: importRepository }));
+  } catch (error) {
+    next(error);
+  }
+});
 
 backofficeRouter.get("/backoffice/tenants/:tenantId/facturadores", ...auth, validateRequest("params", tenantIdParam), async (req, res, next) => {
   try {

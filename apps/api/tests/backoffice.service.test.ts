@@ -241,3 +241,63 @@ describe("backoffice service", () => {
     ).rejects.toMatchObject({ statusCode: 400 });
   });
 });
+
+describe("createBackofficeUser con configuracion operativa (alta guiada)", () => {
+  const tenantId = "22222222-2222-4222-8222-222222222222";
+  const configInline = {
+    facturador_id: "33333333-3333-4333-8333-333333333333",
+    emisor_id: "5057016-1",
+    establecimiento: "001",
+    punto_expedicion: "002",
+    perfil_emision_codigo: "A96099-E001-P002-FE-PTO",
+    actividad_economica_codigo: "96099"
+  };
+
+  it("no envia operationConfig cuando el alta no lo incluye (retrocompatible, CA-12)", async () => {
+    const repo = new FakeBackofficeRepository();
+    await createBackofficeUser(
+      tenantId,
+      { username: "operador1", email: "op1@example.com", role: "OPERADOR_FACTURACION" },
+      repo
+    );
+
+    expect(repo.lastCreateInput?.operationConfig ?? null).toBeNull();
+  });
+
+  it("propaga el contexto normalizado al repositorio (CA-13)", async () => {
+    const repo = new FakeBackofficeRepository();
+    await createBackofficeUser(
+      tenantId,
+      {
+        username: "operador2",
+        email: "op2@example.com",
+        role: "OPERADOR_FACTURACION",
+        operation_config: configInline
+      },
+      repo
+    );
+
+    expect(repo.lastCreateInput?.operationConfig).toEqual(configInline);
+    // El tenant NO viaja dentro del bloque: se deriva del usuario que se crea.
+    expect(repo.lastCreateInput?.operationConfig).not.toHaveProperty("tenant_id");
+    expect(repo.lastCreateInput?.tenantId).toBe(tenantId);
+  });
+
+  it("rechaza un codigo de establecimiento invalido antes de tocar el repositorio", async () => {
+    const repo = new FakeBackofficeRepository();
+    await expect(
+      createBackofficeUser(
+        tenantId,
+        {
+          username: "operador3",
+          email: "op3@example.com",
+          role: "OPERADOR_FACTURACION",
+          operation_config: { ...configInline, establecimiento: "1" }
+        },
+        repo
+      )
+    ).rejects.toMatchObject({ statusCode: 400 });
+
+    expect(repo.lastCreateInput).toBeNull();
+  });
+});

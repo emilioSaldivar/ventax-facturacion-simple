@@ -1,0 +1,348 @@
+{
+  "contrato": {
+    "version": {
+      "valor": "v0.1",
+      "referencia": "GUIA_INTEGRACION_CONSUMIDORES.md#21-configuración-fiscal-exportada"
+    },
+    "generado_en": {
+      "valor": "2026-09-19T20:09:28.426Z",
+      "referencia": "GUIA_INTEGRACION_CONSUMIDORES.md#214-importante-es-una-foto-no-un-contrato-permanente"
+    },
+    "guia_referencia": "GUIA_INTEGRACION_CONSUMIDORES.md",
+    "aviso_vigencia": {
+      "valor": "Esta configuracion es una foto del momento indicado en contrato.generado_en. Si el administrador cambia el timbrado, los establecimientos, los puntos de expedicion, la numeracion o tus permisos, este archivo queda desactualizado y hay que exportarlo de nuevo. Ver GUIA_INTEGRACION_CONSUMIDORES.md#214-importante-es-una-foto-no-un-contrato-permanente",
+      "referencia": "GUIA_INTEGRACION_CONSUMIDORES.md#214-importante-es-una-foto-no-un-contrato-permanente"
+    }
+  },
+  "servicio": {
+    "base_url": {
+      "valor": "http://localhost:9988",
+      "referencia": "GUIA_INTEGRACION_CONSUMIDORES.md#221-cómo-armar-la-url-de-un-endpoint"
+    },
+    "base_path": {
+      "valor": "/v1",
+      "referencia": "GUIA_INTEGRACION_CONSUMIDORES.md#221-cómo-armar-la-url-de-un-endpoint"
+    },
+    "ambiente_esperado": {
+      "valor": "test",
+      "referencia": "GUIA_INTEGRACION_CONSUMIDORES.md#222-ambiente_esperado-y-el-alcance-de-tu-clave"
+    },
+    "url_verificada": {
+      "valor": false,
+      "referencia": "GUIA_INTEGRACION_CONSUMIDORES.md#223-si-el-archivo-dice-url_verificada-false"
+    },
+    "aviso": "La direccion exportada no es https:// (o quedo vacia), asi que no puede confirmarse como URL publica del servicio. Confirmala con el administrador antes de integrar. Ver GUIA_INTEGRACION_CONSUMIDORES.md#223-si-el-archivo-dice-url_verificada-false"
+  },
+  "emisor": {
+    "emisor_id": {
+      "valor": "5057016-1",
+      "referencia": "GUIA_INTEGRACION_CONSUMIDORES.md#4-lo-que-el-administrador-configura-para-vos"
+    },
+    "razon_social": {
+      "valor": "EMILIO MATIAS SALDIVAR CAPUTO",
+      "referencia": "GUIA_INTEGRACION_CONSUMIDORES.md#4-lo-que-el-administrador-configura-para-vos"
+    },
+    "nombre_fantasia": {
+      "valor": "1811 BRANDING Y SOFTWARE",
+      "referencia": "GUIA_INTEGRACION_CONSUMIDORES.md#4-lo-que-el-administrador-configura-para-vos"
+    },
+    "ambiente": {
+      "valor": "test",
+      "referencia": "GUIA_INTEGRACION_CONSUMIDORES.md#4-lo-que-el-administrador-configura-para-vos"
+    }
+  },
+  "actividades_economicas": [
+    {
+      "codigo": {
+        "valor": "96099",
+        "referencia": "GUIA_INTEGRACION_CONSUMIDORES.md#201-actividadeconomicacodigo"
+      },
+      "descripcion": {
+        "valor": "OTRAS ACTIVIDADES DE SERVICIOS PERSONALES N.C.P.",
+        "referencia": "GUIA_INTEGRACION_CONSUMIDORES.md#201-actividadeconomicacodigo"
+      },
+      "es_principal": {
+        "valor": true,
+        "referencia": "GUIA_INTEGRACION_CONSUMIDORES.md#201-actividadeconomicacodigo"
+      }
+    },
+    {
+      "codigo": {
+        "valor": "45203",
+        "referencia": "GUIA_INTEGRACION_CONSUMIDORES.md#201-actividadeconomicacodigo"
+      },
+      "descripcion": {
+        "valor": "TALLERES DE CHAPERÍA Y PINTURA",
+        "referencia": "GUIA_INTEGRACION_CONSUMIDORES.md#201-actividadeconomicacodigo"
+      },
+      "es_principal": {
+        "valor": false,
+        "referencia": "GUIA_INTEGRACION_CONSUMIDORES.md#201-actividadeconomicacodigo"
+      }
+    }
+  ],
+  "establecimientos": [
+    {
+      "codigo": {
+        "valor": "001",
+        "referencia": "GUIA_INTEGRACION_CONSUMIDORES.md#52-campo-obligatorio-idempotency_key"
+      },
+      "denominacion": {
+        "valor": "CASA MATRIZ ITÁ",
+        "referencia": "GUIA_INTEGRACION_CONSUMIDORES.md#4-lo-que-el-administrador-configura-para-vos"
+      },
+      "direccion": {
+        "valor": "BERNARDINO CABALLERO ENTRE NANAWA Y TENIENTE CANDIA N° 112 - BARRIO CERRO CORÁ - ITÁ, Nro. 112, ITA, ITA, CENTRAL",
+        "referencia": "GUIA_INTEGRACION_CONSUMIDORES.md#4-lo-que-el-administrador-configura-para-vos"
+      },
+      "puntos_expedicion": [
+        {
+          "codigo": {
+            "valor": "001",
+            "referencia": "GUIA_INTEGRACION_CONSUMIDORES.md#52-campo-obligatorio-idempotency_key"
+          },
+          "descripcion": {
+            "valor": "TALLERES DE CHAPERÍA Y PINTURA",
+            "referencia": "GUIA_INTEGRACION_CONSUMIDORES.md#4-lo-que-el-administrador-configura-para-vos"
+          }
+        },
+        {
+          "codigo": {
+            "valor": "002",
+            "referencia": "GUIA_INTEGRACION_CONSUMIDORES.md#52-campo-obligatorio-idempotency_key"
+          },
+          "descripcion": {
+            "valor": "OTRAS ACTIVIDADES DE SERVICIOS PERSONALES N.C.P.",
+            "referencia": "GUIA_INTEGRACION_CONSUMIDORES.md#4-lo-que-el-administrador-configura-para-vos"
+          }
+        }
+      ]
+    }
+  ],
+  "timbrados": [
+    {
+      "numero": {
+        "valor": "05057016",
+        "referencia": "GUIA_INTEGRACION_CONSUMIDORES.md#52-campo-obligatorio-idempotency_key"
+      },
+      "fecha_inicio": {
+        "valor": "2026-05-19",
+        "referencia": "GUIA_INTEGRACION_CONSUMIDORES.md#52-campo-obligatorio-idempotency_key"
+      },
+      "fecha_fin": {
+        "valor": "2099-01-01",
+        "referencia": "GUIA_INTEGRACION_CONSUMIDORES.md#4-lo-que-el-administrador-configura-para-vos"
+      },
+      "vigente": {
+        "valor": true,
+        "referencia": "GUIA_INTEGRACION_CONSUMIDORES.md#4-lo-que-el-administrador-configura-para-vos"
+      }
+    },
+    {
+      "numero": {
+        "valor": "18861677",
+        "referencia": "GUIA_INTEGRACION_CONSUMIDORES.md#52-campo-obligatorio-idempotency_key"
+      },
+      "fecha_inicio": {
+        "valor": "2026-08-01",
+        "referencia": "GUIA_INTEGRACION_CONSUMIDORES.md#52-campo-obligatorio-idempotency_key"
+      },
+      "fecha_fin": {
+        "valor": "2099-12-31",
+        "referencia": "GUIA_INTEGRACION_CONSUMIDORES.md#4-lo-que-el-administrador-configura-para-vos"
+      },
+      "vigente": {
+        "valor": true,
+        "referencia": "GUIA_INTEGRACION_CONSUMIDORES.md#4-lo-que-el-administrador-configura-para-vos"
+      }
+    }
+  ],
+  "perfiles_emision": {
+    "requerido": {
+      "valor": true,
+      "referencia": "GUIA_INTEGRACION_CONSUMIDORES.md#202-emission_profile_code"
+    },
+    "items": [
+      {
+        "codigo": {
+          "valor": "AC445203-E001-P001-FE-PTO",
+          "referencia": "GUIA_INTEGRACION_CONSUMIDORES.md#202-emission_profile_code"
+        },
+        "descripcion": {
+          "valor": "Perfil para la emision de comprobantes para actividad economica TALLERES DE CHAPERIA Y PINTURA",
+          "referencia": "GUIA_INTEGRACION_CONSUMIDORES.md#202-emission_profile_code"
+        },
+        "actividad_codigo": {
+          "valor": "45203",
+          "referencia": "GUIA_INTEGRACION_CONSUMIDORES.md#202-emission_profile_code"
+        },
+        "establecimiento_codigo": {
+          "valor": "001",
+          "referencia": "GUIA_INTEGRACION_CONSUMIDORES.md#202-emission_profile_code"
+        },
+        "punto_codigo": {
+          "valor": "001",
+          "referencia": "GUIA_INTEGRACION_CONSUMIDORES.md#202-emission_profile_code"
+        },
+        "tipo_documento": {
+          "valor": "1",
+          "referencia": "GUIA_INTEGRACION_CONSUMIDORES.md#202-emission_profile_code"
+        }
+      },
+      {
+        "codigo": {
+          "valor": "AC496099-E001-P002-FE-PTO",
+          "referencia": "GUIA_INTEGRACION_CONSUMIDORES.md#202-emission_profile_code"
+        },
+        "descripcion": {
+          "valor": "Perfil para la emision de comprobantes para actividad economica principal Otras actividades de servicios personales",
+          "referencia": "GUIA_INTEGRACION_CONSUMIDORES.md#202-emission_profile_code"
+        },
+        "actividad_codigo": {
+          "valor": "96099",
+          "referencia": "GUIA_INTEGRACION_CONSUMIDORES.md#202-emission_profile_code"
+        },
+        "establecimiento_codigo": {
+          "valor": "001",
+          "referencia": "GUIA_INTEGRACION_CONSUMIDORES.md#202-emission_profile_code"
+        },
+        "punto_codigo": {
+          "valor": "002",
+          "referencia": "GUIA_INTEGRACION_CONSUMIDORES.md#202-emission_profile_code"
+        },
+        "tipo_documento": {
+          "valor": "1",
+          "referencia": "GUIA_INTEGRACION_CONSUMIDORES.md#202-emission_profile_code"
+        }
+      }
+    ]
+  },
+  "numeracion": {
+    "autoridad": {
+      "valor": "SERVICE",
+      "referencia": "GUIA_INTEGRACION_CONSUMIDORES.md#19-numeración-service-vs-client"
+    },
+    "documento_nro_requerido": {
+      "valor": false,
+      "referencia": "GUIA_INTEGRACION_CONSUMIDORES.md#19-numeración-service-vs-client"
+    },
+    "serie_fiscal": {
+      "valor": null,
+      "referencia": "GUIA_INTEGRACION_CONSUMIDORES.md#19-numeración-service-vs-client"
+    },
+    "rango_min": {
+      "valor": null,
+      "referencia": "GUIA_INTEGRACION_CONSUMIDORES.md#19-numeración-service-vs-client"
+    },
+    "rango_max": {
+      "valor": null,
+      "referencia": "GUIA_INTEGRACION_CONSUMIDORES.md#19-numeración-service-vs-client"
+    }
+  },
+  "envio": {
+    "modos_habilitados": {
+      "valor": [
+        "SYNC",
+        "BATCH",
+        "AUTO"
+      ],
+      "referencia": "GUIA_INTEGRACION_CONSUMIDORES.md#54-modos-de-envío"
+    }
+  },
+  "tipos_documento_habilitados": {
+    "valor": [
+      "FE",
+      "NCE"
+    ],
+    "referencia": "GUIA_INTEGRACION_CONSUMIDORES.md#5-emitir-una-factura-electrónica"
+  },
+  "consumidor": [
+    {
+      "nombre": {
+        "valor": "facturacion-simple-5057016 — Facturacion Simple 5057016",
+        "referencia": "GUIA_INTEGRACION_CONSUMIDORES.md#13-permisos-funcionales"
+      },
+      "permisos": {
+        "valor": [
+          "CANCEL_SEND",
+          "DOCUMENTO_READ",
+          "FACTURA_EMIT",
+          "IDEMPOTENCY_RECONCILE",
+          "RECIBO_READ",
+          "RECIBO_VOID",
+          "RECIBO_WRITE",
+          "SIFEN_STATUS_READ"
+        ],
+        "referencia": "GUIA_INTEGRACION_CONSUMIDORES.md#13-permisos-funcionales"
+      },
+      "alcance": {
+        "valor": [
+          {
+            "emisor_id": "5057016-1",
+            "env": "test",
+            "activo": true
+          }
+        ],
+        "referencia": "GUIA_INTEGRACION_CONSUMIDORES.md#4-lo-que-el-administrador-configura-para-vos"
+      }
+    },
+    {
+      "nombre": {
+        "valor": "fs-pos-1 — FACTURACION SIMPLE AMBIENTE DE PRUEBAS",
+        "referencia": "GUIA_INTEGRACION_CONSUMIDORES.md#13-permisos-funcionales"
+      },
+      "permisos": {
+        "valor": [
+          "CANCEL_SEND",
+          "DOCUMENTO_READ",
+          "FACTURA_EMIT",
+          "IDEMPOTENCY_RECONCILE",
+          "RECIBO_READ",
+          "RECIBO_VOID",
+          "RECIBO_WRITE",
+          "SIFEN_STATUS_READ"
+        ],
+        "referencia": "GUIA_INTEGRACION_CONSUMIDORES.md#13-permisos-funcionales"
+      },
+      "alcance": {
+        "valor": [
+          {
+            "emisor_id": "5057016-1",
+            "env": "test",
+            "activo": true
+          }
+        ],
+        "referencia": "GUIA_INTEGRACION_CONSUMIDORES.md#4-lo-que-el-administrador-configura-para-vos"
+      }
+    },
+    {
+      "nombre": {
+        "valor": "sub-local-01 — Pos de suscripciones 01",
+        "referencia": "GUIA_INTEGRACION_CONSUMIDORES.md#13-permisos-funcionales"
+      },
+      "permisos": {
+        "valor": [
+          "CANCEL_SEND",
+          "DOCUMENTO_READ",
+          "FACTURA_EMIT",
+          "IDEMPOTENCY_RECONCILE",
+          "RECIBO_READ",
+          "RECIBO_VOID",
+          "RECIBO_WRITE",
+          "SIFEN_STATUS_READ"
+        ],
+        "referencia": "GUIA_INTEGRACION_CONSUMIDORES.md#13-permisos-funcionales"
+      },
+      "alcance": {
+        "valor": [
+          {
+            "emisor_id": "5057016-1",
+            "env": "test",
+            "activo": true
+          }
+        ],
+        "referencia": "GUIA_INTEGRACION_CONSUMIDORES.md#4-lo-que-el-administrador-configura-para-vos"
+      }
+    }
+  ]
+}

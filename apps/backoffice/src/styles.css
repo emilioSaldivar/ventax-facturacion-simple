@@ -516,3 +516,85 @@ tbody tr:hover td { background: var(--bg); }
   font-size: 14px;
   font-family: var(--font);
 }
+
+/* ─── Import de configuracion FE ─────────────────────────────────────────── */
+
+.import-pasos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  list-style: none;
+  padding: 0;
+  margin: 0 0 16px;
+  font-size: 13px;
+}
+.import-pasos li {
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #eef0f3;
+  color: #6b7280;
+}
+.import-pasos li.activo { background: #1f2937; color: #fff; }
+.import-pasos li.hecho { background: #d1fae5; color: #065f46; }
+
+.import-banner.ok { border-left: 4px solid #10b981; }
+.import-banner.bloqueado { border-left: 4px solid #ef4444; }
+
+.diff-chip {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .02em;
+  margin-right: 8px;
+}
+.diff-chip-crear { background: #d1fae5; color: #065f46; }
+.diff-chip-actualizar { background: #fef3c7; color: #92400e; }
+.diff-chip-sin-cambios { background: #eef0f3; color: #6b7280; }
+
+.diff-item {
+  padding: 10px 0;
+  border-bottom: 1px solid #eef0f3;
+}
+.diff-item:last-child { border-bottom: none; }
+.diff-item header { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.diff-item-en-uso { background: #fff7ed; border-left: 3px solid #f59e0b; padding-left: 10px; }
+
+.diff-tabla { width: 100%; margin-top: 8px; font-size: 13px; border-collapse: collapse; }
+.diff-tabla th { text-align: left; color: #6b7280; font-weight: 600; padding: 4px 8px 4px 0; }
+.diff-tabla td { padding: 4px 8px 4px 0; vertical-align: top; }
+.diff-actual { color: #9ca3af; text-decoration: line-through; }
+.diff-nuevo { color: #065f46; font-weight: 500; }
+
+.hallazgo-lista { list-style: none; padding: 0; margin: 0; }
+.hallazgo-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  margin-bottom: 6px;
+  background: #f8f9fb;
+  font-size: 13px;
+}
+.hallazgo-item strong { font-size: 11px; letter-spacing: .04em; color: #374151; }
+.hallazgo-bloqueante { background: #fef2f2; border-left: 3px solid #ef4444; }
+.hallazgo-advertencia { background: #fffbeb; border-left: 3px solid #f59e0b; }
+.hallazgo-ignorado { background: #f8f9fb; border-left: 3px solid #d1d5db; }
+.hallazgo-ruta { font-size: 11px; color: #6b7280; }
+.hallazgo-sugerencia { font-size: 12px; color: #4b5563; }
+
+.radio-inline { display: inline-flex; align-items: center; gap: 6px; margin-right: 16px; }
+
+/* Mobile: la tabla campo|actual|nuevo pasa a lista de definiciones */
+@media (max-width: 640px) {
+  .diff-tabla thead { display: none; }
+  .diff-tabla, .diff-tabla tbody, .diff-tabla tr, .diff-tabla td { display: block; width: 100%; }
+  .diff-tabla tr { border-bottom: 1px solid #eef0f3; padding: 6px 0; }
+  .diff-tabla td::before {
+    content: attr(data-label) ": ";
+    font-weight: 600;
+    color: #6b7280;
+  }
+}

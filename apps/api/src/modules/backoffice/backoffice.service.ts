@@ -30,6 +30,7 @@ import type {
   BackofficeTenantListQuery,
   BackofficeTenantResponse,
   BackofficeTenantUpdateInput,
+  BackofficeOperationConfigInlineInput,
   BackofficeUserCreateInput,
   BackofficeUserDetailResponse,
   BackofficeUserListQuery,
@@ -56,7 +57,18 @@ export async function createBackofficeUser(
   const displayName = normalizeOptional(input.display_name);
   const temporaryPassword = normalizePassword(input.temporary_password) ?? generateTemporaryPassword();
   const passwordHash = await hashPassword(temporaryPassword);
-  const user = await repository.createUser({ tenantId, username, email: input.email, displayName, passwordHash, role: input.role });
+  const operationConfig = input.operation_config
+    ? normalizeOperationConfigInline(input.operation_config)
+    : null;
+  const user = await repository.createUser({
+    tenantId,
+    username,
+    email: input.email,
+    displayName,
+    passwordHash,
+    role: input.role,
+    operationConfig
+  });
   return { ...user, temporary_password: temporaryPassword };
 }
 
@@ -537,6 +549,17 @@ function normalizePassword(value: string | null | undefined): string | null {
     throw new HttpError(400, "VALIDATION_ERROR", "Password temporal debe tener entre 10 y 120 caracteres.");
   }
   return normalized;
+}
+
+/** Igual que `normalizeOperationConfig` pero sin `tenant_id`: lo aporta el usuario que se crea. */
+function normalizeOperationConfigInline(
+  input: BackofficeOperationConfigInlineInput
+): BackofficeOperationConfigInlineInput {
+  const { tenant_id: _ignorado, ...resto } = normalizeOperationConfig({
+    ...input,
+    tenant_id: "00000000-0000-4000-8000-000000000000"
+  });
+  return resto;
 }
 
 function normalizeOperationConfig(input: BackofficeOperationConfigInput): BackofficeOperationConfigInput {

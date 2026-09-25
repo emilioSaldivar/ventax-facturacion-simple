@@ -6,7 +6,8 @@ export type ApiErrorCode =
   | "CONFLICT"
   | "INTERNAL_ERROR"
   | "ONBOARDING_REQUIRED"
-  | "EMAIL_REQUIRED";
+  | "EMAIL_REQUIRED"
+  | "PAYLOAD_TOO_LARGE";
 
 export interface ApiErrorResponse {
   error: {

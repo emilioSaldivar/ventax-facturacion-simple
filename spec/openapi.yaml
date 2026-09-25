@@ -1826,6 +1826,84 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /backoffice/facturadores/import/preview:
+    post:
+      tags: [Backoffice]
+      summary: Vista previa del import de configuracion fiscal
+      description: |
+        Recibe el archivo exportado por facturacion-electronica (JSON o YAML, como texto en el
+        cuerpo), lo valida y lo mapea contra el estado actual, sin escribir nada.
+
+        Responde **200 aun cuando haya bloqueantes**, con `puede_aplicar: false`: el objetivo es
+        que el operador vea el informe completo de una sola vez. El 400 queda reservado a un
+        archivo que no parsea o que no cumple el contrato.
+
+        Un perfil de emision puede no fijar actividad economica (`actividad_codigo: null`, cuando en
+        FE su `modo_actividad` es `SELECCIONADA` o `MULTIPLE`). En ese caso el contexto llega con
+        `actividad_editable: true` y las opciones de su `grupo_actividades`, para que el operador
+        elija cual queda fijada y la envie en `actividad_overrides` al aplicar.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FacturadorImportPreviewRequest"
+      responses:
+        "200":
+          description: Diff calculado (con o sin bloqueantes)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FacturadorImportDiff"
+        "400":
+          description: Archivo invalido o fuera del contrato v0.1
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "413":
+          description: El cuerpo supera el limite admitido
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /backoffice/facturadores/import/apply:
+    post:
+      tags: [Backoffice]
+      summary: Aplicar el import de configuracion fiscal
+      description: |
+        Repite el calculo de la vista previa y persiste todo en **una unica transaccion**.
+        Es aditivo: nunca borra ni desactiva entidades.
+
+        El `preview_token` se recalcula dentro de la transaccion; si el estado cambio desde la
+        vista previa, se rechaza con `409` y `details.motivo = PREVIEW_DESACTUALIZADO`.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FacturadorImportApplyRequest"
+      responses:
+        "200":
+          description: Import aplicado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FacturadorImportApplyResponse"
+        "409":
+          description: |
+            Bloqueado. `details.motivo` distingue el caso:
+            `IMPORT_BLOQUEADO` (quedan bloqueantes) o `PREVIEW_DESACTUALIZADO` (el estado cambio).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /backoffice/users:
     post:
       tags: [Backoffice]
@@ -3169,15 +3247,266 @@ components:
         artifacts:
           $ref: "#/components/schemas/ArtifactsResponse"
 
+    FacturadorImportArchivo:
+      type: object
+      required: [filename, content]
+      properties:
+        filename:
+          type: string
+          maxLength: 255
+        format:
+          type: string
+          enum: [json, yaml, auto]
+          default: auto
+        content:
+          type: string
+          maxLength: 512000
+          description: Texto crudo del archivo exportado por facturacion-electronica.
+
+    FacturadorImportTarget:
+      oneOf:
+        - type: object
+          required: [mode, tenant_id]
+          properties:
+            mode:
+              type: string
+              enum: [EXISTENTE]
+            tenant_id:
+              type: string
+              format: uuid
+        - type: object
+          required: [mode, nombre, slug, plan_codigo]
+          properties:
+            mode:
+              type: string
+              enum: [NUEVO]
+            nombre:
+              type: string
+            slug:
+              type: string
+            plan_codigo:
+              type: string
+      discriminator:
+        propertyName: mode
+
+    FacturadorImportPreviewRequest:
+      allOf:
+        - $ref: "#/components/schemas/FacturadorImportArchivo"
+        - type: object
+          required: [target]
+          properties:
+            target:
+              $ref: "#/components/schemas/FacturadorImportTarget"
+
+    FacturadorImportApplyRequest:
+      allOf:
+        - $ref: "#/components/schemas/FacturadorImportPreviewRequest"
+        - type: object
+          required: [preview_token]
+          properties:
+            preview_token:
+              type: string
+              pattern: "^[0-9a-f]{64}$"
+            permitir_ambiente_distinto:
+              type: boolean
+              default: false
+              description: Override explicito del bloqueante AMBIENTE_DISTINTO. Queda auditado.
+            documento_nro_overrides:
+              type: object
+              additionalProperties:
+                type: string
+                pattern: "^[0-9]{7}$"
+              description: |
+                Numero inicial por codigo de perfil. Solo se aplica a contextos NUEVOS: sobre uno
+                existente se ignora con la advertencia OVERRIDE_IGNORADO, porque la numeracion viva
+                nunca se pisa.
+            actividad_overrides:
+              type: object
+              additionalProperties:
+                type: string
+              description: |
+                Actividad economica elegida por codigo de perfil. Solo se aplica a contextos NUEVOS
+                de perfiles que no fijan actividad, y unicamente si el codigo esta entre las
+                `actividad_opciones` de ese contexto. En cualquier otro caso se ignora con la
+                advertencia OVERRIDE_IGNORADO.
+
+    ImportHallazgo:
+      type: object
+      required: [nivel, codigo, mensaje]
+      properties:
+        nivel:
+          type: string
+          enum: [BLOQUEANTE, ADVERTENCIA, IGNORADO]
+        codigo:
+          type: string
+        mensaje:
+          type: string
+        ruta:
+          type: string
+        valor: {}
+        sugerencia:
+          type: string
+
+    ImportFieldDiff:
+      type: object
+      properties:
+        campo:
+          type: string
+        actual: {}
+        nuevo: {}
+
+    ImportEntityDiff:
+      type: object
+      properties:
+        codigo:
+          type: string
+        accion:
+          type: string
+          enum: [CREAR, ACTUALIZAR, SIN_CAMBIOS, USAR_EXISTENTE]
+        id:
+          type: string
+          format: uuid
+          nullable: true
+        campos:
+          type: array
+          items:
+            $ref: "#/components/schemas/ImportFieldDiff"
+
+    ImportContextoDiff:
+      allOf:
+        - $ref: "#/components/schemas/ImportEntityDiff"
+        - type: object
+          properties:
+            clave:
+              type: object
+              properties:
+                actividad: { type: string }
+                establecimiento: { type: string }
+                punto: { type: string }
+                perfil: { type: string }
+            actividad_codigo:
+              type: string
+              description: Actividad efectiva del contexto (la del archivo, o la elegida).
+            actividad_editable:
+              type: boolean
+              description: true cuando el perfil no fija actividad y el operador puede elegirla.
+            actividad_opciones:
+              type: array
+              description: Actividades del grupo que existen en el archivo. Vacio si el perfil fija actividad.
+              items:
+                type: object
+                properties:
+                  codigo: { type: string }
+                  descripcion: { type: string, nullable: true }
+            documento_nro_sugerido:
+              type: string
+            documento_nro_editable:
+              type: boolean
+            documento_nro_preservado:
+              type: boolean
+            usuarios_asignados:
+              type: integer
+
+    FacturadorImportDiff:
+      type: object
+      properties:
+        contrato:
+          type: object
+          properties:
+            version: { type: string }
+            generado_en: { type: string, nullable: true }
+            archivo: { type: string }
+            formato: { type: string }
+        preview_token:
+          type: string
+        puede_aplicar:
+          type: boolean
+        tenant:
+          type: object
+        facturador:
+          $ref: "#/components/schemas/ImportEntityDiff"
+        establecimientos:
+          type: array
+          items: { $ref: "#/components/schemas/ImportEntityDiff" }
+        puntos:
+          type: array
+          items: { $ref: "#/components/schemas/ImportEntityDiff" }
+        actividades:
+          type: array
+          items: { $ref: "#/components/schemas/ImportEntityDiff" }
+        perfiles:
+          type: array
+          items: { $ref: "#/components/schemas/ImportEntityDiff" }
+        contextos:
+          type: array
+          items: { $ref: "#/components/schemas/ImportContextoDiff" }
+        timbrado_elegido:
+          type: object
+          nullable: true
+          properties:
+            numero: { type: string }
+            fecha_inicio: { type: string, nullable: true }
+            fecha_fin: { type: string, nullable: true }
+            motivo: { type: string }
+        resumen:
+          type: object
+          properties:
+            crear: { type: integer }
+            actualizar: { type: integer }
+            sin_cambios: { type: integer }
+            no_tocados: { type: integer }
+        bloqueantes:
+          type: array
+          items: { $ref: "#/components/schemas/ImportHallazgo" }
+        advertencias:
+          type: array
+          items: { $ref: "#/components/schemas/ImportHallazgo" }
+        ignorados:
+          type: array
+          items: { $ref: "#/components/schemas/ImportHallazgo" }
+        referencias:
+          type: object
+          additionalProperties:
+            type: string
+          description: Ruta del archivo hacia el ancla de la guia FE que explica ese campo.
+
+    FacturadorImportApplyResponse:
+      allOf:
+        - $ref: "#/components/schemas/FacturadorImportDiff"
+        - type: object
+          properties:
+            aplicado:
+              type: boolean
+            tenant_id:
+              type: string
+              format: uuid
+            facturador_id:
+              type: string
+              format: uuid
+            aplicado_en:
+              type: string
+              format: date-time
+            proximos_pasos:
+              type: array
+              items:
+                type: string
+
     BackofficeUserCreateRequest:
       type: object
-      required: [username, display_name, role]
+      required: [tenant_id, username, email, role]
       properties:
+        tenant_id:
+          type: string
+          format: uuid
         username:
           type: string
           description: Username operativo. Puede ser alias tecnico o email del operador.
+        email:
+          type: string
+          format: email
         display_name:
           type: string
+          nullable: true
         role:
           type: string
           enum: [OPERADOR_FACTURACION, SOPORTE_INTERNO, ADMIN_INTERNO]
@@ -3185,6 +3514,32 @@ components:
           type: string
           format: password
           nullable: true
+        operation_config:
+          $ref: "#/components/schemas/BackofficeOperationConfigInline"
+
+    BackofficeOperationConfigInline:
+      type: object
+      description: |
+        Configuracion operativa opcional dentro del alta de usuario (alta guiada). Se crea en la
+        misma transaccion que el usuario: si el contexto no resuelve, el usuario no se crea.
+        Misma forma que la asignacion posterior, menos `tenant_id`, que se deriva del usuario.
+      required: [facturador_id, emisor_id, establecimiento, punto_expedicion, perfil_emision_codigo, actividad_economica_codigo]
+      properties:
+        facturador_id:
+          type: string
+          format: uuid
+        emisor_id:
+          type: string
+        establecimiento:
+          type: string
+          pattern: "^[0-9]{3}$"
+        punto_expedicion:
+          type: string
+          pattern: "^[0-9]{3}$"
+        perfil_emision_codigo:
+          type: string
+        actividad_economica_codigo:
+          type: string
 
     BackofficePasswordResetRequest:
       type: object
