@@ -149,6 +149,18 @@ en `SPEC_IMPORT_CONFIG_FACTURADOR_v0.2`.
   significa "esta factura no tiene eventos", no una falla. Solo `DOCUMENTO_NOT_FOUND` es error.
 - **RN-07 — Lo que no se adopta, se declara.** Cada endpoint del contrato que decidimos no consumir
   queda listado con su motivo. La ausencia de un endpoint no puede ser un descubrimiento futuro.
+- **RN-09 — El `document_uuid` es la identidad del documento, no el CDC.** El uuid lo asigna FE al
+  crear y no cambia nunca; el CDC puede cambiar si FE rehace el documento. Todas nuestras lecturas de
+  estado y artefactos van por `/documentos/{uuid}/...`. **Consecuencia para el cliente final:** el link
+  público que le compartimos resuelve por uuid, así que siempre obtiene el XML y el KUDE vigentes,
+  aunque el CDC haya cambiado entre medio. De acá se deriva que no necesitemos el linaje de CDC ni las
+  variantes por CDC de las consultas.
+
+- **RN-10 — Este stack no absorbe complejidad del dominio de FE.** Solo implementa lo que
+  `facturacion-electronica` publica como consumible externo en `facturacion-electronica-consumer-docs`,
+  y no modifica FE. La mecánica de lotes es el ejemplo: el operador necesita saber si su documento
+  está emitido, no en qué lote viajó; ese diagnóstico vive en el backoffice de FE.
+
 - **RN-08 — Preferir el contrato de consumidor sobre `/admin`.** Cuando exista equivalente publicado,
   se migra. Donde no exista, la dependencia queda declarada como deuda con su riesgo.
 

@@ -44,6 +44,7 @@ La fuente de verdad de este proyecto es:
 - `docs/SPEC_PARIDAD_CONTRATO_FE_v0.1.md`
 - `docs/PLAN_PARIDAD_CONTRATO_FE_v0.1.md`
 - `docs/TASKS_PARIDAD_CONTRATO_FE_v0.1.md`
+- `docs/OPERACION_PARIDAD_FE_v0.1.md`
 - `docs/SPEC_BACKOFFICE_ADMIN_v0.1.md`
 - `docs/PLAN_BACKOFFICE_ADMIN_v0.1.md`
 - `docs/TASKS_BACKOFFICE_ADMIN_v0.1.md`
@@ -147,6 +148,8 @@ Este proyecto es responsable de:
 - El frontend no decide ni incrementa numeracion fiscal.
 - El backend SaaS valida tenant, suscripcion, permisos y facturador antes de llamar al backend fiscal.
 - El backend fiscal devuelve `document_id`, `cdc`, numero fiscal y estados; el SaaS los persiste como referencia.
+- El `document_uuid` es la identidad estable del documento; el `cdc` puede cambiar si `facturacion-electronica` rehace el documento. Toda consulta de estado y artefactos va por `uuid`, nunca por `cdc`. El link publico al cliente final resuelve por `uuid`, de modo que siempre entrega el XML y el KUDE vigentes.
+- Este stack implementa unicamente lo que `facturacion-electronica` publica como consumible externo en `facturacion-electronica-consumer-docs`. No modifica ese repositorio ni absorbe complejidad de su dominio (lotes, linaje de CDC, mecanica SIFEN).
 - Cada factura operativa debe guardar snapshot de cliente, items, totales, usuario emisor y respuesta fiscal resumida.
 - La emision fiscal debe ser resiliente: idempotente, recuperable por estado, con reintentos controlados y feedback claro al operador/cliente cuando falle.
 - El operador debe poder corregir errores operativos antes de emitir o reintentar; el sistema debe evitar dependencias de soporte interno para fallos recuperables.

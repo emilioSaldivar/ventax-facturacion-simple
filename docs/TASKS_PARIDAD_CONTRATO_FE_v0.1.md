@@ -14,7 +14,7 @@ resultado de una cancelación, y FE documenta que SIFEN rechaza ~15% de ellas de
 
 ## Estados
 
-`PENDING` · `PARTIAL` · `DONE` · `BLOCKED`
+`PENDING` · `PARTIAL` · `DONE` · `BLOCKED` · `DESCARTADO` (decisión explícita de no implementar, con su motivo)
 
 ## Reglas de cierre
 
@@ -50,13 +50,13 @@ resultado de una cancelación, y FE documenta que SIFEN rechaza ~15% de ellas de
 | PF-016 | QA — Playwright | Rechazo y reintento | CA-15 | DONE | Mobile y desktop: rechazo con reintento disponible, rechazo terminal sin botón, y el caso sin eventos |  `scripts/playwright-cancelacion-rechazo.cjs`: **8 verificaciones en 2 viewports (390×844 y 1440×900), 0 fallos**. Escenarios: rechazo reintentable (botón presente), rechazo terminal (sin botón), sin respuesta de SIFEN (botón de consulta) y aceptada (sin bloque). Capturas en `test-results/cancelacion-*.png`. |
 | PF-017 | QA — Contenedores | End-to-end | CA-16 | DONE | `bash scripts/deploy.sh`; `npm run test`, `typecheck`, `lint`, `build`, `qa:no-secrets` en verde |  `bash scripts/deploy.sh` con el stack completo; migración 0032 aplicada. `typecheck`, `lint`, `build` y `qa:no-secrets` en verde. Suite completa: **350 pasan, 6 fallan por deuda preexistente** ajena a este trabajo (verificada antes de empezar). |
 | PF-018 | F1 — Datos | Reconciliación de producción | PLAN riesgo 1 | DONE | Consulta que lista los documentos con intento de cancelación y sin resolución, que hoy muestran un estado falso. **Se lista y se revisa; no se corrige a ciegas** |  `scripts/sql/reconciliar_cancelaciones.sql` con 3 bloques: intentos sin resolver posteriores a la corrección, sospechosos históricos (con `cancelacion_motivo` en el snapshot pero sin `cancelacion_status`) y resumen por facturador. **No corrige nada**: lista para revisar contra `/documentos/{uuid}/eventos`. Ejecutado en desarrollo sin errores (0 filas: la base no tiene cancelaciones). |
-| PF-019 | F4 | Linaje de CDC | CA-10 | PENDING | `GET /documentos/{uuid}/lineage` en el gateway y en el detalle, tras opciones avanzadas. Solo lectura | |
-| PF-020 | F5 | Estado de lotes BATCH | CA-11 | PENDING | `GET /consultar/{id}/lotes` y `/lotes/{protocol}` expuestos en el backoffice, que es donde se diagnostica | |
-| PF-021 | F6 | Decisión sobre `/consultar/ruc` | CA-12 | PENDING | Comparación con `dnit-ruc-loader`: cobertura, latencia, disponibilidad offline, costo de mantenimiento y el hecho de que **la DNIT no republica el padrón todos los meses**. Entregable: decisión documentada, no implementación | |
-| PF-022 | F7 | Inventario de `/admin` | RN-08 · CA-13 | PENDING | `docs/OPERACION_PARIDAD_FE_v0.1.md` con los 6 endpoints, si hay equivalente de consumidor y el riesgo de cada uno. Se conecta con la clave compartida ya registrada | |
-| PF-023 | F7 | Inventario de lo no adoptado | RN-07 · CA-14 | PENDING | Los 16 endpoints del contrato que no consumimos, cada uno con su motivo. La ausencia de un endpoint deja de poder ser un descubrimiento futuro | |
-| PF-024 | Deploy | Promoción a staging | — | PENDING | **Requiere confirmación explícita.** Con dump previo: `backups-facturacion-simple-ausentes` sigue vigente | |
-| PF-025 | Deploy | Promoción a producción | — | PENDING | **Requiere confirmación explícita.** Después de PF-024 y de revisar el listado de PF-018 | |
+| PF-019 | F4 | Linaje de CDC | CA-10 | DESCARTADO | `GET /documentos/{uuid}/lineage` en el gateway y en el detalle, tras opciones avanzadas. Solo lectura |  **Decisión del usuario (2026-09-25): no se implementa.** Con `document_uuid` alcanza para resolver XML y KUDE vigentes: el uuid es identidad estable, el CDC puede cambiar por decisión de FE. El link público que se comparte al cliente final resuelve por uuid, así que siempre entrega el comprobante correcto aunque el CDC haya cambiado. El linaje es información del dominio de FE. Registrado en `OPERACION_PARIDAD_FE_v0.1.md` §2 y §3. |
+| PF-020 | F5 | Estado de lotes BATCH | CA-11 | DESCARTADO | `GET /consultar/{id}/lotes` y `/lotes/{protocol}` expuestos en el backoffice, que es donde se diagnostica |  **Decisión del usuario (2026-09-25): no se implementa.** La mecánica de lotes es complejidad del dominio de FE; esa información sirve al backoffice de FE, no al dominio funcional de este stack. El operador necesita saber si su documento está emitido, no en qué lote viajó. El caso real detectado (documento `0000165` de `80136968-1` en `SENT_BATCH` desde el 2026-08-03) **se resuelve en FE**, no acá. |
+| PF-021 | F6 | Decisión sobre `/consultar/ruc` | CA-12 | DESCARTADO | Comparación con `dnit-ruc-loader`: cobertura, latencia, disponibilidad offline, costo de mantenimiento y el hecho de que **la DNIT no republica el padrón todos los meses**. Entregable: decisión documentada, no implementación |  **Decisión del usuario (2026-09-25): no se necesita.** `dnit-ruc-loader` ya resuelve la consulta de RUC con el padrón completo en `dnit_ruc_contribuyentes`, sin depender de FE ni de la latencia de SIFEN. |
+| PF-022 | F7 | Inventario de `/admin` | RN-08 · CA-13 | DONE | `docs/OPERACION_PARIDAD_FE_v0.1.md` con los 6 endpoints, si hay equivalente de consumidor y el riesgo de cada uno. Se conecta con la clave compartida ya registrada |  `docs/OPERACION_PARIDAD_FE_v0.1.md` §4: los 6 endpoints `/admin` con su uso, si hay equivalente publicado y su riesgo. **Hallazgo:** `void-number` sí tiene equivalente de consumidor (`POST /evento/inutilizacionnumfactura`), así que migrarlo bajaría la superficie administrativa de 6 a 5. Los tres riesgos quedan declarados, incluido el de la clave compartida. |
+| PF-023 | F7 | Inventario de lo no adoptado | RN-07 · CA-14 | DONE | Los 16 endpoints del contrato que no consumimos, cada uno con su motivo. La ausencia de un endpoint deja de poder ser un descubrimiento futuro |  `docs/OPERACION_PARIDAD_FE_v0.1.md` §3: los 16 endpoints no consumidos con su motivo. El criterio quedó explícito en §1 y §2: varios son variantes por CDC de endpoints que consumimos por `uuid`, y esa elección es deliberada. |
+| PF-024 | Deploy | Promoción a staging | — | DONE | **Requiere confirmación explícita.** Con dump previo: `backups-facturacion-simple-ausentes` sigue vigente |  Desplegado el 2026-09-25 en `ventax-facturacion-simple` (staging), commit `87579b6`. Migraciones 0031 y 0032 aplicadas, 6 columnas de cancelación, tabla `facturador_import_eventos` creada, health OK y el endpoint del import responde 401 (montado y protegido). Backup previo verificado. |
+| PF-025 | Deploy | Promoción a producción | — | DONE | **Requiere confirmación explícita.** Después de PF-024 y de revisar el listado de PF-018 |  Desplegado el 2026-09-25 en `ventax-facturacion-simple-prod`, commit `87579b6`. Migraciones 0031 y 0032 aplicadas, 233 documentos y 5 facturadores intactos, 0 errores en el log. Backup previo en `~/backups/facturacion-simple-prod/facturacion_simple-pre-paridad-fe-20260925-040030.dump`, verificado con `pg_restore --list` (300 entradas, 35 tablas). |
 
 ---
 
@@ -88,6 +88,42 @@ desplegable sin nada de F4 a F7.
 
 F4 a F7 (PF-019 a PF-023) quedan `PENDING`: son adopción de endpoints e inventario, independientes del
 defecto corregido. PF-024 y PF-025 son los despliegues, que requieren confirmación explícita.
+
+## Hallazgos de la verificación en producción (2026-09-25)
+
+### H1 — 97 documentos con estado falso (42% de producción)
+
+`PENDIENTE_SIFEN` desde hace 2 a 4 meses, y **están aprobados en SIFEN**: se muestrearon tres y los
+tres devuelven `dCodRes 0422` «CDC encontrado», que según EST-013 significa aprobado.
+
+**Causa raíz verificada:** el worker de verificación **sí corre** en producción (log
+`verificacion fiscal worker enabled`), pero selecciona `where verificacion_next_at <= now()`, y los 97
+tienen ese campo en `NULL`. En SQL `NULL <= now()` no es verdadero, así que son invisibles para el
+worker de forma permanente. La columna llegó con `0028_verificacion_fiscal` y **nunca se hizo backfill**
+de los documentos anteriores.
+
+No es una hemorragia: agosto y septiembre son 100% `EMITIDA` (88 documentos, 0 pendientes), porque los
+nuevos reciben `verificacion_next_at` al insertarse. Es un backlog cerrado entre mayo y julio.
+
+**Arreglo propuesto, pendiente de autorización:** `update facturas_operativas set verificacion_next_at
+= now() where estado = 'PENDIENTE_SIFEN' and document_uuid is not null and verificacion_next_at is null`.
+El worker los resolvería solo, a 10 cada 30 s: unos 5 minutos.
+
+### H2 — Error propio al reconciliar las 3 facturas
+
+El primer script de reconciliación hizo `join` por `numero_fiscal`, que **no es único entre
+facturadores** (es una serie por establecimiento y punto): tocó 5 filas en vez de 3 y anuló por error
+dos facturas vigentes, una de ellas de otro emisor.
+
+Detectado de inmediato porque el script imprimía antes/después y `UPDATE 5` no coincidía con las 3
+esperadas. Se verificó contra FE que ambas devolvían `404` (sin eventos: nunca anuladas en SIFEN) y se
+revirtieron a `EMITIDA` con autorización del usuario, por `document_uuid`.
+
+**Regla que queda:** en producción, join por clave natural solo tras verificar su unicidad; si hay un
+identificador único disponible, se usa ese. Los `document_uuid` estaban a mano desde el principio.
+
+**Residuo pendiente:** 2 filas en `audit_events` con `event_type = 'RECONCILIACION_CANCELACION'`
+apuntando a los documentos revertidos. Afirman una reconciliación que ya no existe.
 
 ## Bloqueos y desvíos
 
