@@ -3,7 +3,7 @@
 ## Alineacion
 
 - `AGENTS.md`
-- `docs/API_FACTURACION_ELECTRONICA/facturacion-electronica-consumer-docs/GUIA_INTEGRACION_CONSUMIDORES_v0.2.md` (seccion 16, "Recibos de Dinero Firmados Digitalmente")
+- `docs/API_FACTURACION_ELECTRONICA/facturacion-electronica-consumer-docs/GUIA_INTEGRACION_CONSUMIDORES.md` (seccion 16, "Recibos de Dinero Firmados Digitalmente")
 - `docs/API_FACTURACION_ELECTRONICA/facturacion-electronica-consumer-docs/openapi.consumidor-v0.3.yaml` (schemas `ReciboDineroInput`, `ReciboDineroPatch`, `ReciboDineroResult`, `ReciboAnularInput`, `ReciboVerificacionResult`)
 - `docs/PLAN_RECIBO_DINERO_v0.5.md`
 - `docs/TASKS_RECIBO_DINERO_v0.5.md`

@@ -1,3 +1,4 @@
+import type { FiscalCancelStatus } from "../fiscal-gateway/fiscal-gateway.types";
 import type { TaxCalculatedLine, TaxTotals, TipoIva } from "@facturacion-simple/shared";
 import type { ClienteNaturaleza, DocumentoIdentidadTipo } from "../clientes/clientes.types";
 import type {
@@ -106,6 +107,16 @@ export interface DocumentoAccionDetalle {
   soporte_payload: DocumentoAccionSoportePayload | null;
 }
 
+export interface DocumentoCancelacion {
+  status: FiscalCancelStatus;
+  rejection_code: string | null;
+  rejection_message: string | null;
+  /** `null` cuando no hubo rechazo; FE solo lo informa con REJECTED. */
+  retryable: boolean | null;
+  intentos: number;
+  last_at: string | null;
+}
+
 export interface DocumentoResponse {
   id: string;
   document_uuid: string | null;
@@ -134,6 +145,8 @@ export interface DocumentoResponse {
   sifen_last_checked_at: string | null;
   documento_relacionado_id: string | null;
   nce_motivo: string | null;
+  /** Resultado del ultimo intento de anulacion. `null` si nunca se intento. */
+  cancelacion: DocumentoCancelacion | null;
   delivery: DeliverySummary;
   created_at: string | null;
   /** Derivado en el service (deriveAccion), no persistido — ver DocumentoAccion. */
@@ -389,7 +402,14 @@ export interface FacturaRepository {
     facturadorId: string;
     documentoId: string;
     requestedBy: string;
-    estado: "ANULADA" | "PENDIENTE_SIFEN";
+    /** Solo ACCEPTED anula: cualquier otro resultado deja el estado comercial intacto (RN-04). */
+    anula: boolean;
+    cancelacion: {
+      status: FiscalCancelStatus;
+      rejectionCode: string | null;
+      rejectionMessage: string | null;
+      retryable: boolean | null;
+    };
     fiscalStatus: Record<string, unknown>;
   }): Promise<DocumentoResponse | null>;
   appendAuditEvent(input: {

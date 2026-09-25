@@ -333,10 +333,28 @@ export async function retryDocumentoEmission(
   return withAccion(retried);
 }
 
+/**
+ * Errores de evento que FE devuelve como 409. Traducirlos importa: envolverlos en un 502 generico
+ * oculta el detalle util antes de que llegue a quien opera (checklist de FE, punto 5).
+ * `EVENT_ALREADY_EXISTS` es el caso mas claro: significa que la factura YA esta anulada.
+ */
+const ERRORES_EVENTO: Record<string, { status: number; mensaje: string }> = {
+  EVENT_ALREADY_EXISTS: { status: 409, mensaje: "La factura ya esta anulada en SIFEN." },
+  EVENT_IN_PROGRESS: { status: 409, mensaje: "Hay una anulacion en curso para esta factura. Espera unos segundos y volve a consultar." },
+  CANCEL_WINDOW_EXPIRED: { status: 409, mensaje: "Pasaron mas de 48 horas desde la aprobacion: corresponde emitir una nota de credito." },
+  INVALID_DOCUMENT_STATUS: { status: 409, mensaje: "El documento no esta aprobado en SIFEN, asi que no se puede anular." }
+};
+
+function codigoErrorEvento(error: FiscalGatewayError): string | null {
+  const detalles = error.details as { body?: { error?: unknown } } | null | undefined;
+  const codigo = detalles?.body?.error;
+  return typeof codigo === "string" && codigo in ERRORES_EVENTO ? codigo : null;
+}
+
 export async function cancelDocumento(
   context: OperationalContextResponse,
   documentoId: string,
-  input: { motivo: string },
+  input: { motivo: string; reintentar?: boolean },
   repository: FacturaRepository,
   gateway: FiscalGateway
 ): Promise<DocumentoResponse> {
@@ -351,6 +369,14 @@ export async function cancelDocumento(
     throw new HttpError(409, "CONFLICT", "Documento no elegible para cancelacion.");
   }
 
+  // SIFEN rechaza ~15% de las cancelaciones de forma no determinista. Un rechazo con
+  // `retryable` no bloquea: se reintenta el mismo CDC en el mismo endpoint (SPEC RN-03).
+  if (documento.cancelacion?.status === "REJECTED" && !documento.cancelacion.retryable && !input.reintentar) {
+    throw new HttpError(409, "CONFLICT", "La anulacion fue rechazada de forma definitiva por SIFEN.", {
+      rejection: documento.cancelacion
+    });
+  }
+
   try {
     const cancelled = await gateway.cancelFactura({
       emisor_id: context.facturador.emisor_id,
@@ -358,11 +384,21 @@ export async function cancelDocumento(
       motivo
     });
 
+    // RN-01/RN-04: unicamente ACCEPTED anula. REJECTED deja la factura vigente, FAILED la deja
+    // indeterminada, y UNKNOWN es un estado que el contrato todavia no define.
+    const anula = cancelled.status === "ACCEPTED";
+
     const updated = await repository.cancelDocumento({
       facturadorId: context.facturador.id,
       documentoId,
       requestedBy: context.user.id,
-      estado: cancelled.estado,
+      anula,
+      cancelacion: {
+        status: cancelled.status,
+        rejectionCode: cancelled.rejection?.code ?? null,
+        rejectionMessage: cancelled.rejection?.message ?? null,
+        retryable: cancelled.rejection ? cancelled.rejection.retryable : null
+      },
       fiscalStatus: {
         ...cancelled.raw,
         event_id: cancelled.event_id,
@@ -377,6 +413,25 @@ export async function cancelDocumento(
     return withAccion(updated);
   } catch (error) {
     if (error instanceof FiscalGatewayError) {
+      const codigo = codigoErrorEvento(error);
+      if (codigo) {
+        // Ya esta anulada: se reconcilia el estado local en vez de limitarse a informar el conflicto.
+        if (codigo === "EVENT_ALREADY_EXISTS") {
+          const reconciliado = await reconciliarCancelacionAceptada(
+            context,
+            documentoId,
+            documento.document_uuid,
+            repository,
+            gateway
+          );
+          if (reconciliado) {
+            return reconciliado;
+          }
+        }
+        const { status, mensaje } = ERRORES_EVENTO[codigo]!;
+        throw new HttpError(status, "CONFLICT", mensaje, { evento: codigo });
+      }
+
       throw new HttpError(
         error.code === "TIMEOUT" ? 504 : 502,
         "INTERNAL_ERROR",
@@ -388,6 +443,44 @@ export async function cancelDocumento(
       );
     }
     throw error;
+  }
+}
+
+/**
+ * Una factura esta anulada SOLO si hay un evento `CANCEL` con `status: ACCEPTED` (RN-01).
+ * Mirar solo el `type` es incorrecto: un CANCEL puede estar REJECTED.
+ */
+async function reconciliarCancelacionAceptada(
+  context: OperationalContextResponse,
+  documentoId: string,
+  documentUuid: string | null,
+  repository: FacturaRepository,
+  gateway: FiscalGateway
+): Promise<DocumentoResponse | null> {
+  if (!documentUuid) {
+    return null;
+  }
+
+  try {
+    const eventos = await gateway.getDocumentoEventos(documentUuid);
+    const aceptado = eventos.events.find((e) => e.type === "CANCEL" && e.status === "ACCEPTED");
+    if (!aceptado) {
+      return null;
+    }
+
+    const updated = await repository.cancelDocumento({
+      facturadorId: context.facturador.id,
+      documentoId,
+      requestedBy: context.user.id,
+      anula: true,
+      cancelacion: { status: "ACCEPTED", rejectionCode: null, rejectionMessage: null, retryable: null },
+      fiscalStatus: { reconciliado_desde: "eventos", event_id: aceptado.event_id, response: aceptado.response }
+    });
+
+    return updated ? withAccion(updated) : null;
+  } catch {
+    // La reconciliacion es best-effort: si falla, se informa el 409 original.
+    return null;
   }
 }
 
@@ -1218,3 +1311,6 @@ function buildNotaCreditoExternalRef(context: OperationalContextResponse, factur
     ? `nce_${crypto.createHash("sha256").update(`${context.facturador.id}:${idempotencyKey}`).digest("hex").slice(0, 32)}`
     : `nce_${crypto.createHash("sha256").update(`${context.facturador.id}:${facturaId}:${crypto.randomUUID()}`).digest("hex").slice(0, 32)}`;
 }
+
+/** Superficie interna expuesta solo para tests. */
+export const __testingCancelacion = { codigoErrorEvento, ERRORES_EVENTO };

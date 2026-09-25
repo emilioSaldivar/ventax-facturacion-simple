@@ -7,7 +7,7 @@
 
 ## Alineación
 
-- `docs/facturacion-electronica-consumer-docs/GUIA_INTEGRACION_CONSUMIDORES_v0.2.md` (contenido v0.3)
+- `docs/facturacion-electronica-consumer-docs/GUIA_INTEGRACION_CONSUMIDORES.md` (contenido v0.3)
 - `docs/facturacion-electronica-consumer-docs/openapi.yaml` (auth por endpoint; `GET /documentos/{uuid}/sifen` con `?refresh=true`)
 - `docs/facturacion-electronica-consumer-docs/OPERACION_CONTRATO_CANONICO_v0.1.md` (`sifen_resolution`, linaje, reglas de operación)
 - `docs/SPEC_RESILIENCIA_EMISION_F1_v0.1.md` (estados `CANCELADO_LOCAL`, refresh en idempotencia — ya implementado)

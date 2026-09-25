@@ -308,9 +308,18 @@ class FakeFacturaRepository implements FacturaRepository {
       return null;
     }
 
+    // Refleja la regla del repositorio real: el estado solo cambia si `anula` (RN-04).
     return {
       ...this.findByIdResponse,
-      estado: input.estado,
+      estado: input.anula ? "ANULADA" : this.findByIdResponse.estado,
+      cancelacion: {
+        status: input.cancelacion.status,
+        rejection_code: input.cancelacion.rejectionCode,
+        rejection_message: input.cancelacion.rejectionMessage,
+        retryable: input.cancelacion.retryable,
+        intentos: (this.findByIdResponse.cancelacion?.intentos ?? 0) + 1,
+        last_at: "2026-09-25T00:00:00.000Z"
+      },
       fiscal_status: input.fiscalStatus
     };
   }
@@ -387,8 +396,11 @@ class FakeFiscalGateway implements FiscalGateway {
     },
     private readonly cancelResponse: FiscalCancelFacturaResponse | FiscalGatewayError = {
       event_id: "evt-1",
-      estado: "ANULADA",
-      raw: { event_id: "evt-1", status: "SENT" }
+      // SPEC_PARIDAD_CONTRATO_FE_v0.1: el gateway devuelve el status del contrato de FE
+      // sin traducir; solo ACCEPTED anula.
+      status: "ACCEPTED",
+      rejection: null,
+      raw: { event_id: "evt-1", status: "ACCEPTED" }
     },
     private readonly notaCreditoResponse: FiscalEmitNotaCreditoResponse | FiscalGatewayError = {
       fiscal_document_id: "nce-doc-1",
@@ -982,10 +994,18 @@ describe("facturas service", () => {
       facturadorId: context.facturador.id,
       documentoId: "66666666-6666-4666-8666-666666666666",
       requestedBy: context.user.id,
-      estado: "ANULADA",
+      // SPEC_PARIDAD_CONTRATO_FE_v0.1: el service decide si anula a partir del status de FE,
+      // y persiste el resultado del intento aunque no anule.
+      anula: true,
+      cancelacion: {
+        status: "ACCEPTED",
+        rejectionCode: null,
+        rejectionMessage: null,
+        retryable: null
+      },
       fiscalStatus: {
         event_id: "evt-1",
-        status: "SENT",
+        status: "ACCEPTED",
         cancelacion_motivo: "Error en datos del receptor"
       }
     });

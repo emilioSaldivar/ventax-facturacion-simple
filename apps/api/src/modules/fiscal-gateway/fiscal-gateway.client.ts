@@ -1,3 +1,4 @@
+import { logger } from "../../shared/logging/logger";
 import crypto from "node:crypto";
 import { env } from "../../config/env";
 import { buildFiscalGatewayConfig } from "./fiscal-gateway.config";
@@ -12,6 +13,8 @@ import {
   type FiscalArtifactResponse,
   type FiscalCancelFacturaRequest,
   type FiscalCancelFacturaResponse,
+  type FiscalCancelRejection,
+  type FiscalCancelStatus,
   type FiscalBatchPendientesResponse,
   type FiscalDocumentoCancelSendResponse,
   type FiscalDocumentoCreateDerivedResponse,
@@ -139,12 +142,13 @@ export class MockFiscalGateway implements FiscalGateway {
 
     return {
       event_id: `mock-cancel-${digest.slice(0, 16)}`,
-      estado: "ANULADA",
+      status: "ACCEPTED",
+      rejection: null,
       raw: {
         mode: "mock",
         event_id: `mock-cancel-${digest.slice(0, 16)}`,
         cdc: request.cdc,
-        status: "SENT"
+        status: "ACCEPTED"
       }
     };
   }
@@ -705,6 +709,16 @@ export class RealFiscalGateway implements FiscalGateway {
     });
 
     const body = await readJson(response);
+
+    // Una factura vigente sin eventos responde 404 con `error: "NOT_FOUND"`: es un estado normal,
+    // no una falla (checklist de FE, paso 1). `DOCUMENTO_NOT_FOUND` si es error: el uuid no existe.
+    if (response.status === 404) {
+      const codigo = body && typeof body === "object" ? (body as { error?: unknown }).error : null;
+      if (codigo === "NOT_FOUND") {
+        return { events: [], raw: { error: "NOT_FOUND" } };
+      }
+    }
+
     if (!response.ok) {
       throw new FiscalGatewayError(
         response.status === 408 || response.status === 504 ? "TIMEOUT" : "UPSTREAM_ERROR",
@@ -1487,6 +1501,17 @@ function isIdempotentDocumentConflict(status: number, body: unknown): boolean {
   return data.idempotent === true && Boolean(stringOrNull(data.document_id) || stringOrNull(data.cdc));
 }
 
+/**
+ * `de_events.id` de FE es un bigint: segun como serialice puede llegar como numero o como string.
+ * `stringOrNull` solo acepta strings, asi que sin esto el `event_id` se perderia.
+ */
+function idOrNull(value: unknown): string | null {
+  if (typeof value === "string" && value.length > 0) return value;
+  if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  if (typeof value === "bigint") return String(value);
+  return null;
+}
+
 function stringOrNull(value: unknown): string | null {
   return typeof value === "string" && value.length > 0 ? value : null;
 }
@@ -1647,36 +1672,50 @@ function mapFiscalCancelResponse(body: unknown): FiscalCancelFacturaResponse {
   }
 
   const data = body as Record<string, unknown>;
-  const status = stringOrNull(data.status) ?? stringOrNull(data.estado) ?? stringOrNull(data.event_status);
+  const crudo = stringOrNull(data.status) ?? stringOrNull(data.estado) ?? stringOrNull(data.event_status);
+  const status = mapCancelStatus(crudo);
+
+  if (status === "UNKNOWN") {
+    // No se absorbe en silencio: es la senal de que FE incorporo un estado y hay que mirarlo.
+    logger.warn({ status: crudo, event_id: data.event_id }, "Estado de cancelacion no contemplado por el contrato");
+  }
 
   return {
-    event_id: stringOrNull(data.event_id),
-    estado: mapCancelStatus(status),
+    event_id: idOrNull(data.event_id),
+    status,
+    rejection: mapCancelRejection(data.rejection),
     raw: data
   };
 }
 
-function mapCancelStatus(status: string | null): FiscalCancelFacturaResponse["estado"] {
-  if (!status) {
-    return "PENDIENTE_SIFEN";
+/** `retryable` ausente se asume `false`: el lado seguro (SPEC RN-03). */
+function mapCancelRejection(value: unknown): FiscalCancelRejection | null {
+  if (!value || typeof value !== "object") {
+    return null;
   }
+  const row = value as Record<string, unknown>;
+  return {
+    code: stringOrNull(row.code),
+    message: stringOrNull(row.message),
+    retryable: row.retryable === true
+  };
+}
 
-  if (
-    status === "SENT" ||
-    status === "RECEIVED" ||
-    status === "PENDING" ||
-    status === "PENDIENTE" ||
-    status === "PROCESSING" ||
-    status === "EN_PROCESO"
-  ) {
-    return "PENDIENTE_SIFEN";
+/**
+ * Mapeo CERRADO sobre el contrato de FE. Antes era una lista de sinonimos en dos idiomas que mandaba
+ * todo lo desconocido a PENDIENTE_SIFEN; ese diseno hacia que una cancelacion ACCEPTED y una REJECTED
+ * se vieran identicas (ambas caian en el `default`).
+ */
+function mapCancelStatus(value: string | null): FiscalCancelStatus {
+  switch (value) {
+    case "PENDING":
+    case "ACCEPTED":
+    case "REJECTED":
+    case "FAILED":
+      return value;
+    default:
+      return "UNKNOWN";
   }
-
-  if (status === "DONE" || status === "APPROVED" || status === "ACEPTADO" || status === "ANULADO" || status === "CANCELADO") {
-    return "ANULADA";
-  }
-
-  return "PENDIENTE_SIFEN";
 }
 
 function mapEmailStatus(value: unknown): FiscalEmitFacturaResponse["email_status"] {
@@ -1701,7 +1740,7 @@ function mapFiscalDocumentoEventosResponse(body: unknown): FiscalDocumentoEvento
     events: events.map((event) => {
       const row = event && typeof event === "object" ? (event as Record<string, unknown>) : {};
       return {
-        event_id: stringOrNull(row.event_id),
+        event_id: idOrNull(row.event_id),
         type: stringOrNull(row.type),
         status: stringOrNull(row.status),
         created_at: stringOrNull(row.created_at),
@@ -1999,3 +2038,12 @@ function mapFetchError(error: unknown): FiscalGatewayError {
 }
 
 export const fiscalGateway = createFiscalGateway(buildFiscalGatewayConfig(env));
+
+/** Superficie interna expuesta solo para tests (SPEC_PARIDAD_CONTRATO_FE_v0.1). */
+export const __testing = {
+  idOrNull,
+  mapCancelStatus,
+  mapCancelRejection,
+  mapFiscalCancelResponse,
+  mapFiscalDocumentoEventosResponse
+};

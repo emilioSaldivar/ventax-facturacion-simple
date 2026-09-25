@@ -6,7 +6,7 @@
 
 ## Alineación
 
-- `docs/facturacion-electronica-consumer-docs/GUIA_INTEGRACION_CONSUMIDORES_v0.2.md` (contenido v0.3, 2026-07-24 — modelo de dos claves, permisos por consumidor, recibos firmados)
+- `docs/facturacion-electronica-consumer-docs/GUIA_INTEGRACION_CONSUMIDORES.md` (contenido v0.3, 2026-07-24 — modelo de dos claves, permisos por consumidor, recibos firmados)
 - `docs/facturacion-electronica-consumer-docs/README.md` (endpoints incluidos/excluidos del contrato de consumidores)
 - `docs/facturacion-electronica-consumer-docs/openapi.yaml` (auth real por endpoint: `ApiConsumerKeyAuth` vs `ApiKeyAuth`)
 - `docs/TASKS_BACKOFFICE_ADMIN_v0.1.md` (implementado — ver sección 1)

@@ -2427,3 +2427,27 @@ dd {
   gap: 8px;
   margin-bottom: 12px;
 }
+
+/* Resultado de una anulacion que no fue aceptada (SPEC_PARIDAD_CONTRATO_FE_v0.1) */
+.cancelacion-resultado {
+  margin: 12px 0;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: #fffbeb;
+  border-left: 4px solid #f59e0b;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.cancelacion-resultado .cancelacion-mensaje {
+  margin: 0;
+  font-weight: 500;
+  line-height: 1.4;
+}
+.cancelacion-resultado .muted {
+  margin: 0;
+  font-size: 13px;
+}
+.cancelacion-resultado .secondary-action {
+  align-self: flex-start;
+}

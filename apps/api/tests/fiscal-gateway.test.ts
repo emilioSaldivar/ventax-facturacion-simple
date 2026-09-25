@@ -118,7 +118,9 @@ describe("fiscal gateway", () => {
     });
 
     expect(first).toEqual(second);
-    expect(first.estado).toBe("ANULADA");
+    // SPEC_PARIDAD_CONTRATO_FE_v0.1: el gateway devuelve el status de FE sin traducir.
+    expect(first.status).toBe("ACCEPTED");
+    expect(first.rejection).toBeNull();
     expect(first.event_id).toMatch(/^mock-cancel-/);
   });
 
@@ -958,9 +960,12 @@ describe("fiscal gateway", () => {
       motivo: "Error en datos del receptor"
     });
 
+    // "SENT" no es uno de los cuatro estados del contrato de FE: se reporta como UNKNOWN
+    // en vez de absorberse como "pendiente", que era lo que ocultaba los rechazos.
     expect(result).toMatchObject({
       event_id: "evt-real-1",
-      estado: "PENDIENTE_SIFEN"
+      status: "UNKNOWN",
+      rejection: null
     });
     expect(calls).toHaveLength(1);
     expect(calls[0]?.url).toBe("https://fe-api.ventax.app/fcws/evento/cancelar");

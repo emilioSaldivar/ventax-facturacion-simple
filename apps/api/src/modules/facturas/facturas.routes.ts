@@ -102,7 +102,9 @@ const reconciliacionQuerySchema = z.object({
 });
 
 const cancelacionSchema = z.object({
-  motivo: z.string().trim().min(1).max(150)
+  motivo: z.string().trim().min(1).max(150),
+  // Reintento sobre el mismo CDC tras un rechazo transitorio de SIFEN (SPEC RN-03).
+  reintentar: z.boolean().optional()
 });
 const gestionActionSchema = z.object({
   mode: z.enum(["SYNC", "BATCH", "AUTO"]).optional(),

@@ -1,3 +1,4 @@
+import type { FiscalCancelStatus } from "../fiscal-gateway/fiscal-gateway.types";
 import { pool } from "../../db/pool";
 import type {
   DocumentoListFilters,
@@ -32,6 +33,12 @@ interface FacturaRow {
   sifen_result_code: string | null;
   sifen_result_message: string | null;
   sifen_last_checked_at: Date | null;
+  cancelacion_status: string | null;
+  cancelacion_rejection_code: string | null;
+  cancelacion_rejection_message: string | null;
+  cancelacion_retryable: boolean | null;
+  cancelacion_intentos: number | null;
+  cancelacion_last_at: Date | null;
   created_at: Date;
 }
 
@@ -83,6 +90,12 @@ export class PgFacturaRepository implements FacturaRepository {
           sifen_result_code,
           sifen_result_message,
           sifen_last_checked_at,
+          cancelacion_status,
+          cancelacion_rejection_code,
+          cancelacion_rejection_message,
+          cancelacion_retryable,
+          cancelacion_intentos,
+          cancelacion_last_at,
           created_at
         from facturas_operativas
         where facturador_id = $1
@@ -124,6 +137,12 @@ export class PgFacturaRepository implements FacturaRepository {
           sifen_result_code,
           sifen_result_message,
           sifen_last_checked_at,
+          cancelacion_status,
+          cancelacion_rejection_code,
+          cancelacion_rejection_message,
+          cancelacion_retryable,
+          cancelacion_intentos,
+          cancelacion_last_at,
           created_at
         from facturas_operativas
         where facturador_id = $1
@@ -165,6 +184,12 @@ export class PgFacturaRepository implements FacturaRepository {
           sifen_result_code,
           sifen_result_message,
           sifen_last_checked_at,
+          cancelacion_status,
+          cancelacion_rejection_code,
+          cancelacion_rejection_message,
+          cancelacion_retryable,
+          cancelacion_intentos,
+          cancelacion_last_at,
           created_at
         from facturas_operativas
         where facturador_id = $1
@@ -211,6 +236,12 @@ export class PgFacturaRepository implements FacturaRepository {
           sifen_result_code,
           sifen_result_message,
           sifen_last_checked_at,
+          cancelacion_status,
+          cancelacion_rejection_code,
+          cancelacion_rejection_message,
+          cancelacion_retryable,
+          cancelacion_intentos,
+          cancelacion_last_at,
           created_at
         from facturas_operativas
         ${where}
@@ -283,6 +314,12 @@ export class PgFacturaRepository implements FacturaRepository {
           sifen_result_code,
           sifen_result_message,
           sifen_last_checked_at,
+          cancelacion_status,
+          cancelacion_rejection_code,
+          cancelacion_rejection_message,
+          cancelacion_retryable,
+          cancelacion_intentos,
+          cancelacion_last_at,
           created_at
       `,
       [
@@ -365,6 +402,12 @@ export class PgFacturaRepository implements FacturaRepository {
             sifen_result_code,
             sifen_result_message,
             sifen_last_checked_at,
+            cancelacion_status,
+            cancelacion_rejection_code,
+            cancelacion_rejection_message,
+            cancelacion_retryable,
+            cancelacion_intentos,
+            cancelacion_last_at,
             created_at
         `,
         [
@@ -522,6 +565,12 @@ export class PgFacturaRepository implements FacturaRepository {
             sifen_result_code,
             sifen_result_message,
             sifen_last_checked_at,
+            cancelacion_status,
+            cancelacion_rejection_code,
+            cancelacion_rejection_message,
+            cancelacion_retryable,
+            cancelacion_intentos,
+            cancelacion_last_at,
             created_at
         `,
         [
@@ -699,6 +748,12 @@ export class PgFacturaRepository implements FacturaRepository {
             sifen_result_code,
             sifen_result_message,
             sifen_last_checked_at,
+            cancelacion_status,
+            cancelacion_rejection_code,
+            cancelacion_rejection_message,
+            cancelacion_retryable,
+            cancelacion_intentos,
+            cancelacion_last_at,
             created_at
         `,
         [
@@ -1044,6 +1099,12 @@ export class PgFacturaRepository implements FacturaRepository {
             sifen_result_code,
             sifen_result_message,
             sifen_last_checked_at,
+            cancelacion_status,
+            cancelacion_rejection_code,
+            cancelacion_rejection_message,
+            cancelacion_retryable,
+            cancelacion_intentos,
+            cancelacion_last_at,
             created_at
         `,
         [
@@ -1127,6 +1188,12 @@ export class PgFacturaRepository implements FacturaRepository {
             sifen_result_code,
             sifen_result_message,
             sifen_last_checked_at,
+            cancelacion_status,
+            cancelacion_rejection_code,
+            cancelacion_rejection_message,
+            cancelacion_retryable,
+            cancelacion_intentos,
+            cancelacion_last_at,
             created_at
         `,
         [input.documentoId, input.estado, JSON.stringify(input.error)]
@@ -1215,6 +1282,12 @@ export class PgFacturaRepository implements FacturaRepository {
             sifen_result_code,
             sifen_result_message,
             sifen_last_checked_at,
+            cancelacion_status,
+            cancelacion_rejection_code,
+            cancelacion_rejection_message,
+            cancelacion_retryable,
+            cancelacion_intentos,
+            cancelacion_last_at,
             created_at
         `,
         [input.facturadorId, input.documentoId, JSON.stringify(retryStatus)]
@@ -1262,7 +1335,13 @@ export class PgFacturaRepository implements FacturaRepository {
     facturadorId: string;
     documentoId: string;
     requestedBy: string;
-    estado: "ANULADA" | "PENDIENTE_SIFEN";
+    anula: boolean;
+    cancelacion: {
+      status: FiscalCancelStatus;
+      rejectionCode: string | null;
+      rejectionMessage: string | null;
+      retryable: boolean | null;
+    };
     fiscalStatus: Record<string, unknown>;
   }): Promise<DocumentoResponse | null> {
     const client = await pool.connect();
@@ -1274,8 +1353,16 @@ export class PgFacturaRepository implements FacturaRepository {
         `
           update facturas_operativas
           set
-            estado = $3,
+            -- RN-04: solo ACCEPTED cambia el estado comercial. Con REJECTED la factura sigue
+            -- vigente en SIFEN y con FAILED no se sabe: en ninguno de los dos se anula.
+            estado = case when $3::boolean then 'ANULADA' else estado end,
             fiscal_response_snapshot = $4::jsonb,
+            cancelacion_status = $5,
+            cancelacion_rejection_code = $6,
+            cancelacion_rejection_message = $7,
+            cancelacion_retryable = $8,
+            cancelacion_intentos = cancelacion_intentos + 1,
+            cancelacion_last_at = now(),
             updated_at = now()
           where facturador_id = $1
             and id = $2
@@ -1301,9 +1388,24 @@ export class PgFacturaRepository implements FacturaRepository {
             sifen_result_code,
             sifen_result_message,
             sifen_last_checked_at,
+            cancelacion_status,
+            cancelacion_rejection_code,
+            cancelacion_rejection_message,
+            cancelacion_retryable,
+            cancelacion_intentos,
+            cancelacion_last_at,
             created_at
         `,
-        [input.facturadorId, input.documentoId, input.estado, JSON.stringify(input.fiscalStatus)]
+        [
+          input.facturadorId,
+          input.documentoId,
+          input.anula,
+          JSON.stringify(input.fiscalStatus),
+          input.cancelacion.status,
+          input.cancelacion.rejectionCode,
+          input.cancelacion.rejectionMessage,
+          input.cancelacion.retryable
+        ]
       );
 
       const factura = result.rows[0];
@@ -1551,6 +1653,21 @@ function buildListWhere(facturadorId: string, filters: DocumentoListFilters): { 
   };
 }
 
+/** `null` mientras no haya habido ningun intento de anulacion. */
+function mapCancelacion(row: FacturaRow): DocumentoResponse["cancelacion"] {
+  if (!row.cancelacion_status) {
+    return null;
+  }
+  return {
+    status: row.cancelacion_status as FiscalCancelStatus,
+    rejection_code: row.cancelacion_rejection_code ?? null,
+    rejection_message: row.cancelacion_rejection_message ?? null,
+    retryable: row.cancelacion_retryable ?? null,
+    intentos: row.cancelacion_intentos ?? 0,
+    last_at: row.cancelacion_last_at ? row.cancelacion_last_at.toISOString() : null
+  };
+}
+
 function mapFacturaRow(row: FacturaRow, items: FacturaItemPreview[]): DocumentoResponse {
   const emailStatus = row.email_estado ?? "NOT_APPLICABLE";
   const cdc = row.cdc;
@@ -1580,6 +1697,7 @@ function mapFacturaRow(row: FacturaRow, items: FacturaItemPreview[]): DocumentoR
     sifen_last_checked_at: row.sifen_last_checked_at ? row.sifen_last_checked_at.toISOString() : null,
     documento_relacionado_id: row.documento_relacionado_id,
     nce_motivo: row.nce_motivo,
+    cancelacion: mapCancelacion(row),
     delivery: {
       public_url: null,
       whatsapp_url: null,

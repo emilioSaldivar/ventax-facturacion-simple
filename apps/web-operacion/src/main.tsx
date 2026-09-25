@@ -248,10 +248,21 @@ interface DocumentoAccionDetalle {
   soporte_payload: DocumentoAccionSoportePayload | null;
 }
 
+interface DocumentoCancelacion {
+  status: "PENDING" | "ACCEPTED" | "REJECTED" | "FAILED" | "UNKNOWN";
+  rejection_code: string | null;
+  rejection_message: string | null;
+  retryable: boolean | null;
+  intentos: number;
+  last_at: string | null;
+}
+
 interface DocumentoResponse {
   id: string;
   tipo: "FACTURA" | "NOTA_CREDITO";
   estado: DocumentoEstado;
+  /** Resultado del ultimo intento de anulacion; null si nunca se intento. */
+  cancelacion?: DocumentoCancelacion | null;
   condicion_venta: CondicionVenta;
   numero_fiscal: string | null;
   cdc: string | null;
@@ -1771,6 +1782,7 @@ function DocumentsView({
     action: "CANCEL_DETAIL" | "CANCEL_LIST" | "CREDIT_NOTE_DETAIL" | "CREDIT_NOTE_LIST" | "VOID_NUMBER";
     documentoId: string;
     tipo?: DocumentoResponse["tipo"];
+    reintentar?: boolean;
   } | null>(null);
   const [reasonDraft, setReasonDraft] = useState("");
   const [reasonError, setReasonError] = useState<string | null>(null);
@@ -1930,9 +1942,10 @@ function DocumentsView({
   function openReasonModal(
     action: "CANCEL_DETAIL" | "CANCEL_LIST" | "CREDIT_NOTE_DETAIL" | "CREDIT_NOTE_LIST" | "VOID_NUMBER",
     documentoId: string,
-    tipo?: DocumentoResponse["tipo"]
+    tipo?: DocumentoResponse["tipo"],
+    reintentar?: boolean
   ) {
-    setReasonModal({ action, documentoId, tipo });
+    setReasonModal({ action, documentoId, tipo, reintentar });
     setReasonDraft("");
     setReasonError(null);
   }
@@ -1963,14 +1976,18 @@ function DocumentsView({
 
     try {
       if (reasonModal.action === "CANCEL_DETAIL") {
-        const updated = await api.post<DocumentoResponse>(`/facturas/${reasonModal.documentoId}/cancelar`, { motivo });
+        const updated = await api.post<DocumentoResponse>(`/facturas/${reasonModal.documentoId}/cancelar`, {
+          motivo,
+          ...(reasonModal.reintentar ? { reintentar: true } : {})
+        });
         setSelected(updated);
         setDocuments((current) => current.map((item) => (item.id === updated.id ? updated : item)));
-        setMessage("Documento anulado.");
+        // SIFEN rechaza ~15% de las cancelaciones: el resultado no se asume exitoso.
+        setMessage(mensajeCancelacion(updated));
         await loadDeliveryFor(updated);
       } else if (reasonModal.action === "CANCEL_LIST") {
-        await api.post<DocumentoResponse>(`/facturas/${reasonModal.documentoId}/cancelar`, { motivo });
-        setMessage("Documento anulado.");
+        const updated = await api.post<DocumentoResponse>(`/facturas/${reasonModal.documentoId}/cancelar`, { motivo });
+        setMessage(mensajeCancelacion(updated));
         await loadDocuments();
       } else if (reasonModal.action === "CREDIT_NOTE_DETAIL") {
         const notaCredito = await api.request<DocumentoResponse>(`/facturas/${reasonModal.documentoId}/nota-credito`, {
@@ -2567,6 +2584,43 @@ function DocumentsView({
                   ⚠ Anular {getDocumentoNombreLower(selected.tipo)}
                 </button>
               </div>
+
+              {/* Resultado del ultimo intento de anulacion. Solo se muestra si hubo uno y no
+                  termino aceptado: una anulacion exitosa ya se refleja en el estado. */}
+              {selected.cancelacion && selected.cancelacion.status !== "ACCEPTED" ? (
+                <section className="cancelacion-resultado" data-testid="cancelacion-resultado">
+                  <p className="cancelacion-mensaje">{mensajeCancelacion(selected)}</p>
+                  {selected.cancelacion.rejection_code ? (
+                    <p className="muted">
+                      Codigo SIFEN {selected.cancelacion.rejection_code}
+                      {selected.cancelacion.intentos > 1 ? ` · ${selected.cancelacion.intentos} intentos` : null}
+                    </p>
+                  ) : null}
+                  {selected.cancelacion.status === "REJECTED" && selected.cancelacion.retryable ? (
+                    <button
+                      className="secondary-action"
+                      disabled={actionLoading}
+                      onClick={() => openReasonModal("CANCEL_DETAIL", selected.id, selected.tipo, true)}
+                      type="button"
+                      data-testid="reintentar-anulacion"
+                    >
+                      ↻ Reintentar anulacion
+                    </button>
+                  ) : null}
+                  {selected.cancelacion.status === "FAILED" ? (
+                    <button
+                      className="secondary-action"
+                      disabled={actionLoading}
+                      onClick={() => void refreshSelectedStatus()}
+                      type="button"
+                      data-testid="consultar-tras-failed"
+                    >
+                      ⟳ Consultar estado en SIFEN
+                    </button>
+                  ) : null}
+                </section>
+              ) : null}
+
               <details className="tech-block">
                 <summary>Informacion fiscal</summary>
                 <dl className="receipt-summary">
@@ -5385,6 +5439,27 @@ function formatIva(value: TipoIva): string {
     return "IVA 5%";
   }
   return "Exenta";
+}
+
+/**
+ * El resultado de una anulacion no es binario: SIFEN puede aceptar, rechazar (de forma
+ * reintentable o no) o no responder. Cada caso dice que hacer, no que codigo devolvio SIFEN.
+ */
+function mensajeCancelacion(doc: DocumentoResponse): string {
+  const c = doc.cancelacion;
+  if (!c || c.status === "ACCEPTED") {
+    return "Documento anulado.";
+  }
+  if (c.status === "REJECTED") {
+    const motivo = c.rejection_message ? `: ${c.rejection_message}.` : ".";
+    return c.retryable
+      ? `SIFEN rechazo la anulacion${motivo} Podes reintentar: suele resolverse en el segundo intento.`
+      : `SIFEN rechazo la anulacion de forma definitiva${motivo} Si corresponde, emiti una nota de credito.`;
+  }
+  if (c.status === "FAILED") {
+    return "No hubo respuesta de SIFEN. La factura puede seguir vigente: consulta el estado antes de reintentar.";
+  }
+  return "La anulacion quedo en un estado que no pudimos interpretar. Consulta el estado del documento.";
 }
 
 function formatDocumentoEstado(value: DocumentoEstado, tipo?: DocumentoResponse["tipo"]): string {

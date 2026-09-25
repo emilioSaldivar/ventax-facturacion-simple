@@ -126,9 +126,32 @@ export interface FiscalCancelFacturaRequest {
   motivo: string;
 }
 
+/**
+ * Estados del evento de cancelacion segun el contrato de FE
+ * (CHECKLIST_REINTENTO_CANCELACION, y `admin-eventos.service.ts`:
+ * `CONCLUSIVE_STATUSES = ['ACCEPTED', 'REJECTED']`).
+ *
+ * `UNKNOWN` no es de FE: es nuestro camino explicito para un valor que el contrato todavia no
+ * define. Se registra y se muestra como indeterminado, en vez de disfrazarse de pendiente.
+ */
+export type FiscalCancelStatus = "PENDING" | "ACCEPTED" | "REJECTED" | "FAILED" | "UNKNOWN";
+
+export interface FiscalCancelRejection {
+  code: string | null;
+  message: string | null;
+  /**
+   * Lo resuelve FE. Un codigo nuevo que nadie verifico llega como `false`, que es el lado seguro:
+   * no se reintenta algo que no se sabe si es reintentable (SPEC RN-03).
+   */
+  retryable: boolean;
+}
+
 export interface FiscalCancelFacturaResponse {
   event_id: string | null;
-  estado: "ANULADA" | "PENDIENTE_SIFEN";
+  /** Estado tal como lo devuelve FE, sin traducir: la traduccion a vocabulario local es del service. */
+  status: FiscalCancelStatus;
+  /** Presente solo cuando `status` es REJECTED. */
+  rejection: FiscalCancelRejection | null;
   raw: Record<string, unknown>;
 }
 
