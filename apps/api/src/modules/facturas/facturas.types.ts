@@ -117,6 +117,17 @@ export interface DocumentoCancelacion {
   last_at: string | null;
 }
 
+/**
+ * Usuario que emitio el documento. `facturas_operativas.usuario_id` es `not null`, asi que
+ * el historico completo tiene emisor; se modela nullable para que un usuario borrado
+ * logicamente no rompa la lectura (SPEC_SEGMENTACION_PERFIL_EMISION RN-13).
+ */
+export interface DocumentoEmisor {
+  id: string;
+  username: string;
+  display_name: string | null;
+}
+
 export interface DocumentoResponse {
   id: string;
   document_uuid: string | null;
@@ -145,6 +156,8 @@ export interface DocumentoResponse {
   sifen_last_checked_at: string | null;
   documento_relacionado_id: string | null;
   nce_motivo: string | null;
+  /** Quien emitio el documento. Ver DocumentoEmisor. */
+  emitido_por: DocumentoEmisor | null;
   /** Resultado del ultimo intento de anulacion. `null` si nunca se intento. */
   cancelacion: DocumentoCancelacion | null;
   delivery: DeliverySummary;

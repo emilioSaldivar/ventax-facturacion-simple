@@ -2754,11 +2754,31 @@ components:
         nce_motivo:
           type: string
           nullable: true
+        emitido_por:
+          $ref: "#/components/schemas/DocumentoEmisor"
         delivery:
           $ref: "#/components/schemas/DeliverySummary"
         created_at:
           type: string
           format: date-time
+          nullable: true
+
+    DocumentoEmisor:
+      type: object
+      nullable: true
+      description: >-
+        Usuario que emitio el documento. Se resuelve en el servidor a partir de
+        facturas_operativas.usuario_id, que es not null, por lo que el historico completo
+        tiene emisor. Es nullable para que un usuario dado de baja no rompa la lectura.
+      required: [id, username, display_name]
+      properties:
+        id:
+          type: string
+          format: uuid
+        username:
+          type: string
+        display_name:
+          type: string
           nullable: true
 
     DocumentoListResponse:

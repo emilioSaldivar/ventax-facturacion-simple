@@ -912,6 +912,13 @@ dd {
   font-weight: 800;
 }
 
+/* Emisor del documento: segunda linea de la fila, subordinada al cliente. */
+.document-row-emisor {
+  font-size: 11px;
+  font-weight: 600;
+  opacity: 0.85;
+}
+
 .empty-state {
   margin: 0;
 }

@@ -10,12 +10,14 @@ import type {
   PendingFiscalEmission,
   PendingVerificacion,
   FacturaRepository,
+  DocumentoEmisor,
   DocumentoResponse
 } from "./facturas.types";
 
 interface FacturaRow {
   id: string;
   document_uuid: string | null;
+  usuario_id: string | null;
   tipo: DocumentoResponse["tipo"];
   estado: DocumentoResponse["estado"];
   condicion_venta: DocumentoResponse["condicion_venta"];
@@ -66,13 +68,15 @@ interface PendingFiscalEmissionRow {
   accion_notificada_at: Date | null;
 }
 
-export class PgFacturaRepository implements FacturaRepository {
-  async findById(input: { facturadorId: string; documentoId: string }): Promise<DocumentoResponse | null> {
-    const result = await pool.query<FacturaRow>(
-      `
-        select
+/**
+ * Proyeccion unica de `facturas_operativas`. Todas las lecturas y todos los `returning`
+ * devuelven estas columnas, de modo que `FacturaRow` describa una sola forma real.
+ * `usuario_id` habilita la atribucion del emisor (SPEC_SEGMENTACION_PERFIL_EMISION RN-13).
+ */
+const COLUMNAS_DOCUMENTO = `
           id,
           document_uuid,
+          usuario_id,
           tipo,
           estado,
           condicion_venta,
@@ -96,7 +100,51 @@ export class PgFacturaRepository implements FacturaRepository {
           cancelacion_retryable,
           cancelacion_intentos,
           cancelacion_last_at,
-          created_at
+          created_at`.trim();
+
+interface EmisorRow {
+  id: string;
+  username: string;
+  display_name: string | null;
+}
+
+export class PgFacturaRepository implements FacturaRepository {
+  /**
+   * Resuelve los emisores de un conjunto de documentos en una sola consulta.
+   * No filtra por `deleted_at`: un usuario dado de baja sigue siendo el emisor de los
+   * documentos que emitio, y el historico debe mostrarlo (CA-9).
+   */
+  private async findEmisores(usuarioIds: Array<string | null>): Promise<Map<string, DocumentoEmisor>> {
+    const ids = [...new Set(usuarioIds.filter((id): id is string => Boolean(id)))];
+    if (ids.length === 0) {
+      return new Map();
+    }
+
+    const result = await pool.query<EmisorRow>(
+      `
+        select id, username, display_name
+        from usuarios
+        where id = any($1::uuid[])
+      `,
+      [ids]
+    );
+
+    return new Map(
+      result.rows.map((row) => [row.id, { id: row.id, username: row.username, display_name: row.display_name }])
+    );
+  }
+
+  /** Unico punto donde una fila de `facturas_operativas` se convierte en respuesta. */
+  private async toResponse(row: FacturaRow, items: FacturaItemPreview[]): Promise<DocumentoResponse> {
+    const emisores = await this.findEmisores([row.usuario_id]);
+    return mapFacturaRow(row, items, row.usuario_id ? emisores.get(row.usuario_id) ?? null : null);
+  }
+
+  async findById(input: { facturadorId: string; documentoId: string }): Promise<DocumentoResponse | null> {
+    const result = await pool.query<FacturaRow>(
+      `
+        select
+          ${COLUMNAS_DOCUMENTO}
         from facturas_operativas
         where facturador_id = $1
           and id = $2
@@ -111,39 +159,14 @@ export class PgFacturaRepository implements FacturaRepository {
       return null;
     }
 
-    return mapFacturaRow(factura, await this.findItems(factura.id));
+    return this.toResponse(factura, await this.findItems(factura.id));
   }
 
   async findByIdempotencyKey(input: { facturadorId: string; idempotencyKey: string }): Promise<DocumentoResponse | null> {
     const result = await pool.query<FacturaRow>(
       `
         select
-          id,
-          document_uuid,
-          tipo,
-          estado,
-          condicion_venta,
-          external_ref,
-          cliente_snapshot,
-          totals_snapshot,
-          fiscal_response_snapshot,
-          fiscal_document_id,
-          cdc,
-          numero_fiscal,
-          email_estado,
-          documento_relacionado_id,
-          nce_motivo,
-          fiscal_status_raw,
-          sifen_result_code,
-          sifen_result_message,
-          sifen_last_checked_at,
-          cancelacion_status,
-          cancelacion_rejection_code,
-          cancelacion_rejection_message,
-          cancelacion_retryable,
-          cancelacion_intentos,
-          cancelacion_last_at,
-          created_at
+          ${COLUMNAS_DOCUMENTO}
         from facturas_operativas
         where facturador_id = $1
           and idempotency_key = $2
@@ -158,39 +181,14 @@ export class PgFacturaRepository implements FacturaRepository {
       return null;
     }
 
-    return mapFacturaRow(factura, await this.findItems(factura.id));
+    return this.toResponse(factura, await this.findItems(factura.id));
   }
 
   async findNotaCreditoByOriginal(input: { facturadorId: string; documentoId: string }): Promise<DocumentoResponse | null> {
     const result = await pool.query<FacturaRow>(
       `
         select
-          id,
-          document_uuid,
-          tipo,
-          estado,
-          condicion_venta,
-          external_ref,
-          cliente_snapshot,
-          totals_snapshot,
-          fiscal_response_snapshot,
-          fiscal_document_id,
-          cdc,
-          numero_fiscal,
-          email_estado,
-          documento_relacionado_id,
-          nce_motivo,
-          fiscal_status_raw,
-          sifen_result_code,
-          sifen_result_message,
-          sifen_last_checked_at,
-          cancelacion_status,
-          cancelacion_rejection_code,
-          cancelacion_rejection_message,
-          cancelacion_retryable,
-          cancelacion_intentos,
-          cancelacion_last_at,
-          created_at
+          ${COLUMNAS_DOCUMENTO}
         from facturas_operativas
         where facturador_id = $1
           and documento_relacionado_id = $2
@@ -206,7 +204,7 @@ export class PgFacturaRepository implements FacturaRepository {
       return null;
     }
 
-    return mapFacturaRow(notaCredito, await this.findItems(notaCredito.id));
+    return this.toResponse(notaCredito, await this.findItems(notaCredito.id));
   }
 
   async list(input: { facturadorId: string; filters: DocumentoListFilters }): Promise<DocumentoListResponse> {
@@ -217,32 +215,7 @@ export class PgFacturaRepository implements FacturaRepository {
     const listResult = await pool.query<FacturaRow>(
       `
         select
-          id,
-          document_uuid,
-          tipo,
-          estado,
-          condicion_venta,
-          external_ref,
-          cliente_snapshot,
-          totals_snapshot,
-          fiscal_response_snapshot,
-          fiscal_document_id,
-          cdc,
-          numero_fiscal,
-          email_estado,
-          documento_relacionado_id,
-          nce_motivo,
-          fiscal_status_raw,
-          sifen_result_code,
-          sifen_result_message,
-          sifen_last_checked_at,
-          cancelacion_status,
-          cancelacion_rejection_code,
-          cancelacion_rejection_message,
-          cancelacion_retryable,
-          cancelacion_intentos,
-          cancelacion_last_at,
-          created_at
+          ${COLUMNAS_DOCUMENTO}
         from facturas_operativas
         ${where}
         order by created_at desc, id desc
@@ -262,9 +235,16 @@ export class PgFacturaRepository implements FacturaRepository {
     );
 
     const itemsByFacturaId = await this.findItemsByFacturaIds(listResult.rows.map((row) => row.id));
+    const emisores = await this.findEmisores(listResult.rows.map((row) => row.usuario_id));
 
     return {
-      items: listResult.rows.map((row) => mapFacturaRow(row, itemsByFacturaId.get(row.id) ?? [])),
+      items: listResult.rows.map((row) =>
+        mapFacturaRow(
+          row,
+          itemsByFacturaId.get(row.id) ?? [],
+          row.usuario_id ? emisores.get(row.usuario_id) ?? null : null
+        )
+      ),
       total: Number(countResult.rows[0]?.total ?? 0)
     };
   }
@@ -295,32 +275,7 @@ export class PgFacturaRepository implements FacturaRepository {
           and id = $2
           and deleted_at is null
         returning
-          id,
-          document_uuid,
-          tipo,
-          estado,
-          condicion_venta,
-          external_ref,
-          cliente_snapshot,
-          totals_snapshot,
-          fiscal_response_snapshot,
-          fiscal_document_id,
-          cdc,
-          numero_fiscal,
-          email_estado,
-          documento_relacionado_id,
-          nce_motivo,
-          fiscal_status_raw,
-          sifen_result_code,
-          sifen_result_message,
-          sifen_last_checked_at,
-          cancelacion_status,
-          cancelacion_rejection_code,
-          cancelacion_rejection_message,
-          cancelacion_retryable,
-          cancelacion_intentos,
-          cancelacion_last_at,
-          created_at
+          ${COLUMNAS_DOCUMENTO}
       `,
       [
         input.facturadorId,
@@ -339,7 +294,7 @@ export class PgFacturaRepository implements FacturaRepository {
       return null;
     }
 
-    return mapFacturaRow(factura, await this.findItems(factura.id));
+    return this.toResponse(factura, await this.findItems(factura.id));
   }
 
   async createFromEmission(input: FacturaPersistInput): Promise<DocumentoResponse> {
@@ -383,32 +338,7 @@ export class PgFacturaRepository implements FacturaRepository {
             now()
           )
           returning
-            id,
-            document_uuid,
-            tipo,
-            estado,
-            condicion_venta,
-            external_ref,
-            cliente_snapshot,
-            totals_snapshot,
-            fiscal_response_snapshot,
-            fiscal_document_id,
-            cdc,
-            numero_fiscal,
-            email_estado,
-            documento_relacionado_id,
-            nce_motivo,
-            fiscal_status_raw,
-            sifen_result_code,
-            sifen_result_message,
-            sifen_last_checked_at,
-            cancelacion_status,
-            cancelacion_rejection_code,
-            cancelacion_rejection_message,
-            cancelacion_retryable,
-            cancelacion_intentos,
-            cancelacion_last_at,
-            created_at
+            ${COLUMNAS_DOCUMENTO}
         `,
         [
           input.tenantId,
@@ -501,7 +431,7 @@ export class PgFacturaRepository implements FacturaRepository {
 
       await client.query("commit");
 
-      return mapFacturaRow(factura, input.preview.items);
+      return this.toResponse(factura, input.preview.items);
     } catch (error) {
       await client.query("rollback");
       if (isUniqueViolation(error) && input.idempotencyKey) {
@@ -547,31 +477,7 @@ export class PgFacturaRepository implements FacturaRepository {
             $1, $2, $3, 'FACTURA', $4, 'EMITIENDO', $5, $6, $7::jsonb, $8::jsonb, $9::jsonb, '{}'::jsonb, $10
           )
           returning
-            id,
-            tipo,
-            estado,
-            condicion_venta,
-            external_ref,
-            cliente_snapshot,
-            totals_snapshot,
-            fiscal_response_snapshot,
-            fiscal_document_id,
-            cdc,
-            numero_fiscal,
-            email_estado,
-            documento_relacionado_id,
-            nce_motivo,
-            fiscal_status_raw,
-            sifen_result_code,
-            sifen_result_message,
-            sifen_last_checked_at,
-            cancelacion_status,
-            cancelacion_rejection_code,
-            cancelacion_rejection_message,
-            cancelacion_retryable,
-            cancelacion_intentos,
-            cancelacion_last_at,
-            created_at
+            ${COLUMNAS_DOCUMENTO}
         `,
         [
           input.tenantId,
@@ -667,7 +573,7 @@ export class PgFacturaRepository implements FacturaRepository {
 
       await client.query("commit");
 
-      return mapFacturaRow(factura, input.preview.items);
+      return this.toResponse(factura, input.preview.items);
     } catch (error) {
       await client.query("rollback");
       if (isUniqueViolation(error) && input.idempotencyKey) {
@@ -729,32 +635,7 @@ export class PgFacturaRepository implements FacturaRepository {
             now()
           )
           returning
-            id,
-            document_uuid,
-            tipo,
-            estado,
-            condicion_venta,
-            external_ref,
-            cliente_snapshot,
-            totals_snapshot,
-            fiscal_response_snapshot,
-            fiscal_document_id,
-            cdc,
-            numero_fiscal,
-            email_estado,
-            documento_relacionado_id,
-            nce_motivo,
-            fiscal_status_raw,
-            sifen_result_code,
-            sifen_result_message,
-            sifen_last_checked_at,
-            cancelacion_status,
-            cancelacion_rejection_code,
-            cancelacion_rejection_message,
-            cancelacion_retryable,
-            cancelacion_intentos,
-            cancelacion_last_at,
-            created_at
+            ${COLUMNAS_DOCUMENTO}
         `,
         [
           input.tenantId,
@@ -850,7 +731,7 @@ export class PgFacturaRepository implements FacturaRepository {
 
       await client.query("commit");
 
-      return mapFacturaRow(notaCredito, input.original.items);
+      return this.toResponse(notaCredito, input.original.items);
     } catch (error) {
       await client.query("rollback");
       if (isUniqueViolation(error)) {
@@ -1080,32 +961,7 @@ export class PgFacturaRepository implements FacturaRepository {
           where id = $1
             and deleted_at is null
           returning
-            id,
-            document_uuid,
-            tipo,
-            estado,
-            condicion_venta,
-            external_ref,
-            cliente_snapshot,
-            totals_snapshot,
-            fiscal_response_snapshot,
-            fiscal_document_id,
-            cdc,
-            numero_fiscal,
-            email_estado,
-            documento_relacionado_id,
-            nce_motivo,
-            fiscal_status_raw,
-            sifen_result_code,
-            sifen_result_message,
-            sifen_last_checked_at,
-            cancelacion_status,
-            cancelacion_rejection_code,
-            cancelacion_rejection_message,
-            cancelacion_retryable,
-            cancelacion_intentos,
-            cancelacion_last_at,
-            created_at
+            ${COLUMNAS_DOCUMENTO}
         `,
         [
           input.documentoId,
@@ -1125,7 +981,7 @@ export class PgFacturaRepository implements FacturaRepository {
       await client.query("commit");
 
       const factura = result.rows[0];
-      return factura ? mapFacturaRow(factura, await this.findItems(factura.id)) : null;
+      return factura ? this.toResponse(factura, await this.findItems(factura.id)) : null;
     } catch (error) {
       await client.query("rollback");
       throw error;
@@ -1170,31 +1026,7 @@ export class PgFacturaRepository implements FacturaRepository {
           where id = $1
             and deleted_at is null
           returning
-            id,
-            tipo,
-            estado,
-            condicion_venta,
-            external_ref,
-            cliente_snapshot,
-            totals_snapshot,
-            fiscal_response_snapshot,
-            fiscal_document_id,
-            cdc,
-            numero_fiscal,
-            email_estado,
-            documento_relacionado_id,
-            nce_motivo,
-            fiscal_status_raw,
-            sifen_result_code,
-            sifen_result_message,
-            sifen_last_checked_at,
-            cancelacion_status,
-            cancelacion_rejection_code,
-            cancelacion_rejection_message,
-            cancelacion_retryable,
-            cancelacion_intentos,
-            cancelacion_last_at,
-            created_at
+            ${COLUMNAS_DOCUMENTO}
         `,
         [input.documentoId, input.estado, JSON.stringify(input.error)]
       );
@@ -1202,7 +1034,7 @@ export class PgFacturaRepository implements FacturaRepository {
       await client.query("commit");
 
       const factura = result.rows[0];
-      return factura ? mapFacturaRow(factura, await this.findItems(factura.id)) : null;
+      return factura ? this.toResponse(factura, await this.findItems(factura.id)) : null;
     } catch (error) {
       await client.query("rollback");
       throw error;
@@ -1264,31 +1096,7 @@ export class PgFacturaRepository implements FacturaRepository {
             and id = $2
             and deleted_at is null
           returning
-            id,
-            tipo,
-            estado,
-            condicion_venta,
-            external_ref,
-            cliente_snapshot,
-            totals_snapshot,
-            fiscal_response_snapshot,
-            fiscal_document_id,
-            cdc,
-            numero_fiscal,
-            email_estado,
-            documento_relacionado_id,
-            nce_motivo,
-            fiscal_status_raw,
-            sifen_result_code,
-            sifen_result_message,
-            sifen_last_checked_at,
-            cancelacion_status,
-            cancelacion_rejection_code,
-            cancelacion_rejection_message,
-            cancelacion_retryable,
-            cancelacion_intentos,
-            cancelacion_last_at,
-            created_at
+            ${COLUMNAS_DOCUMENTO}
         `,
         [input.facturadorId, input.documentoId, JSON.stringify(retryStatus)]
       );
@@ -1322,7 +1130,7 @@ export class PgFacturaRepository implements FacturaRepository {
       await client.query("commit");
 
       const factura = result.rows[0];
-      return factura ? mapFacturaRow(factura, await this.findItems(factura.id)) : null;
+      return factura ? this.toResponse(factura, await this.findItems(factura.id)) : null;
     } catch (error) {
       await client.query("rollback");
       throw error;
@@ -1370,31 +1178,7 @@ export class PgFacturaRepository implements FacturaRepository {
             and cdc is not null
             and deleted_at is null
           returning
-            id,
-            tipo,
-            estado,
-            condicion_venta,
-            external_ref,
-            cliente_snapshot,
-            totals_snapshot,
-            fiscal_response_snapshot,
-            fiscal_document_id,
-            cdc,
-            numero_fiscal,
-            email_estado,
-            documento_relacionado_id,
-            nce_motivo,
-            fiscal_status_raw,
-            sifen_result_code,
-            sifen_result_message,
-            sifen_last_checked_at,
-            cancelacion_status,
-            cancelacion_rejection_code,
-            cancelacion_rejection_message,
-            cancelacion_retryable,
-            cancelacion_intentos,
-            cancelacion_last_at,
-            created_at
+            ${COLUMNAS_DOCUMENTO}
         `,
         [
           input.facturadorId,
@@ -1442,7 +1226,7 @@ export class PgFacturaRepository implements FacturaRepository {
 
       await client.query("commit");
 
-      return mapFacturaRow(factura, await this.findItems(factura.id));
+      return this.toResponse(factura, await this.findItems(factura.id));
     } catch (error) {
       await client.query("rollback");
       throw error;
@@ -1668,7 +1452,11 @@ function mapCancelacion(row: FacturaRow): DocumentoResponse["cancelacion"] {
   };
 }
 
-function mapFacturaRow(row: FacturaRow, items: FacturaItemPreview[]): DocumentoResponse {
+function mapFacturaRow(
+  row: FacturaRow,
+  items: FacturaItemPreview[],
+  emisor: DocumentoEmisor | null
+): DocumentoResponse {
   const emailStatus = row.email_estado ?? "NOT_APPLICABLE";
   const cdc = row.cdc;
   const fiscalStatus = row.fiscal_response_snapshot as Record<string, unknown> | null;
@@ -1697,6 +1485,7 @@ function mapFacturaRow(row: FacturaRow, items: FacturaItemPreview[]): DocumentoR
     sifen_last_checked_at: row.sifen_last_checked_at ? row.sifen_last_checked_at.toISOString() : null,
     documento_relacionado_id: row.documento_relacionado_id,
     nce_motivo: row.nce_motivo,
+    emitido_por: emisor,
     cancelacion: mapCancelacion(row),
     delivery: {
       public_url: null,

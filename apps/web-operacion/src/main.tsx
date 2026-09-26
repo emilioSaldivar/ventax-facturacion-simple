@@ -284,6 +284,8 @@ interface DocumentoResponse {
   accion_detalle?: DocumentoAccionDetalle;
   documento_relacionado_id: string | null;
   nce_motivo: string | null;
+  /** Quien emitio el documento. Opcional: respuestas previas al cambio no lo traen. */
+  emitido_por?: { id: string; username: string; display_name: string | null } | null;
   delivery: {
     public_url: string | null;
     whatsapp_url: string | null;
@@ -1787,7 +1789,9 @@ function DocumentsView({
   const [reasonDraft, setReasonDraft] = useState("");
   const [reasonError, setReasonError] = useState<string | null>(null);
   const [notaCreditoPopup, setNotaCreditoPopup] = useState<DocumentoResponse | null>(null);
-  const isInternalSupport = role !== "OPERADOR_FACTURACION";
+  // Lista blanca a proposito: un rol nuevo no hereda permisos de soporte por descarte
+  // (SPEC_SEGMENTACION_PERFIL_EMISION §0).
+  const isInternalSupport = role === "SOPORTE_INTERNO" || role === "ADMIN_INTERNO";
 
   useEffect(() => {
     void loadDocuments();
@@ -2325,7 +2329,7 @@ function DocumentsView({
 
       {error ? <p className="form-error">{error}</p> : null}
 
-      {!selected && role !== "OPERADOR_FACTURACION" ? (
+      {!selected && isInternalSupport ? (
       <section className="document-management" aria-label="Gestion de documentos">
         <header className="document-management-header">
           <h3>Gestion de documentos</h3>
@@ -2406,6 +2410,7 @@ function DocumentsView({
                 <span>
                   <strong title={documento.accion_detalle?.titulo}>{`${getDocumentoAccionIcon(documento)} ${formatDocumentoTipo(documento.tipo)} ${documento.numero_fiscal ?? "pendiente"}`}</strong>
                   <small>{documento.cliente.razon_social}</small>
+                  {formatEmisor(documento) ? <small className="document-row-emisor">Emitio {formatEmisor(documento)}</small> : null}
                 </span>
                 <span>
                   <strong>{formatGuaranies(documento.totals.total)}</strong>
@@ -2437,6 +2442,7 @@ function DocumentsView({
               <span>
                 <strong title={documento.accion_detalle?.titulo}>{`${getDocumentoAccionIcon(documento)} ${documento.numero_fiscal ?? "Numero pendiente"}`}</strong>
                 <small>{documento.cliente.razon_social}</small>
+                {formatEmisor(documento) ? <small className="document-row-emisor">Emitio {formatEmisor(documento)}</small> : null}
               </span>
               <span>
                 <strong>{formatGuaranies(documento.totals.total)}</strong>
@@ -2483,6 +2489,12 @@ function DocumentsView({
                   <dt>Email</dt>
                   <dd>{formatEmailStatus(emailStatus?.status ?? selected.delivery.email_status)}</dd>
                 </div>
+                {formatEmisor(selected) ? (
+                  <div>
+                    <dt>Emitido por</dt>
+                    <dd>{formatEmisor(selected)}</dd>
+                  </div>
+                ) : null}
               </div>
 
               <section className="invoice-lines" aria-label="Productos vendidos">
@@ -5497,6 +5509,13 @@ function getSimpleDocumentoHint(value: DocumentoEstado, tipo?: DocumentoResponse
     return "El documento requiere revision antes de continuar.";
   }
   return `Estamos procesando la ${nombre.toLowerCase()}. Puede compartir el enlace al cliente.`;
+}
+
+/** Nombre visible del emisor del documento; `null` si la respuesta no lo trae. */
+function formatEmisor(documento: DocumentoResponse): string | null {
+  const emisor = documento.emitido_por;
+  if (!emisor) return null;
+  return emisor.display_name ?? emisor.username;
 }
 
 function formatDocumentoTipo(value: DocumentoResponse["tipo"]): string {

@@ -146,14 +146,16 @@ const isInternalSupport = role === "SOPORTE_INTERNO" || role === "ADMIN_INTERNO"
 
 Sin migración. Entrega el criterio 9 del SPEC (el histórico muestra su emisor) de forma aislada.
 
-**Repository** (`facturas.repository.ts`): agregar a las cinco proyecciones de lectura el join y las columnas:
+**Repository** (`facturas.repository.ts`) — diseño adoptado, distinto del `join` que este PLAN proponía en su primera redacción (ver TASKS, desvío D-1):
 
 ```sql
-join usuarios u on u.id = f.usuario_id
--- select … u.id as usuario_id, u.username, u.display_name
+-- En las doce proyecciones, via la constante COLUMNAS_DOCUMENTO:
+usuario_id,
+-- y una segunda consulta, batcheada en el listado:
+select id, username, display_name from usuarios where id = any($1::uuid[])
 ```
 
-Las consultas hoy no tienen alias de tabla (`from facturas_operativas` a secas): se introduce `f` en las cinco, junto con el join. Es un cambio mecánico y el `typecheck` cubre el mapeo de filas.
+El `join` no sirve porque `FacturaRow` lo producen doce consultas, ocho de ellas `insert`/`update … returning`, donde no se puede unir; y porque `buildListWhere` emite `deleted_at` y `created_at` sin calificar, que se volverían ambiguas con `usuarios` en el `from`. En su lugar, `usuario_id` —columna de la tabla, válida también en `RETURNING`— entra en la proyección y el emisor se resuelve en `findEmisores`, siguiendo el patrón que `findItemsByFacturaIds` ya usa acá. La consulta de emisores **no filtra `deleted_at`**: un usuario dado de baja sigue siendo el emisor de lo que emitió (CA-9). Todas las lecturas pasan por `toResponse`, único punto donde una fila se convierte en respuesta.
 
 **Tipos** (`facturas.types.ts:109-140`): `DocumentoResponse` suma
 

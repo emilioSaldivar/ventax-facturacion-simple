@@ -490,9 +490,7 @@ export async function getDocumentoEventos(
   repository: FacturaRepository,
   gateway: FiscalGateway
 ): Promise<DocumentoEventosListResponse> {
-  if (context.user.role === "OPERADOR_FACTURACION") {
-    throw new HttpError(403, "FORBIDDEN", "Historial fiscal avanzado disponible solo para soporte interno.");
-  }
+  assertInternalSupportRole(context, "Historial fiscal avanzado disponible solo para soporte interno.");
 
   const documento = await getDocumentoById(context, documentoId, repository);
   if (!documento.document_uuid) {
@@ -528,9 +526,7 @@ export async function getDocumentoDecision(
   repository: FacturaRepository,
   gateway: FiscalGateway
 ): Promise<DocumentoDecisionResponse> {
-  if (context.user.role === "OPERADOR_FACTURACION") {
-    throw new HttpError(403, "FORBIDDEN", "Autogestion avanzada disponible solo para soporte interno.");
-  }
+  assertInternalSupportRole(context, "Autogestion avanzada disponible solo para soporte interno.");
 
   const documento = await getDocumentoById(context, documentoId, repository);
 
@@ -614,9 +610,7 @@ export async function getReconciliacionFiscal(
   gateway: FiscalGateway,
   repository: FacturaRepository
 ): Promise<ReconciliacionFiscalResponse> {
-  if (context.user.role === "OPERADOR_FACTURACION") {
-    throw new HttpError(403, "FORBIDDEN", "Comparar con registro fiscal disponible solo para soporte interno.");
-  }
+  assertInternalSupportRole(context, "Comparar con registro fiscal disponible solo para soporte interno.");
 
   try {
     const response = await gateway.getFacturalistaByEmisor({
@@ -661,8 +655,18 @@ export async function getReconciliacionFiscal(
   }
 }
 
+/**
+ * Roles con permisos de soporte interno. Es una lista blanca a proposito: un rol
+ * nuevo no debe heredar estos permisos por descarte (SPEC_SEGMENTACION_PERFIL_EMISION §0).
+ */
+const ROLES_SOPORTE_INTERNO: ReadonlySet<string> = new Set(["SOPORTE_INTERNO", "ADMIN_INTERNO"]);
+
+export function esRolSoporteInterno(role: string): boolean {
+  return ROLES_SOPORTE_INTERNO.has(role);
+}
+
 function assertInternalSupportRole(context: OperationalContextResponse, message: string): void {
-  if (context.user.role === "OPERADOR_FACTURACION") {
+  if (!esRolSoporteInterno(context.user.role)) {
     throw new HttpError(403, "FORBIDDEN", message);
   }
 }

@@ -29,12 +29,12 @@ Convierte el contexto operativo (`actividad_punto_perfiles`) en unidad de segmen
 
 | ID | Fase | Tarea | Traza | Estado | Criterio de aceptación | Evidencia |
 |---|---|---|---|---|---|---|
-| SEG-001 | F0 — Autorización | Lista blanca en `facturas.service.ts` | PLAN F0 · SPEC §0 · CA-1 | PENDING | Las cuatro ocurrencias de `role !== "OPERADOR_FACTURACION"` (`:400`, `:438`, `:524`, helper `:571`) pasan a una lista blanca explícita `["SOPORTE_INTERNO","ADMIN_INTERNO"]`. `assertInternalSupportRole` conserva nombre y firma. **Cambio de comportamiento nulo** para los tres roles actuales. | |
-| SEG-002 | F0 — Autorización | Lista blanca en `web-operacion` | PLAN F0 | PENDING | `isInternalSupport` (`main.tsx:1778`) y el gate de "Gestión de documentos" (`:2311`) usan lista blanca. Ningún rol futuro hereda permisos por descarte. | |
-| SEG-003 | F0 — Tests | `auth.roles.test.ts` | PLAN §5 · CA-1 | PENDING | Test parametrizado por rol que fija la equivalencia de comportamiento para los tres roles actuales y verifica que un código desconocido **no** obtiene permisos de soporte. Verde. | |
-| SEG-004 | F1 — Atribución | Exponer el usuario emisor en las lecturas de facturas | PLAN F1 · RN-13 · CA-8, CA-9 | PENDING | Las cinco proyecciones de `facturas.repository.ts` (`findById`, `findByIdempotencyKey`, `findNotaCreditoByOriginal`, `list`, y el conteo/candidatas) introducen alias `f` y `join usuarios u on u.id = f.usuario_id`, seleccionando id, username y display_name. **Sin migración.** | |
-| SEG-005 | F1 — Tipos | `DocumentoResponse.emitido_por` | PLAN F1 | PENDING | Campo `{ id, username, display_name } \| null` en `facturas.types.ts`. Nullable por prudencia ante un usuario borrado lógicamente. Mapeo cubierto por `typecheck`. | |
-| SEG-006 | F1 — Front | Emisor visible en listado y detalle | PLAN F1 · CA-8 | PENDING | `display_name ?? username` en detalle y en la fila del listado (en mobile como segunda línea, no columna nueva). **El histórico completo muestra su emisor sin haber corrido ningún backfill** (CA-9). | |
+| SEG-001 | F0 — Autorización | Lista blanca en `facturas.service.ts` | PLAN F0 · SPEC §0 · CA-1 | DONE | Las cuatro ocurrencias de `role !== "OPERADOR_FACTURACION"` (`:400`, `:438`, `:524`, helper `:571`) pasan a una lista blanca explícita `["SOPORTE_INTERNO","ADMIN_INTERNO"]`. `assertInternalSupportRole` conserva nombre y firma. **Cambio de comportamiento nulo** para los tres roles actuales. | Las cuatro ocurrencias pasan por `assertInternalSupportRole`, reescrito sobre `ROLES_SOPORTE_INTERNO` (`Set` de `SOPORTE_INTERNO`/`ADMIN_INTERNO`) y acompanado del predicado exportado `esRolSoporteInterno`. `OPERADOR_FACTURACION` ya no aparece en `facturas.service.ts`. Nombre y firma del helper intactos: sus 4 llamadas previas no cambiaron. Verificado contra contenedor: el operador recibe 403 con el mismo mensaje en `/facturas/:id/eventos` y `/facturas/:id/gestion/decision`. |
+| SEG-002 | F0 — Autorización | Lista blanca en `web-operacion` | PLAN F0 | DONE | `isInternalSupport` (`main.tsx:1778`) y el gate de "Gestión de documentos" (`:2311`) usan lista blanca. Ningún rol futuro hereda permisos por descarte. | `isInternalSupport` (`main.tsx:1792`) es lista blanca explicita y el gate de "Gestion de documentos" (`:2330`) lo reusa en lugar de repetir la comparacion. Playwright confirma que con `CONSULTA_FACTURADOR` la seccion no se monta. |
+| SEG-003 | F0 — Tests | `auth.roles.test.ts` | PLAN §5 · CA-1 | DONE | Test parametrizado por rol que fija la equivalencia de comportamiento para los tres roles actuales y verifica que un código desconocido **no** obtiene permisos de soporte. Verde. | `apps/api/tests/auth.roles.test.ts`: 16 pruebas verdes. Cubre las 7 operaciones protegidas x 3 roles actuales (equivalencia de comportamiento) y x 2 codigos desconocidos. **Contraprueba ejecutada**: contra el `facturas.service.ts` anterior fallan 9 de 16, de modo que el test fija comportamiento nuevo y no es tautologico. |
+| SEG-004 | F1 — Atribución | Exponer el usuario emisor en las lecturas de facturas | PLAN F1 · RN-13 · CA-8, CA-9 | DONE | Las cinco proyecciones de `facturas.repository.ts` (`findById`, `findByIdempotencyKey`, `findNotaCreditoByOriginal`, `list`, y el conteo/candidatas) introducen alias `f` y `join usuarios u on u.id = f.usuario_id`, seleccionando id, username y display_name. **Sin migración.** | Resuelto **sin join**, por el desvio D-1 (ver Bloqueos y desvios): las 12 proyecciones se unificaron en la constante `COLUMNAS_DOCUMENTO`, que suma `usuario_id`, y el emisor se resuelve en `findEmisores` (una consulta por `id = any($1::uuid[])`, sin filtrar `deleted_at`). Todas las lecturas pasan por `toResponse`. En el listado la resolucion es batcheada, igual que `findItemsByFacturaIds`. Sin migracion. |
+| SEG-005 | F1 — Tipos | `DocumentoResponse.emitido_por` | PLAN F1 | DONE | Campo `{ id, username, display_name } \| null` en `facturas.types.ts`. Nullable por prudencia ante un usuario borrado lógicamente. Mapeo cubierto por `typecheck`. | `DocumentoEmisor` y `emitido_por: DocumentoEmisor | null` en `facturas.types.ts`. `npm run typecheck` verde en los 3 workspaces. `spec/openapi.yaml` actualizado con el schema `DocumentoEmisor` y el campo en `DocumentoResponse`; YAML validado. |
+| SEG-006 | F1 — Front | Emisor visible en listado y detalle | PLAN F1 · CA-8 | DONE | `display_name ?? username` en detalle y en la fila del listado (en mobile como segunda línea, no columna nueva). **El histórico completo muestra su emisor sin haber corrido ningún backfill** (CA-9). | `display_name ?? username` via `formatEmisor`, como segunda linea de la fila (`.document-row-emisor`) y como entrada "Emitido por" en `receipt-summary`. **CA-9 verificado sobre datos reales sin backfill**: los 27 documentos de la base local devuelven su emisor (3 usuarios distintos); `GET /facturas` y `GET /facturas/:id` contra el contenedor traen `emitido_por` poblado. Playwright `scripts/playwright-segmentacion-f0-f1.cjs`: 8/8 en `390x844` y `1440x900`, cubriendo emisor con `display_name`, emisor solo con `username` y documento sin emisor (no renderiza nada). |
 | SEG-007 | F2 — DB | Migración `0033_segmentacion_perfil_emision.sql` | PLAN F2 · §7 del SPEC | PENDING | `actividad_punto_perfil_id uuid` **nullable** con FK en `catalogo_items`, `facturas_operativas`, `recibos_dinero` y `notas_comerciales`; `usuario_id` + `usuario_atribucion_historica` en `recibos_dinero` y `notas_comerciales`; los 4 índices parciales del filtro combinado. Ningún índice existente eliminado. `npm run migrate` OK. **Sin backfill en esta migración.** | |
 | SEG-008 | F3 — Backfill | Validar las rutas del JSON de `fiscal_request_snapshot` sobre datos reales | PLAN §3.1 · riesgo 3 | PENDING | Las rutas ya están fijadas en PLAN §3.1 (`fiscal_context ->> establecimiento / punto_expedicion / perfil_emision_codigo / actividad_economica_codigo`, de `buildFiscalEmitRequest`). Esta tarea las **valida sobre datos**: `select count(*)` en desarrollo contando cuántas filas resuelve el `where` completo y cuántas quedarían en `null`. Resultado anotado. | |
 | SEG-009 | F3 — Backfill | Migración `0034_segmentacion_backfill.sql` | PLAN §3 · RN-09, RN-13 · CA-10, CA-11, CA-12 | PENDING | Idempotente (solo toca filas con la columna en `null`). Facturas: perfil desde el snapshot por tupla exacta; sin snapshot, solo si establecimiento+punto resuelven **un único** contexto; si no, `null`. Recibos y notas: `usuario_id` = operador más antiguo del facturador con `usuario_atribucion_historica = true`; perfil solo si el facturador tiene **un solo** contexto. Catálogo: **sin backfill** (CA-3). | |
@@ -98,3 +98,38 @@ Registrar acá cualquier tarea que pase a `BLOCKED`, con impacto, alcance y deci
 | Fecha | ID | Bloqueo | Impacto | Decisión |
 |---|---|---|---|---|
 | | | | | |
+
+### D-1 — La atribución no se resuelve con un `join` (SEG-004)
+
+El PLAN Fase 1 indicaba `join usuarios u on u.id = f.usuario_id` con alias `f` en las cinco
+proyecciones. **No es aplicable**, por dos razones verificadas en el código:
+
+1. `FacturaRow` no lo producen cinco `select`, sino **doce** consultas, y ocho de ellas son
+   `insert … returning` / `update … returning`. Un `RETURNING` no admite `join`, así que esos ocho
+   caminos habrían devuelto el emisor en `null` justo después de emitir o actualizar un documento.
+2. `buildListWhere` emite cláusulas sin calificar (`deleted_at is null`, y `created_at` en el filtro
+   de fechas). Con `usuarios` en el `from`, esas columnas pasan a ser ambiguas y la consulta falla.
+   Calificarlas ahora adelantaría, a medias, el cambio de firma que F4 hace en SEG-013.
+
+**Adoptado:** `usuario_id` entra en la proyección (una columna de la tabla, válida también en
+`RETURNING`) y el emisor se resuelve en una segunda consulta, `findEmisores`, batcheada en el
+listado. Es el mismo patrón que ya usa `findItemsByFacturaIds` en este repositorio. Los doce
+caminos devuelven el emisor de forma uniforme y `buildListWhere` queda intacto para SEG-013.
+
+### H-1 — Cuatro proyecciones devolvían `document_uuid` indefinido
+
+Al unificar las doce proyecciones en `COLUMNAS_DOCUMENTO` se descubrió que cuatro de ellas
+—`createQueuedEmission`, `failPendingEmission`, `retryPendingEmission` y `cancelDocumento`— **no
+seleccionaban `document_uuid`**, pese a estar tipadas como `FacturaRow`, que lo declara. La
+respuesta salía con `document_uuid: undefined` en lugar del valor real. En `createQueuedEmission`
+era inocuo (el documento aún no tiene `uuid`), pero las otras tres operan sobre documentos ya
+emitidos. Contradice la regla arquitectónica de `AGENTS.md` que hace del `document_uuid` la
+identidad estable del documento. **Corregido** al unificar: las doce proyecciones devuelven la
+misma lista de columnas y `FacturaRow` describe una sola forma real.
+
+### H-2 — `isValidAccessTokenPayload` es una lista blanca cerrada (dependencia de F7)
+
+`apps/api/src/modules/auth/token.service.ts:73-75` valida que el `role` del token sea uno de los
+tres actuales. Es correcto, pero significa que **`CONSULTA_FACTURADOR` será rechazado en la
+autenticación** hasta que se agregue ahí. SEG-023 no lo menciona: al implementarlo hay que tocar
+ese archivo además de la migración del rol.
