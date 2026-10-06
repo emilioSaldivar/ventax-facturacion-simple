@@ -42,7 +42,7 @@ Convierte el contexto operativo (`actividad_punto_perfiles`) en unidad de segmen
 | SEG-011 | F3 — Backfill | Ensayo en seco contra producción y de escritura en staging | PLAN §5 · riesgo 2 | DONE | Resultado del backfill conocido de antemano sobre el objetivo real: ensayo en seco (solo lectura) **contra produccion**, que es mas representativo que una restauracion y no la expone a escritura, mas ensayo de **escritura sobre una restauracion de la base de staging** en el stack local. Ninguna asignacion dudosa: la duda queda en `null`. | Ensayo en seco contra produccion y staging ejecutado el 2026-10-06 — ver evidencia de SEG-008. Escenarios R-1 y R-3 reproducidos en local sobre transaccion revertida — ver SEG-009. Pendiente unicamente el ensayo de escritura en staging, cubierto por SEG-036. **Ensayo de escritura sobre la base real de staging (2026-10-06):** dump de `ventax-facturacion-simple` restaurado en el stack local (5 facturadores, 70 facturas, 12 usuarios, migracion 0032) y 0033+0034 aplicadas encima. Resultado **identico a la prediccion**: 67 facturas por tupla exacta + 3 por el fallback del paso 2 = **70/70 con perfil, 0 sin perfil**. Los 3 del fallback son los del codigo viejo `C4_96099`, resueltos a la actividad `96099` (R-3 en datos reales). Reparto en el facturador multi-perfil `5057016-1`: **16 documentos al perfil del punto 001 y 37 al del punto 002**, ambos con usuarios asignados. Recibos 2/5 y presupuestos 0/6 con perfil, que es lo esperado por la regla conservadora al haber 2 contextos. Los tres invariantes en 0, catalogo intacto, 0 documentos huerfanos en staging. Verificacion funcional sobre esos datos: `GET /facturas` del operador `esaldivar1811` devuelve 53 documentos, **todos con `emitido_por`**, con 3 emisores distintos; los 16 atribuidos a `esaldivartaller` coinciden exactamente con los 16 del perfil del punto 001. F0 verificado con operador real: 403 en `/eventos` y `/gestion/decision`. Playwright 8/8 y suite de la API sin regresiones (los 6 fallos preexistentes). |
 | SEG-012 | F4 — Alcance | `AlcanceLectura` y `alcanceDesdeContexto` | PLAN §1.2, §1.3 | PENDING | Tipo unión en `context.types.ts` con las dos formas (`PERFIL` y `FACTURADOR`) y el derivador desde el contexto operativo. **Ningún endpoint acepta el perfil desde el cliente.** | |
 | SEG-013 | F4 — Alcance | `buildListWhere` recibe el alcance | PLAN F4 · RN-08 · CA-6 | PENDING | Firma cambiada; la cláusula del operador es `facturador_id = $1 and (actividad_punto_perfil_id = $2 or actividad_punto_perfil_id is null)`. Los filtros actuales (tipo, estado, fechas, búsqueda) no cambian. **Las cuatro lecturas puntuales pasan por el mismo helper**: un documento fuera de alcance devuelve `null` → 404 (CA-7). | |
-| SEG-014 | F4 — Escritura | Persistir el perfil al emitir | PLAN F4 · RN-07 | PENDING | `createFactura` y `createNotaCredito` persisten `context.actividad_punto_perfil_id`, que ya viaja en el contexto (`context.types.ts:45`). La nota de crédito hereda el perfil **de la factura original**, no el del operador. | |
+| SEG-014 | F4 — Escritura | Persistir el perfil al emitir | PLAN F4 · RN-07 | PENDING | `createFactura` y `createNotaCredito` persisten `context.actividad_punto_perfil_id`, que ya viaja en el contexto (`context.types.ts:45`). La nota de crédito hereda el perfil **de la factura original**, no el del operador. **Incluye una migración que repite el backfill de `0034`** para recuperar los documentos emitidos en la ventana entre F3 y F4 (hallazgo H-3). | |
 | SEG-015 | F4 — Tests | `facturas.alcance.test.ts` + extensión de `facturas.service.test.ts` | PLAN §5 · CA-6, CA-7 | PENDING | `buildAlcanceWhere` en sus dos formas; el operador ve lo suyo más lo que no tiene perfil y no ve lo ajeno; el de consulta ve todo; documento de otro perfil → 404; NC hereda perfil. Verde. | |
 | SEG-016 | F5 — Catálogo | Alcance en `list` y `search` | PLAN F5 · RN-02 · CA-2 | PENDING | Ambas reciben `AlcanceLectura`. El operador ve los de su perfil **más los compartidos**. Tras la migración, todos los ítems preexistentes son compartidos y nadie pierde acceso (CA-3). | |
 | SEG-017 | F5 — Catálogo | Creación, edición y baja con perfil | PLAN F5 · RN-04, RN-06 · CA-4, CA-5 | PENDING | El ítem nace con el perfil del creador; `compartido: true` lo deja en `null`. Un ítem de otro perfil no es alcanzable (404). Los compartidos son editables desde cualquier perfil, con `updated_by` trazado. **El índice único `(facturador_id, codigo_normalizado)` no se toca** y el 409 por código duplicado sigue aplicando (CA-5). | |
@@ -92,6 +92,45 @@ todo ──▶ SEG-027, SEG-031..035 ──▶ SEG-036 ──▶ SEG-037
 3. **F4** facturas, **F5** catálogo, **F6** recibos y presupuestos: un módulo por vez. Si el alcance de facturas rompe algo, catálogo todavía no cambió.
 4. **F7–F8** rol de consulta.
 
+## Runbook de despliegue F0–F3
+
+Un solo despliegue lleva F0, F1, F2 y F3. Trae **dos migraciones** (`0033` esquema, `0034` backfill)
+y **ningún cambio visible salvo la línea de emisor de F1**: hasta F4 nada lee la columna de perfil.
+
+El checkout de la VPS es uno solo (`/home/deploy/apps/ventax-facturacion-simple`) y de ahí salen los
+dos stacks, que se distinguen por `APP_ENV_FILE` y `COMPOSE_PROJECT_NAME`.
+
+| # | Paso | Comando / criterio |
+|---|---|---|
+| 1 | Backup del entorno a desplegar | `APP_ENV_FILE=<env> BACKUP_DIR=/home/deploy/backups/<dir> npm run ops:backup`, y verificar el `.dump` con `pg_restore --list` |
+| 2 | Anotar el estado previo | `select version from schema_migrations order by version desc limit 1` debe dar `0032`, y conteo de documentos |
+| 3 | Traer el código | `git pull` en el checkout. `limpieza.sql` está sin versionar y no estorba |
+| 4 | Desplegar | `APP_ENV_FILE=<env> bash scripts/deploy.sh`. Si el build falla por DNS (ocurrió en local al construir la imagen con Chromium), reintentar; las migraciones solas son `docker compose up migrate` |
+| 5 | Confirmar migraciones | `schema_migrations` debe tener `0033` y `0034` |
+| 6 | Consultas de control | `scripts/sql/verificar_backfill_segmentacion.sql`. **Los tres invariantes deben dar 0** y el catálogo 0 ítems con perfil |
+| 7 | Contrastar con lo predicho | El número de documentos con perfil debe coincidir con el ensayo previo del mismo entorno |
+| 8 | Smoke funcional | Login de un operador, `GET /facturas` trae `emitido_por` poblado, y un endpoint de soporte devuelve 403 |
+| 9 | Salud | Healthcheck de la API y log sin errores |
+
+**Números esperados, medidos antes del despliegue:**
+
+| entorno | facturas | con perfil | sin perfil |
+|---|---|---|---|
+| staging | 70 | 70 (67 por tupla exacta + 3 por el fallback) | 0 |
+| producción | 242 | 242 | 0 |
+
+En producción, además, **4 documentos de `80136968-1` quedan en un contexto sin operador asignado**
+(RN-23). El bloque 6 de las consultas de control debe mostrarlos: es el resultado esperado, no un
+error.
+
+**Rollback.** El código vuelve con `git checkout <commit anterior>` y un redeploy. Las migraciones no
+se revierten: `0033` es aditiva y nullable, y `0034` solo rellena columnas que nadie lee todavía, así
+que el código viejo convive con el esquema nuevo sin cambios de comportamiento. Si hiciera falta
+deshacer el efecto del backfill, alcanza con poner la columna en `null`, sin tocar el esquema
+(PLAN §1.1).
+
+---
+
 ## Bloqueos y desvíos
 
 Registrar acá cualquier tarea que pase a `BLOCKED`, con impacto, alcance y decisión temporal, antes de continuar con cambios inciertos (`AGENTS.md`). El desvío más importante a vigilar está declarado en las reglas de cierre: **si una prueba de emisión existente requiere modificación, el diseño se apartó del PLAN §1.4.**
@@ -127,6 +166,21 @@ era inocuo (el documento aún no tiene `uuid`), pero las otras tres operan sobre
 emitidos. Contradice la regla arquitectónica de `AGENTS.md` que hace del `document_uuid` la
 identidad estable del documento. **Corregido** al unificar: las doce proyecciones devuelven la
 misma lista de columnas y `FacturaRow` describe una sola forma real.
+
+### H-3 — Los documentos emitidos entre F3 y F4 quedan sin perfil para siempre
+
+`0034` es una migración: corre una sola vez. Y nada escribe `actividad_punto_perfil_id` al emitir
+hasta SEG-014, que es parte de F4. En la ventana entre un despliegue y el otro, **todo documento
+nuevo nace con la columna en `null` y ya nadie se la completa**.
+
+Antes de F4 eso es inofensivo: nada lee la columna. Después de F4 esos documentos quedarían como
+«histórico sin perfil», visibles para todos los operadores del facturador (RN-09) de forma
+permanente — justo lo contrario de lo que se busca, y en los facturadores multi-perfil significa que
+documentos recientes se filtran entre perfiles.
+
+**Mitigación, obligatoria en F4:** la migración que acompaña a SEG-014 repite la lógica de `0034`.
+Es idempotente y solo toca filas con la columna en `null`, así que repetirla no tiene costo ni
+riesgo. Cuanto más corta sea la ventana entre ambos despliegues, menos documentos alcanza.
 
 ### H-2 — `isValidAccessTokenPayload` es una lista blanca cerrada (dependencia de F7)
 
