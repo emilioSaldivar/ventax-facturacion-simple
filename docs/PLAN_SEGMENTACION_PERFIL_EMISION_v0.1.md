@@ -237,30 +237,52 @@ es el `FiscalContext` completo del contexto operativo:
 > (`timbrado.establecimiento`, `timbrado.puntoExpedicion`, `emission_profile_code`). Ese payload **no se persiste**: lo
 > persistido es el request interno de arriba. Usar los nombres del gateway en el backfill no resolvería ninguna fila.
 
-Como el snapshot trae **las cuatro claves** del contexto, la tupla se resuelve completa y sin ambigüedad:
+Como el snapshot trae **las cuatro claves** del contexto, la tupla se resuelve completa:
 
 ```sql
 update facturas_operativas f
    set actividad_punto_perfil_id = app.id
   from actividad_punto_perfiles app
-  join facturador_actividades a       on a.id  = app.actividad_id
-  join facturador_establecimientos e  on e.id  = app.establecimiento_id
-  join facturador_puntos_expedicion p on p.id  = app.punto_expedicion_id
-  join facturador_perfiles_emision pe on pe.id = app.perfil_emision_id
+  join facturador_actividades a       on a.id  = app.actividad_id        and a.deleted_at  is null
+  join facturador_establecimientos e  on e.id  = app.establecimiento_id  and e.deleted_at  is null
+  join facturador_puntos_expedicion p on p.id  = app.punto_expedicion_id and p.deleted_at  is null
+  join facturador_perfiles_emision pe on pe.id = app.perfil_emision_id   and pe.deleted_at is null
  where f.actividad_punto_perfil_id is null
+   and f.deleted_at is null
    and app.facturador_id = f.facturador_id
+   and app.deleted_at is null
    and e.codigo  = f.fiscal_request_snapshot -> 'fiscal_context' ->> 'establecimiento'
    and p.codigo  = f.fiscal_request_snapshot -> 'fiscal_context' ->> 'punto_expedicion'
    and pe.codigo = f.fiscal_request_snapshot -> 'fiscal_context' ->> 'perfil_emision_codigo'
    and a.codigo  = f.fiscal_request_snapshot -> 'fiscal_context' ->> 'actividad_economica_codigo';
 ```
 
-Igual se valida con un `select count(*)` sobre desarrollo antes de convertirlo en migración: el snapshot es JSON libre y
-nada impide que una fila antigua tenga otra forma.
+> **Los `deleted_at is null` de las cinco tablas no son decorativos.** Sin ellos, un contexto dado de baja duplica la
+> tupla de uno vivo y la coincidencia deja de ser única. Medido sobre producción el 2026-10-06: la versión sin filtros
+> deja **231 de 242 documentos ambiguos** (171 de `4732402-3` y 60 de `5057016-1`), porque hay 3 contextos con baja
+> lógica. Y un `update … from` con varias filas coincidentes **no falla**: PostgreSQL elige una arbitrariamente y
+> continúa, de modo que el daño sería silencioso. Con los filtros puestos: **242 de 242, cero ambiguos.**
 
-Cuando el snapshot falta o no resuelve (borradores, errores operativos previos a la emisión), se intenta la tupla
-establecimiento + punto: si resuelve **un solo** contexto, se asigna; si resuelve varios o ninguno, **queda en `null`**
-(RN-09). No se adivina.
+**Por qué la unicidad está garantizada, no solo observada.** Las cuatro tablas dimensión tienen índice único
+`(padre, codigo) where deleted_at is null` y `actividad_punto_perfiles_uidx` es único sobre la tupla de cuatro con la
+misma condición. Con los filtros de arriba, la consulta **no puede** devolver más de una fila: es una propiedad del
+esquema, no una característica de los datos de hoy.
+
+**Nunca se filtra por `activo`.** `activo` significa «puede emitir ahora», que no dice nada sobre el origen de un
+documento ya emitido. Un contexto desactivado sigue siendo el perfil real de lo que se emitió con él (RN-23); filtrarlo
+mandaría esos documentos al fallback y les asignaría un contexto que no es el suyo.
+
+**Cascada de resolución**, en este orden exacto:
+
+1. **Tupla exacta** del snapshot (la consulta de arriba).
+2. **Establecimiento + punto** del snapshot, si la tupla exacta no resolvió: se asigna solo si esos dos códigos
+   resuelven **un único** contexto vivo del facturador.
+3. En cualquier otro caso, **`null`** (RN-09). No se adivina.
+
+El paso 2 aplica tanto cuando falta el snapshot como cuando **está pero su tupla no coincide**, que es el caso real de
+los documentos anteriores a un cambio de formato de código: en staging hay 3 de `5057016-1` que traen la actividad como
+`C4_96099` en vez de `96099`, los tres en estado fallido y de mayo de 2026. La redacción anterior de este PLAN solo
+contemplaba la ausencia del snapshot y los habría mandado a `null` sin intentar el fallback.
 
 ### 3.2 Recibos y presupuestos — atribución de usuario
 
@@ -290,10 +312,14 @@ update recibos_dinero r
 más pobre que el de facturas: `buildFiscalCrearReciboRequest` (`recibos.service.ts:70-92`) guarda `emisor_id` y
 **`actividad_economica_codigo`**, sin establecimiento ni punto. Alcanza igual para una resolución exacta en el caso frecuente:
 
-1. Si la actividad del snapshot corresponde a **un único** contexto del facturador, se asigna.
+1. Si la actividad del snapshot corresponde a **un único** contexto vivo del facturador, se asigna.
 2. Si no hay snapshot o la actividad resuelve varios contextos, se aplica la regla conservadora: solo si el facturador tiene
-   **exactamente un** contexto activo.
+   **exactamente un** contexto vivo.
 3. En cualquier otro caso, `null`.
+
+**«Vivo» significa `deleted_at is null`, no `activo = true`**, igual que en 3.1 y por el mismo motivo. La distinción no es
+teórica: `80136968-1` tiene 2 contextos vivos de los cuales 1 está activo. Contando por `activo` caería en el paso 2 y
+recibiría el contexto de agosto para documentos de junio.
 
 `notas_comerciales` **no** tiene snapshot fiscal: para presupuestos y pedidos solo aplican los pasos 2 y 3.
 

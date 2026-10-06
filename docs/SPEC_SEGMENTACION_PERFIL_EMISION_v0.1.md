@@ -165,6 +165,7 @@ Dos formas de asignar un usuario a un facturador, mutuamente excluyentes:
 - **RN-10 — Coherencia en la emisión.** Una factura solo puede incluir ítems del perfil del operador o compartidos. Un recibo solo puede imputarse a una factura visible para ese operador. Un presupuesto solo se convierte en factura dentro del mismo perfil.
 - **RN-11 — Cambio de perfil de un usuario.** Si soporte reasigna a un operador de un perfil a otro, el operador pasa a ver los documentos y el catálogo del perfil nuevo y deja de ver los del anterior. Los documentos ya emitidos **no se reasignan**: siguen perteneciendo al perfil con el que se emitieron. Es la consecuencia esperada de la segmentación.
 - **RN-12 — Facturador con un solo perfil.** El comportamiento es exactamente el actual. La segmentación solo se nota cuando hay más de un contexto.
+- **RN-23 — Perfil sin operador asignado.** Un contexto puede quedar sin ningún usuario asignado, típicamente cuando el facturador cambia de actividad económica y el contexto viejo se desactiva. Sus documentos **conservan ese perfil** y, en consecuencia, **ningún operador los ve**; quedan accesibles solo para el rol de consulta cuando exista. Es un corolario de RN-11 y una decisión tomada con evidencia: en producción son 4 documentos de `80136968-1`, que pasó de la actividad `37000` a la `82110` en agosto de 2026. Se prefiere esto a reasignarlos al contexto nuevo, que sería reescribir la historia fiscal, y a dejarlos sin perfil, que descartaría información que sí tenemos.
 
 ### 6.3 Atribución de usuario
 
@@ -199,7 +200,7 @@ Dos formas de asignar un usuario a un facturador, mutuamente excluyentes:
 | `roles` | Incorporar el código del rol de consulta (restricción y seed) | Ninguno |
 | `usuario_operacion_config` | Admitir la asignación a facturador **sin** contexto operativo, para el rol de consulta. El modelado físico (columna opcional o vínculo propio) se define en el PLAN | Ninguno: las asignaciones existentes no cambian |
 | `catalogo_items` | Perfil de emisión opcional | Ninguno: todos los ítems quedan compartidos (RN-03) |
-| `facturas_operativas` | Perfil de emisión opcional | Best-effort desde `fiscal_request_snapshot`, que ya contiene establecimiento, punto y código de perfil de cada emisión. Lo que no resuelva queda sin perfil (RN-09) |
+| `facturas_operativas` | Perfil de emisión opcional | Best-effort desde `fiscal_request_snapshot`, que ya contiene establecimiento, punto y código de perfil de cada emisión. La resolución es por códigos **entre filas vivas** (`deleted_at is null`), nunca por `activo`: un contexto desactivado sigue siendo el origen real de sus documentos (RN-23). Lo que no resuelva queda sin perfil (RN-09) |
 | `recibos_dinero` | Perfil opcional + usuario que lo emitió | Usuario: operador más antiguo del facturador (RN-13). Perfil: solo si el facturador tiene un único contexto; si tiene varios, queda sin perfil |
 | `notas_comerciales` | Perfil opcional + usuario que lo creó | Ídem recibos |
 
