@@ -19,6 +19,7 @@ import {
   type FiscalEmitNotaCreditoRequest,
   type FiscalEmitNotaCreditoResponse,
   type FiscalFacturalistaResponse,
+  type FiscalIdempotencyReconciliationItem,
   type FiscalRefreshStatusRequest,
   type FiscalRefreshStatusResponse
 } from "../src/modules/fiscal-gateway/fiscal-gateway.types";
@@ -41,7 +42,13 @@ import {
   previewFactura,
   refreshDocumentoStatus
 } from "../src/modules/facturas/facturas.service";
-import { enqueueFacturaEmission, processNextQueuedFiscalEmission, retryDocumentoEmission } from "../src/modules/facturas/facturas.service";
+import {
+  enqueueFacturaEmission,
+  processNextQueuedFiscalEmission,
+  retryDocumentoEmission,
+  ventanasIdempotencia,
+  type RetryEmisionDeps
+} from "../src/modules/facturas/facturas.service";
 import type { OperationalContextRepository, OperationalContextResponse } from "../src/modules/context/context.types";
 import type { ClienteRepository, ClienteResponse, ClienteSearchResult } from "../src/modules/clientes/clientes.types";
 import type {
@@ -116,6 +123,8 @@ class FakeFacturaRepository implements FacturaRepository {
   public lastFailedInput: Parameters<FacturaRepository["failPendingEmission"]>[0] | null = null;
   public retryResponse: DocumentoResponse | null = null;
   public lastRetryInput: Parameters<FacturaRepository["retryPendingEmission"]>[0] | null = null;
+  public lastAdoptInput: Parameters<FacturaRepository["adoptarDocumentoFiscalExistente"]>[0] | null = null;
+  public adoptReturnsNull = false;
   public lastCancelInput: Parameters<FacturaRepository["cancelDocumento"]>[0] | null = null;
   public lastNotaCreditoInput: NotaCreditoPersistInput | null = null;
   public markAccionNotificadaCalls: string[] = [];
@@ -300,6 +309,30 @@ class FakeFacturaRepository implements FacturaRepository {
   async retryPendingEmission(input: Parameters<FacturaRepository["retryPendingEmission"]>[0]): Promise<DocumentoResponse | null> {
     this.lastRetryInput = input;
     return this.retryResponse;
+  }
+
+  async getFacturadorApiKey(): Promise<string | null> {
+    return null;
+  }
+
+  // Refleja el repositorio real: la adopcion deja identidad fiscal y PENDIENTE_SIFEN.
+  async adoptarDocumentoFiscalExistente(
+    input: Parameters<FacturaRepository["adoptarDocumentoFiscalExistente"]>[0]
+  ): Promise<DocumentoResponse | null> {
+    this.lastAdoptInput = input;
+    if (this.adoptReturnsNull || !this.findByIdResponse) {
+      return null;
+    }
+    this.findByIdResponse = {
+      ...this.findByIdResponse,
+      estado: "PENDIENTE_SIFEN",
+      document_uuid: input.documentUuid,
+      fiscal_document_id: input.fiscalDocumentId,
+      cdc: input.cdc,
+      numero_fiscal: input.numeroFiscal,
+      fiscal_status: input.fiscalStatus
+    };
+    return this.findByIdResponse;
   }
 
   async cancelDocumento(input: Parameters<FacturaRepository["cancelDocumento"]>[0]): Promise<DocumentoResponse | null> {
@@ -596,6 +629,68 @@ const emitInput = {
   ]
 };
 
+/** Documento que FE nunca recibio: sin identidad y con el fallo del outbox registrado. */
+function buildDocumentoNoRecibido(overrides: Partial<DocumentoResponse> = {}): DocumentoResponse {
+  return buildDocumento({
+    estado: "ERROR_TEMPORAL",
+    document_uuid: null,
+    cdc: null,
+    fiscal_document_id: null,
+    numero_fiscal: null,
+    external_ref: "fac_0123456789abcdef0123456789abcdef",
+    fiscal_status: { code: "TIMEOUT", message: "Timeout fiscal", recoverable: true },
+    ...overrides
+  });
+}
+
+function buildRetryDeps(
+  conciliacion: Partial<FiscalIdempotencyReconciliationItem> | FiscalGatewayError = { result: "NOT_IMPACTED" },
+  refresh: FiscalRefreshStatusResponse | FiscalGatewayError = { estado: "EMITIDA", current_cdc: null, raw: { refreshed: true } }
+): RetryEmisionDeps & {
+  reconcileCalls: Array<Parameters<FiscalGateway["reconcileByIdempotencyKeys"]>[0]>;
+  refreshCalls: FiscalRefreshStatusRequest[];
+} {
+  const reconcileCalls: Array<Parameters<FiscalGateway["reconcileByIdempotencyKeys"]>[0]> = [];
+  const refreshCalls: FiscalRefreshStatusRequest[] = [];
+  const consumerGateway = {
+    async reconcileByIdempotencyKeys(input: Parameters<FiscalGateway["reconcileByIdempotencyKeys"]>[0]) {
+      reconcileCalls.push(input);
+      if (conciliacion instanceof FiscalGatewayError) {
+        throw conciliacion;
+      }
+      return {
+        emisor_id: input.emisorId,
+        env: input.env,
+        from: input.from,
+        to: input.to,
+        raw: {},
+        items: input.idempotencyKeys.map((key) => ({
+          idempotency_key: key,
+          result: "NOT_IMPACTED" as const,
+          document_uuid: null,
+          document_id: null,
+          current_cdc: null,
+          status: null,
+          nro_factura: null,
+          created_at: null,
+          message: null,
+          ...conciliacion
+        }))
+      };
+    }
+  } as unknown as FiscalGateway;
+  const sharedGateway = {
+    async refreshFacturaStatus(request: FiscalRefreshStatusRequest) {
+      refreshCalls.push(request);
+      if (refresh instanceof FiscalGatewayError) {
+        throw refresh;
+      }
+      return refresh;
+    }
+  } as unknown as FiscalGateway;
+  return { consumerGateway, sharedGateway, feEnv: "test", reconcileCalls, refreshCalls };
+}
+
 function buildDocumento(overrides: Partial<DocumentoResponse> = {}): DocumentoResponse {
   return {
     id: "66666666-6666-4666-8666-666666666666",
@@ -852,10 +947,8 @@ describe("facturas service", () => {
       documentoId: "66666666-6666-4666-8666-666666666666"
     });
 
-    repo.findByIdResponse = buildDocumento({
-      estado: "PENDIENTE_SIFEN"
-    });
-    await retryDocumentoEmission(otherFacturadorContext, "66666666-6666-4666-8666-666666666666", repo);
+    repo.findByIdResponse = buildDocumentoNoRecibido();
+    await retryDocumentoEmission(otherFacturadorContext, "66666666-6666-4666-8666-666666666666", repo, buildRetryDeps());
     expect(repo.lastRetryInput).toEqual({
       facturadorId: otherFacturadorContext.facturador.id,
       documentoId: "66666666-6666-4666-8666-666666666666",
@@ -1253,26 +1346,20 @@ describe("facturas service", () => {
     expect(repo.lastNotaCreditoInput).toBeNull();
   });
 
-  it("retries recoverable queued fiscal emissions", async () => {
+  it("retries emission only after FE confirms NOT_IMPACTED", async () => {
     const repo = new FakeFacturaRepository();
-    repo.findByIdResponse = buildDocumento({
-      estado: "ERROR_TEMPORAL",
-      cdc: null,
-      fiscal_document_id: null,
-      numero_fiscal: null
-    });
+    repo.findByIdResponse = buildDocumentoNoRecibido();
     repo.retryResponse = buildDocumento({
       estado: "EMITIENDO",
+      document_uuid: null,
       cdc: null,
       fiscal_document_id: null,
       numero_fiscal: null,
-      fiscal_status: {
-        recoverable: true,
-        action: "RETRY_EMISSION_REQUESTED"
-      }
+      fiscal_status: { recoverable: true, action: "RETRY_EMISSION_REQUESTED" }
     });
+    const deps = buildRetryDeps();
 
-    const result = await retryDocumentoEmission(context, "66666666-6666-4666-8666-666666666666", repo);
+    const result = await retryDocumentoEmission(context, "66666666-6666-4666-8666-666666666666", repo, deps);
 
     expect(result.estado).toBe("EMITIENDO");
     expect(repo.lastRetryInput).toEqual({
@@ -1280,32 +1367,126 @@ describe("facturas service", () => {
       documentoId: "66666666-6666-4666-8666-666666666666",
       requestedBy: context.user.id
     });
+    expect(deps.reconcileCalls).toHaveLength(1);
+    expect(deps.reconcileCalls[0]).toMatchObject({
+      emisorId: context.facturador.emisor_id,
+      env: "test",
+      idempotencyKeys: ["fac_0123456789abcdef0123456789abcdef"]
+    });
+    expect(repo.lastAdoptInput).toBeNull();
   });
 
-  it("rejects retry for final fiscal states", async () => {
+  it("adopts the FE document instead of retrying when FE reports IMPACTED", async () => {
     const repo = new FakeFacturaRepository();
-    repo.findByIdResponse = buildDocumento({
-      estado: "EMITIDA"
+    repo.findByIdResponse = buildDocumentoNoRecibido();
+    const deps = buildRetryDeps({
+      result: "IMPACTED",
+      document_uuid: "bbbbbbbb-bbbb-4bbb-bbbb-bbbbbbbbbbbb",
+      document_id: "158",
+      current_cdc: "C".repeat(44),
+      status: "QUEUED_BATCH",
+      nro_factura: "001-001-0001086"
     });
 
-    await expect(retryDocumentoEmission(context, "66666666-6666-4666-8666-666666666666", repo)).rejects.toMatchObject({
-      statusCode: 409,
-      code: "CONFLICT"
+    const result = await retryDocumentoEmission(context, "66666666-6666-4666-8666-666666666666", repo, deps);
+
+    expect(repo.lastRetryInput).toBeNull();
+    expect(repo.lastAdoptInput).toMatchObject({
+      documentUuid: "bbbbbbbb-bbbb-4bbb-bbbb-bbbbbbbbbbbb",
+      fiscalDocumentId: "158",
+      cdc: "C".repeat(44),
+      numeroFiscal: "001-001-0001086"
+    });
+    // El refresh posterior va por UUID con el gateway de clave compartida.
+    expect(deps.refreshCalls).toEqual([{ documentUuid: "bbbbbbbb-bbbb-4bbb-bbbb-bbbbbbbbbbbb" }]);
+    expect(result.estado).toBe("EMITIDA");
+    expect(result.puede_reintentar_emision).toBe(false);
+  });
+
+  it("returns the adopted document when the refresh after adoption fails", async () => {
+    const repo = new FakeFacturaRepository();
+    repo.findByIdResponse = buildDocumentoNoRecibido();
+    const deps = buildRetryDeps(
+      { result: "IMPACTED", document_uuid: "bbbbbbbb-bbbb-4bbb-bbbb-bbbbbbbbbbbb", current_cdc: "C".repeat(44) },
+      new FiscalGatewayError("TIMEOUT", "timeout")
+    );
+
+    const result = await retryDocumentoEmission(context, "66666666-6666-4666-8666-666666666666", repo, deps);
+
+    expect(result.estado).toBe("PENDIENTE_SIFEN");
+    expect(result.document_uuid).toBe("bbbbbbbb-bbbb-4bbb-bbbb-bbbbbbbbbbbb");
+    expect(repo.lastRetryInput).toBeNull();
+  });
+
+  it.each(["DUPLICATE_CONFLICT", "INVALID_KEY"] as const)("asks for support when FE reports %s", async (result) => {
+    const repo = new FakeFacturaRepository();
+    repo.findByIdResponse = buildDocumentoNoRecibido();
+
+    await expect(
+      retryDocumentoEmission(context, "66666666-6666-4666-8666-666666666666", repo, buildRetryDeps({ result }))
+    ).rejects.toMatchObject({ statusCode: 409, code: "CONFLICT", details: { motivo: "REQUIERE_SOPORTE", result } });
+    expect(repo.lastRetryInput).toBeNull();
+    expect(repo.lastAdoptInput).toBeNull();
+  });
+
+  it("never retries blindly when the idempotency check fails", async () => {
+    const repo = new FakeFacturaRepository();
+    repo.findByIdResponse = buildDocumentoNoRecibido();
+    const deps = buildRetryDeps(new FiscalGatewayError("UPSTREAM_ERROR", "403 FORBIDDEN"));
+
+    await expect(retryDocumentoEmission(context, "66666666-6666-4666-8666-666666666666", repo, deps)).rejects.toMatchObject({
+      statusCode: 503,
+      details: { motivo: "CONFIRMACION_NO_DISPONIBLE", gateway_code: "UPSTREAM_ERROR" }
     });
     expect(repo.lastRetryInput).toBeNull();
   });
 
-  it("rejects retry when no recoverable outbox job exists", async () => {
+  it("tells the operator to verify when FE already received the document", async () => {
     const repo = new FakeFacturaRepository();
-    repo.findByIdResponse = buildDocumento({
-      estado: "PENDIENTE_SIFEN"
+    repo.findByIdResponse = buildDocumento({ estado: "PENDIENTE_SIFEN" });
+    const deps = buildRetryDeps();
+
+    await expect(retryDocumentoEmission(context, "66666666-6666-4666-8666-666666666666", repo, deps)).rejects.toMatchObject({
+      statusCode: 409,
+      message: "Este documento ya fue recibido por facturacion electronica. Usa 'Verificar estado fiscal'."
     });
+    expect(deps.reconcileCalls).toHaveLength(0);
+    expect(repo.lastRetryInput).toBeNull();
+  });
+
+  it("rejects retry for final fiscal states", async () => {
+    const repo = new FakeFacturaRepository();
+    repo.findByIdResponse = buildDocumentoNoRecibido({ estado: "EMITIDA" });
+
+    await expect(
+      retryDocumentoEmission(context, "66666666-6666-4666-8666-666666666666", repo, buildRetryDeps())
+    ).rejects.toMatchObject({ statusCode: 409, code: "CONFLICT" });
+    expect(repo.lastRetryInput).toBeNull();
+  });
+
+  it("reports a race when the outbox job is already being processed", async () => {
+    const repo = new FakeFacturaRepository();
+    repo.findByIdResponse = buildDocumentoNoRecibido();
     repo.retryResponse = null;
 
-    await expect(retryDocumentoEmission(context, "66666666-6666-4666-8666-666666666666", repo)).rejects.toMatchObject({
-      statusCode: 409,
-      code: "CONFLICT"
-    });
+    await expect(
+      retryDocumentoEmission(context, "66666666-6666-4666-8666-666666666666", repo, buildRetryDeps())
+    ).rejects.toMatchObject({ statusCode: 409, code: "CONFLICT" });
+  });
+
+  it("queries the creation window and the last 7 days for documents older than 7 days", async () => {
+    const now = new Date("2026-10-15T12:00:00Z");
+    const createdAt = new Date("2026-09-30T12:00:00Z");
+
+    const ventanas = ventanasIdempotencia(createdAt, now);
+
+    expect(ventanas).toEqual([
+      { from: new Date("2026-09-30T11:55:00Z"), to: new Date("2026-10-07T11:55:00Z") },
+      { from: new Date("2026-10-08T12:00:00Z"), to: now }
+    ]);
+    expect(ventanasIdempotencia(new Date("2026-10-15T10:00:00Z"), now)).toEqual([
+      { from: new Date("2026-10-15T09:55:00Z"), to: now }
+    ]);
   });
 
   it("rejects missing customer identity data", () => {

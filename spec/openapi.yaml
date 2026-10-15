@@ -1011,16 +1011,27 @@ paths:
   /facturas/{documentoId}/retry-emission:
     post:
       tags: [Facturas]
-      summary: Reintentar emision fiscal recuperable
+      summary: Reintentar emision fiscal confirmada con facturacion-electronica
       description: |
-        Reactiva el outbox de una factura en `PENDIENTE_SIFEN` o `ERROR_TEMPORAL`
-        usando el mismo `external_ref` idempotente. No crea una nueva factura
-        operativa ni permite reintentar estados finales.
+        Solo aplica a documentos con `puede_reintentar_emision = true`. Antes de reencolar, el
+        servidor consulta `POST /v1/conciliacion/idempotency` de `facturacion-electronica` con la
+        clave de consumidor del facturador y el `external_ref` del documento
+        (SPEC_REINTENTO_EMISION_CONFIRMADO_v0.1):
+
+        - `NOT_IMPACTED`: FE no lo recibio. Se reactiva el outbox con el mismo `external_ref`
+          idempotente y el documento queda `EMITIENDO`.
+        - `IMPACTED`: FE ya lo tenia. No se reencola: se adopta su `document_uuid`, CDC y numero,
+          el outbox queda cerrado y el estado se refresca por UUID. El documento vuelve con el
+          estado fiscal vigente (por ejemplo `PENDIENTE_SIFEN` o `EMITIDA`).
+        - `DUPLICATE_CONFLICT` o `INVALID_KEY`: `409` con `details.motivo = REQUIERE_SOPORTE`.
+        - Si FE no responde la consulta: `503` con `details.motivo = CONFIRMACION_NO_DISPONIBLE`.
+
+        Nunca se reencola sin confirmacion de FE. No crea una nueva factura operativa.
       parameters:
         - $ref: "#/components/parameters/DocumentoId"
       responses:
         "200":
-          description: Reintento encolado
+          description: Reintento encolado (`estado = EMITIENDO`) o documento adoptado desde FE (estado fiscal refrescado)
           content:
             application/json:
               schema:
@@ -1030,7 +1041,15 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
         "409":
-          description: Documento no recuperable o sin outbox reintentable
+          description: |
+            Documento no candidato (ya recibido por FE: usar refresh de estado), emision ya en
+            proceso, documento modificado durante la operacion, o `details.motivo = REQUIERE_SOPORTE`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: No se pudo confirmar con FE si recibio el documento (`details.motivo = CONFIRMACION_NO_DISPONIBLE`). No se reencola.
           content:
             application/json:
               schema:
@@ -2757,6 +2776,14 @@ components:
         external_ref:
           type: string
           nullable: true
+        puede_reintentar_emision:
+          type: boolean
+          description: |
+            `true` solo si `facturacion-electronica` nunca recibio el documento: estado
+            `ERROR_TEMPORAL` o `PENDIENTE_SIFEN`, sin `document_uuid` ni `cdc`, y con el fallo del
+            ultimo intento registrado. Es la unica condicion para mostrar "Reintentar emision"
+            (SPEC_REINTENTO_EMISION_CONFIRMADO_v0.1, RN-01). Ser candidato no garantiza el
+            reintento: el servidor confirma con FE antes de reencolar.
         fiscal_envio_modo:
           $ref: "#/components/schemas/FiscalEnvioModo"
         delivery_mode:

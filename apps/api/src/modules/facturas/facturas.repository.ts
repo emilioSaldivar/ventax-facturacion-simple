@@ -1139,6 +1139,117 @@ export class PgFacturaRepository implements FacturaRepository {
     }
   }
 
+  async getFacturadorApiKey(facturadorId: string): Promise<string | null> {
+    const result = await pool.query<{ fe_consumer_api_key: string | null }>(
+      "select fe_consumer_api_key from facturadores where id = $1",
+      [facturadorId]
+    );
+    return result.rows[0]?.fe_consumer_api_key ?? null;
+  }
+
+  async adoptarDocumentoFiscalExistente(input: {
+    facturadorId: string;
+    documentoId: string;
+    requestedBy: string;
+    documentUuid: string;
+    fiscalDocumentId: string | null;
+    cdc: string | null;
+    numeroFiscal: string | null;
+    fiscalStatus: Record<string, unknown>;
+  }): Promise<DocumentoResponse | null> {
+    const client = await pool.connect();
+
+    try {
+      await client.query("begin");
+
+      // La guarda `document_uuid is null and cdc is null` evita pisar una identidad que el
+      // worker de outbox haya escrito mientras se consultaba a FE.
+      const result = await client.query<FacturaRow>(
+        `
+          update facturas_operativas
+          set
+            estado = 'PENDIENTE_SIFEN',
+            document_uuid = $3,
+            fiscal_document_id = coalesce(fiscal_document_id, $4),
+            cdc = $5,
+            numero_fiscal = coalesce($6, numero_fiscal),
+            fiscal_response_snapshot = $7::jsonb,
+            verificacion_next_at = now() + interval '5 minutes',
+            verificacion_attempts = 0,
+            emitted_at = coalesce(emitted_at, now()),
+            updated_at = now()
+          where facturador_id = $1
+            and id = $2
+            and deleted_at is null
+            and document_uuid is null
+            and cdc is null
+          returning
+            ${COLUMNAS_DOCUMENTO}
+        `,
+        [
+          input.facturadorId,
+          input.documentoId,
+          input.documentUuid,
+          input.fiscalDocumentId,
+          input.cdc,
+          input.numeroFiscal,
+          JSON.stringify(input.fiscalStatus)
+        ]
+      );
+
+      if (!result.rows[0]) {
+        await client.query("rollback");
+        return null;
+      }
+
+      await client.query(
+        `
+          update factura_emision_outbox
+          set estado = 'DONE', locked_at = null, last_error = null, updated_at = now()
+          where factura_operativa_id = $1
+            and estado in ('PENDING', 'FAILED_TEMP', 'FAILED_PERM')
+        `,
+        [input.documentoId]
+      );
+
+      await client.query(
+        `
+          insert into audit_events (
+            tenant_id,
+            facturador_id,
+            usuario_id,
+            entity_type,
+            entity_id,
+            event_type,
+            metadata
+          )
+          select
+            tenant_id,
+            facturador_id,
+            $3,
+            'factura_operativa',
+            id,
+            'FACTURA_EMISION_ADOPTADA',
+            $4::jsonb
+          from facturas_operativas
+          where facturador_id = $1
+            and id = $2
+        `,
+        [input.facturadorId, input.documentoId, input.requestedBy, JSON.stringify(input.fiscalStatus)]
+      );
+
+      await client.query("commit");
+
+      const factura = result.rows[0];
+      return this.toResponse(factura, await this.findItems(factura.id));
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
   async cancelDocumento(input: {
     facturadorId: string;
     documentoId: string;

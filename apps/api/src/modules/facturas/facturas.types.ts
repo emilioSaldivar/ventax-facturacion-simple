@@ -165,6 +165,8 @@ export interface DocumentoResponse {
   /** Derivado en el service (deriveAccion), no persistido — ver DocumentoAccion. */
   accion?: DocumentoAccion;
   accion_detalle?: DocumentoAccionDetalle;
+  /** SPEC_REINTENTO_EMISION_CONFIRMADO_v0.1 RN-01: unica condicion de visibilidad de "Reintentar emision". */
+  puede_reintentar_emision?: boolean;
 }
 
 export interface DocumentoListFilters {
@@ -410,6 +412,23 @@ export interface FacturaRepository {
     facturadorId: string;
     documentoId: string;
     requestedBy: string;
+  }): Promise<DocumentoResponse | null>;
+  /** Clave de consumidor de FE del facturador (`facturadores.fe_consumer_api_key`), si tiene. */
+  getFacturadorApiKey(facturadorId: string): Promise<string | null>;
+  /**
+   * FE confirmo por idempotencia que el documento ya existe (SPEC_REINTENTO_EMISION_CONFIRMADO_v0.1
+   * RN-03): se adopta su identidad en vez de reencolar. Devuelve null si el documento ya tenia
+   * identidad o no existe (carrera con el worker).
+   */
+  adoptarDocumentoFiscalExistente(input: {
+    facturadorId: string;
+    documentoId: string;
+    requestedBy: string;
+    documentUuid: string;
+    fiscalDocumentId: string | null;
+    cdc: string | null;
+    numeroFiscal: string | null;
+    fiscalStatus: Record<string, unknown>;
   }): Promise<DocumentoResponse | null>;
   cancelDocumento(input: {
     facturadorId: string;

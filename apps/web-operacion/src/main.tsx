@@ -266,6 +266,8 @@ interface DocumentoResponse {
   condicion_venta: CondicionVenta;
   numero_fiscal: string | null;
   cdc: string | null;
+  /** Identidad estable del documento en FE; el CDC puede cambiar (AGENTS.md). */
+  document_uuid?: string | null;
   fiscal_document_id: string | null;
   external_ref: string | null;
   fiscal_envio_modo?: "BATCH" | "SYNC";
@@ -282,6 +284,8 @@ interface DocumentoResponse {
   sifen_last_checked_at?: string | null;
   accion?: DocumentoAccion;
   accion_detalle?: DocumentoAccionDetalle;
+  /** SPEC_REINTENTO_EMISION_CONFIRMADO_v0.1 RN-01: lo decide el backend, no la UI. */
+  puede_reintentar_emision?: boolean;
   documento_relacionado_id: string | null;
   nce_motivo: string | null;
   /** Quien emitio el documento. Opcional: respuestas previas al cambio no lo traen. */
@@ -2081,8 +2085,9 @@ function DocumentsView({
       const updated = await api.post<DocumentoResponse>(`/facturas/${selected.id}/retry-emission`, {});
       setSelected(updated);
       setDocuments((current) => current.map((item) => (item.id === updated.id ? updated : item)));
+      setMessage(mensajeResultadoReintento(updated));
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "No se pudo reintentar emision.");
+      setMessage(err instanceof Error ? err.message : "No se pudo reintentar la emision.");
     } finally {
       setActionLoading(false);
     }
@@ -2515,11 +2520,16 @@ function DocumentsView({
                 <div className={`accion-banner ${accionBannerClass(selected.accion)}`}>
                   <p className="accion-banner-titulo">{selected.accion_detalle.titulo}</p>
                   <p className="accion-banner-descripcion">{selected.accion_detalle.descripcion}</p>
-                  {selected.accion_detalle.acciones_sugeridas.length > 0 ? (
+                  {selected.accion_detalle.acciones_sugeridas.length > 0 || puedeVerificarAhora(selected) ? (
                     <div className="accion-banner-acciones">
-                      {selected.accion_detalle.acciones_sugeridas.includes("REINTENTAR") ? (
+                      {puedeVerificarAhora(selected) ? (
+                        <button className="secondary-action" disabled={actionLoading} onClick={() => void refreshSelectedStatus()} type="button">
+                          Verificar estado fiscal
+                        </button>
+                      ) : null}
+                      {selected.accion_detalle.acciones_sugeridas.includes("REINTENTAR") && selected.puede_reintentar_emision ? (
                         <button className="secondary-action" disabled={actionLoading} onClick={() => void retrySelectedEmission()} type="button">
-                          Reintentar
+                          Reintentar emisión
                         </button>
                       ) : null}
                       {selected.accion_detalle.acciones_sugeridas.includes("CORREGIR_REEMITIR") ? (
@@ -2654,16 +2664,18 @@ function DocumentsView({
                 <summary>Opciones avanzadas</summary>
                 <div className="result-actions">
                   <span>
-                    <button className="secondary-action" disabled={actionLoading || !selected.cdc} onClick={() => void refreshSelectedStatus()} type="button">
+                    <button className="secondary-action" disabled={actionLoading || !(selected.document_uuid || selected.cdc)} onClick={() => void refreshSelectedStatus()} type="button">
                       Verificar estado fiscal
                     </button>
                     {selected.sifen_last_checked_at ? (
                       <small className="muted"> Última verificación automática: {formatUltimaVerificacion(selected.sifen_last_checked_at)}</small>
                     ) : null}
                   </span>
-                  <button className="secondary-action" disabled={actionLoading || !["PENDIENTE_SIFEN", "ERROR_TEMPORAL"].includes(selected.estado)} onClick={() => void retrySelectedEmission()} type="button">
-                    Volver a verificar
-                  </button>
+                  {selected.puede_reintentar_emision ? (
+                    <button className="secondary-action" disabled={actionLoading} onClick={() => void retrySelectedEmission()} type="button">
+                      Reintentar emisión
+                    </button>
+                  ) : null}
                   <button className="secondary-action" disabled={actionLoading} onClick={() => void loadDeliveryFor(selected, true)} type="button">
                     Crear nuevo enlace
                   </button>
@@ -4247,6 +4259,7 @@ function InvoiceEditor({
     try {
       const result = await api.post<DocumentoResponse>(`/facturas/${emittedDocumento.id}/retry-emission`, {});
       setEmittedDocumento(result);
+      setDeliveryMessage(mensajeResultadoReintento(result));
     } catch (error) {
       setEmissionError(error instanceof Error ? error.message : "No se pudo reintentar la emision.");
     } finally {
@@ -5153,20 +5166,17 @@ function InvoiceEditor({
               </button>
               <button
                 className="secondary-action"
-                disabled={emitting || !emittedDocumento.cdc}
+                disabled={emitting || !(emittedDocumento.document_uuid || emittedDocumento.cdc)}
                 onClick={() => void refreshEmittedDocumento()}
                 type="button"
               >
-                Consultar estado fiscal
+                Verificar estado fiscal
               </button>
-              <button
-                className="secondary-action"
-                disabled={emitting || !["PENDIENTE_SIFEN", "ERROR_TEMPORAL"].includes(emittedDocumento.estado)}
-                onClick={() => void retryEmittedDocumento()}
-                type="button"
-              >
-                Reintentar validacion
-              </button>
+              {emittedDocumento.puede_reintentar_emision ? (
+                <button className="secondary-action" disabled={emitting} onClick={() => void retryEmittedDocumento()} type="button">
+                  Reintentar emisión
+                </button>
+              ) : null}
             </div>
           </details>
 
@@ -5387,6 +5397,18 @@ function formatShortDate(value: string | null): string {
     return "-";
   }
   return date.toLocaleDateString("es-PY");
+}
+
+/** RN-08: con identidad fiscal y aun sin respuesta de SIFEN, el operador puede adelantarse al worker. */
+function puedeVerificarAhora(documento: DocumentoResponse): boolean {
+  return (documento.estado === "EMITIENDO" || documento.estado === "PENDIENTE_SIFEN") && Boolean(documento.document_uuid || documento.cdc);
+}
+
+/** RN-03: el backend solo reencola con confirmacion de FE; si FE ya lo tenia, devuelve el estado refrescado. */
+function mensajeResultadoReintento(documento: DocumentoResponse): string {
+  return documento.estado === "EMITIENDO"
+    ? "Reintento de emisión enviado."
+    : "La factura ya había llegado a facturación electrónica. Actualizamos su estado.";
 }
 
 function formatUltimaVerificacion(iso: string): string {

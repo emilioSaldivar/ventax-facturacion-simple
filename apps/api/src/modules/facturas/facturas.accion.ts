@@ -23,7 +23,29 @@ export type DeriveAccionInput = Pick<
   | "sifen_result_message"
   | "sifen_last_checked_at"
   | "created_at"
->;
+> & {
+  /**
+   * Opcional a proposito (PLAN_REINTENTO_EMISION_CONFIRMADO_v0.1 §1): el conteo de salud
+   * fiscal del backoffice arma este input a mano y no lo necesita. Sin el, ningun documento
+   * es candidato a reintento, que es el lado seguro.
+   */
+  fiscal_status?: Record<string, unknown> | null;
+};
+
+/**
+ * Candidato a "Reintentar emision" (SPEC_REINTENTO_EMISION_CONFIRMADO_v0.1, RN-01): FE nunca
+ * le asigno identidad y el ultimo intento del outbox fallo (failPendingEmission deja `code`).
+ * Un documento con `document_uuid` o `cdc` ya llego a FE: lo que corresponde es verificar.
+ * Ser candidato no autoriza a reencolar: el servicio confirma con FE antes (RN-02).
+ */
+export function puedeReintentarEmision(documento: DeriveAccionInput): boolean {
+  return (
+    (documento.estado === "ERROR_TEMPORAL" || documento.estado === "PENDIENTE_SIFEN") &&
+    !documento.document_uuid &&
+    !documento.cdc &&
+    typeof documento.fiscal_status?.code === "string"
+  );
+}
 
 /**
  * Deriva el estado de accion "intuitivo" (SPEC_BACKOFFICE_ALINEACION_FE_v0.2, seccion 2.4)
@@ -97,7 +119,7 @@ export function deriveAccion(documento: DeriveAccionInput): { accion: DocumentoA
         accion_detalle: {
           titulo: "Reintentando envío",
           descripcion: "Hubo un error técnico temporal. El sistema sigue reintentando el envío automáticamente.",
-          acciones_sugeridas: ["REINTENTAR"],
+          acciones_sugeridas: puedeReintentarEmision(documento) ? ["REINTENTAR"] : [],
           soporte_payload: null
         }
       };
@@ -149,11 +171,15 @@ function buildTerminalDetalle(documento: DeriveAccionInput): DocumentoAccionDeta
 
 function buildEnProcesoDetalle(documento: DeriveAccionInput): DocumentoAccionDetalle {
   const lastChecked = documento.sifen_last_checked_at ? formatRelativeCheckedAt(documento.sifen_last_checked_at) : null;
+  // RN-08: con identidad fiscal el operador puede adelantarse a la verificacion automatica.
+  const cierre = documento.document_uuid || documento.cdc
+    ? "Si ya debería estar aprobada, podés verificar ahora."
+    : "No necesitás hacer nada.";
   return {
     titulo: "Verificación automática en curso",
     descripcion: lastChecked
-      ? `Estamos verificando el estado fiscal automáticamente. Última verificación: ${lastChecked}. No necesitás hacer nada.`
-      : "Estamos verificando el estado fiscal automáticamente. No necesitás hacer nada.",
+      ? `Estamos verificando el estado fiscal automáticamente. Última verificación: ${lastChecked}. ${cierre}`
+      : `Estamos verificando el estado fiscal automáticamente. ${cierre}`,
     acciones_sugeridas: [],
     soporte_payload: null
   };

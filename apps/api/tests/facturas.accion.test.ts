@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { deriveAccion } from "../src/modules/facturas/facturas.accion";
+import { deriveAccion, puedeReintentarEmision } from "../src/modules/facturas/facturas.accion";
 import { resolveCausaSifen } from "../src/modules/facturas/sifen-causa-catalogo";
 import type { DocumentoResponse, DocumentoEstado } from "../src/modules/facturas/facturas.types";
 
@@ -155,5 +155,50 @@ describe("deriveAccion", () => {
       const { accion } = deriveAccion(buildDocumento({ estado }));
       expect(permitidos.has(accion)).toBe(true);
     }
+  });
+});
+
+describe("puedeReintentarEmision (SPEC_REINTENTO_EMISION_CONFIRMADO_v0.1 RN-01)", () => {
+  const noRecibido: Partial<DocumentoResponse> = {
+    estado: "ERROR_TEMPORAL",
+    document_uuid: null,
+    cdc: null,
+    fiscal_status: { code: "UPSTREAM_ERROR", recoverable: true }
+  };
+
+  it("es candidato si FE nunca le asigno identidad y el ultimo intento fallo", () => {
+    expect(puedeReintentarEmision(buildDocumento(noRecibido))).toBe(true);
+    expect(puedeReintentarEmision(buildDocumento({ ...noRecibido, estado: "PENDIENTE_SIFEN" }))).toBe(true);
+  });
+
+  it.each([
+    ["con document_uuid", { document_uuid: "11111111-1111-4111-8111-111111111111" }],
+    ["con cdc", { cdc: "0".repeat(44) }],
+    ["sin fallo registrado", { fiscal_status: null }],
+    ["sin fiscal_status en el input", { fiscal_status: undefined }],
+    ["EMITIDA", { estado: "EMITIDA" as DocumentoEstado }],
+    ["EMITIENDO", { estado: "EMITIENDO" as DocumentoEstado }]
+  ])("no es candidato %s", (_caso, overrides) => {
+    expect(puedeReintentarEmision(buildDocumento({ ...noRecibido, ...overrides }))).toBe(false);
+  });
+
+  it("deriveAccion sugiere REINTENTAR solo para candidatos", () => {
+    const reciente = new Date().toISOString();
+    const candidato = deriveAccion(buildDocumento({ ...noRecibido, created_at: reciente }));
+    expect(candidato.accion_detalle.acciones_sugeridas).toEqual(["REINTENTAR"]);
+
+    const yaRecibido = deriveAccion(
+      buildDocumento({ ...noRecibido, created_at: reciente, document_uuid: "11111111-1111-4111-8111-111111111111" })
+    );
+    expect(yaRecibido.accion).toBe("EN_PROCESO");
+    expect(yaRecibido.accion_detalle.acciones_sugeridas).toEqual([]);
+  });
+
+  it("invita a verificar ahora solo si el documento tiene identidad fiscal (RN-08)", () => {
+    const conUuid = deriveAccion(buildDocumento({ estado: "PENDIENTE_SIFEN" }));
+    expect(conUuid.accion_detalle.descripcion).toContain("podés verificar ahora");
+
+    const sinIdentidad = deriveAccion(buildDocumento({ estado: "EMITIENDO", document_uuid: null, cdc: null }));
+    expect(sinIdentidad.accion_detalle.descripcion).toContain("No necesitás hacer nada");
   });
 });

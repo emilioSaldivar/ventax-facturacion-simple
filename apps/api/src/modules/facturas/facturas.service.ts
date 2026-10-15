@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import { calculateDocumentTotals, type TaxInputLine } from "@facturacion-simple/shared";
 import { HttpError } from "../../shared/errors/http-error";
 import { logger } from "../../shared/logging/logger";
-import { deriveAccion } from "./facturas.accion";
+import { deriveAccion, puedeReintentarEmision } from "./facturas.accion";
 import { notifyAccionRequerida } from "./facturas.notificaciones";
 import type { ClienteRepository, ClienteResponse } from "../clientes/clientes.types";
 import type { OperationalContextRepository, OperationalContextResponse } from "../context/context.types";
@@ -12,7 +12,9 @@ import {
   type FiscalEmitFacturaRequest,
   type FiscalEmitFacturaResponse,
   type FiscalEmitNotaCreditoRequest,
-  type FiscalEmitNotaCreditoResponse
+  type FiscalEmitNotaCreditoResponse,
+  type FiscalIdempotencyReconciliationItem,
+  type FiscalIdempotencyReconciliationItemResult
 } from "../fiscal-gateway/fiscal-gateway.types";
 import type {
   BatchPendientesGestionResponse,
@@ -138,7 +140,7 @@ export async function listDocumentos(
 
 function withAccion(documento: DocumentoResponse): DocumentoResponse {
   const { accion, accion_detalle } = deriveAccion(documento);
-  return { ...documento, accion, accion_detalle };
+  return { ...documento, accion, accion_detalle, puede_reintentar_emision: puedeReintentarEmision(documento) };
 }
 
 export async function listNotaCreditoCandidates(
@@ -309,28 +311,165 @@ export async function refreshFiscalStatusForDocumento(
   }
 }
 
+/** FE limita la conciliacion por idempotencia a rangos de 7 dias (guia de consumidores, 10.2). */
+const VENTANA_IDEMPOTENCIA_MS = 7 * 24 * 60 * 60 * 1000;
+const MARGEN_IDEMPOTENCIA_MS = 5 * 60 * 1000;
+
+/**
+ * Ventanas a consultar (PLAN_REINTENTO_EMISION_CONFIRMADO_v0.1 §2.2): la de creacion y, si el
+ * documento tiene mas de 7 dias, tambien los ultimos 7 dias, porque un reintento manual
+ * posterior pudo haber creado el documento en FE fuera de la primera ventana.
+ */
+export function ventanasIdempotencia(createdAt: Date, now: Date): Array<{ from: Date; to: Date }> {
+  const from = new Date(createdAt.getTime() - MARGEN_IDEMPOTENCIA_MS);
+  const to = new Date(Math.min(now.getTime(), from.getTime() + VENTANA_IDEMPOTENCIA_MS));
+  const ventanas = [{ from, to }];
+  if (now.getTime() - createdAt.getTime() > VENTANA_IDEMPOTENCIA_MS) {
+    ventanas.push({ from: new Date(now.getTime() - VENTANA_IDEMPOTENCIA_MS), to: now });
+  }
+  return ventanas;
+}
+
+export interface RetryEmisionDeps {
+  /** Gateway con la clave de consumidor del facturador: `/conciliacion/idempotency` la exige. */
+  consumerGateway: FiscalGateway;
+  /** Gateway con la clave compartida: `/documentos/:uuid/sifen` la exige. */
+  sharedGateway: FiscalGateway;
+  feEnv: "test" | "prod";
+  now?: () => Date;
+}
+
+/**
+ * "Reintentar emision" (SPEC_REINTENTO_EMISION_CONFIRMADO_v0.1): solo para documentos que FE
+ * nunca recibio, y solo despues de que FE lo confirme por idempotencia. Nunca reencola a ciegas.
+ */
 export async function retryDocumentoEmission(
   context: OperationalContextResponse,
   documentoId: string,
-  repository: FacturaRepository
+  repository: FacturaRepository,
+  deps: RetryEmisionDeps
 ): Promise<DocumentoResponse> {
   const documento = await getDocumentoById(context, documentoId, repository);
 
-  if (!["PENDIENTE_SIFEN", "ERROR_TEMPORAL"].includes(documento.estado)) {
+  // RN-05: un documento con identidad fiscal ya llego a FE.
+  if (!puedeReintentarEmision(documento)) {
+    if (documento.document_uuid || documento.cdc) {
+      throw new HttpError(
+        409,
+        "CONFLICT",
+        "Este documento ya fue recibido por facturacion electronica. Usa 'Verificar estado fiscal'."
+      );
+    }
     throw new HttpError(409, "CONFLICT", "Solo documentos con error temporal o pendiente SIFEN pueden reintentarse.");
   }
 
-  const retried = await repository.retryPendingEmission({
-    facturadorId: context.facturador.id,
-    documentoId,
-    requestedBy: context.user.id
-  });
-
-  if (!retried) {
-    throw new HttpError(409, "CONFLICT", "El documento no tiene una emision fiscal recuperable en cola.");
+  const idempotencyKey = documento.external_ref;
+  if (!idempotencyKey) {
+    throw new HttpError(409, "CONFLICT", "No pudimos confirmar la emision de esta factura. Contacta a soporte.", {
+      motivo: "REQUIERE_SOPORTE",
+      result: "SIN_IDEMPOTENCY_KEY"
+    });
   }
 
-  return withAccion(retried);
+  const confirmacion = await confirmarRecepcionFiscal(context, documento, idempotencyKey, deps);
+
+  if (confirmacion.result === "NOT_IMPACTED") {
+    const retried = await repository.retryPendingEmission({
+      facturadorId: context.facturador.id,
+      documentoId,
+      requestedBy: context.user.id
+    });
+    if (!retried) {
+      throw new HttpError(409, "CONFLICT", "La emision ya se esta procesando. Espera unos segundos y verifica el estado.");
+    }
+    return withAccion(retried);
+  }
+
+  if (confirmacion.result === "IMPACTED" && confirmacion.item?.document_uuid) {
+    const item = confirmacion.item;
+    const adoptado = await repository.adoptarDocumentoFiscalExistente({
+      facturadorId: context.facturador.id,
+      documentoId,
+      requestedBy: context.user.id,
+      documentUuid: item.document_uuid as string,
+      fiscalDocumentId: item.document_id,
+      cdc: item.current_cdc,
+      numeroFiscal: item.nro_factura,
+      fiscalStatus: {
+        action: "ADOPTED_FROM_IDEMPOTENCY",
+        requested_by: context.user.id,
+        idempotency: { ...item }
+      }
+    });
+    if (!adoptado) {
+      throw new HttpError(409, "CONFLICT", "El documento cambio mientras se procesaba. Recarga y verifica el estado.");
+    }
+
+    try {
+      const refrescado = await refreshFiscalStatusForDocumento(context.facturador.id, documentoId, repository, deps.sharedGateway);
+      return withAccion(refrescado);
+    } catch (error) {
+      // El documento ya quedo adoptado y agendado: el worker lo verifica en 5 minutos.
+      logger.warn({ err: error, documentoId }, "reintento de emision: refresh posterior a la adopcion fallo");
+      return withAccion(adoptado);
+    }
+  }
+
+  // DUPLICATE_CONFLICT, INVALID_KEY o IMPACTED sin uuid: no hay forma segura de seguir (RN-04).
+  throw new HttpError(409, "CONFLICT", "No pudimos confirmar la emision de esta factura. Contacta a soporte.", {
+    motivo: "REQUIERE_SOPORTE",
+    result: confirmacion.result,
+    idempotency_key: idempotencyKey
+  });
+}
+
+async function confirmarRecepcionFiscal(
+  context: OperationalContextResponse,
+  documento: DocumentoResponse,
+  idempotencyKey: string,
+  deps: RetryEmisionDeps
+): Promise<{ result: FiscalIdempotencyReconciliationItemResult; item: FiscalIdempotencyReconciliationItem | null }> {
+  const now = deps.now?.() ?? new Date();
+  const createdAt = documento.created_at ? new Date(documento.created_at) : now;
+
+  for (const ventana of ventanasIdempotencia(createdAt, now)) {
+    let item: FiscalIdempotencyReconciliationItem | undefined;
+    try {
+      const response = await deps.consumerGateway.reconcileByIdempotencyKeys({
+        emisorId: context.facturador.emisor_id,
+        env: deps.feEnv,
+        from: ventana.from.toISOString(),
+        to: ventana.to.toISOString(),
+        idempotencyKeys: [idempotencyKey]
+      });
+      item = response.items.find((candidato) => candidato.idempotency_key === idempotencyKey);
+    } catch (error) {
+      if (error instanceof FiscalGatewayError) {
+        logger.warn({ documentoId: documento.id, gateway_code: error.code }, "reintento de emision: conciliacion por idempotencia no disponible");
+        throw new HttpError(
+          503,
+          "INTERNAL_ERROR",
+          "No pudimos confirmar con facturacion electronica si la factura llego. Intenta de nuevo en unos minutos.",
+          { motivo: "CONFIRMACION_NO_DISPONIBLE", gateway_code: error.code }
+        );
+      }
+      throw error;
+    }
+
+    if (!item) {
+      throw new HttpError(
+        503,
+        "INTERNAL_ERROR",
+        "No pudimos confirmar con facturacion electronica si la factura llego. Intenta de nuevo en unos minutos.",
+        { motivo: "CONFIRMACION_NO_DISPONIBLE", gateway_code: "INVALID_RESPONSE" }
+      );
+    }
+    if (item.result !== "NOT_IMPACTED") {
+      return { result: item.result, item };
+    }
+  }
+
+  return { result: "NOT_IMPACTED", item: null };
 }
 
 /**

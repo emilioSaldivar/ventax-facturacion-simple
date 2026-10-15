@@ -6,7 +6,10 @@ import { clienteNaturalezaTipos, documentoIdentidadTipos } from "../clientes/cli
 import { operationalContextRepository } from "../context/context.repository";
 import { getOperationalContext } from "../context/context.service";
 import { validateRequest } from "../../shared/validation/validate-request";
-import { fiscalGateway } from "../fiscal-gateway/fiscal-gateway.client";
+import { createFiscalGateway, fiscalGateway } from "../fiscal-gateway/fiscal-gateway.client";
+import { buildFiscalGatewayConfig } from "../fiscal-gateway/fiscal-gateway.config";
+import type { FiscalGateway } from "../fiscal-gateway/fiscal-gateway.types";
+import { env } from "../../config/env";
 import { facturasRepository } from "./facturas.repository";
 import {
   cancelDocumento,
@@ -125,6 +128,16 @@ const voidNumberSchema = z.object({
 const notaCreditoSchema = z.object({
   motivo: z.string().trim().min(1).max(300)
 });
+
+/**
+ * `/conciliacion/idempotency` exige la clave de consumidor del facturador, a diferencia de
+ * `/documentos/*`, que exige la compartida (SPEC_REINTENTO_EMISION_CONFIRMADO_v0.1 RN-09).
+ * Mismo mecanismo que recibos.routes.ts.
+ */
+async function resolveConsumerGateway(facturadorId: string): Promise<FiscalGateway> {
+  const apiKey = await facturasRepository.getFacturadorApiKey(facturadorId);
+  return apiKey ? createFiscalGateway({ ...buildFiscalGatewayConfig(env), apiKey }) : fiscalGateway;
+}
 
 export const facturasRouter = Router();
 
@@ -371,7 +384,11 @@ facturasRouter.post(
   async (req, res, next) => {
     try {
       const context = await getOperationalContext(req.user!.id, operationalContextRepository);
-      const result = await retryDocumentoEmission(context, String(req.params.documentoId), facturasRepository);
+      const result = await retryDocumentoEmission(context, String(req.params.documentoId), facturasRepository, {
+        consumerGateway: await resolveConsumerGateway(context.facturador.id),
+        sharedGateway: fiscalGateway,
+        feEnv: env.FE_API_ENV
+      });
       res.json(result);
     } catch (error) {
       next(error);

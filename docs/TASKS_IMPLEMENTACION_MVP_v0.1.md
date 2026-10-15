@@ -303,3 +303,13 @@ protegidos en el re-import, API key obligatoria en el import y en la asignación
 parcial del backoffice corregido. Validación: `typecheck`/`lint`/`build`/`qa:no-secrets` en verde;
 403 tests (mismos 6 fallos preexistentes de `entrega`/`facturas`); 17/17 de integración con Postgres;
 circuito HTTP 20/20 sobre `bash scripts/deploy.sh`; Playwright 46/46 en mobile y desktop.
+
+## Referencia de evidencia — Reintento de emision confirmado v0.1 (2026-10-15)
+
+Matriz y evidencia en `docs/TASKS_REINTENTO_EMISION_CONFIRMADO_v0.1.md` (REC-000 a REC-012 DONE).
+"Reintentar emision" solo aparece para documentos que FE nunca recibio, y el backend confirma con
+`/v1/conciliacion/idempotency` antes de reencolar; si FE ya lo tenia, adopta su UUID y CDC. "Verificar
+estado fiscal" aparece en el aviso del documento. Validacion: `typecheck`/`lint`/`build` en verde;
+419 tests (mismos 6 fallos preexistentes); integracion con Postgres 3/3; Playwright 20/20 en mobile
+390x844 y desktop 1280x800 sobre contenedores con FE mock (desvio de build por DNS de Docker
+documentado en la matriz).
