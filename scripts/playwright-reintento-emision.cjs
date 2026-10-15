@@ -84,12 +84,15 @@ async function main() {
     check(vp.nombre, "a", "sin 'Reintentar emisión' en ninguna parte", await contarBoton(page, "Reintentar emisión") === 0);
     check(vp.nombre, "a", "sin etiquetas viejas",
       await contarBoton(page, "Volver a verificar") === 0 && await contarBoton(page, "Reintentar validacion") === 0 && await contarBoton(page, "Reintentar") === 0);
+    check(vp.nombre, "a", "un solo 'Verificar estado fiscal' en pantalla (RN-10)", await contarBoton(page, "Verificar estado fiscal") === 1);
     await page.screenshot({ path: path.join(outDir, `reintento-a-antes-${vp.nombre}.png`), fullPage: true });
 
     await banner.getByRole("button", { name: "Verificar estado fiscal" }).click();
     const emitida = await page.locator(".accion-banner", { hasText: "Factura emitida" }).first()
       .waitFor({ timeout: 15000 }).then(() => true).catch(() => false);
     check(vp.nombre, "a", "tras verificar, el documento queda emitido", emitida);
+    await abrirOpcionesAvanzadas(page);
+    check(vp.nombre, "a", "emitida: sin 'Verificar estado fiscal' (RN-10)", await contarBoton(page, "Verificar estado fiscal") === 0);
     await page.screenshot({ path: path.join(outDir, `reintento-a-despues-${vp.nombre}.png`), fullPage: true });
 
     // (b) FE nunca lo recibio: reintentar emision, con confirmacion del backend.

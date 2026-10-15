@@ -138,3 +138,13 @@ Hace una transaccion analoga a `completePendingEmission`:
 - **Frontend:** el tipo `DocumentoResponse` de `web-operacion` no tenia `document_uuid` aunque la API lo devuelve. Se agrego como opcional para habilitar "Verificar estado fiscal" por UUID.
 - **Tests de ruta:** `facturas.routes.test.ts` solo prueba schemas y no hay infraestructura HTTP con fakes. La ruta se valido por HTTP sobre los contenedores (REC-006 y REC-012).
 - **Fakes:** `apps/api/tsconfig.json` incluye solo `src`, asi que los fakes de los tests no se verifican contra la interfaz. Solo el fake de `facturas.service.test.ts` necesita los metodos nuevos. Los fakes de `entrega`, `verificacion.worker`, `notificaciones` y `auth.roles` no los usan y no se tocaron.
+
+## 7. RN-10: un solo "Verificar estado fiscal" (2026-10-15)
+
+Solo frontend (`apps/web-operacion/src/main.tsx`). No hay cambios de API ni de contrato.
+
+- Nuevo helper de modulo `esEstadoFinalOperador(estado)`, que es `true` para `EMITIDA`, `ANULADA` y `CANCELADO_LOCAL`.
+- Nuevo helper `verificarEnOpcionesAvanzadas(doc)`, que es `Boolean(doc.document_uuid || doc.cdc) && !puedeVerificarAhora(doc) && !esEstadoFinalOperador(doc.estado)`.
+- **Detalle, "Opciones avanzadas":** el boton se renderiza solo si `verificarEnOpcionesAvanzadas(selected)`. La leyenda de ultima verificacion se renderiza siempre que haya `sifen_last_checked_at`.
+- **Pantalla posterior a emitir:** el boton se renderiza si `Boolean(uuid || cdc) && !esEstadoFinalOperador(estado)`, porque no hay aviso que lo duplique.
+- **Validacion:** se extiende `scripts/playwright-reintento-emision.cjs`. En (a), antes de verificar, hay exactamente 1 "Verificar estado fiscal" en la pantalla; despues de verificar, que deja el documento `EMITIDA`, hay 0. En (b) no cambia nada.

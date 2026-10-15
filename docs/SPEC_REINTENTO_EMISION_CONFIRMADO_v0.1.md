@@ -85,9 +85,20 @@ Cada consumidor de FE asociado a un facturador activo debe tener el permiso `IDE
 - **CA-03:** el mismo documento con FE `IMPACTED` no se reencola. Queda con `document_uuid` y `cdc` de FE, outbox `DONE` y estado refrescado, y la UI muestra el mensaje de RN-03.
 - **CA-04:** si la consulta de idempotencia falla, la respuesta es `503` (`details.motivo = CONFIRMACION_NO_DISPONIBLE`), no se reencola y la UI muestra el mensaje de RN-04.
 - **CA-05:** el detalle de un documento `PENDIENTE_SIFEN` con UUID muestra "Verificar estado fiscal" en el banner, y al presionarlo el estado se actualiza.
+- **CA-07:** "Verificar estado fiscal" aparece una sola vez por pantalla, y nunca en documentos `EMITIDA`, `ANULADA` o `CANCELADO_LOCAL` (RN-10).
 - **CA-06:** ya no existen en la UI las etiquetas "Volver a verificar", "Reintentar validacion" ni "Reintentar" sin calificar.
 
 ## Ajustes Durante La Implementacion (2026-10-15)
 
 - **Codigos de error:** `ApiErrorCode` (`packages/shared`) es un conjunto cerrado que comparten API y frontend. En lugar de agregar `REQUIERE_SOPORTE` y `CONFIRMACION_NO_DISPONIBLE` como codigos nuevos, se usan los existentes (`CONFLICT` con 409 e `INTERNAL_ERROR` con 503) y el motivo viaja en `details.motivo`. El frontend muestra el `message` igual que antes.
 - **Sin `external_ref`:** si el documento no tiene clave de idempotencia, no se puede confirmar con FE. Responde `409` con `details.motivo = REQUIERE_SOPORTE` y `details.result = SIN_IDEMPOTENCY_KEY`.
+
+## RN-10 — Un solo "Verificar estado fiscal" (agregado 2026-10-15, tras validacion del usuario en prod)
+
+Hallazgo del usuario en el uso real: en un documento en proceso, "Verificar estado fiscal" aparecia dos veces, en el aviso y en "Opciones avanzadas". En documentos ya emitidos seguia en "Opciones avanzadas" sin aportar nada.
+
+- **Documento en `EMITIENDO` o `PENDIENTE_SIFEN` con identidad fiscal:** el boton aparece **solo en el aviso** (RN-08).
+- **Documento `EMITIDA`, `ANULADA` o `CANCELADO_LOCAL`:** el boton **no aparece**. El estado es final para el operador, y la verificacion automatica ya no lo agenda.
+- **Cualquier otro estado con identidad fiscal** (por ejemplo `RECHAZADA` o `ERROR_TEMPORAL` con UUID): el boton queda en "Opciones avanzadas", como hasta ahora.
+- La leyenda "Ultima verificacion automatica: ..." se sigue mostrando en "Opciones avanzadas" aunque el boton no este ahi.
+- La pantalla posterior a emitir aplica la misma regla. Esa pantalla no tiene aviso de accion, asi que el boton se muestra para `EMITIENDO`/`PENDIENTE_SIFEN` con identidad y para los demas estados no finales con identidad.

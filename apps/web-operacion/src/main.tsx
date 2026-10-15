@@ -2664,9 +2664,11 @@ function DocumentsView({
                 <summary>Opciones avanzadas</summary>
                 <div className="result-actions">
                   <span>
-                    <button className="secondary-action" disabled={actionLoading || !(selected.document_uuid || selected.cdc)} onClick={() => void refreshSelectedStatus()} type="button">
-                      Verificar estado fiscal
-                    </button>
+                    {verificarEnOpcionesAvanzadas(selected) ? (
+                      <button className="secondary-action" disabled={actionLoading} onClick={() => void refreshSelectedStatus()} type="button">
+                        Verificar estado fiscal
+                      </button>
+                    ) : null}
                     {selected.sifen_last_checked_at ? (
                       <small className="muted"> Última verificación automática: {formatUltimaVerificacion(selected.sifen_last_checked_at)}</small>
                     ) : null}
@@ -5164,14 +5166,11 @@ function InvoiceEditor({
               >
                 Regenerar enlace
               </button>
-              <button
-                className="secondary-action"
-                disabled={emitting || !(emittedDocumento.document_uuid || emittedDocumento.cdc)}
-                onClick={() => void refreshEmittedDocumento()}
-                type="button"
-              >
-                Verificar estado fiscal
-              </button>
+              {(emittedDocumento.document_uuid || emittedDocumento.cdc) && !esEstadoFinalOperador(emittedDocumento.estado) ? (
+                <button className="secondary-action" disabled={emitting} onClick={() => void refreshEmittedDocumento()} type="button">
+                  Verificar estado fiscal
+                </button>
+              ) : null}
               {emittedDocumento.puede_reintentar_emision ? (
                 <button className="secondary-action" disabled={emitting} onClick={() => void retryEmittedDocumento()} type="button">
                   Reintentar emisión
@@ -5402,6 +5401,16 @@ function formatShortDate(value: string | null): string {
 /** RN-08: con identidad fiscal y aun sin respuesta de SIFEN, el operador puede adelantarse al worker. */
 function puedeVerificarAhora(documento: DocumentoResponse): boolean {
   return (documento.estado === "EMITIENDO" || documento.estado === "PENDIENTE_SIFEN") && Boolean(documento.document_uuid || documento.cdc);
+}
+
+/** RN-10: estados en los que verificar ya no le aporta nada al operador. */
+function esEstadoFinalOperador(estado: DocumentoEstado): boolean {
+  return estado === "EMITIDA" || estado === "ANULADA" || estado === "CANCELADO_LOCAL";
+}
+
+/** RN-10: en proceso el boton vive en el aviso; aca solo para otros estados no finales con identidad. */
+function verificarEnOpcionesAvanzadas(documento: DocumentoResponse): boolean {
+  return Boolean(documento.document_uuid || documento.cdc) && !puedeVerificarAhora(documento) && !esEstadoFinalOperador(documento.estado);
 }
 
 /** RN-03: el backend solo reencola con confirmacion de FE; si FE ya lo tenia, devuelve el estado refrescado. */
