@@ -10,7 +10,7 @@
 
 - `SPEC`: DONE (2026-10-14)
 - `PLAN`: DONE (2026-10-14)
-- `TASKS`: REC-000 a REC-012 DONE. REC-013 con staging DONE y prod pendiente. REC-014 (cierre) PENDIENTE.
+- `TASKS`: REC-000 a REC-013 DONE. REC-014 (cierre) PENDIENTE de la validacion manual del usuario en prod.
 
 ## Matriz
 
@@ -29,7 +29,7 @@
 | REC-010 | Frontend | `main.tsx`, "Opciones avanzadas": "Volver a verificar" pasa a "Reintentar emision" y solo se renderiza si es candidato; "Verificar estado fiscal" se habilita con `document_uuid \|\| cdc` | DONE (2026-10-15) | Cubierto por REC-012 |
 | REC-011 | Frontend | `main.tsx`, pantalla posterior a emitir: "Verificar estado fiscal" y "Reintentar emision" con las mismas reglas; mensajes de resultado del reintento (encolado o adoptado) | DONE (2026-10-15) | `npm run typecheck` y `npm run build` de `web-operacion` limpios. `grep` sin "Volver a verificar", "Reintentar validacion" ni `>Reintentar<` (CA-06) |
 | REC-012 | QA visual | Playwright contra el stack de `bash scripts/deploy.sh` (FE mock), en mobile 390x844 y desktop 1280x800: (a) `PENDIENTE_SIFEN` con UUID muestra "Verificar estado fiscal" en el banner y no muestra "Reintentar emision"; al presionarlo, el estado se actualiza. (b) `ERROR_TEMPORAL` sin identidad con fallo registrado muestra "Reintentar emision"; al presionarlo queda `EMITIENDO` | DONE (2026-10-15) | Escenarios, viewports y resultado de Playwright registrados en Evidencia y en `docs/TASKS_IMPLEMENTACION_MVP_v0.1.md` |
-| REC-013 | Deploy | Deploy a staging (`APP_ENV_FILE=.env.staging bash scripts/deploy.sh`) y smoke en un documento real `PENDIENTE_SIFEN`; luego prod con autorizacion explicita del usuario | PARTIAL (staging DONE 2026-10-15; prod pendiente de OK del usuario) | Healthcheck OK y escenario (a) de REC-012 reproducido en staging. Prod solo tras OK del usuario |
+| REC-013 | Deploy | Deploy a staging (`APP_ENV_FILE=.env.staging bash scripts/deploy.sh`) y smoke en un documento real `PENDIENTE_SIFEN`; luego prod con autorizacion explicita del usuario | DONE (staging y prod 2026-10-15) | Healthcheck OK y escenario (a) de REC-012 reproducido en staging. Prod solo tras OK del usuario |
 | REC-014 | Cierre | Repasar SPEC/PLAN/TASKS contra la implementacion real y registrar desvios | PENDIENTE | Documentos actualizados, sin desvios sin documentar |
 
 ## Orden De Ejecucion Y Agrupacion De Validaciones
@@ -69,3 +69,4 @@
   - `APP_ENV_FILE=.env.staging bash scripts/deploy.sh`: api healthy con `APP_VERSION=9d4977f` y 0 errores en el log. No hay migraciones.
   - **Llamada real** a `POST /v1/conciliacion/idempotency` desde el contenedor `api`, con el gateway desplegado y la clave de consumidor del facturador (sin imprimirla): la ultima factura de staging con UUID da `IMPACTED` con el mismo `document_uuid` que guarda el SaaS, y una clave inexistente (`fac_000...`) da `NOT_IMPACTED`. Esto confirma el permiso `IDEMPOTENCY_RECONCILE` y el contrato contra el FE real (cierra la parte pendiente de REC-000).
   - **Produccion:** corre `87579b6`. Entre esa version y `9d4977f` estan tambien la segmentacion F0-F3 y las migraciones `0033`/`0034` (backfill), que corresponden a SEG-037 y su runbook. El deploy a prod queda pendiente de decision del usuario.
+- 2026-10-15: REC-013, produccion. Desplegado junto con SEG-037 e import v0.3, version `dc97ae4` (detalle en `TASKS_SEGMENTACION_PERFIL_EMISION_v0.1.md`, SEG-037). El analisis previo mostro 0 documentos de prod candidatos a "Reintentar emision" y 98 `PENDIENTE_SIFEN` ya recibidos por FE que pasan de "Volver a verificar" (que fallaba) a "Verificar estado fiscal". Consulta de idempotencia real contra FE prod: la clave de consumidor de los 6 facturadores es aceptada para su emisor.

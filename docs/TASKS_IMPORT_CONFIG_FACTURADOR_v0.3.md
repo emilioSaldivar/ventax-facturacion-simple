@@ -80,6 +80,6 @@ todo ──▶ IV3-020 ──▶ IV3-021 ──▶ IV3-022 ──▶ IV3-023
 | Fecha | Ambiente | Detalle | Estado |
 |---|---|---|---|
 | 2026-10-15 | Staging (`ventax-facturacion-simple`) | Commit `a639d07`. Backup previo `facturacion_simple-20261015-202530-pre-import-v03.dump` (62 MB, 36 tablas con datos segun `pg_restore --list`). `APP_ENV_FILE=.env.staging bash scripts/deploy.sh`: api y frontend healthy, migrate sin cambios (v0.3 no trae migraciones), 0 errores en el log de la API. Smoke HTTP sobre `127.0.0.1:8091`: preview sin auth da `401`; con usuario de backoffice, el preview del fixture `fe-config-4543629-sin-perfiles.json` da `200`, genera el centinela `NO_REQUERIDO` y ya no emite `SIN_CONTEXTOS`. El unico bloqueante, `FACTURADOR_EN_OTRO_TENANT`, es correcto porque METAMORFOSIS ya existe en staging. El preview no escribe en la base. | DONE |
-| — | Produccion (`ventax-facturacion-simple-prod`) | Pendiente de confirmacion explicita del usuario | PENDING |
+| 2026-10-15 | Produccion (`ventax-facturacion-simple-prod`) | Desplegado con autorizacion del usuario, junto con SEG-037 y el reintento confirmado, version `dc97ae4`. Sin migraciones propias. Backup, controles y readiness en `TASKS_SEGMENTACION_PERFIL_EMISION_v0.1.md` (SEG-037). | DONE |
 
 Nota operativa: el 2026-10-15 la red local no llegaba a GitHub ni al puerto SSH de Hetzner. El commit se llevo a la VPS por `hetzner-jump` con un `git bundle` y se aplico como fast-forward (`git pull --ff-only`). Falta `git push` a `origin` desde local cuando vuelva la conectividad. Son los mismos commits, sin divergencia.
