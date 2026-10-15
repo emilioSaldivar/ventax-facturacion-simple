@@ -180,7 +180,8 @@ export async function updateFacturador(
   const f = await repository.updateFacturador(facturadorId, {
     razon_social: input.razon_social ? normalizeRequired(input.razon_social, "Razon social requerida.") : undefined,
     ruc: input.ruc ? normalizeRequired(input.ruc, "RUC requerido.") : undefined,
-    nombre_fantasia: "nombre_fantasia" in input ? normalizeOptional(input.nombre_fantasia) : undefined,
+    // RN-36: un campo ausente no viaja; el repositorio lo distingue con `in`.
+    ...("nombre_fantasia" in input ? { nombre_fantasia: normalizeOptional(input.nombre_fantasia) } : {}),
     activo: input.activo
   });
   if (!f) throw new HttpError(404, "NOT_FOUND", "Facturador no encontrado.");
@@ -278,7 +279,7 @@ export async function updateEstablecimiento(
 ): Promise<BackofficeEstablecimientoResponse> {
   const e = await repository.updateEstablecimiento(id, {
     nombre: input.nombre ? normalizeRequired(input.nombre, "Nombre requerido.") : undefined,
-    direccion: "direccion" in input ? normalizeOptional(input.direccion) : undefined,
+    ...("direccion" in input ? { direccion: normalizeOptional(input.direccion) } : {}),
     activo: input.activo
   });
   if (!e) throw new HttpError(404, "NOT_FOUND", "Establecimiento no encontrado.");
@@ -318,7 +319,7 @@ export async function updatePunto(
   repository: BackofficeRepository
 ): Promise<BackofficePuntoResponse> {
   const p = await repository.updatePunto(id, {
-    nombre: "nombre" in input ? normalizeOptional(input.nombre) : undefined,
+    ...("nombre" in input ? { nombre: normalizeOptional(input.nombre) } : {}),
     activo: input.activo
   });
   if (!p) throw new HttpError(404, "NOT_FOUND", "Punto de expedicion no encontrado.");
@@ -359,8 +360,8 @@ export async function updateActividad(
   repository: BackofficeRepository
 ): Promise<BackofficeActividadResponse> {
   const a = await repository.updateActividad(id, {
-    descripcion: "descripcion" in input ? normalizeOptional(input.descripcion) : undefined,
-    alias_operativo: "alias_operativo" in input ? normalizeOptional(input.alias_operativo) : undefined,
+    ...("descripcion" in input ? { descripcion: normalizeOptional(input.descripcion) } : {}),
+    ...("alias_operativo" in input ? { alias_operativo: normalizeOptional(input.alias_operativo) } : {}),
     activo: input.activo
   });
   if (!a) throw new HttpError(404, "NOT_FOUND", "Actividad no encontrada.");
@@ -400,7 +401,7 @@ export async function updatePerfil(
   repository: BackofficeRepository
 ): Promise<BackofficePerfilResponse> {
   const p = await repository.updatePerfil(id, {
-    descripcion: "descripcion" in input ? normalizeOptional(input.descripcion) : undefined,
+    ...("descripcion" in input ? { descripcion: normalizeOptional(input.descripcion) } : {}),
     activo: input.activo
   });
   if (!p) throw new HttpError(404, "NOT_FOUND", "Perfil de emision no encontrado.");
@@ -485,7 +486,7 @@ export async function updateBackofficeUser(
   repository: BackofficeRepository
 ): Promise<BackofficeUserDetailResponse> {
   const user = await repository.updateUser(userId, {
-    display_name: "display_name" in input ? normalizeOptional(input.display_name) : undefined,
+    ...("display_name" in input ? { display_name: normalizeOptional(input.display_name) } : {}),
     role: input.role,
     activo: input.activo
   });

@@ -20,11 +20,30 @@ export interface CampoDiff {
   nuevo: unknown;
 }
 
+/** Texto de presentacion: editable en la vista previa solo si la entidad se crea (SPEC v0.3 RN-32). */
+export interface TextoVisible {
+  campo: string;
+  propuesto: string | null;
+  editable: boolean;
+}
+
+export interface TextosOverrides {
+  nombre_fantasia?: string;
+  /** Por codigo de establecimiento. */
+  establecimientos?: Record<string, string>;
+  /** Por `<establecimiento>-<punto>`. */
+  puntos?: Record<string, string>;
+  /** Alias por `ref` de contexto. */
+  contextos?: Record<string, string>;
+}
+
 export interface EntidadDiff {
   codigo: string;
   accion: AccionDiff;
   id: string | null;
   campos: CampoDiff[];
+  /** Solo establecimientos y puntos. */
+  texto?: TextoVisible;
 }
 
 export interface PuntoDiff extends EntidadDiff {
@@ -37,6 +56,8 @@ export interface ActividadOpcion {
 }
 
 export interface ContextoDiff {
+  /** Identificador del contexto en el archivo; indexa los overrides (SPEC v0.3 §6.1). */
+  ref: string;
   clave: { actividad: string; establecimiento: string; punto: string; perfil: string };
   /** Actividad efectiva del contexto: la del archivo, o la elegida si el perfil no la fija. */
   actividad_codigo: string;
@@ -49,6 +70,7 @@ export interface ContextoDiff {
   documento_nro_editable: boolean;
   documento_nro_preservado: boolean;
   usuarios_asignados: number;
+  texto: TextoVisible;
 }
 
 export interface TimbradoElegido {
@@ -67,7 +89,15 @@ export interface ImportDiff {
   preview_token: string;
   puede_aplicar: boolean;
   tenant: { accion: AccionDiff; id: string | null; nombre: string; slug: string; plan_codigo: string | null };
-  facturador: { accion: AccionDiff; id: string | null; emisor_id: string; campos: CampoDiff[] };
+  facturador: {
+    accion: AccionDiff;
+    id: string | null;
+    emisor_id: string;
+    campos: CampoDiff[];
+    /** Si es false, el apply exige la API key (SPEC v0.3 RN-33). */
+    has_api_key: boolean;
+    texto: TextoVisible;
+  };
   establecimientos: EntidadDiff[];
   puntos: PuntoDiff[];
   actividades: EntidadDiff[];
@@ -106,6 +136,9 @@ export function postImportApply(
     permitir_ambiente_distinto?: boolean;
     documento_nro_overrides?: Record<string, string>;
     actividad_overrides?: Record<string, string>;
+    textos_overrides?: TextosOverrides;
+    adoptar_textos_archivo?: boolean;
+    api_key?: string;
   }
 ): Promise<ImportApplyResponse> {
   return apiPost<ImportApplyResponse>("/backoffice/facturadores/import/apply", input);

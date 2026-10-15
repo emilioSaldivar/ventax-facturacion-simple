@@ -12,7 +12,9 @@ export const logger = pino({
       "*.accessToken",
       "*.refreshToken",
       "*.FE_API_KEY",
-      "*.apiKey"
+      "*.apiKey",
+      "*.api_key",
+      "*.fe_consumer_api_key"
     ],
     censor: "[redacted]"
   }

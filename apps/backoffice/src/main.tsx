@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 import "./styles.css";
 
 import { apiLogin, ApiError, getToken, setToken } from "./api/client";
-import { postImportApply, postImportPreview, type ActividadOpcion, type ContextoDiff, type EntidadDiff, type Hallazgo, type ImportApplyResponse, type ImportDiff, type ImportTarget } from "./api/import";
+import { postImportApply, postImportPreview, type ActividadOpcion, type ContextoDiff, type EntidadDiff, type Hallazgo, type ImportApplyResponse, type ImportDiff, type ImportTarget, type TextosOverrides } from "./api/import";
 import { listTenants, getTenant, createTenant, updateTenant, type Tenant } from "./api/tenants";
 import {
   listFacturadores,
@@ -1882,20 +1882,45 @@ function CamposDiff({ campos }: { campos: Array<{ campo: string; actual: unknown
   );
 }
 
-function EntidadesDiff({ titulo, items }: { titulo: string; items: EntidadDiff[] }) {
+/**
+ * Texto visible editable (SPEC import v0.3 RN-32): solo se ofrece cuando la entidad se crea.
+ * `claveDe` da la clave del override y del data-testid.
+ */
+interface TextoEditable {
+  etiqueta: string;
+  testid: string;
+  claveDe: (e: EntidadDiff) => string;
+  valores: Record<string, string>;
+  onChange: (clave: string, valor: string) => void;
+}
+
+function EntidadesDiff({ titulo, items, texto }: { titulo: string; items: EntidadDiff[]; texto?: TextoEditable }) {
   if (items.length === 0) return null;
   return (
     <section className="panel" aria-label={titulo}>
       <h3>{titulo}</h3>
-      {items.map((e) => (
-        <article key={e.codigo} className="diff-item">
-          <header>
-            <span className={accionChipClass(e.accion)}>{e.accion.replace("_", " ")}</span>
-            <strong className="monospace">{e.codigo}</strong>
-          </header>
-          <CamposDiff campos={e.campos} />
-        </article>
-      ))}
+      {items.map((e) => {
+        const clave = texto ? texto.claveDe(e) : e.codigo;
+        return (
+          <article key={clave} className="diff-item">
+            <header>
+              <span className={accionChipClass(e.accion)}>{e.accion.replace("_", " ")}</span>
+              <strong className="monospace">{e.codigo}</strong>
+            </header>
+            {texto && e.texto?.editable ? (
+              <FormField label={texto.etiqueta}>
+                <input
+                  value={texto.valores[clave] ?? e.texto.propuesto ?? ""}
+                  onChange={(ev) => texto.onChange(clave, ev.target.value)}
+                  maxLength={200}
+                  data-testid={`${texto.testid}-${clave}`}
+                />
+              </FormField>
+            ) : null}
+            <CamposDiff campos={e.campos} />
+          </article>
+        );
+      })}
     </section>
   );
 }
@@ -1945,6 +1970,11 @@ function FacturadorImportView({ tenantId, onNavigate }: { tenantId?: string; onN
   const [resultado, setResultado] = useState<ImportApplyResponse | null>(null);
   const [overrides, setOverrides] = useState<Record<string, string>>({});
   const [actividadOverrides, setActividadOverrides] = useState<Record<string, string>>({});
+  // SPEC v0.3: textos visibles editables al crear (RN-32), adopcion de los del archivo (RN-34)
+  // y API key obligatoria para un facturador sin clave (RN-33). La clave nunca se guarda en storage.
+  const [textos, setTextos] = useState<Required<TextosOverrides>>({ nombre_fantasia: "", establecimientos: {}, puntos: {}, contextos: {} });
+  const [adoptarTextos, setAdoptarTextos] = useState(false);
+  const [apiKey, setApiKey] = useState("");
   const [forzarAmbiente, setForzarAmbiente] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -1992,10 +2022,19 @@ function FacturadorImportView({ tenantId, onNavigate }: { tenantId?: string; onN
     try {
       const d = await postImportPreview({ filename: archivo.filename, format: archivo.format, content: archivo.content, target: target() });
       setDiff(d);
-      setOverrides(Object.fromEntries(d.contextos.filter((c) => c.documento_nro_editable).map((c) => [c.clave.perfil, c.documento_nro_sugerido])));
+      setOverrides(Object.fromEntries(d.contextos.filter((c) => c.documento_nro_editable).map((c) => [c.ref, c.documento_nro_sugerido])));
       setActividadOverrides(
-        Object.fromEntries(d.contextos.filter((c) => c.actividad_editable).map((c) => [c.clave.perfil, c.actividad_codigo]))
+        Object.fromEntries(d.contextos.filter((c) => c.actividad_editable).map((c) => [c.ref, c.actividad_codigo]))
       );
+      const propuestos = <T extends { texto?: { propuesto: string | null; editable: boolean } }>(xs: T[], clave: (x: T) => string) =>
+        Object.fromEntries(xs.filter((x) => x.texto?.editable).map((x) => [clave(x), x.texto?.propuesto ?? ""]));
+      setTextos({
+        nombre_fantasia: d.facturador.texto.editable ? d.facturador.texto.propuesto ?? "" : "",
+        establecimientos: propuestos(d.establecimientos, (e) => e.codigo),
+        puntos: propuestos(d.puntos, (p) => `${p.establecimiento_codigo}-${p.codigo}`),
+        contextos: propuestos(d.contextos, (c) => c.ref)
+      });
+      setAdoptarTextos(false);
       setForzarAmbiente(false);
       setPaso("preview");
     } catch (e) {
@@ -2019,7 +2058,11 @@ function FacturadorImportView({ tenantId, onNavigate }: { tenantId?: string; onN
         permitir_ambiente_distinto: forzarAmbiente,
         documento_nro_overrides: overrides,
         actividad_overrides: actividadOverrides,
+        textos_overrides: textosParaEnviar(),
+        adoptar_textos_archivo: adoptarTextos,
+        ...(apiKey.trim() ? { api_key: apiKey.trim() } : {}),
       });
+      setApiKey("");
       setResultado(r);
       setPaso("resultado");
     } catch (e) {
@@ -2029,8 +2072,26 @@ function FacturadorImportView({ tenantId, onNavigate }: { tenantId?: string; onN
     }
   }
 
+  /** Solo textos no vacios: uno vacio vuelve al valor del archivo. */
+  function textosParaEnviar(): TextosOverrides {
+    const limpio = (r: Record<string, string>) => {
+      const out = Object.fromEntries(Object.entries(r).map(([k, v]) => [k, v.trim()] as const).filter(([, v]) => v.length > 0));
+      return Object.keys(out).length > 0 ? out : undefined;
+    };
+    return {
+      ...(textos.nombre_fantasia.trim() ? { nombre_fantasia: textos.nombre_fantasia.trim() } : {}),
+      establecimientos: limpio(textos.establecimientos),
+      puntos: limpio(textos.puntos),
+      contextos: limpio(textos.contextos)
+    };
+  }
+
   const tieneAmbienteDistinto = diff?.bloqueantes.some((b) => b.codigo === "AMBIENTE_DISTINTO") ?? false;
-  const puedeAplicar = Boolean(diff && (diff.puede_aplicar || (tieneAmbienteDistinto && forzarAmbiente && diff.bloqueantes.length === 1)));
+  const textosDifieren = diff?.advertencias.some((a) => a.codigo === "TEXTO_VISIBLE_DIFIERE") ?? false;
+  const requiereApiKey = diff ? !diff.facturador.has_api_key : false;
+  const apiKeyValida = !requiereApiKey || apiKey.trim().length >= 10;
+  const puedeAplicar =
+    apiKeyValida && Boolean(diff && (diff.puede_aplicar || (tieneAmbienteDistinto && forzarAmbiente && diff.bloqueantes.length === 1)));
 
   return (
     <div className="view" data-testid="import-view">
@@ -2132,19 +2193,51 @@ function FacturadorImportView({ tenantId, onNavigate }: { tenantId?: string; onN
                 <span className={accionChipClass(diff.facturador.accion)}>{diff.facturador.accion.replace("_", " ")}</span>
                 <strong className="monospace">{diff.facturador.emisor_id}</strong>
               </header>
+              {diff.facturador.texto.editable ? (
+                <FormField label="Nombre visible en la app">
+                  <input
+                    value={textos.nombre_fantasia}
+                    onChange={(e) => setTextos({ ...textos, nombre_fantasia: e.target.value })}
+                    maxLength={300}
+                    data-testid="import-texto-facturador"
+                  />
+                </FormField>
+              ) : (
+                <p className="muted">Nombre visible: <strong>{diff.facturador.texto.propuesto ?? "—"}</strong></p>
+              )}
               <CamposDiff campos={diff.facturador.campos} />
             </article>
           </section>
 
-          <EntidadesDiff titulo="Establecimientos" items={diff.establecimientos} />
-          <EntidadesDiff titulo="Puntos de expedicion" items={diff.puntos} />
+          <EntidadesDiff
+            titulo="Establecimientos"
+            items={diff.establecimientos}
+            texto={{
+              etiqueta: "Nombre visible del establecimiento",
+              testid: "import-texto-est",
+              claveDe: (e) => e.codigo,
+              valores: textos.establecimientos,
+              onChange: (k, v) => setTextos({ ...textos, establecimientos: { ...textos.establecimientos, [k]: v } })
+            }}
+          />
+          <EntidadesDiff
+            titulo="Puntos de expedicion"
+            items={diff.puntos}
+            texto={{
+              etiqueta: "Nombre visible del punto",
+              testid: "import-texto-punto",
+              claveDe: (e) => `${(e as { establecimiento_codigo?: string }).establecimiento_codigo ?? ""}-${e.codigo}`,
+              valores: textos.puntos,
+              onChange: (k, v) => setTextos({ ...textos, puntos: { ...textos.puntos, [k]: v } })
+            }}
+          />
           <EntidadesDiff titulo="Actividades economicas" items={diff.actividades} />
           <EntidadesDiff titulo="Perfiles de emision" items={diff.perfiles} />
 
           <section className="panel" aria-label="Contextos operativos">
             <h3>Contextos operativos</h3>
             {diff.contextos.map((c: ContextoDiff) => (
-              <article key={c.clave.perfil} className={`diff-item ${c.usuarios_asignados > 0 ? "diff-item-en-uso" : ""}`}>
+              <article key={c.ref} className={`diff-item ${c.usuarios_asignados > 0 ? "diff-item-en-uso" : ""}`}>
                 <header>
                   <span className={accionChipClass(c.accion)}>{c.accion.replace("_", " ")}</span>
                   <strong className="monospace">{c.clave.perfil}</strong>
@@ -2160,9 +2253,9 @@ function FacturadorImportView({ tenantId, onNavigate }: { tenantId?: string; onN
                 {c.actividad_editable ? (
                   <FormField label="Actividad economica del contexto">
                     <select
-                      value={actividadOverrides[c.clave.perfil] ?? c.actividad_codigo}
-                      onChange={(e) => setActividadOverrides({ ...actividadOverrides, [c.clave.perfil]: e.target.value })}
-                      data-testid={`import-actividad-${c.clave.perfil}`}
+                      value={actividadOverrides[c.ref] ?? c.actividad_codigo}
+                      onChange={(e) => setActividadOverrides({ ...actividadOverrides, [c.ref]: e.target.value })}
+                      data-testid={`import-actividad-${c.ref}`}
                     >
                       {c.actividad_opciones.map((a: ActividadOpcion) => (
                         <option key={a.codigo} value={a.codigo}>
@@ -2176,14 +2269,24 @@ function FacturadorImportView({ tenantId, onNavigate }: { tenantId?: string; onN
                     </p>
                   </FormField>
                 ) : null}
+                {c.texto.editable ? (
+                  <FormField label="Nombre visible del contexto (alias)">
+                    <input
+                      value={textos.contextos[c.ref] ?? ""}
+                      onChange={(e) => setTextos({ ...textos, contextos: { ...textos.contextos, [c.ref]: e.target.value } })}
+                      maxLength={100}
+                      data-testid={`import-texto-ctx-${c.ref}`}
+                    />
+                  </FormField>
+                ) : null}
                 {c.documento_nro_editable ? (
                   <FormField label="Numero inicial de documento">
                     <input
-                      value={overrides[c.clave.perfil] ?? c.documento_nro_sugerido}
-                      onChange={(e) => setOverrides({ ...overrides, [c.clave.perfil]: e.target.value })}
+                      value={overrides[c.ref] ?? c.documento_nro_sugerido}
+                      onChange={(e) => setOverrides({ ...overrides, [c.ref]: e.target.value })}
                       pattern="[0-9]{7}"
                       maxLength={7}
-                      data-testid={`import-docnro-${c.clave.perfil}`}
+                      data-testid={`import-docnro-${c.ref}`}
                     />
                   </FormField>
                 ) : (
@@ -2204,6 +2307,34 @@ function FacturadorImportView({ tenantId, onNavigate }: { tenantId?: string; onN
               </label>
             </section>
           ) : null}
+
+          {textosDifieren ? (
+            <section className="panel import-banner" aria-label="Textos visibles">
+              <label className="radio-inline">
+                <input type="checkbox" checked={adoptarTextos} onChange={(e) => setAdoptarTextos(e.target.checked)} data-testid="import-adoptar-textos" />
+                Adoptar los textos visibles del archivo (reemplaza los nombres que se ven hoy en la app).
+              </label>
+            </section>
+          ) : null}
+
+          <section className="panel" aria-label="API key de FE">
+            <h3>API key del consumidor FE</h3>
+            <FormField label={requiereApiKey ? "API key (obligatoria)" : "API key (opcional: reemplaza la actual)"} required={requiereApiKey}>
+              <input
+                type="password"
+                autoComplete="off"
+                value={apiKey}
+                onChange={(e) => setApiKey(e.target.value)}
+                placeholder={requiereApiKey ? "Pegar la clave del consumidor" : "Dejar vacio para conservar la actual"}
+                data-testid="import-api-key"
+              />
+            </FormField>
+            <p className="muted">
+              {requiereApiKey
+                ? "Sin la clave el facturador no puede emitir ni recibir usuarios operativos."
+                : "El facturador ya tiene una clave cargada."}
+            </p>
+          </section>
 
           <div className="form-actions">
             <button type="button" onClick={() => setPaso("destino")}>Volver</button>

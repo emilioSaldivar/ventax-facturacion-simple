@@ -54,3 +54,14 @@ este repositorio. La forma se reprodujo leyendo el generador
 (`export-configuracion-consumidor.service.ts`), que antepone la actividad de presentación al grupo
 solo `if (actividadPresentacion)` — sin ella, `actividad_codigo` sale `null`. Se pueden reemplazar
 exportando desde fe-test el emisor 6 con la clave `fs-test-001`.
+
+## v0.3 — Emisor sin perfiles y textos visibles
+
+| Archivo | Origen | Qué cubre |
+|---|---|---|
+| `fe-config-4543629-sin-perfiles.json` | Export real de fe-test de `4543629-0` (2026-10-14 13:26 UTC), reformateado | RN-28/RN-29: `requerido: false` + `items: []` → contexto `NO_REQUERIDO@001-001` |
+| `fe-config-4543629-con-perfil.json` | Re-export real del mismo emisor (13:47 UTC): perfil `A96099-E001-P001-FE-COMP` y punto renombrado | RN-31 (`requerido` en ignorados), RN-34 (re-import sobre un nombre visible cambiado) |
+| `fe-config-sin-perfiles-requerido-ausente.json` | `fe-config-sin-perfiles.json` sin `perfiles_emision.requerido` | RN-08 sin cambios: `items: []` sin la declaración de FE sigue bloqueando |
+
+Los exports de FE **no traen la API key** (la guía §21 la excluye por diseño), así que estos archivos
+no contienen secretos. Los tests usan una clave sintética (`clave-sintetica-de-prueba`).

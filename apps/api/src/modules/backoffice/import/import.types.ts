@@ -58,6 +58,12 @@ export interface ActividadOpcion {
 }
 
 export interface PlanContexto {
+  /**
+   * Identificador del contexto dentro del archivo; indexa los overrides (PLAN v0.3 §1.1).
+   * Igual al codigo de perfil para los perfiles de FE; `NO_REQUERIDO@<est>-<punto>` para los
+   * derivados de un emisor sin perfiles (RN-29).
+   */
+  ref: string;
   /** Clave de identidad del contexto, en codigos. */
   actividad_codigo: string;
   establecimiento_codigo: string;
@@ -110,6 +116,17 @@ export interface MapperContext {
 }
 
 export const DOCUMENTO_NRO_INICIAL = "0000001";
+
+/**
+ * Perfil centinela de los emisores sin perfiles en FE (RN-28). El gateway no lo envia a FE:
+ * `fiscal-gateway.client.ts`, `profileCode !== "NO_REQUERIDO"`. Cambiarlo rompe ese acuerdo.
+ */
+export const PERFIL_CENTINELA = "NO_REQUERIDO";
+export const PERFIL_CENTINELA_DESCRIPCION = "Perfil no requerido por FE";
+
+export function refCentinela(establecimiento: string, punto: string): string {
+  return `${PERFIL_CENTINELA}@${establecimiento}-${punto}`;
+}
 export const CREDITO_PLAZO_DIAS_DEFAULT = 30;
 
 /** Permisos minimos esperados en la clave del consumidor (SPEC seccion 9.2). */
@@ -199,11 +216,34 @@ export interface CampoDiff {
   nuevo: unknown;
 }
 
+/**
+ * Texto de presentacion de una entidad (RN-32): editable en la vista previa solo si la entidad se
+ * crea. `propuesto` es el valor que se escribira si el operador no lo cambia.
+ */
+export interface TextoVisible {
+  campo: string;
+  propuesto: string | null;
+  editable: boolean;
+}
+
+/** Overrides de textos visibles (SPEC v0.3 §6.2). Rigen solo para entidades que se crean. */
+export interface TextosOverrides {
+  nombre_fantasia?: string;
+  /** Por codigo de establecimiento. */
+  establecimientos?: Record<string, string>;
+  /** Por `<establecimiento>-<punto>`. */
+  puntos?: Record<string, string>;
+  /** Por `ref` del contexto. */
+  contextos?: Record<string, string>;
+}
+
 export interface EntidadDiff {
   codigo: string;
   accion: AccionDiff;
   id: string | null;
   campos: CampoDiff[];
+  /** Solo establecimientos y puntos. */
+  texto?: TextoVisible;
 }
 
 export interface PuntoDiff extends EntidadDiff {
@@ -211,6 +251,8 @@ export interface PuntoDiff extends EntidadDiff {
 }
 
 export interface ContextoDiff {
+  /** Ver `PlanContexto.ref`. */
+  ref: string;
   clave: {
     actividad: string;
     establecimiento: string;
@@ -229,6 +271,7 @@ export interface ContextoDiff {
   /** true cuando el contexto ya existe y su numeracion NO se pisa (RN-09). */
   documento_nro_preservado: boolean;
   usuarios_asignados: number;
+  texto: TextoVisible;
 }
 
 export interface TenantDiff {
@@ -244,6 +287,9 @@ export interface FacturadorDiff {
   id: string | null;
   emisor_id: string;
   campos: CampoDiff[];
+  /** RN-33: si es false, el apply exige la API key. Nunca se expone la clave. */
+  has_api_key: boolean;
+  texto: TextoVisible;
 }
 
 export interface ResumenDiff {

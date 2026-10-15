@@ -1880,6 +1880,16 @@ paths:
 
         El `preview_token` se recalcula dentro de la transaccion; si el estado cambio desde la
         vista previa, se rechaza con `409` y `details.motivo = PREVIEW_DESACTUALIZADO`.
+
+        SPEC v0.3:
+        - `api_key` es obligatoria si el facturador se crea o no tiene clave (RN-33). Se guarda en
+          la misma transaccion y nunca se devuelve ni se audita: la respuesta solo informa
+          `facturador.has_api_key`.
+        - Los textos visibles (`nombre_fantasia`, nombres de establecimiento y punto, alias de
+          contexto) se editan con `textos_overrides` solo al crear (RN-32). Sobre entidades
+          existentes se conservan los actuales salvo `adoptar_textos_archivo: true` (RN-34).
+        - Un emisor sin perfiles (`perfiles_emision.items: []` con `requerido: false`) se importa
+          con el perfil centinela `NO_REQUERIDO`, un contexto por punto (RN-28, RN-29).
       security:
         - bearerAuth: []
       requestBody:
@@ -1899,6 +1909,14 @@ paths:
           description: |
             Bloqueado. `details.motivo` distingue el caso:
             `IMPORT_BLOQUEADO` (quedan bloqueantes) o `PREVIEW_DESACTUALIZADO` (el estado cambio).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: |
+            Falta la API key del consumidor FE (`details.motivo = API_KEY_REQUERIDA`). No se
+            escribio nada.
           content:
             application/json:
               schema:
@@ -1933,6 +1951,14 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "409":
           description: Username ya existe
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: |
+            El facturador no tiene API key de FE (`details.motivo = FACTURADOR_SIN_API_KEY`).
+            No se asignan usuarios operativos a un facturador que no puede emitir (SPEC import v0.3 RN-33).
           content:
             application/json:
               schema:
@@ -2011,6 +2037,14 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "404":
           description: Usuario o configuracion operativa no encontrada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: |
+            El facturador no tiene API key de FE (`details.motivo = FACTURADOR_SIN_API_KEY`).
+            No se asignan usuarios operativos a un facturador que no puede emitir (SPEC import v0.3 RN-33).
           content:
             application/json:
               schema:
@@ -3337,7 +3371,8 @@ components:
                 type: string
                 pattern: "^[0-9]{7}$"
               description: |
-                Numero inicial por codigo de perfil. Solo se aplica a contextos NUEVOS: sobre uno
+                Numero inicial por `ref` de contexto (igual al codigo de perfil para los perfiles de
+                FE; `NO_REQUERIDO@<est>-<punto>` para los derivados). Solo se aplica a contextos NUEVOS: sobre uno
                 existente se ignora con la advertencia OVERRIDE_IGNORADO, porque la numeracion viva
                 nunca se pisa.
             actividad_overrides:
@@ -3345,10 +3380,44 @@ components:
               additionalProperties:
                 type: string
               description: |
-                Actividad economica elegida por codigo de perfil. Solo se aplica a contextos NUEVOS
+                Actividad economica elegida por `ref` de contexto. Solo se aplica a contextos NUEVOS
                 de perfiles que no fijan actividad, y unicamente si el codigo esta entre las
                 `actividad_opciones` de ese contexto. En cualquier otro caso se ignora con la
                 advertencia OVERRIDE_IGNORADO.
+            textos_overrides:
+              type: object
+              description: |
+                Textos visibles de las entidades que se CREAN (SPEC v0.3 RN-32). Sobre una entidad
+                existente, o una que el archivo no define, se ignoran con OVERRIDE_IGNORADO.
+              properties:
+                nombre_fantasia: { type: string, minLength: 1, maxLength: 300 }
+                establecimientos:
+                  type: object
+                  description: Por codigo de establecimiento.
+                  additionalProperties: { type: string, minLength: 1, maxLength: 200 }
+                puntos:
+                  type: object
+                  description: Por `<establecimiento>-<punto>`.
+                  additionalProperties: { type: string, minLength: 1, maxLength: 200 }
+                contextos:
+                  type: object
+                  description: Alias operativo por `ref` de contexto.
+                  additionalProperties: { type: string, minLength: 1, maxLength: 100 }
+            adoptar_textos_archivo:
+              type: boolean
+              default: false
+              description: |
+                RN-34. Con `true`, los textos visibles existentes se reemplazan por los del archivo.
+                Con `false` se conservan y la vista previa los informa con TEXTO_VISIBLE_DIFIERE.
+            api_key:
+              type: string
+              format: password
+              writeOnly: true
+              minLength: 10
+              maxLength: 200
+              description: |
+                API key del consumidor FE. Obligatoria si el facturador se crea o no tiene clave
+                (RN-33); si ya tiene, la reemplaza. Nunca se devuelve.
 
     ImportHallazgo:
       type: object
@@ -3391,12 +3460,39 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/ImportFieldDiff"
+        texto:
+          $ref: "#/components/schemas/ImportTextoVisible"
+
+    ImportTextoVisible:
+      type: object
+      description: |
+        Texto de presentacion (SPEC v0.3 RN-32). Presente en facturador, establecimientos, puntos y
+        contextos. `editable` es true solo si la entidad se crea.
+      properties:
+        campo: { type: string }
+        propuesto: { type: string, nullable: true }
+        editable: { type: boolean }
+
+    ImportFacturadorDiff:
+      allOf:
+        - $ref: "#/components/schemas/ImportEntityDiff"
+        - type: object
+          properties:
+            emisor_id: { type: string }
+            has_api_key:
+              type: boolean
+              description: RN-33. Si es false, el apply exige `api_key`. La clave nunca se expone.
 
     ImportContextoDiff:
       allOf:
         - $ref: "#/components/schemas/ImportEntityDiff"
         - type: object
           properties:
+            ref:
+              type: string
+              description: |
+                Identificador del contexto en este archivo; indexa los overrides. Igual al codigo de
+                perfil, o `NO_REQUERIDO@<est>-<punto>` para emisores sin perfiles (RN-29).
             clave:
               type: object
               properties:
@@ -3444,7 +3540,7 @@ components:
         tenant:
           type: object
         facturador:
-          $ref: "#/components/schemas/ImportEntityDiff"
+          $ref: "#/components/schemas/ImportFacturadorDiff"
         establecimientos:
           type: array
           items: { $ref: "#/components/schemas/ImportEntityDiff" }

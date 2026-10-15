@@ -493,8 +493,9 @@ export class PgBackofficeRepository implements BackofficeRepository {
     client: PoolClient,
     input: { userId: string; tenantId: string; data: Omit<BackofficeOperationConfigInput, "tenant_id"> }
   ): Promise<{ tenant_id: string; facturador_id: string; actividad_punto_perfil_id: string } | null> {
-    const resolved = await client.query<{ tenant_id: string; facturador_id: string; actividad_punto_perfil_id: string }>(
-      `select u.tenant_id, f.id as facturador_id, app.id as actividad_punto_perfil_id
+    const resolved = await client.query<{ tenant_id: string; facturador_id: string; actividad_punto_perfil_id: string; has_api_key: boolean }>(
+      `select u.tenant_id, f.id as facturador_id, app.id as actividad_punto_perfil_id,
+              (f.fe_consumer_api_key is not null) as has_api_key
        from usuarios u
        join facturadores f on f.id = $3 and f.tenant_id = u.tenant_id and f.tenant_id = $2 and f.emisor_id = $4 and f.activo = true and f.deleted_at is null
        join actividad_punto_perfiles app on app.facturador_id = f.id and app.tenant_id = f.tenant_id and app.activo = true and app.deleted_at is null
@@ -509,7 +510,15 @@ export class PgBackofficeRepository implements BackofficeRepository {
         input.data.perfil_emision_codigo, input.data.actividad_economica_codigo
       ]
     );
-    return resolved.rows[0] ?? null;
+    const row = resolved.rows[0];
+    if (!row) return null;
+    // RN-33: sin API key el facturador no puede emitir; no se le asocian usuarios operativos.
+    if (!row.has_api_key) {
+      throw new HttpError(422, "VALIDATION_ERROR", "El facturador no tiene cargada la API key de FE: cargala antes de asignarle usuarios.", {
+        motivo: "FACTURADOR_SIN_API_KEY"
+      });
+    }
+    return { tenant_id: row.tenant_id, facturador_id: row.facturador_id, actividad_punto_perfil_id: row.actividad_punto_perfil_id };
   }
 
   async assignOperationConfig(input: { userId: string; data: BackofficeOperationConfigInput }): Promise<BackofficeOperationConfigResponse | null> {
@@ -713,6 +722,9 @@ export class PgBackofficeRepository implements BackofficeRepository {
        usr as (
          select count(*) as usuarios_operativos
          from usuario_operacion_config uoc join f on uoc.facturador_id = f.id
+         -- RN-35: un usuario sobre un contexto inactivo no puede emitir; no cuenta.
+         join actividad_punto_perfiles app on app.id = uoc.actividad_punto_perfil_id
+           and app.activo = true and app.deleted_at is null
          where uoc.activo = true and uoc.deleted_at is null
        )
        select

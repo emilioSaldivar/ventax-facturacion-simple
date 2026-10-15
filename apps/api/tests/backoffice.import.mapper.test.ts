@@ -113,14 +113,16 @@ describe("coherencia con el deployment", () => {
 });
 
 describe("perfiles y contextos", () => {
+  // SPEC v0.3 (PLAN §1.9): `fe-config-sin-perfiles.json` declara `requerido: false`, que ahora
+  // activa RN-28. RN-08 se sigue cubriendo con el mismo archivo sin `requerido`.
   it("bloquea si no hay perfiles y el deployment envia el codigo a FE (RN-08)", () => {
-    const p = plan("fe-config-sin-perfiles.json", { ...ctxTest, sendProfileCode: true });
+    const p = plan("fe-config-sin-perfiles-requerido-ausente.json", { ...ctxTest, sendProfileCode: true });
     expect(codigos(bloqueantes(p))).toContain("SIN_CONTEXTOS");
     expect(p.contextos).toHaveLength(0);
   });
 
   it("solo advierte si el deployment no envia el codigo de perfil", () => {
-    const p = plan("fe-config-sin-perfiles.json", { ...ctxTest, sendProfileCode: false });
+    const p = plan("fe-config-sin-perfiles-requerido-ausente.json", { ...ctxTest, sendProfileCode: false });
     expect(codigos(bloqueantes(p))).not.toContain("SIN_CONTEXTOS");
     expect(codigos(advertencias(p))).toContain("SIN_CONTEXTOS");
   });

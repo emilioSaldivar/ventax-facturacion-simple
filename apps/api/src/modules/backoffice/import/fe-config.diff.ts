@@ -22,7 +22,8 @@ import type {
   ImportTarget,
   PuntoDiff,
   ResumenDiff,
-  SnapshotContexto
+  SnapshotContexto,
+  TextosOverrides
 } from "./import.types";
 
 /** Compara solo los campos que el import escribe; `null` del archivo nunca borra un valor existente. */
@@ -33,6 +34,32 @@ function diffCampos(pares: Array<[string, unknown, unknown]>): CampoDiff[] {
     if (actual !== nuevo) campos.push({ campo, actual: actual ?? null, nuevo });
   }
   return campos;
+}
+
+interface TextoDifiere {
+  entidad: string;
+  codigo: string;
+  actual: string | null;
+  archivo: string;
+}
+
+/**
+ * RN-34 (D-4): en una entidad existente el texto visible es "solo al crear", como los alias.
+ * Devuelve el valor a escribir (para `diffCampos`; `null` = no cambia) y registra la diferencia
+ * cuando el archivo trae otro texto que no se adopta.
+ */
+function textoExistente(
+  entidad: string,
+  codigo: string,
+  actual: string | null,
+  archivo: string | null,
+  adoptar: boolean,
+  difieren: TextoDifiere[]
+): string | null {
+  if (archivo === null || archivo === actual) return null;
+  if (adoptar || actual === null) return archivo;
+  difieren.push({ entidad, codigo, actual, archivo });
+  return null;
 }
 
 function accionDe(existe: boolean, campos: CampoDiff[]): AccionDiff {
@@ -95,10 +122,15 @@ export function buildDiff(
   target: ImportTarget,
   archivo: { nombre: string; formato: string },
   overrides: Record<string, string> = {},
-  /** Actividad elegida por perfil, para los contextos sin actividad fija (RN-22). */
-  actividadOverrides: Record<string, string> = {}
+  /** Actividad elegida por `ref`, para los contextos sin actividad fija (RN-22, RN-29). */
+  actividadOverrides: Record<string, string> = {},
+  /** RN-32 y RN-34. Los textos solo se aplican a entidades que se crean. */
+  opciones: { textos?: TextosOverrides; adoptarTextos?: boolean } = {}
 ): ImportDiff {
   const hallazgos: Hallazgo[] = [...plan.hallazgos];
+  const textos = opciones.textos ?? {};
+  const adoptar = opciones.adoptarTextos === true;
+  const difieren: TextoDifiere[] = [];
 
   // --- Bloqueantes que dependen del estado de la base ---
   if (snapshot.emisorEnOtroTenant) {
@@ -138,16 +170,21 @@ export function buildDiff(
 
   // --- Facturador ---
   const f = snapshot.facturador;
+  const nombreFantasiaNuevo = textos.nombre_fantasia ?? plan.emisor.nombre_fantasia;
   const camposFacturador = f
     ? diffCampos([
         ["razon_social", f.razon_social, plan.emisor.razon_social],
-        ["nombre_fantasia", f.nombre_fantasia, plan.emisor.nombre_fantasia],
+        [
+          "nombre_fantasia",
+          f.nombre_fantasia,
+          textoExistente("facturador", plan.emisor.emisor_id, f.nombre_fantasia, plan.emisor.nombre_fantasia, adoptar, difieren)
+        ],
         ["activo", f.activo, f.activo ? null : true]
       ])
     : diffCampos([
         ["razon_social", null, plan.emisor.razon_social],
         ["ruc", null, plan.emisor.ruc],
-        ["nombre_fantasia", null, plan.emisor.nombre_fantasia]
+        ["nombre_fantasia", null, nombreFantasiaNuevo]
       ]);
 
   if (f && f.ruc !== plan.emisor.ruc) {
@@ -158,19 +195,13 @@ export function buildDiff(
       sugerencia: "El RUC existente no se modifica; corregirlo a mano si corresponde."
     });
   }
-  if (f && !f.has_api_key) {
+  // RN-33: la clave se pide en el apply; la vista previa solo avisa que sera obligatoria.
+  if (!f || !f.has_api_key) {
     hallazgos.push({
       nivel: "ADVERTENCIA",
       codigo: "API_KEY_AUSENTE",
-      mensaje: "El facturador no tiene cargada la API key de FE.",
-      sugerencia: "Cargarla en el panel del facturador; sin ella no puede emitir."
-    });
-  } else if (!f) {
-    hallazgos.push({
-      nivel: "ADVERTENCIA",
-      codigo: "API_KEY_AUSENTE",
-      mensaje: "El facturador se crea sin API key de FE.",
-      sugerencia: "Cargarla en el panel del facturador despues de aplicar."
+      mensaje: f ? "El facturador no tiene cargada la API key de FE." : "El facturador se crea sin API key de FE.",
+      sugerencia: "Completar la API key del consumidor antes de aplicar: es obligatoria."
     });
   }
 
@@ -178,7 +209,13 @@ export function buildDiff(
     accion: accionDe(Boolean(f), camposFacturador),
     id: f?.id ?? null,
     emisor_id: plan.emisor.emisor_id,
-    campos: camposFacturador
+    campos: camposFacturador,
+    has_api_key: f?.has_api_key ?? false,
+    texto: {
+      campo: "nombre_fantasia",
+      propuesto: f ? f.nombre_fantasia : nombreFantasiaNuevo,
+      editable: !f
+    }
   };
 
   const reactivaciones: string[] = [];
@@ -190,14 +227,21 @@ export function buildDiff(
   const establecimientos: EntidadDiff[] = plan.establecimientos.map((e) => {
     const actual = snapshot.establecimientos.find((x) => x.codigo === e.codigo);
     if (actual) marcarReactivacion("establecimiento", e.codigo, actual.activo);
+    const nombreNuevo = textos.establecimientos?.[e.codigo] ?? e.nombre;
     const campos = actual
       ? diffCampos([
-          ["nombre", actual.nombre, e.nombre],
+          ["nombre", actual.nombre, textoExistente("establecimiento", e.codigo, actual.nombre, e.nombre, adoptar, difieren)],
           ["direccion", actual.direccion, e.direccion],
           ["activo", actual.activo, actual.activo ? null : true]
         ])
-      : diffCampos([["nombre", null, e.nombre], ["direccion", null, e.direccion]]);
-    return { codigo: e.codigo, accion: accionDe(Boolean(actual), campos), id: actual?.id ?? null, campos };
+      : diffCampos([["nombre", null, nombreNuevo], ["direccion", null, e.direccion]]);
+    return {
+      codigo: e.codigo,
+      accion: accionDe(Boolean(actual), campos),
+      id: actual?.id ?? null,
+      campos,
+      texto: { campo: "nombre", propuesto: actual ? actual.nombre : nombreNuevo, editable: !actual }
+    };
   });
 
   // --- Puntos ---
@@ -206,15 +250,21 @@ export function buildDiff(
       (x) => x.codigo === p.codigo && x.establecimiento_codigo === p.establecimiento_codigo
     );
     if (actual) marcarReactivacion("punto", p.codigo, actual.activo);
+    const clavePunto = `${p.establecimiento_codigo}-${p.codigo}`;
+    const nombreNuevo = textos.puntos?.[clavePunto] ?? p.nombre;
     const campos = actual
-      ? diffCampos([["nombre", actual.nombre, p.nombre], ["activo", actual.activo, actual.activo ? null : true]])
-      : diffCampos([["nombre", null, p.nombre]]);
+      ? diffCampos([
+          ["nombre", actual.nombre, textoExistente("punto", clavePunto, actual.nombre, p.nombre, adoptar, difieren)],
+          ["activo", actual.activo, actual.activo ? null : true]
+        ])
+      : diffCampos([["nombre", null, nombreNuevo]]);
     return {
       codigo: p.codigo,
       establecimiento_codigo: p.establecimiento_codigo,
       accion: accionDe(Boolean(actual), campos),
       id: actual?.id ?? null,
-      campos
+      campos,
+      texto: { campo: "nombre", propuesto: actual ? actual.nombre : nombreNuevo, editable: !actual }
     };
   });
 
@@ -249,12 +299,13 @@ export function buildDiff(
   const contextos: ContextoDiff[] = plan.contextos.map((c) => {
     // La identidad usa la actividad EFECTIVA: un contexto creado con 47591 se reconoce por esa
     // actividad, no por el null que traia el archivo.
-    const elegida = c.actividad_editable ? actividadOverrides[c.perfil_codigo] : undefined;
+    const elegida = c.actividad_editable ? actividadOverrides[c.ref] : undefined;
     const actividadEfectiva =
       elegida && c.actividad_opciones.some((o) => o.codigo === elegida) ? elegida : c.actividad_codigo;
     const clave = claveContexto({ ...c, actividad_codigo: actividadEfectiva });
     const actual = snapshot.contextos.find((x) => claveSnapshotContexto(x) === clave);
-    const sugerido = overrides[c.perfil_codigo] ?? c.documento_nro_sugerido;
+    const sugerido = overrides[c.ref] ?? c.documento_nro_sugerido;
+    const aliasNuevo = textos.contextos?.[c.ref] ?? c.alias_operativo;
 
     const campos = actual
       ? diffCampos([
@@ -268,7 +319,7 @@ export function buildDiff(
           ["timbrado_inicio", null, c.timbrado_inicio],
           ["documento_nro", null, sugerido],
           ["credito_plazo_dias", null, c.credito_plazo_dias],
-          ["alias_operativo", null, c.alias_operativo]
+          ["alias_operativo", null, aliasNuevo]
         ]);
 
     if (actual) marcarReactivacion("contexto", c.perfil_codigo, actual.activo);
@@ -283,6 +334,7 @@ export function buildDiff(
     }
 
     return {
+      ref: c.ref,
       clave: {
         actividad: actividadEfectiva,
         establecimiento: c.establecimiento_codigo,
@@ -298,9 +350,20 @@ export function buildDiff(
       documento_nro_sugerido: sugerido,
       documento_nro_editable: !actual,
       documento_nro_preservado: Boolean(actual),
-      usuarios_asignados: actual?.usuarios_asignados ?? 0
+      usuarios_asignados: actual?.usuarios_asignados ?? 0,
+      texto: { campo: "alias_operativo", propuesto: actual ? actual.alias_operativo : aliasNuevo, editable: !actual }
     };
   });
+
+  if (difieren.length > 0) {
+    hallazgos.push({
+      nivel: "ADVERTENCIA",
+      codigo: "TEXTO_VISIBLE_DIFIERE",
+      mensaje: `El archivo trae ${difieren.length} texto(s) visible(s) distinto(s) de los actuales. Se conservan los actuales.`,
+      valor: difieren,
+      sugerencia: "Marcar \"Adoptar los textos del archivo\" para reemplazarlos."
+    });
+  }
 
   if (reactivaciones.length > 0) {
     hallazgos.push({

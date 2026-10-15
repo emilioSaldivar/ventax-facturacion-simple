@@ -230,8 +230,20 @@ const importApplySchema = importPreviewSchema.extend({
   preview_token: z.string().trim().regex(/^[0-9a-f]{64}$/),
   permitir_ambiente_distinto: z.boolean().default(false),
   documento_nro_overrides: z.record(z.string().regex(/^[0-9]{7}$/, "documento_nro debe ser 7 digitos.")).default({}),
-  // Actividad elegida por perfil, para los contextos sin actividad fija (SPEC v0.2 seccion 6.3).
-  actividad_overrides: z.record(z.string().trim().min(1).max(40)).default({})
+  // Actividad elegida por `ref` de contexto, para los contextos sin actividad fija (SPEC v0.2 6.3, v0.3 RN-29).
+  actividad_overrides: z.record(z.string().trim().min(1).max(40)).default({}),
+  // SPEC v0.3 RN-32: textos visibles de las entidades que se crean.
+  textos_overrides: z
+    .object({
+      nombre_fantasia: z.string().trim().min(1).max(300).optional(),
+      establecimientos: z.record(z.string().trim().min(1).max(200)).optional(),
+      puntos: z.record(z.string().trim().min(1).max(200)).optional(),
+      contextos: z.record(z.string().trim().min(1).max(100)).optional()
+    })
+    .default({}),
+  adoptar_textos_archivo: z.boolean().default(false),
+  // SPEC v0.3 RN-33: obligatoria si el facturador se crea o no tiene clave (lo decide el service).
+  api_key: z.string().trim().min(10, "API key demasiado corta.").max(200).optional()
 });
 
 // ─── Middlewares ──────────────────────────────────────────────────────────────

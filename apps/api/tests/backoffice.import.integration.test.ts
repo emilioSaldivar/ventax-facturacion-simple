@@ -19,6 +19,9 @@ process.env.JWT_ACCESS_SECRET = process.env.JWT_ACCESS_SECRET ?? "test-secret-in
 const FIXTURES = join(__dirname, "fixtures");
 const leer = (n: string) => readFileSync(join(FIXTURES, n), "utf8");
 
+// SPEC v0.3 RN-33: el apply exige API key en un facturador nuevo. Valor sintetico, no es una clave real.
+const API_KEY_TEST = "clave-sintetica-de-prueba";
+
 describeDb("import de configuracion — integracion con base", () => {
   let pool: import("pg").Pool;
   let repo: import("../src/modules/backoffice/import/import.repository").ImportRepository;
@@ -91,7 +94,8 @@ describeDb("import de configuracion — integracion con base", () => {
         ...archivo(),
         preview_token: diff.preview_token,
         permitir_ambiente_distinto: false,
-        documento_nro_overrides: overrides
+        documento_nro_overrides: overrides,
+        api_key: API_KEY_TEST
       },
       usuarioId,
       { repository: repo, ctx }
@@ -179,7 +183,7 @@ describeDb("import de configuracion — integracion con base", () => {
 
     const hacer = (token: string) =>
       applyFacturadorImport(
-        { ...archivo(), preview_token: token, permitir_ambiente_distinto: false, documento_nro_overrides: {} },
+        { ...archivo(), preview_token: token, permitir_ambiente_distinto: false, documento_nro_overrides: {}, api_key: API_KEY_TEST },
         usuarioId,
         { repository: repo, ctx }
       );
@@ -209,7 +213,8 @@ describeDb("import de configuracion — integracion con base", () => {
         preview_token: diff.preview_token,
         permitir_ambiente_distinto: false,
         documento_nro_overrides: {},
-        actividad_overrides: { [perfil]: "45203" }
+        actividad_overrides: { [perfil]: "45203" },
+        api_key: API_KEY_TEST
       },
       usuarioId,
       { repository: repo, ctx: ctxTest }
@@ -234,7 +239,7 @@ describeDb("import de configuracion — integracion con base", () => {
     const eventosAntes = await contar("facturador_import_eventos");
     await expect(
       applyFacturadorImport(
-        { ...archivo(), preview_token: "0".repeat(64), permitir_ambiente_distinto: false, documento_nro_overrides: {} },
+        { ...archivo(), preview_token: "0".repeat(64), permitir_ambiente_distinto: false, documento_nro_overrides: {}, api_key: API_KEY_TEST },
         usuarioId,
         { repository: repo, ctx }
       )

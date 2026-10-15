@@ -10,7 +10,10 @@ import type { FeConfigDocument, FeConfigPerfilItem, FeConfigTimbrado } from "./f
 import {
   CREDITO_PLAZO_DIAS_DEFAULT,
   DOCUMENTO_NRO_INICIAL,
+  PERFIL_CENTINELA,
+  PERFIL_CENTINELA_DESCRIPCION,
   PERMISOS_MINIMOS,
+  refCentinela,
   type ActividadOpcion,
   type Hallazgo,
   type ImportPlan,
@@ -219,6 +222,58 @@ function resolverActividad(
   );
 
   return { actividad: sugerida, editable: true, opciones };
+}
+
+// ─── RN-28 a RN-30: emisor sin perfiles ───────────────────────────────────────
+
+/**
+ * Un contexto por punto con el perfil centinela (D-1: no uno por actividad, como RN-24). La
+ * actividad sugerida es la principal, si no la primera; editable si el archivo trae mas de una.
+ */
+function derivarContextosCentinela(
+  actividades: ImportPlan["actividades"],
+  puntos: ImportPlan["puntos"],
+  perfiles: ImportPlan["perfiles"],
+  contextos: Array<Omit<PlanContexto, "timbrado" | "timbrado_inicio">>,
+  h: Hallazgos
+): void {
+  if (actividades.length === 0 || puntos.length === 0) {
+    h.bloqueante("SIN_CONTEXTOS", "El emisor no usa perfiles, pero el archivo no trae actividades y puntos con que armar un contexto.", {
+      ruta: actividades.length === 0 ? "$.actividades_economicas" : "$.establecimientos[].puntos_expedicion",
+      sugerencia: "Completar actividades y puntos en facturacion-electronica y exportar de nuevo."
+    });
+    return;
+  }
+
+  const sugerida = actividades.find((a) => a.es_principal) ?? actividades[0]!;
+  const editable = actividades.length > 1;
+  const opciones: ActividadOpcion[] = editable ? actividades.map((a) => ({ codigo: a.codigo, descripcion: a.descripcion })) : [];
+
+  perfiles.push({ codigo: PERFIL_CENTINELA, descripcion: PERFIL_CENTINELA_DESCRIPCION });
+  for (const p of puntos) {
+    contextos.push({
+      ref: refCentinela(p.establecimiento_codigo, p.codigo),
+      actividad_codigo: sugerida.codigo,
+      establecimiento_codigo: p.establecimiento_codigo,
+      punto_codigo: p.codigo,
+      perfil_codigo: PERFIL_CENTINELA,
+      documento_nro_sugerido: DOCUMENTO_NRO_INICIAL,
+      credito_plazo_dias: CREDITO_PLAZO_DIAS_DEFAULT,
+      alias_operativo: alias(p.nombre ?? sugerida.descripcion),
+      actividad_editable: editable,
+      actividad_opciones: opciones
+    });
+  }
+
+  h.advertencia(
+    "PERFIL_NO_REQUERIDO",
+    `FE declara que el emisor no usa perfiles de emision: se crean ${puntos.length} contexto(s) con el perfil ${PERFIL_CENTINELA}, que no se envia a FE.`,
+    {
+      ruta: "$.perfiles_emision",
+      valor: { requerido: false, contextos: puntos.length },
+      sugerencia: `Actividad propuesta: ${sugerida.codigo}${sugerida.es_principal ? " (la principal del emisor)" : " (la primera del archivo)"}.`
+    }
+  );
 }
 
 // ─── RN-17: campos del archivo sin destino en nuestro modelo ──────────────────
@@ -532,6 +587,7 @@ export function buildImportPlan(doc: FeConfigDocument, ctx: MapperContext): Impo
     const descripcionPerfil = texto(item.descripcion);
     const descripcionActividad = actividades.find((a) => a.codigo === actividad)?.descripcion ?? null;
     contextosPreliminares.push({
+      ref: codigo,
       actividad_codigo: actividad,
       establecimiento_codigo: establecimiento!,
       punto_codigo: punto!,
@@ -544,8 +600,14 @@ export function buildImportPlan(doc: FeConfigDocument, ctx: MapperContext): Impo
     });
   });
 
-  // RN-08: sin perfiles no se pueden inventar codigos si FE los valida en cada emision.
-  if (items.length === 0) {
+  // RN-28: FE declara que el emisor no usa perfiles. `requerido` lo deriva FE como
+  // `perfiles.length > 1`, asi que lo que identifica al emisor sin perfiles es `items: []`.
+  const sinPerfilesDeclarado = items.length === 0 && doc.perfiles_emision?.requerido === false;
+
+  if (sinPerfilesDeclarado) {
+    derivarContextosCentinela(actividades, puntos, perfiles, contextosPreliminares, h);
+  } else if (items.length === 0) {
+    // RN-08: sin perfiles no se pueden inventar codigos si FE los valida en cada emision.
     if (ctx.sendProfileCode) {
       h.bloqueante("SIN_CONTEXTOS", "El archivo no trae perfiles de emision y este deployment los envia a FE en cada emision.", {
         ruta: "$.perfiles_emision.items",
@@ -578,6 +640,16 @@ export function buildImportPlan(doc: FeConfigDocument, ctx: MapperContext): Impo
 
   validarServicioYConsumidor(doc, ctx, emisorId, h);
   reportarIgnorados(doc, h);
+
+  // RN-31: `requerido` nunca se descarta en silencio. Bajo RN-28 ya lo explica PERFIL_NO_REQUERIDO.
+  const requeridoArchivo = doc.perfiles_emision?.requerido;
+  if (!sinPerfilesDeclarado && requeridoArchivo !== undefined && requeridoArchivo !== null) {
+    h.ignorado(
+      "$.perfiles_emision.requerido",
+      requeridoArchivo,
+      "Informativo: FE lo deriva de la cantidad de perfiles (true si hay mas de uno). El import usa items."
+    );
+  }
 
   return {
     contrato: { version, generado_en: texto(doc.contrato.generado_en) },

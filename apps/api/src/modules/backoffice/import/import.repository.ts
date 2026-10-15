@@ -27,7 +27,12 @@ export interface ImportRepository {
     target: ImportTarget;
     diff: ImportDiff;
     previewToken: string;
+    /** Por `ref` del contexto. */
     documentoNroOverrides: Record<string, string>;
+    /** RN-34: reemplazar los textos visibles existentes por los del archivo. */
+    adoptarTextos: boolean;
+    /** RN-33: se guarda en la misma transaccion. Nunca se escribe en la auditoria. */
+    apiKey: string | null;
     usuarioId: string;
     archivo: { nombre: string; formato: FeConfigFormat };
     payload: unknown;
@@ -176,18 +181,29 @@ export class PgImportRepository implements ImportRepository {
 
       // ── 2. Facturador ──────────────────────────────────────────────────────
       // El `ruc` NO se pisa si el facturador ya existe (advertencia RUC_DISTINTO).
+      // RN-34: el texto visible existente se conserva salvo adopcion explicita ($6).
       const f = await client.query<{ id: string }>(
         `insert into facturadores (tenant_id, emisor_id, razon_social, ruc, nombre_fantasia, activo)
          values ($1, $2, $3, $4, $5, true)
          on conflict (tenant_id, emisor_id) where deleted_at is null
          do update set razon_social = excluded.razon_social,
-                       nombre_fantasia = coalesce(excluded.nombre_fantasia, facturadores.nombre_fantasia),
+                       nombre_fantasia = case when $6::boolean
+                         then coalesce(excluded.nombre_fantasia, facturadores.nombre_fantasia)
+                         else coalesce(facturadores.nombre_fantasia, excluded.nombre_fantasia) end,
                        activo = true,
                        updated_at = now()
          returning id`,
-        [tenantId, plan.emisor.emisor_id, plan.emisor.razon_social, plan.emisor.ruc, plan.emisor.nombre_fantasia]
+        [tenantId, plan.emisor.emisor_id, plan.emisor.razon_social, plan.emisor.ruc, plan.emisor.nombre_fantasia, input.adoptarTextos]
       );
       const facturadorId = f.rows[0]!.id;
+
+      // RN-33: la clave entra en la misma transaccion; si algo falla despues, no queda guardada.
+      if (input.apiKey) {
+        await client.query(`update facturadores set fe_consumer_api_key = $2, updated_at = now() where id = $1`, [
+          facturadorId,
+          input.apiKey
+        ]);
+      }
 
       // ── 3. Establecimientos ────────────────────────────────────────────────
       for (const e of plan.establecimientos) {
@@ -195,10 +211,12 @@ export class PgImportRepository implements ImportRepository {
           `insert into facturador_establecimientos (tenant_id, facturador_id, codigo, nombre, direccion, activo)
            values ($1, $2, $3, $4, $5, true)
            on conflict (facturador_id, codigo) where deleted_at is null
-           do update set nombre = coalesce(excluded.nombre, facturador_establecimientos.nombre),
+           do update set nombre = case when $6::boolean
+                           then coalesce(excluded.nombre, facturador_establecimientos.nombre)
+                           else coalesce(facturador_establecimientos.nombre, excluded.nombre) end,
                          direccion = coalesce(excluded.direccion, facturador_establecimientos.direccion),
                          activo = true, updated_at = now()`,
-          [tenantId, facturadorId, e.codigo, e.nombre, e.direccion]
+          [tenantId, facturadorId, e.codigo, e.nombre, e.direccion, input.adoptarTextos]
         );
       }
 
@@ -210,9 +228,11 @@ export class PgImportRepository implements ImportRepository {
              from facturador_establecimientos e
             where e.facturador_id = $2 and e.codigo = $3 and e.deleted_at is null
            on conflict (establecimiento_id, codigo) where deleted_at is null
-           do update set nombre = coalesce(excluded.nombre, facturador_puntos_expedicion.nombre),
+           do update set nombre = case when $6::boolean
+                           then coalesce(excluded.nombre, facturador_puntos_expedicion.nombre)
+                           else coalesce(facturador_puntos_expedicion.nombre, excluded.nombre) end,
                          activo = true, updated_at = now()`,
-          [tenantId, facturadorId, p.establecimiento_codigo, p.codigo, p.nombre]
+          [tenantId, facturadorId, p.establecimiento_codigo, p.codigo, p.nombre, input.adoptarTextos]
         );
       }
 
@@ -245,7 +265,7 @@ export class PgImportRepository implements ImportRepository {
       // `documento_nro` con coalesce: la numeracion viva nunca se pisa (RN-09).
       // `credito_plazo_dias` y `tipo_transaccion_default` no se tocan en update.
       for (const c of plan.contextos) {
-        const documentoNro = documentoNroOverrides[c.perfil_codigo] ?? c.documento_nro_sugerido;
+        const documentoNro = documentoNroOverrides[c.ref] ?? c.documento_nro_sugerido;
         await client.query(
           `insert into actividad_punto_perfiles (
              tenant_id, facturador_id, actividad_id, establecimiento_id, punto_expedicion_id, perfil_emision_id,

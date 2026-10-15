@@ -4,6 +4,8 @@
 // Corre contra el backoffice servido por el contenedor `frontend`, con la API mockeada
 // por `page.route` para poder ejercitar los tres estados de la vista previa sin depender
 // del estado de la base. Ver TASKS_IMPORT_CONFIG_FACTURADOR_v0.1 (IMP-034).
+// v0.3 (IV3-022): los mocks siguen el contrato v0.3 (`ref`, `texto`, `has_api_key`) y se verifican
+// la API key obligatoria, los textos visibles editables y TEXTO_VISIBLE_DIFIERE.
 
 const { chromium } = require("playwright");
 const fs = require("node:fs");
@@ -24,9 +26,14 @@ const planes = [{ codigo: "BASICO_MVP", nombre: "Basico MVP", activo: true }];
 
 const campo = (c, actual, nuevo) => ({ campo: c, actual, nuevo });
 const entidad = (codigo, accion, campos = []) => ({ codigo, accion, id: accion === "CREAR" ? null : "id-" + codigo, campos });
+const conTexto = (e, propuesto) => ({ ...e, texto: { campo: "nombre", propuesto, editable: e.accion === "CREAR" } });
+// Valor sintetico, no es una clave real.
+const API_KEY_TEST = "clave-sintetica-playwright";
 
 function contexto(perfil, accion, extra = {}) {
   return {
+    ref: perfil,
+    texto: { campo: "alias_operativo", propuesto: "CASA MATRIZ", editable: accion === "CREAR" },
     clave: { actividad: "45203", establecimiento: "001", punto: "001", perfil },
     accion,
     id: accion === "CREAR" ? null : "ctx-" + perfil,
@@ -48,9 +55,16 @@ function diffBase(over = {}) {
     preview_token: "a".repeat(64),
     puede_aplicar: true,
     tenant: { accion: "USAR_EXISTENTE", id: TENANT, nombre: "Tenant Demo", slug: "demo", plan_codigo: null },
-    facturador: { accion: "CREAR", id: null, emisor_id: "5057016-1", campos: [campo("razon_social", null, "EMILIO MATIAS SALDIVAR CAPUTO")] },
-    establecimientos: [entidad("001", "CREAR", [campo("nombre", null, "CASA MATRIZ ITA")])],
-    puntos: [entidad("001", "CREAR"), entidad("002", "CREAR")],
+    facturador: {
+      accion: "CREAR", id: null, emisor_id: "5057016-1", campos: [campo("razon_social", null, "EMILIO MATIAS SALDIVAR CAPUTO")],
+      has_api_key: false,
+      texto: { campo: "nombre_fantasia", propuesto: "EMILIO SALDIVAR", editable: true }
+    },
+    establecimientos: [conTexto(entidad("001", "CREAR", [campo("nombre", null, "CASA MATRIZ ITA")]), "CASA MATRIZ ITA")],
+    puntos: [
+      { ...conTexto(entidad("001", "CREAR"), "CAJA 1"), establecimiento_codigo: "001" },
+      { ...conTexto(entidad("002", "CREAR"), "CAJA 2"), establecimiento_codigo: "001" }
+    ],
     actividades: [entidad("45203", "CREAR"), entidad("96099", "CREAR")],
     perfiles: [entidad("A45203-E001-P001-FE-PTO", "CREAR")],
     contextos: [contexto("A45203-E001-P001-FE-PTO", "CREAR")],
@@ -96,6 +110,36 @@ const ESCENARIOS = {
       }
     ]
   }),
+  // v0.3 RN-28/RN-29: emisor sin perfiles -> contexto centinela por punto.
+  "h-sin-perfiles": diffBase({
+    perfiles: [entidad("NO_REQUERIDO", "CREAR")],
+    contextos: [contexto("NO_REQUERIDO", "CREAR", { ref: "NO_REQUERIDO@001-001", clave: { actividad: "96099", establecimiento: "001", punto: "001", perfil: "NO_REQUERIDO" } })],
+    advertencias: [
+      { nivel: "ADVERTENCIA", codigo: "PERFIL_NO_REQUERIDO", mensaje: "FE declara que el emisor no usa perfiles de emision: se crean 1 contexto(s) con el perfil NO_REQUERIDO, que no se envia a FE." }
+    ]
+  }),
+  // v0.3 RN-34: re-import sobre un facturador existente con clave y nombre visible propio.
+  "g-textos-difieren": diffBase({
+    facturador: {
+      accion: "SIN_CAMBIOS", id: FACTURADOR, emisor_id: "4543629-0", campos: [], has_api_key: true,
+      texto: { campo: "nombre_fantasia", propuesto: "METAMORFOSIS AGENCIA DIGITAL", editable: false }
+    },
+    establecimientos: [conTexto(entidad("001", "SIN_CAMBIOS"), "JILSSE ZULMINA CARDOZO BENITEZ")],
+    puntos: [{ ...conTexto(entidad("001", "SIN_CAMBIOS"), "PRESTACION DE SERVICIOS"), establecimiento_codigo: "001" }],
+    actividades: [entidad("96099", "SIN_CAMBIOS")],
+    perfiles: [entidad("A96099-E001-P001-FE-COMP", "CREAR")],
+    contextos: [contexto("A96099-E001-P001-FE-COMP", "CREAR")],
+    advertencias: [
+      {
+        nivel: "ADVERTENCIA", codigo: "TEXTO_VISIBLE_DIFIERE",
+        mensaje: "El archivo trae 2 texto(s) visible(s) distinto(s) de los actuales. Se conservan los actuales.",
+        valor: [
+          { entidad: "facturador", codigo: "4543629-0", actual: "METAMORFOSIS AGENCIA DIGITAL", archivo: "JILSSE ZULMINA CARDOZO BENITEZ" },
+          { entidad: "punto", codigo: "001-001", actual: "PRESTACION DE SERVICIOS", archivo: "METAMORFOSIS AGENCIA DIGITAL" }
+        ]
+      }
+    ]
+  }),
   "c-bloqueante": diffBase({
     puede_aplicar: false,
     bloqueantes: [
@@ -116,7 +160,7 @@ const APPLY = {
   tenant_id: TENANT,
   facturador_id: FACTURADOR,
   aplicado_en: "2026-09-19T20:00:00.000Z",
-  proximos_pasos: ["Cargar la API key de FE en el panel del facturador.", "Crear el usuario operativo y asignarle un perfil de emision."]
+  proximos_pasos: ["Crear el usuario operativo y asignarle un perfil de emision."]
 };
 
 const FACTURADORES = [{ id: FACTURADOR, tenant_id: TENANT, emisor_id: "5057016-1", ruc: "5057016-1", razon_social: "EMILIO MATIAS SALDIVAR CAPUTO", nombre_fantasia: "EMILIO SALDIVAR", activo: true, has_api_key: false }];
@@ -132,13 +176,19 @@ const CONTEXTOS = [
   }
 ];
 
+/** Ultimo cuerpo enviado al apply, para verificar lo que viaja (texto editado, API key). */
+let ultimoApply = null;
+
 async function mockApi(page, escenario) {
   await page.route("**/api/v1/**", async (route) => {
     const url = route.request().url();
     const json = (body, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
 
     if (url.includes("/backoffice/facturadores/import/preview")) return json(ESCENARIOS[escenario]);
-    if (url.includes("/backoffice/facturadores/import/apply")) return json(APPLY);
+    if (url.includes("/backoffice/facturadores/import/apply")) {
+      ultimoApply = JSON.parse(route.request().postData() ?? "{}");
+      return json(APPLY);
+    }
     if (url.includes("/backoffice/tenants") && url.includes("/facturadores")) return json(FACTURADORES);
     if (url.includes("/backoffice/facturadores/") && url.includes("/contextos")) return json(CONTEXTOS);
     if (url.includes("/backoffice/tenants")) return json(tenants);
@@ -182,7 +232,30 @@ async function run() {
       await page.click('[data-testid="import-preview-btn"]');
       await page.waitForSelector('[data-testid="import-banner"]');
 
+      // v0.3 RN-33: sin clave cargada, "Aplicar" queda deshabilitado aunque no haya bloqueantes.
+      const requiereClave = !ESCENARIOS[escenario].facturador.has_api_key;
+      const deshabilitadoSinClave = await page.isDisabled('[data-testid="import-apply-btn"]');
+      if (requiereClave) {
+        resultados.push({ viewport: vp.nombre, escenario: `${escenario}/api-key-obligatoria`, deshabilitadoSinClave, ok: deshabilitadoSinClave === true });
+        await page.fill('[data-testid="import-api-key"]', API_KEY_TEST);
+      }
+      const tipoClave = await page.getAttribute('[data-testid="import-api-key"]', "type");
+      resultados.push({ viewport: vp.nombre, escenario: `${escenario}/api-key-oculta`, tipoClave, ok: tipoClave === "password" });
+
       const aplicarDeshabilitado = await page.isDisabled('[data-testid="import-apply-btn"]');
+
+      // v0.3 RN-32: textos visibles editables solo al crear; RN-34: casilla de adopcion.
+      if (escenario === "h-sin-perfiles") {
+        const inputs = ['import-texto-facturador', 'import-texto-est-001', 'import-texto-punto-001-001', 'import-texto-ctx-NO_REQUERIDO@001-001'];
+        const visibles = await Promise.all(inputs.map((t) => page.isVisible(`[data-testid="${t}"]`)));
+        resultados.push({ viewport: vp.nombre, escenario: "h-textos-editables", visibles, ok: visibles.every(Boolean) });
+      }
+      if (escenario === "g-textos-difieren") {
+        const casilla = await page.isVisible('[data-testid="import-adoptar-textos"]');
+        const sinInputNombre = !(await page.isVisible('[data-testid="import-texto-facturador"]').catch(() => false));
+        const etiquetaOpcional = ((await page.textContent('[aria-label="API key de FE"]')) ?? "").includes("opcional");
+        resultados.push({ viewport: vp.nombre, escenario: "g-adopcion", casilla, sinInputNombre, etiquetaOpcional, ok: casilla && sinInputNombre && etiquetaOpcional && !aplicarDeshabilitado });
+      }
 
       // v0.2: el selector de actividad aparece solo en perfiles que no fijan actividad.
       const selectorActividad = '[data-testid="import-actividad-E001-P001-FE-TODAS"]';
@@ -209,8 +282,17 @@ async function run() {
 
       // (d) apply + (e) alta guiada, solo en el escenario feliz
       if (escenario === "a-todo-crear") {
+        await page.fill('[data-testid="import-texto-facturador"]', "NOMBRE VISIBLE EDITADO");
+        ultimoApply = null;
         await page.click('[data-testid="import-apply-btn"]');
         await page.waitForSelector('[data-testid="import-resultado"]');
+        resultados.push({
+          viewport: vp.nombre,
+          escenario: "d-apply-cuerpo",
+          nombre: ultimoApply?.textos_overrides?.nombre_fantasia,
+          clave: ultimoApply?.api_key === API_KEY_TEST,
+          ok: ultimoApply?.textos_overrides?.nombre_fantasia === "NOMBRE VISIBLE EDITADO" && ultimoApply?.api_key === API_KEY_TEST
+        });
         await page.screenshot({ path: path.join(outDir, `import-resultado-${vp.nombre}.png`), fullPage: true });
         resultados.push({ viewport: vp.nombre, escenario: "d-apply", ok: true });
 

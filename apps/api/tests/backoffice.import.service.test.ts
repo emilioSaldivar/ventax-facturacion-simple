@@ -67,12 +67,16 @@ async function tokenDe(repo: ImportRepository, input = archivo()): Promise<strin
   return (await previewFacturadorImport(input, { repository: repo, ctx })).preview_token;
 }
 
+// SPEC v0.3 RN-33: el apply exige API key en un facturador nuevo. Valor sintetico, no es una clave real.
+const API_KEY_TEST = "clave-sintetica-de-prueba";
+
 function applyInput(token: string, over: Partial<ImportApplyInput> = {}): ImportApplyInput {
   return {
     ...archivo(),
     preview_token: token,
     permitir_ambiente_distinto: false,
     documento_nro_overrides: {},
+    api_key: API_KEY_TEST,
     ...over
   };
 }
@@ -109,7 +113,8 @@ describe("applyFacturadorImport", () => {
     expect(res.aplicado).toBe(true);
     expect(res.facturador_id).toBe("f1");
     expect(res.bloqueantes).toEqual([]);
-    expect(res.proximos_pasos.join(" ")).toContain("API key");
+    // SPEC v0.3 RN-33: la clave viaja en el apply, asi que ya no es un paso pendiente.
+    expect(res.proximos_pasos.join(" ")).not.toContain("API key");
   });
 
   it("rechaza con IMPORT_BLOQUEADO si hay bloqueantes", async () => {
@@ -139,7 +144,7 @@ describe("applyFacturadorImport", () => {
       await previewFacturadorImport({ ...base, target }, { repository: repo, ctx })
     ).preview_token;
 
-    const res = await applyFacturadorImport({ ...base, preview_token: token }, "u1", { repository: repo, ctx });
+    const res = await applyFacturadorImport({ ...base, preview_token: token, api_key: API_KEY_TEST }, "u1", { repository: repo, ctx });
 
     expect(res.aplicado).toBe(true);
     expect(repo.ultimoApply?.ambienteForzado).toBe(true);

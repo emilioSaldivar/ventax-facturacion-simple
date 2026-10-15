@@ -40,6 +40,9 @@ function plan(fixture: string) {
 }
 const codigos = (xs: ReturnType<typeof bloqueantes>) => xs.map((x) => x.codigo);
 
+// SPEC v0.3 RN-33: el apply exige API key en un facturador nuevo. Valor sintetico, no es una clave real.
+const API_KEY_TEST = "clave-sintetica-de-prueba";
+
 describe("RN-21 — grupo_actividades es informativo y se declara", () => {
   it("un perfil con actividad fija y grupo no bloquea", () => {
     const p = plan("fe-config-grupo-actividades.json");
@@ -217,7 +220,7 @@ describe("service — actividad_overrides", () => {
     const repo = new FakeRepo();
     const d = await previewFacturadorImport(entrada(fixture), { repository: repo, ctx });
     const res = await applyFacturadorImport(
-      { ...entrada(fixture), preview_token: d.preview_token, permitir_ambiente_distinto: false, documento_nro_overrides: {}, actividad_overrides },
+      { ...entrada(fixture), preview_token: d.preview_token, permitir_ambiente_distinto: false, documento_nro_overrides: {}, actividad_overrides, api_key: API_KEY_TEST },
       "u1",
       { repository: repo, ctx }
     );

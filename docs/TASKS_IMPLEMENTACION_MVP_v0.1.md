@@ -294,3 +294,12 @@ La integracion real Ventax FE debe entrar despues de que el flujo mock este esta
 - reenvio de email propio;
 - expiracion automatica de links publicos;
 - UI backoffice completa si los endpoints y SQL cubren soporte inicial.
+
+## Referencia de evidencia — Import de configuración de facturador v0.3 (2026-10-14)
+
+Matriz completa y evidencia en `docs/TASKS_IMPORT_CONFIG_FACTURADOR_v0.3.md` (IV3-001 a IV3-023, todas
+DONE). Resumen: emisor sin perfiles con perfil centinela `NO_REQUERIDO`, textos visibles editables y
+protegidos en el re-import, API key obligatoria en el import y en la asignación de usuarios, PATCH
+parcial del backoffice corregido. Validación: `typecheck`/`lint`/`build`/`qa:no-secrets` en verde;
+403 tests (mismos 6 fallos preexistentes de `entrega`/`facturas`); 17/17 de integración con Postgres;
+circuito HTTP 20/20 sobre `bash scripts/deploy.sh`; Playwright 46/46 en mobile y desktop.
