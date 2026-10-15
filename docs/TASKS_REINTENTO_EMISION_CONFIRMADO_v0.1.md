@@ -10,13 +10,13 @@
 
 - `SPEC`: DONE (2026-10-14)
 - `PLAN`: DONE (2026-10-14)
-- `TASKS`: REC-000 a REC-012 DONE. REC-013 (deploy) y REC-014 (cierre) PENDIENTE.
+- `TASKS`: REC-000 a REC-012 DONE. REC-013 con staging DONE y prod pendiente. REC-014 (cierre) PENDIENTE.
 
 ## Matriz
 
 | ID | Fase | Tarea | Estado | Criterio de aceptacion |
 | --- | --- | --- | --- | --- |
-| REC-000 | Operacion | Verificar en FE (staging y prod) que el consumidor de cada facturador activo con `fe_consumer_api_key` tiene el permiso `IDEMPOTENCY_RECONCILE` (SPEC, "Prerrequisito Operativo"). Si falta, pedirlo al administrador de FE | DONE (2026-10-14, ver Evidencia; la llamada real queda para el smoke de REC-013) | Listado de facturadores y permiso confirmado por ambiente, registrado en Evidencia sin exponer claves. Una llamada real a `POST /v1/conciliacion/idempotency` desde el contenedor `api` responde 200 en staging |
+| REC-000 | Operacion | Verificar en FE (staging y prod) que el consumidor de cada facturador activo con `fe_consumer_api_key` tiene el permiso `IDEMPOTENCY_RECONCILE` (SPEC, "Prerrequisito Operativo"). Si falta, pedirlo al administrador de FE | DONE (2026-10-14; llamada real verificada en staging el 2026-10-15) | Listado de facturadores y permiso confirmado por ambiente, registrado en Evidencia sin exponer claves. Una llamada real a `POST /v1/conciliacion/idempotency` desde el contenedor `api` responde 200 en staging |
 | REC-001 | SDD | Crear cadena SPEC/PLAN/TASKS de esta iniciativa | DONE | Existen los tres documentos y se referencian entre si |
 | REC-002 | Backend | `facturas.accion.ts`: `fiscal_status` opcional en `DeriveAccionInput`; nueva `puedeReintentarEmision()`; `REINTENTAR` en `acciones_sugeridas` solo para candidatos; texto de `buildEnProcesoDetalle` segun RN-08 (PLAN §1) | DONE (2026-10-15) | Tests unitarios: candidato y no candidato (con UUID, con CDC, sin `fiscal_status.code`, estado `EMITIDA`). `backoffice.repository.ts` sin cambios y compila |
 | REC-003 | Backend | `facturas.types.ts` y `withAccion()`: campo `puede_reintentar_emision` en `DocumentoResponse` | DONE (2026-10-15) | `GET /facturas/:id` y el listado devuelven el campo. Typecheck limpio |
@@ -29,7 +29,7 @@
 | REC-010 | Frontend | `main.tsx`, "Opciones avanzadas": "Volver a verificar" pasa a "Reintentar emision" y solo se renderiza si es candidato; "Verificar estado fiscal" se habilita con `document_uuid \|\| cdc` | DONE (2026-10-15) | Cubierto por REC-012 |
 | REC-011 | Frontend | `main.tsx`, pantalla posterior a emitir: "Verificar estado fiscal" y "Reintentar emision" con las mismas reglas; mensajes de resultado del reintento (encolado o adoptado) | DONE (2026-10-15) | `npm run typecheck` y `npm run build` de `web-operacion` limpios. `grep` sin "Volver a verificar", "Reintentar validacion" ni `>Reintentar<` (CA-06) |
 | REC-012 | QA visual | Playwright contra el stack de `bash scripts/deploy.sh` (FE mock), en mobile 390x844 y desktop 1280x800: (a) `PENDIENTE_SIFEN` con UUID muestra "Verificar estado fiscal" en el banner y no muestra "Reintentar emision"; al presionarlo, el estado se actualiza. (b) `ERROR_TEMPORAL` sin identidad con fallo registrado muestra "Reintentar emision"; al presionarlo queda `EMITIENDO` | DONE (2026-10-15) | Escenarios, viewports y resultado de Playwright registrados en Evidencia y en `docs/TASKS_IMPLEMENTACION_MVP_v0.1.md` |
-| REC-013 | Deploy | Deploy a staging (`APP_ENV_FILE=.env.staging bash scripts/deploy.sh`) y smoke en un documento real `PENDIENTE_SIFEN`; luego prod con autorizacion explicita del usuario | PENDIENTE (requiere commit; prod con OK del usuario) | Healthcheck OK y escenario (a) de REC-012 reproducido en staging. Prod solo tras OK del usuario |
+| REC-013 | Deploy | Deploy a staging (`APP_ENV_FILE=.env.staging bash scripts/deploy.sh`) y smoke en un documento real `PENDIENTE_SIFEN`; luego prod con autorizacion explicita del usuario | PARTIAL (staging DONE 2026-10-15; prod pendiente de OK del usuario) | Healthcheck OK y escenario (a) de REC-012 reproducido en staging. Prod solo tras OK del usuario |
 | REC-014 | Cierre | Repasar SPEC/PLAN/TASKS contra la implementacion real y registrar desvios | PENDIENTE | Documentos actualizados, sin desvios sin documentar |
 
 ## Orden De Ejecucion Y Agrupacion De Validaciones
@@ -63,3 +63,9 @@
     - Capturas en `test-results/reintento-*.png`.
   - **Datos de prueba locales:** usuario `e2e-reintento` (operador de 80136968-1, aceptacion de T&C con `otp_email_destino = admin-bypass:e2e-reintento`) y facturas `E2E REC *`. Solo en la base local, no en la VPS.
   - **Hallazgo UX (fuera de alcance):** el mensaje de resultado de las acciones del detalle aparece al pie del documento, lejos del boton del aviso. Es el patron existente de todas las acciones de esa pantalla.
+- 2026-10-15: REC-013, staging.
+  - Commit `9d4977f` llevado a la VPS por `hetzner-jump` con `git bundle` y `git pull --ff-only`, porque GitHub no era alcanzable desde la red local.
+  - Backup previo `facturacion_simple-20261015-204517-pre-reintento.dump` (62 MB).
+  - `APP_ENV_FILE=.env.staging bash scripts/deploy.sh`: api healthy con `APP_VERSION=9d4977f` y 0 errores en el log. No hay migraciones.
+  - **Llamada real** a `POST /v1/conciliacion/idempotency` desde el contenedor `api`, con el gateway desplegado y la clave de consumidor del facturador (sin imprimirla): la ultima factura de staging con UUID da `IMPACTED` con el mismo `document_uuid` que guarda el SaaS, y una clave inexistente (`fac_000...`) da `NOT_IMPACTED`. Esto confirma el permiso `IDEMPOTENCY_RECONCILE` y el contrato contra el FE real (cierra la parte pendiente de REC-000).
+  - **Produccion:** corre `87579b6`. Entre esa version y `9d4977f` estan tambien la segmentacion F0-F3 y las migraciones `0033`/`0034` (backfill), que corresponden a SEG-037 y su runbook. El deploy a prod queda pendiente de decision del usuario.
