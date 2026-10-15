@@ -131,6 +131,22 @@ deshacer el efecto del backfill, alcanza con poner la columna en `null`, sin toc
 
 ---
 
+## Ensayo de impacto previo a producción (2026-10-15)
+
+Pedido por el usuario antes de autorizar SEG-037. Produccion corre `87579b6`: desplegar `master` lleva juntos F0-F3 (este documento), import v0.3 y el reintento de emision confirmado. Todo se hizo en solo lectura sobre produccion.
+
+| Frente | Metodo | Resultado |
+|---|---|---|
+| Backfill `0033`/`0034` | Dump fresco de prod (`facturacion_simple-20261015-224514-ensayo-impacto.dump`, 64 MB, que sirve tambien de backup) restaurado en un Postgres descartable `--network none`. Se aplicaron `0033` y `0034` del checkout desplegado y se corrio `verificar_backfill_segmentacion.sql`. Contenedor eliminado al terminar | Migraciones sin errores. **Facturas 273/273 con perfil** (eran 242 en la prediccion del 2026-10-06; las 31 nuevas tambien se asignan). Los tres invariantes en 0 y el catalogo con 0 items con perfil. Bloque 6: los **4 documentos esperados** de `80136968-1` en `A37000-E001-P002-FE-PTO` (inactivo, RN-23). Recibos de `5057016-1`: 9/13 con perfil; presupuestos de `5057016-1`: 0/10; el resto queda en `null` por duda, que es el diseno. Atribucion historica en 22 recibos y 10 presupuestos |
+| F0, lista blanca de soporte | Roles en uso en prod | Solo `ADMIN_INTERNO` (1) y `OPERADOR_FACTURACION` (17): **sin cambio de comportamiento** |
+| F1, emisor visible | Revision del commit `65a510f` | Solo agrega `usuario_id` a la proyeccion y "Emitido por" en la UI. Corrige H-1 (`document_uuid` indefinido en 3 respuestas) |
+| Reintento confirmado | Documentos de prod que cumplen RN-01 | **0** documentos mostrarian "Reintentar emision". Hoy 99 `PENDIENTE_SIFEN` tienen habilitado el boton viejo; 98 ya estan en FE (daban 409) y pasan a ver "Verificar estado fiscal" en el aviso |
+| Import v0.3 | Revision del diff | Sin migraciones ni escritura al desplegar. Cambia solo el import del backoffice y el PATCH parcial, que deja de borrar textos no enviados |
+
+**Hallazgo:** 97 documentos `PENDIENTE_SIFEN` con identidad fiscal y mas de 30 dias quedaron sin verificacion agendada (90 de `4732402-3`, del 2026-05-23 al 2026-07-23, y 6 de `5057016-1`). Es la iniciativa del backlog "Recuperar documentos retirados por el corte de 30 dias". El deploy no los resuelve, pero el boton "Verificar estado fiscal" del aviso permite confirmarlos a mano.
+
+**Rollback:** sin cambios respecto del runbook. El codigo vuelve a `87579b6` con un redeploy; `0033` es aditiva y `0034` solo rellena columnas que hasta F4 nadie lee.
+
 ## Bloqueos y desvíos
 
 Registrar acá cualquier tarea que pase a `BLOCKED`, con impacto, alcance y decisión temporal, antes de continuar con cambios inciertos (`AGENTS.md`). El desvío más importante a vigilar está declarado en las reglas de cierre: **si una prueba de emisión existente requiere modificación, el diseño se apartó del PLAN §1.4.**
