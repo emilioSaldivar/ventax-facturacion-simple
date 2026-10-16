@@ -10,7 +10,7 @@
 
 - `SPEC`: DONE (decisiones D-1 a D-4 del usuario, 2026-10-15)
 - `PLAN`: DONE
-- `TASKS`: EFC-001 a EFC-008 DONE. EFC-009 a EFC-012 PENDIENTE.
+- `TASKS`: EFC-001 a EFC-009 DONE. EFC-010 a EFC-012 PENDIENTE.
 
 ## Matriz
 
@@ -24,8 +24,8 @@
 | EFC-006 | Worker | Prueba de notificacion unica en el paso a `RECHAZADA`, y sin correo si ya estaba notificado | DONE (2026-10-15) | Test en `verificacion.worker.test.ts` |
 | EFC-007 | Mock | `FE_MOCK_CANONICAL_STATUS` para el E2E | DONE (2026-10-15) | Con el valor `REJECTED`, el refresh mock da `RECHAZADA` |
 | EFC-008 | QA | `test`/`typecheck`/`lint` de `api`; `typecheck`/`build` de `web-operacion`; Playwright sobre contenedores en mobile y desktop (documento `RECHAZADA` con causa) | DONE (2026-10-15) | Sin regresiones respecto a la linea base de 6 fallos preexistentes; Playwright en verde |
-| EFC-009 | Staging | Deploy y smoke real: `GET /documentos/{uuid}` responde y la `0000004` de `4543629-0` queda "Rechazada" tras verificar | PENDIENTE | Evidencia registrada |
-| EFC-010 | Prod, preparacion | Chequeo real de solo lectura de `GET /documentos/{uuid}` sobre la `0000047`; marcar como notificada la `0000003` de `80044279-2` (PLAN §4) **con OK del usuario**; backup | PENDIENTE | Respuesta `REJECTED`; `accion_notificada_at` marcado solo en 2823 |
+| EFC-009 | Staging | Deploy y smoke real: `GET /documentos/{uuid}` responde y la `0000004` de `4543629-0` queda "Rechazada" tras verificar | DONE (2026-10-15) | Evidencia registrada |
+| EFC-010 | Prod, preparacion | Chequeo real de solo lectura de `GET /documentos/{uuid}` sobre la `0000047`; marcar como notificada la `0000003` de `80044279-2` (PLAN §4) **con OK del usuario**; backup | PARTIAL (chequeo de solo lectura DONE; marca de 2823 y deploy en espera del usuario) | Respuesta `REJECTED`; `accion_notificada_at` marcado solo en 2823 |
 | EFC-011 | Prod | Deploy, readiness y caso de prueba de la `0000047` (estado "Rechazada" y correo recibido) | PENDIENTE | CA-04 |
 | EFC-012 | Cierre | Repasar SPEC/PLAN/TASKS | PENDIENTE | Sin desvios sin documentar |
 
@@ -43,3 +43,8 @@
   - **Contenedores**, con el mismo desvio de build documentado en `TASKS_REINTENTO_EMISION_CONFIRMADO_v0.1.md` (`docker build --network host` + `compose up --no-build`):
     - `scripts/playwright-estado-canonico.cjs` con `FE_MOCK_CANONICAL_STATUS=REJECTED`: **10/10 en mobile 390x844 y desktop 1280x800**. Tras "Verificar estado fiscal", el documento pasa a "Requiere revision" con aviso de causa y "Copiar datos para soporte", sin "Reintentar emision" y con un solo "Verificar estado fiscal" (en opciones avanzadas). En base: `RECHAZADA`, `fiscal_status_raw = REJECTED`, sin agenda.
     - Regresion `scripts/playwright-reintento-emision.cjs` con el mock en `APPROVED`: 24/24.
+- 2026-10-15: EFC-009, staging. `7fe6ae8` desplegado: api y frontend healthy, 0 errores. Contra el FE real de pruebas, `GET /documentos/{uuid}` de la `0000004` de `4543629-0` responde `REJECTED`. El mismo refresh del boton "Verificar estado fiscal" (`refreshFiscalStatusForDocumento`, ejecutado desde el contenedor) la llevo de `PENDIENTE_SIFEN` sin agenda a `RECHAZADA`, con `fiscal_status_raw = REJECTED`, causa `0160 XML Mal Formado.` y sin agenda.
+- 2026-10-15/16: EFC-010, preparacion de produccion.
+  - Chequeo de solo lectura desde el contenedor `api` de prod con la clave compartida: `GET /documentos/{uuid}` de FE prod responde 200 con `status: REJECTED` para la `0000047` de `5057016-1` y para la `0000003` de `80044279-2`.
+  - El usuario decidio **no desplegar todavia**. Prod sigue en `0deef35`, no se marco la 2823 y no se tomo backup.
+  - Mientras tanto, el worker de prod (codigo viejo) sigue viendo ambas como `PENDIENTE_SIFEN`, asi que no hay riesgo de correo hasta el deploy.
