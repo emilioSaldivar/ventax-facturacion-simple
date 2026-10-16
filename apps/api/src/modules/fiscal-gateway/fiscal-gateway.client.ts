@@ -27,6 +27,8 @@ import {
   type FiscalGatewayConfig,
   type FiscalGatewayHealth,
   type FiscalFacturalistaResponse,
+  type FiscalDocumentoCanonicoResponse,
+  type FiscalEstadoCanonico,
   type FiscalIdempotencyReconciliationItem,
   type FiscalIdempotencyReconciliationItemResult,
   type FiscalIdempotencyReconciliationResponse,
@@ -134,6 +136,17 @@ export class MockFiscalGateway implements FiscalGateway {
         refreshed: true,
         status: "APPROVED"
       }
+    };
+  }
+
+  async getDocumentoCanonico(documentUuid: string): Promise<FiscalDocumentoCanonicoResponse> {
+    const status = env.FE_MOCK_CANONICAL_STATUS;
+    return {
+      status,
+      estado: mapDocumentStatusCanonico(status),
+      current_cdc: null,
+      nro_factura: null,
+      raw: { mode: "mock", document_uuid: documentUuid, status }
     };
   }
 
@@ -654,6 +667,28 @@ export class RealFiscalGateway implements FiscalGateway {
     }
 
     return mapFiscalRefreshStatusCanonicoResponse(body);
+  }
+
+  async getDocumentoCanonico(documentUuid: string): Promise<FiscalDocumentoCanonicoResponse> {
+    const url = new URL(`${this.config.baseUrl}/documentos/${encodeURIComponent(documentUuid)}`);
+    url.searchParams.set("env", this.config.environment);
+
+    const response = await this.fetchWithTimeout(url.toString(), {
+      method: "GET",
+      headers: this.buildHeaders()
+    });
+
+    const body = await readJson(response);
+
+    if (!response.ok) {
+      throw new FiscalGatewayError(
+        response.status === 408 || response.status === 504 ? "TIMEOUT" : "UPSTREAM_ERROR",
+        "Backend fiscal rechazo la consulta del documento.",
+        { status: response.status, body }
+      );
+    }
+
+    return mapFiscalDocumentoCanonicoResponse(body);
   }
 
   async cancelFactura(request: FiscalCancelFacturaRequest): Promise<FiscalCancelFacturaResponse> {
@@ -1581,7 +1616,8 @@ function mapFiscalRefreshStatusCanonicoResponse(body: unknown): FiscalRefreshSta
     stringOrNull((statusPayload as Record<string, unknown>).result_message);
 
   return {
-    estado: mapRefreshDocumentStatusWithCode(status, fiscalCode),
+    // RN-01: la consulta a SIFEN no decide el estado; lo decide getDocumentoCanonico().
+    estado: "PENDIENTE_SIFEN",
     current_cdc: stringOrNull(data.current_cdc),
     status_raw: status,
     result_code: fiscalCode,
@@ -1615,17 +1651,47 @@ function mapFiscalByCdcResponse(body: unknown): FiscalByCdcResponse {
   };
 }
 
-function mapRefreshDocumentStatusWithCode(status: string | null, fiscalCode: string | null): FiscalRefreshStatusResponse["estado"] {
-  if (isApprovedFiscalStatus(status) || isApprovedFiscalCode(fiscalCode)) {
-    return "EMITIDA";
+function mapFiscalDocumentoCanonicoResponse(body: unknown): FiscalDocumentoCanonicoResponse {
+  if (!body || typeof body !== "object") {
+    throw new FiscalGatewayError("INVALID_RESPONSE", "Respuesta fiscal invalida.", body);
   }
-  if (status === "REJECTED" || status === "RECHAZADO") {
-    return "RECHAZADA";
-  }
-  if (status === "CANCELLED" || status === "VOIDED" || status === "ANULADO" || status === "CANCELADO") {
-    return "ANULADA";
-  }
-  return "PENDIENTE_SIFEN";
+  const data = body as Record<string, unknown>;
+  const status = stringOrNull(data.status);
+  return {
+    status,
+    estado: mapDocumentStatusCanonico(status),
+    current_cdc: stringOrNull(data.current_cdc),
+    nro_factura: stringOrNull(data.nro_factura),
+    raw: data
+  };
+}
+
+const ESTADO_POR_STATUS_CANONICO: Record<string, FiscalEstadoCanonico> = {
+  APPROVED: "EMITIDA",
+  APPROVED_WITH_OBS: "EMITIDA",
+  REJECTED: "RECHAZADA",
+  CANCELLED: "ANULADA",
+  VOIDED: "ANULADA",
+  DRAFT: "PENDIENTE_SIFEN",
+  XML_GENERATED: "PENDIENTE_SIFEN",
+  XML_SIGNED: "PENDIENTE_SIFEN",
+  QR_ATTACHED: "PENDIENTE_SIFEN",
+  QUEUED_SYNC: "PENDIENTE_SIFEN",
+  SENT_SYNC: "PENDIENTE_SIFEN",
+  QUEUED_BATCH: "PENDIENTE_SIFEN",
+  SENT_BATCH: "PENDIENTE_SIFEN",
+  CANCEL_REQUESTED: "PENDIENTE_SIFEN",
+  VOID_REQUESTED: "PENDIENTE_SIFEN",
+  // D-3: FE reintenta el envio por su cuenta; para el operador sigue en proceso.
+  TRANSMISSION_FAILED: "PENDIENTE_SIFEN"
+};
+
+/**
+ * Traduccion unica del `DocumentStatus` de FE a estado del SaaS (SPEC_ESTADO_FISCAL_CANONICO_v0.1,
+ * Definiciones). Un status desconocido devuelve null: el servicio conserva el estado actual.
+ */
+export function mapDocumentStatusCanonico(status: string | null): FiscalEstadoCanonico | null {
+  return status ? ESTADO_POR_STATUS_CANONICO[status] ?? null : null;
 }
 
 function isApprovedFiscalStatus(status: string | null): boolean {

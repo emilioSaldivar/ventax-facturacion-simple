@@ -13,7 +13,7 @@
 
 ## Objetivo
 
-Que el estado que ve el operador (Procesando, Emitida, Rechazada, Anulada) sea **el estado canonico que publica `facturacion-electronica`** y no una interpretacion propia de la respuesta cruda de SIFEN. Tambien hay que regularizar los documentos que hoy muestran un estado equivocado.
+Que el estado que ve el operador (Procesando, Emitida, Rechazada, Anulada) sea **el estado canonico que publica `facturacion-electronica`** y no una interpretacion propia de la respuesta cruda de SIFEN. Rige de ahora en adelante: los documentos historicos con estado equivocado no se regularizan en bloque (decision D-2).
 
 ## Hallazgo Que Origina Este Cambio (medido el 2026-10-15)
 
@@ -49,7 +49,7 @@ Lo que no esta roto: el catalogo de causas (`sifen-causa-catalogo.ts`) y `derive
 | `REJECTED` | `RECHAZADA` | Rechazada (con causa) |
 | `CANCELLED`, `VOIDED` | `ANULADA` | Anulada |
 | `DRAFT`, `XML_GENERATED`, `XML_SIGNED`, `QR_ATTACHED`, `QUEUED_SYNC`, `SENT_SYNC`, `QUEUED_BATCH`, `SENT_BATCH`, `CANCEL_REQUESTED`, `VOID_REQUESTED` | `PENDIENTE_SIFEN` | Procesando |
-| `TRANSMISSION_FAILED` | `PENDIENTE_SIFEN` mas una accion de soporte | ver decision D-3 |
+| `TRANSMISSION_FAILED` | `PENDIENTE_SIFEN` | Procesando: FE reintenta el envio por su cuenta (D-3). Si no se recupera, aplica la regla de antiguedad existente de `deriveAccion` (soporte a los 30 dias) |
 
 ## Reglas De Negocio
 
@@ -57,7 +57,7 @@ Lo que no esta roto: el catalogo de causas (`sifen-causa-catalogo.ts`) y `derive
 - **RN-02 (causa visible):** el codigo y el mensaje de SIFEN se siguen guardando (`sifen_result_code`/`sifen_result_message`) solo para **explicar** la causa al operador mediante el catalogo existente, nunca para decidir el estado.
 - **RN-03 (refresco de SIFEN):** cuando el operador presiona "Verificar estado fiscal" o corre el worker, el SaaS primero pide a FE una consulta fresca a SIFEN (`/documentos/{uuid}/sifen?refresh=true`, como hoy) y despues lee el estado canonico (`/documentos/{uuid}`). Los dos endpoints usan la clave compartida.
 - **RN-04 (agenda sin huerfanos):** todo documento que, tras un refresh manual o automatico, quede en un estado no final (`PENDIENTE_SIFEN`, `EMITIENDO`) debe tener verificacion agendada.
-- **RN-05 (regularizacion):** una unica vez, despues del deploy, se resincroniza contra FE todo documento no final, incluidos los de mas de 30 dias. Se reporta antes y despues por facturador.
+- **RN-05 (sin regularizacion masiva, D-1/D-2):** no se resincronizan ni se modifican en bloque los documentos historicos y no se envian correos por ellos. Un documento viejo se actualiza solo si un operador presiona "Verificar estado fiscal" o si ya tenia verificacion agendada.
 - **RN-06 (`fiscal_status_raw` vigente):** se actualiza con el `status` canonico en cada refresh.
 - **RN-07 (sin logica SIFEN nueva):** no se agregan reglas de 72 h, de impacto de CDC ni de reenvio. Las acciones sobre un rechazo siguen siendo las existentes (catalogo de causas, nota de credito, soporte).
 
@@ -68,7 +68,6 @@ Incluye:
 - Metodo nuevo `getDocumentoCanonico(uuid)` en el gateway real y en el mock, con mapeo segun la tabla de Definiciones.
 - Refresh (manual y del worker) en dos pasos: consulta a SIFEN y luego estado canonico.
 - Correccion de la agenda (RN-04) y diagnostico del caso staging `0000004`.
-- Script de resincronizacion unica, con modo de ensayo (solo lectura) y modo de aplicacion (RN-05).
 - Pruebas unitarias del mapeo, prueba de integracion, y Playwright del detalle de un documento `RECHAZADA` (mobile y desktop).
 
 No incluye:
@@ -76,18 +75,22 @@ No incluye:
 - Cambios en `facturacion-electronica`.
 - Acciones nuevas de regularizacion de rechazos (reintento con el mismo CDC, derivado, inutilizacion), que ya existen solo para soporte.
 - La deteccion proactiva de documentos que FE tiene y el SaaS no.
+- La resincronizacion de los 93 aprobados y los rechazados historicos (D-2).
+- El mapeo de estado en la **respuesta de emision** (`mapDocumentStatusWithCode`): ahi FE ya devuelve su `status` propio.
 
-## Decisiones Abiertas (requieren al usuario antes del PLAN)
+## Decisiones Del Usuario (2026-10-15)
 
-- **D-1, correos de la resincronizacion:** al pasar a `RECHAZADA`, el worker envia el correo de "accion requerida", una vez por documento. En la resincronizacion unica, ¿se envian para los 5 rechazados (3 de mayo, fuera de la ventana de 72 h) o se marcan como ya notificados y se avisa por otro medio?
-- **D-2, aprobados viejos:** los 93 aprobados pasan a "Emitida" en bloque. ¿Se avisa a los facturadores, sobre todo a Despensa (`4732402-3`, 90 documentos), o pasa en silencio?
-- **D-3, `TRANSMISSION_FAILED`:** ¿se muestra como "Procesando" con aviso de soporte, o como un estado propio de error?
-- **D-4, rechazos de prod ya identificados:** las dos facturas del 2026-10-12 (`5057016-1` `0000047`, `80044279-2` `0000003`) estan fuera de la ventana de 72 h. ¿Se regularizan ahora por la via de soporte existente, en paralelo a esta iniciativa?
+- **D-1:** no se envian correos por documentos historicos. Desde ahora, el correo de "accion requerida" funciona como hasta hoy: a lo sumo uno por documento cuando pasa a un estado que requiere accion.
+- **D-2:** no se avisa ni se modifican en bloque los documentos historicos. La correccion rige de ahora en adelante.
+- **D-3:** `TRANSMISSION_FAILED` se muestra como "Procesando". FE reintenta el envio por su cuenta; si no se recupera, aplica la regla de antiguedad existente.
+- **D-4:**
+  - `80044279-2` `0000003` ya se regularizo operativamente en FE (anulada e inutilizada) y no requiere accion. Esta agendada: el worker la va a dejar con su estado canonico.
+  - `5057016-1` `0000047` (`REJECTED` en FE, `0420`) es el **caso de prueba en produccion**: al desplegar debe verse "Rechazada" con su causa y debe llegar el correo de accion requerida.
 
 ## Criterios De Aceptacion
 
 - **CA-01:** un documento `REJECTED` en FE aparece como "Rechazada" con su causa despues de un refresh, manual o automatico.
 - **CA-02:** un documento `APPROVED` en FE aparece como "Emitida" aunque la consulta a SIFEN devuelva un codigo distinto de `0260`/`0422`.
 - **CA-03:** ningun documento no final queda sin verificacion agendada despues de un refresh.
-- **CA-04:** tras la resincronizacion, el cruce SaaS contra FE en produccion da 0 diferencias de estado en documentos del SaaS.
+- **CA-04:** en produccion, tras el deploy, la `0000047` de `5057016-1` aparece "Rechazada" con su causa y su facturador recibe el correo de accion requerida (una vez). Ningun documento historico no agendado cambia de estado sin intervencion.
 - **CA-05:** el SaaS no tiene ninguna regla que decida el estado por codigo SIFEN (revision de codigo).

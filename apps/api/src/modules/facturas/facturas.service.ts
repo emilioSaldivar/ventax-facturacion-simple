@@ -270,24 +270,38 @@ export async function refreshFiscalStatusForDocumento(
     }
   }
 
+  // Paso SIFEN, best-effort (SPEC_ESTADO_FISCAL_CANONICO_v0.1 RN-02/RN-03): pide a FE una consulta
+  // fresca y trae codigo y mensaje para explicar la causa. No decide el estado.
+  let refreshed: Awaited<ReturnType<FiscalGateway["refreshFacturaStatus"]>> | null = null;
   try {
-    const refreshed = await gateway.refreshFacturaStatus({ documentUuid });
+    refreshed = await gateway.refreshFacturaStatus({ documentUuid });
+  } catch (error) {
+    if (!(error instanceof FiscalGatewayError)) {
+      throw error;
+    }
+    logger.warn({ documentoId, gateway_code: error.code }, "refresh fiscal: consulta SIFEN fallo, se usa solo el estado canonico");
+  }
 
-    // RN-03: actualizar cdc si el backend devuelve un current_cdc diferente al almacenado
-    const cdcActualizado =
-      refreshed.current_cdc && refreshed.current_cdc !== documento.cdc
-        ? refreshed.current_cdc
-        : undefined;
+  try {
+    // Paso canonico, obligatorio (RN-01): el estado lo decide el `status` de FE.
+    const canonico = await gateway.getDocumentoCanonico(documentUuid);
+    if (!canonico.estado) {
+      logger.warn({ documentoId, status: canonico.status }, "refresh fiscal: status canonico desconocido, se conserva el estado");
+    }
+
+    // RN-03 (contrato canonico): actualizar cdc si FE informa uno distinto al almacenado.
+    const cdcVigente = canonico.current_cdc ?? refreshed?.current_cdc ?? null;
+    const cdcActualizado = cdcVigente && cdcVigente !== documento.cdc ? cdcVigente : undefined;
 
     const updated = await repository.updateFiscalStatus({
       facturadorId,
       documentoId,
-      estado: refreshed.estado,
-      fiscalStatus: mergeFiscalStatus(documento.fiscal_status, refreshed.raw),
+      estado: canonico.estado ?? documento.estado,
+      fiscalStatus: mergeFiscalStatus(documento.fiscal_status, { ...(refreshed?.raw ?? {}), canonical: canonico.raw }),
       cdc: cdcActualizado,
-      fiscalStatusRaw: refreshed.status_raw,
-      sifenResultCode: refreshed.result_code,
-      sifenResultMessage: refreshed.result_message
+      fiscalStatusRaw: canonico.status,
+      sifenResultCode: refreshed?.result_code ?? null,
+      sifenResultMessage: refreshed?.result_message ?? null
     });
 
     if (!updated) {

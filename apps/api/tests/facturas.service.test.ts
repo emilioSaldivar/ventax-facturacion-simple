@@ -18,6 +18,7 @@ import {
   type FiscalEmitFacturaResponse,
   type FiscalEmitNotaCreditoRequest,
   type FiscalEmitNotaCreditoResponse,
+  type FiscalDocumentoCanonicoResponse,
   type FiscalFacturalistaResponse,
   type FiscalIdempotencyReconciliationItem,
   type FiscalRefreshStatusRequest,
@@ -414,6 +415,14 @@ class FakeContextRepository implements OperationalContextRepository {
   }
 }
 
+/** Status canonico de FE equivalente al estado que declara el test (SPEC_ESTADO_FISCAL_CANONICO_v0.1). */
+const STATUS_CANONICO_POR_ESTADO: Record<string, string> = {
+  EMITIDA: "APPROVED",
+  RECHAZADA: "REJECTED",
+  ANULADA: "CANCELLED",
+  PENDIENTE_SIFEN: "QUEUED_BATCH"
+};
+
 class FakeFiscalGateway implements FiscalGateway {
   public lastRequest: FiscalEmitFacturaRequest | null = null;
   public lastNotaCreditoRequest: FiscalEmitNotaCreditoRequest | null = null;
@@ -544,6 +553,15 @@ class FakeFiscalGateway implements FiscalGateway {
       throw this.refreshResponse;
     }
     return this.refreshResponse;
+  }
+
+  // El estado lo decide el paso canonico: se deriva del estado que declara cada test.
+  async getDocumentoCanonico(documentUuid: string): Promise<FiscalDocumentoCanonicoResponse> {
+    if (this.refreshResponse instanceof FiscalGatewayError) {
+      throw this.refreshResponse;
+    }
+    const status = STATUS_CANONICO_POR_ESTADO[this.refreshResponse.estado] ?? null;
+    return { status, estado: this.refreshResponse.estado, current_cdc: this.refreshResponse.current_cdc, nro_factura: null, raw: { document_uuid: documentUuid, status } };
   }
 
   async cancelFactura(request: FiscalCancelFacturaRequest): Promise<FiscalCancelFacturaResponse> {
@@ -686,6 +704,13 @@ function buildRetryDeps(
         throw refresh;
       }
       return refresh;
+    },
+    async getDocumentoCanonico() {
+      if (refresh instanceof FiscalGatewayError) {
+        throw refresh;
+      }
+      const status = STATUS_CANONICO_POR_ESTADO[refresh.estado] ?? null;
+      return { status, estado: refresh.estado, current_cdc: refresh.current_cdc, nro_factura: null, raw: { status } };
     }
   } as unknown as FiscalGateway;
   return { consumerGateway, sharedGateway, feEnv: "test", reconcileCalls, refreshCalls };
@@ -1043,6 +1068,93 @@ describe("facturas service", () => {
       facturadorId: context.facturador.id,
       documentoId: "66666666-6666-4666-8666-666666666666",
       estado: "EMITIDA"
+    });
+  });
+
+  describe("estado fiscal canonico (SPEC_ESTADO_FISCAL_CANONICO_v0.1)", () => {
+    function gatewayCanonico(opts: {
+      sifen?: Partial<FiscalRefreshStatusResponse> | FiscalGatewayError;
+      canonico: { status: string | null; estado: FiscalDocumentoCanonicoResponse["estado"] } | FiscalGatewayError;
+    }) {
+      const calls = { sifen: 0, canonico: 0 };
+      const gateway = {
+        async refreshFacturaStatus() {
+          calls.sifen += 1;
+          if (opts.sifen instanceof FiscalGatewayError) throw opts.sifen;
+          return { estado: "PENDIENTE_SIFEN", current_cdc: null, status_raw: null, result_code: null, result_message: null, raw: {}, ...opts.sifen };
+        },
+        async getDocumentoCanonico() {
+          calls.canonico += 1;
+          if (opts.canonico instanceof FiscalGatewayError) throw opts.canonico;
+          return { ...opts.canonico, current_cdc: null, nro_factura: null, raw: { status: opts.canonico.status } };
+        }
+      } as unknown as FiscalGateway;
+      return { gateway, calls };
+    }
+
+    it("REJECTED en FE con SIFEN 0420 queda RECHAZADA y conserva la causa (CA-01)", async () => {
+      const repo = new FakeFacturaRepository();
+      repo.findByIdResponse = buildDocumento({ estado: "PENDIENTE_SIFEN" });
+      const { gateway } = gatewayCanonico({
+        sifen: { result_code: "0420", result_message: "Documento No Existe en SIFEN o ha sido Rechazado" },
+        canonico: { status: "REJECTED", estado: "RECHAZADA" }
+      });
+
+      const result = await refreshDocumentoStatus(context, "66666666-6666-4666-8666-666666666666", repo, gateway);
+
+      expect(result.estado).toBe("RECHAZADA");
+      expect(repo.lastUpdateFiscalStatusInput).toMatchObject({
+        estado: "RECHAZADA",
+        fiscalStatusRaw: "REJECTED",
+        sifenResultCode: "0420"
+      });
+    });
+
+    it("APPROVED en FE queda EMITIDA aunque SIFEN no devuelva 0260/0422 (CA-02)", async () => {
+      const repo = new FakeFacturaRepository();
+      repo.findByIdResponse = buildDocumento({ estado: "PENDIENTE_SIFEN" });
+      const { gateway } = gatewayCanonico({ sifen: { result_code: "0160" }, canonico: { status: "APPROVED", estado: "EMITIDA" } });
+
+      const result = await refreshDocumentoStatus(context, "66666666-6666-4666-8666-666666666666", repo, gateway);
+
+      expect(result.estado).toBe("EMITIDA");
+    });
+
+    it("si la consulta SIFEN falla, decide igual con el estado canonico", async () => {
+      const repo = new FakeFacturaRepository();
+      repo.findByIdResponse = buildDocumento({ estado: "PENDIENTE_SIFEN" });
+      const { gateway, calls } = gatewayCanonico({
+        sifen: new FiscalGatewayError("TIMEOUT", "timeout"),
+        canonico: { status: "APPROVED", estado: "EMITIDA" }
+      });
+
+      const result = await refreshDocumentoStatus(context, "66666666-6666-4666-8666-666666666666", repo, gateway);
+
+      expect(calls).toEqual({ sifen: 1, canonico: 1 });
+      expect(result.estado).toBe("EMITIDA");
+      expect(repo.lastUpdateFiscalStatusInput).toMatchObject({ sifenResultCode: null });
+    });
+
+    it("si el estado canonico falla, responde 502 y no actualiza", async () => {
+      const repo = new FakeFacturaRepository();
+      repo.findByIdResponse = buildDocumento({ estado: "PENDIENTE_SIFEN" });
+      const { gateway } = gatewayCanonico({ canonico: new FiscalGatewayError("UPSTREAM_ERROR", "caido") });
+
+      await expect(refreshDocumentoStatus(context, "66666666-6666-4666-8666-666666666666", repo, gateway)).rejects.toMatchObject({
+        statusCode: 502
+      });
+      expect(repo.lastUpdateFiscalStatusInput).toBeNull();
+    });
+
+    it("un status canonico desconocido conserva el estado actual", async () => {
+      const repo = new FakeFacturaRepository();
+      repo.findByIdResponse = buildDocumento({ estado: "PENDIENTE_SIFEN" });
+      const { gateway } = gatewayCanonico({ canonico: { status: "ALGO_NUEVO", estado: null } });
+
+      const result = await refreshDocumentoStatus(context, "66666666-6666-4666-8666-666666666666", repo, gateway);
+
+      expect(result.estado).toBe("PENDIENTE_SIFEN");
+      expect(repo.lastUpdateFiscalStatusInput).toMatchObject({ estado: "PENDIENTE_SIFEN", fiscalStatusRaw: "ALGO_NUEVO" });
     });
   });
 

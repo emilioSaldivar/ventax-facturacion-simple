@@ -7,7 +7,7 @@ vi.mock("../src/shared/email/email.service", () => ({
 
 import { startVerificacionFiscalWorker } from "../src/modules/facturas/verificacion.worker";
 import type { FacturaRepository, DocumentoResponse, PendingVerificacion } from "../src/modules/facturas/facturas.types";
-import type { FiscalGateway, FiscalRefreshStatusResponse } from "../src/modules/fiscal-gateway/fiscal-gateway.types";
+import type { FiscalGateway, FiscalDocumentoCanonicoResponse, FiscalRefreshStatusResponse } from "../src/modules/fiscal-gateway/fiscal-gateway.types";
 import { FiscalGatewayError } from "../src/modules/fiscal-gateway/fiscal-gateway.types";
 
 beforeEach(() => {
@@ -109,7 +109,24 @@ class FakeGateway implements Partial<FiscalGateway> {
     }
     return this.response;
   }
+
+  // El estado lo decide el paso canonico: se deriva del estado que declara cada test.
+  async getDocumentoCanonico(documentUuid: string): Promise<FiscalDocumentoCanonicoResponse> {
+    if (this.response instanceof FiscalGatewayError) {
+      throw this.response;
+    }
+    const status = STATUS_CANONICO_POR_ESTADO[this.response.estado] ?? null;
+    return { status, estado: this.response.estado, current_cdc: this.response.current_cdc, nro_factura: null, raw: { document_uuid: documentUuid, status } };
+  }
 }
+
+/** Status canonico de FE equivalente al estado que declara el test (SPEC_ESTADO_FISCAL_CANONICO_v0.1). */
+const STATUS_CANONICO_POR_ESTADO: Record<string, string> = {
+  EMITIDA: "APPROVED",
+  RECHAZADA: "REJECTED",
+  ANULADA: "CANCELLED",
+  PENDIENTE_SIFEN: "QUEUED_BATCH"
+};
 
 describe("verificacion fiscal worker", () => {
   it("transiciona PENDIENTE_SIFEN a EMITIDA automaticamente y retira el documento de la agenda", async () => {

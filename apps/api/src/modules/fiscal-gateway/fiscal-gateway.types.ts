@@ -88,7 +88,24 @@ export interface FiscalRefreshStatusRequest {
   documentUuid: string;
 }
 
+/** Traduccion del `status` canonico de FE a estado del SaaS (SPEC_ESTADO_FISCAL_CANONICO_v0.1). */
+export type FiscalEstadoCanonico = "EMITIDA" | "PENDIENTE_SIFEN" | "RECHAZADA" | "ANULADA";
+
+export interface FiscalDocumentoCanonicoResponse {
+  /** `DocumentStatus` de FE, sin traducir. */
+  status: string | null;
+  /** null si el status es desconocido: el servicio conserva el estado actual. */
+  estado: FiscalEstadoCanonico | null;
+  current_cdc: string | null;
+  nro_factura: string | null;
+  raw: Record<string, unknown>;
+}
+
 export interface FiscalRefreshStatusResponse {
+  /**
+   * Valor neutro: siempre PENDIENTE_SIFEN. La consulta a SIFEN no decide el estado
+   * (SPEC_ESTADO_FISCAL_CANONICO_v0.1 RN-01); usar getDocumentoCanonico().
+   */
   estado: "EMITIDA" | "PENDIENTE_SIFEN" | "RECHAZADA" | "ANULADA";
   current_cdc: string | null;
   /** Status crudo del backend fiscal antes del mapeo a estado local. */
@@ -381,6 +398,8 @@ export interface FiscalGateway {
   emitFactura(request: FiscalEmitFacturaRequest): Promise<FiscalEmitFacturaResponse>;
   emitNotaCredito(request: FiscalEmitNotaCreditoRequest): Promise<FiscalEmitNotaCreditoResponse>;
   refreshFacturaStatus(request: FiscalRefreshStatusRequest): Promise<FiscalRefreshStatusResponse>;
+  /** GET /documentos/{uuid}: estado canonico del documento en FE (clave compartida). */
+  getDocumentoCanonico(documentUuid: string): Promise<FiscalDocumentoCanonicoResponse>;
   cancelFactura(request: FiscalCancelFacturaRequest): Promise<FiscalCancelFacturaResponse>;
   getDocumentoEventos(documentUuid: string): Promise<FiscalDocumentoEventosResponse>;
   resolveDocumentoByCdc(cdc: string): Promise<FiscalByCdcResponse>;

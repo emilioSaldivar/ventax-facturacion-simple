@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { buildFiscalGatewayConfig } from "../src/modules/fiscal-gateway/fiscal-gateway.config";
-import { MockFiscalGateway, RealFiscalGateway } from "../src/modules/fiscal-gateway/fiscal-gateway.client";
+import { MockFiscalGateway, RealFiscalGateway, mapDocumentStatusCanonico } from "../src/modules/fiscal-gateway/fiscal-gateway.client";
 import type { FiscalEmitFacturaRequest } from "../src/modules/fiscal-gateway/fiscal-gateway.types";
 
 const request: FiscalEmitFacturaRequest = {
@@ -861,7 +861,7 @@ describe("fiscal gateway", () => {
     expect(result.estado).toBe("EMITIDA");
   });
 
-  it("refreshes fiscal status from SIFEN endpoint and maps approved state", async () => {
+  it("refreshes SIFEN status by uuid and keeps the SIFEN code without deciding the state", async () => {
     const calls: string[] = [];
     const gateway = new RealFiscalGateway({
       mode: "real",
@@ -893,11 +893,13 @@ describe("fiscal gateway", () => {
     const testUuid = "ffffffff-ffff-4fff-bfff-ffffffffffff";
     const result = await gateway.refreshFacturaStatus({ documentUuid: testUuid });
 
-    expect(result.estado).toBe("EMITIDA");
+    // SPEC_ESTADO_FISCAL_CANONICO_v0.1 RN-01: la consulta a SIFEN no decide el estado.
+    expect(result.estado).toBe("PENDIENTE_SIFEN");
+    expect(result.result_code).toBe("0260");
     expect(calls[0]).toBe(`https://fe-api.ventax.app/fcws/documentos/${testUuid}/sifen?env=test&refresh=true`);
   });
 
-  it("maps refresh code 0422 (CDC encontrado) as approved state", async () => {
+  it("does not approve by SIFEN code 0422 anymore: the canonical status decides (CA-05)", async () => {
     const gateway = new RealFiscalGateway({
       mode: "real",
       baseUrl: "https://fe-api.ventax.app/fcws",
@@ -910,21 +912,80 @@ describe("fiscal gateway", () => {
       "fetch",
       vi.fn(async () =>
         new Response(
-          JSON.stringify({
-            cdc: "G".repeat(44),
-            status: {
-              status: "PENDING",
-              sifen_status: { code: "0422", message: "CDC encontrado" }
-            },
-            refreshed: true
-          }),
+          JSON.stringify({ id: "190", "ns2:rEnviConsDeResponse": { "ns2:dCodRes": "0422", "ns2:dMsgRes": "CDC encontrado" } }),
           { status: 200, headers: { "content-type": "application/json" } }
         )
       )
     );
 
     const result = await gateway.refreshFacturaStatus({ documentUuid: "gggggggg-gggg-4ggg-bggg-gggggggggggg" });
-    expect(result.estado).toBe("EMITIDA");
+    expect(result.estado).toBe("PENDIENTE_SIFEN");
+    expect(result.result_code).toBe("0422");
+    expect(result.result_message).toBe("CDC encontrado");
+  });
+
+  it("reads the canonical document status by uuid with GET /documentos/{uuid}", async () => {
+    const calls: Array<{ url: string; key: string | null }> = [];
+    const gateway = new RealFiscalGateway({
+      mode: "real",
+      baseUrl: "https://fe-api.ventax.app/v1",
+      apiKey: "clave-compartida",
+      timeoutMs: 20000,
+      environment: "prod"
+    });
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init: RequestInit) => {
+        calls.push({ url, key: new Headers(init.headers).get("x-api-key") });
+        return new Response(
+          JSON.stringify({ document_uuid: "u-1", document_id: "2826", current_cdc: "C".repeat(44), nro_factura: "0000047", status: "REJECTED", accepted_by_sifen: false }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        );
+      })
+    );
+
+    const result = await gateway.getDocumentoCanonico("6dd74248-0b53-4114-ad10-2ec179497089");
+
+    expect(calls[0].url).toBe("https://fe-api.ventax.app/v1/documentos/6dd74248-0b53-4114-ad10-2ec179497089?env=prod");
+    expect(calls[0].key).toBe("clave-compartida");
+    expect(result).toMatchObject({ status: "REJECTED", estado: "RECHAZADA", current_cdc: "C".repeat(44), nro_factura: "0000047" });
+  });
+
+  it("raises UPSTREAM_ERROR when the canonical document lookup fails", async () => {
+    const gateway = new RealFiscalGateway({
+      mode: "real",
+      baseUrl: "https://fe-api.ventax.app/v1",
+      apiKey: "secret",
+      timeoutMs: 20000,
+      environment: "test"
+    });
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ error: "DOCUMENTO_NOT_FOUND" }), { status: 404 })));
+
+    await expect(gateway.getDocumentoCanonico("u-404")).rejects.toMatchObject({ code: "UPSTREAM_ERROR" });
+  });
+
+  it.each([
+    ["APPROVED", "EMITIDA"],
+    ["APPROVED_WITH_OBS", "EMITIDA"],
+    ["REJECTED", "RECHAZADA"],
+    ["CANCELLED", "ANULADA"],
+    ["VOIDED", "ANULADA"],
+    ["DRAFT", "PENDIENTE_SIFEN"],
+    ["XML_GENERATED", "PENDIENTE_SIFEN"],
+    ["XML_SIGNED", "PENDIENTE_SIFEN"],
+    ["QR_ATTACHED", "PENDIENTE_SIFEN"],
+    ["QUEUED_SYNC", "PENDIENTE_SIFEN"],
+    ["SENT_SYNC", "PENDIENTE_SIFEN"],
+    ["QUEUED_BATCH", "PENDIENTE_SIFEN"],
+    ["SENT_BATCH", "PENDIENTE_SIFEN"],
+    ["CANCEL_REQUESTED", "PENDIENTE_SIFEN"],
+    ["VOID_REQUESTED", "PENDIENTE_SIFEN"],
+    ["TRANSMISSION_FAILED", "PENDIENTE_SIFEN"],
+    ["ALGO_NUEVO", null],
+    [null, null]
+  ])("maps canonical status %s to %s", (status, estado) => {
+    expect(mapDocumentStatusCanonico(status)).toBe(estado);
   });
 
   it("sends cancellation event to real fiscal backend", async () => {

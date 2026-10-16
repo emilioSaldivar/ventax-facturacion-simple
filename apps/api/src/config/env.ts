@@ -16,6 +16,8 @@ const envSchema = z.object({
   FE_API_TIMEOUT_MS: z.coerce.number().int().positive().default(20000),
   FE_API_ENV: z.enum(["test", "prod"]).default("test"),
   FE_GATEWAY_MODE: z.enum(["mock", "real"]).default("mock"),
+  /** Solo modo mock: status canonico que devuelve GET /documentos/{uuid} (pruebas E2E). */
+  FE_MOCK_CANONICAL_STATUS: z.string().trim().min(1).default("APPROVED"),
   FE_SEND_EMISSION_PROFILE_CODE: z.enum(["true", "false"]).default("true").transform((value) => value === "true"),
   FE_SERVICE_NUMBERING: z.enum(["true", "false"]).default("false").transform((value) => value === "true"),
   FE_OUTBOX_WORKER_ENABLED: z.enum(["true", "false"]).default("true").transform((value) => value === "true"),

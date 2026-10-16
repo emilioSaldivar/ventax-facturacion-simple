@@ -270,6 +270,12 @@ export class PgFacturaRepository implements FacturaRepository {
           sifen_result_code = coalesce($7, sifen_result_code),
           sifen_result_message = coalesce($8, sifen_result_message),
           sifen_last_checked_at = now(),
+          -- RN-04 (SPEC_ESTADO_FISCAL_CANONICO_v0.1): un documento no final nunca queda sin agenda,
+          -- y uno final sale de ella. El worker sobrescribe esto con su backoff despues del refresh.
+          verificacion_next_at = case
+            when $3 in ('PENDIENTE_SIFEN', 'EMITIENDO') then coalesce(verificacion_next_at, now() + interval '5 minutes')
+            else null
+          end,
           updated_at = now()
         where facturador_id = $1
           and id = $2

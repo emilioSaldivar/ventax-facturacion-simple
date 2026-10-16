@@ -313,3 +313,10 @@ estado fiscal" aparece en el aviso del documento. Validacion: `typecheck`/`lint`
 419 tests (mismos 6 fallos preexistentes); integracion con Postgres 3/3; Playwright 20/20 en mobile
 390x844 y desktop 1280x800 sobre contenedores con FE mock (desvio de build por DNS de Docker
 documentado en la matriz).
+
+## Referencia de evidencia — Estado fiscal canonico v0.1 (2026-10-15)
+
+Matriz y evidencia en `docs/TASKS_ESTADO_FISCAL_CANONICO_v0.1.md`. El estado del documento se deriva del
+`status` de `GET /v1/documentos/{uuid}` de FE y no de codigos SIFEN; ningun documento no final queda sin
+verificacion agendada tras un refresh. Validacion: 444 tests (mismos 6 fallos preexistentes), integracion
+con Postgres 3/3, Playwright 10/10 (rechazo) y 24/24 (regresion del reintento) en mobile y desktop.
