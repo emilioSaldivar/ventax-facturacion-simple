@@ -10,7 +10,42 @@
 
 - `SPEC`: DONE (decisiones D-1 a D-4 del usuario, 2026-10-15)
 - `PLAN`: DONE
-- `TASKS`: EFC-001 a EFC-009 DONE. EFC-010 a EFC-012 PENDIENTE.
+- `TASKS`: EFC-001 a EFC-009 DONE. EFC-010 PARTIAL. EFC-011 y EFC-012 PENDIENTE. **Despliegue a produccion en espera: ver "Retomar aqui".**
+
+## Retomar aqui (estado al 2026-10-16)
+
+**Donde quedamos:**
+- El codigo esta en `master` (`7fe6ae8`) y desplegado y validado en **staging**.
+- **Produccion sigue en `0deef35`**, sin este cambio. El usuario postergo el deploy porque se entro en horario transaccional: hay que hacerlo fuera de ese horario.
+
+**Mientras no se despliegue no hay riesgo:**
+- El worker de prod, con el codigo viejo, sigue viendo la `0000047` (`5057016-1`) y la `0000003` (`80044279-2`) como `PENDIENTE_SIFEN`, asi que no envia correos por ellas.
+- Su agenda sigue corriendo cada 24 h, y el backoff ya esta en el maximo.
+
+**Pasos para el deploy a produccion, en este orden:**
+
+1. **Decision pendiente del usuario (D-4, Ibanez).** La `0000003` de `80044279-2` (`fiscal_document_id = '2823'`) esta `REJECTED` en FE pero ya se regularizo operativamente. Tras el deploy, el worker la pasaria a "Requiere revision" y **enviaria el correo de accion requerida a sus 6 operadores** en su proxima verificacion agendada. Opciones:
+   - (a) marcarla como notificada antes del deploy, que es lo recomendado:
+     `update facturas_operativas set accion_notificada_at = now() where fiscal_document_id = '2823' and accion_notificada_at is null;`
+   - (b) aceptar que llegue el correo.
+2. Confirmar que el outbox de prod no tiene trabajo en vuelo (`PENDING`/`PROCESSING`).
+3. Backup: `pg_dump -Fc` de `ventax-facturacion-simple-prod-postgres-1` a `~/backups/facturacion-simple-prod/`, y verificarlo con `pg_restore --list`.
+4. En la VPS (`ssh hetzner-jump` o `ssh hetzner`), dentro de `~/apps/ventax-facturacion-simple`: `git pull --ff-only`, y despues `APP_ENV_FILE=.env.production bash scripts/deploy.sh`. No hay migraciones.
+5. Verificar:
+   - version `7fe6ae8` o posterior, api y frontend healthy, y 0 errores en el log;
+   - readiness de los 6 facturadores con `python3 /tmp/check_facturadores.py 8191 ~/.config/ventax/prod-backoffice.env ventax-facturacion-simple-prod-postgres-1`. Si el script ya no esta en `/tmp`, esta descrito en la evidencia de SEG-037.
+6. **Caso de prueba (CA-04):** la `0000047` de `5057016-1` debe pasar a `RECHAZADA` ("Requiere revision", causa `0420`) en su proxima verificacion automatica, o antes si un operador presiona "Verificar estado fiscal".
+   - Confirmar que `accion_notificada_at` quede marcado y que llegue el correo de accion requerida a los operadores de `5057016-1`.
+   - Ojo: el refresh **manual** no envia correo, solo el worker. Para probar el correo hay que esperar la verificacion automatica (agenda alrededor de las 13:34 UTC).
+7. Cerrar EFC-010, EFC-011 y EFC-012 con la evidencia, y repasar el SPEC.
+
+**Tambien pendiente de esta sesion (fuera de esta iniciativa):**
+- `TASKS_REINTENTO_EMISION_CONFIRMADO_v0.1.md` REC-014: cierre, despues de la validacion manual del usuario.
+- La corrida unica de Playwright y verificaciones de las matrices viejas que quedaron sin evidencia (UX9-005, DUX-034, RUX-006/011/015/024, ADR-018, AGS-009, UXS-012).
+- La auditoria de matrices desactualizadas con codigo ya implementado (Contrato canonico, Presupuestos v0.2, Scripts ABM, Backoffice admin, Resiliencia F1).
+- SPEC de backups automatizados de las DB (ultimo backup automatico: ninguno; solo dumps manuales pre-deploy).
+- F4 de segmentacion: debe repetir el backfill de `0034` (hallazgo H-3).
+- Los 93 aprobados y los rechazados historicos en prod quedan como estan, por decision D-2. Un operador puede actualizarlos uno a uno con "Verificar estado fiscal".
 
 ## Matriz
 
@@ -25,7 +60,7 @@
 | EFC-007 | Mock | `FE_MOCK_CANONICAL_STATUS` para el E2E | DONE (2026-10-15) | Con el valor `REJECTED`, el refresh mock da `RECHAZADA` |
 | EFC-008 | QA | `test`/`typecheck`/`lint` de `api`; `typecheck`/`build` de `web-operacion`; Playwright sobre contenedores en mobile y desktop (documento `RECHAZADA` con causa) | DONE (2026-10-15) | Sin regresiones respecto a la linea base de 6 fallos preexistentes; Playwright en verde |
 | EFC-009 | Staging | Deploy y smoke real: `GET /documentos/{uuid}` responde y la `0000004` de `4543629-0` queda "Rechazada" tras verificar | DONE (2026-10-15) | Evidencia registrada |
-| EFC-010 | Prod, preparacion | Chequeo real de solo lectura de `GET /documentos/{uuid}` sobre la `0000047`; marcar como notificada la `0000003` de `80044279-2` (PLAN §4) **con OK del usuario**; backup | PARTIAL (chequeo de solo lectura DONE; marca de 2823 y deploy en espera del usuario) | Respuesta `REJECTED`; `accion_notificada_at` marcado solo en 2823 |
+| EFC-010 | Prod, preparacion | Chequeo real de solo lectura de `GET /documentos/{uuid}` sobre la `0000047`; marcar como notificada la `0000003` de `80044279-2` (PLAN §4) **con OK del usuario**; backup | PARTIAL (chequeo de solo lectura DONE; marca de 2823, backup y deploy en espera) | Respuesta `REJECTED`; `accion_notificada_at` marcado solo en 2823 |
 | EFC-011 | Prod | Deploy, readiness y caso de prueba de la `0000047` (estado "Rechazada" y correo recibido) | PENDIENTE | CA-04 |
 | EFC-012 | Cierre | Repasar SPEC/PLAN/TASKS | PENDIENTE | Sin desvios sin documentar |
 
@@ -48,3 +83,4 @@
   - Chequeo de solo lectura desde el contenedor `api` de prod con la clave compartida: `GET /documentos/{uuid}` de FE prod responde 200 con `status: REJECTED` para la `0000047` de `5057016-1` y para la `0000003` de `80044279-2`.
   - El usuario decidio **no desplegar todavia**. Prod sigue en `0deef35`, no se marco la 2823 y no se tomo backup.
   - Mientras tanto, el worker de prod (codigo viejo) sigue viendo ambas como `PENDIENTE_SIFEN`, asi que no hay riesgo de correo hasta el deploy.
+- 2026-10-15/16: EFC-010, preparacion de produccion. Chequeo de solo lectura desde el contenedor `api` de prod con la clave compartida: `GET /documentos/{uuid}` de FE prod responde 200 con `status: REJECTED` para la `0000047` de `5057016-1` y para la `0000003` de `80044279-2`. El usuario decidio no desplegar todavia (horario transaccional). Prod sigue en `0deef35`; no se marco la 2823 ni se tomo el backup previo.
