@@ -320,3 +320,8 @@ Matriz y evidencia en `docs/TASKS_ESTADO_FISCAL_CANONICO_v0.1.md`. El estado del
 `status` de `GET /v1/documentos/{uuid}` de FE y no de codigos SIFEN; ningun documento no final queda sin
 verificacion agendada tras un refresh. Validacion: 444 tests (mismos 6 fallos preexistentes), integracion
 con Postgres 3/3, Playwright 10/10 (rechazo) y 24/24 (regresion del reintento) en mobile y desktop.
+
+Despliegue a produccion 2026-10-19 02:41 UTC (domingo 18 a las 22:41 hora de Paraguay, fuera del horario transaccional): `7fe6ae8`, con backup previo
+verificado por restauracion, 6/6 facturadores listos, Playwright smoke 390x844 y 1280x800 en
+`factura.ventax.app`. El caso CA-04 (correo del worker para la `0000047`) queda para la verificacion
+agendada del 2026-10-19 a las 13:34 UTC (detalle en EFC-011).

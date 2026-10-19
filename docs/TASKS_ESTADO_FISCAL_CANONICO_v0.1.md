@@ -10,11 +10,13 @@
 
 - `SPEC`: DONE (decisiones D-1 a D-4 del usuario, 2026-10-15)
 - `PLAN`: DONE
-- `TASKS`: EFC-001 a EFC-009 DONE. EFC-010 PARTIAL. EFC-011 y EFC-012 PENDIENTE. **Despliegue a produccion en espera: ver "Retomar aqui".**
+- `TASKS`: EFC-001 a EFC-010 DONE. EFC-011 PARTIAL: desplegado en produccion el 2026-10-19, falta observar CA-04. EFC-012 PENDIENTE.
 
-## Retomar aqui (estado al 2026-10-16)
+## Retomar aqui (estado al 2026-10-19)
 
-**Donde quedamos:**
+**Actualizacion 2026-10-19:** `7fe6ae8` quedo desplegado en produccion (ver EFC-010/EFC-011). Solo falta el paso 6: observar CA-04 en la verificacion agendada de la `0000047`, el 2026-10-19 a las 13:34 UTC. Despues, el paso 7. Los pasos 1 a 5 de abajo quedan como registro historico.
+
+**Donde quedamos (2026-10-16):**
 - El codigo esta en `master` (`7fe6ae8`) y desplegado y validado en **staging**.
 - **Produccion sigue en `0deef35`**, sin este cambio. El usuario postergo el deploy porque se entro en horario transaccional: hay que hacerlo fuera de ese horario.
 
@@ -60,8 +62,8 @@
 | EFC-007 | Mock | `FE_MOCK_CANONICAL_STATUS` para el E2E | DONE (2026-10-15) | Con el valor `REJECTED`, el refresh mock da `RECHAZADA` |
 | EFC-008 | QA | `test`/`typecheck`/`lint` de `api`; `typecheck`/`build` de `web-operacion`; Playwright sobre contenedores en mobile y desktop (documento `RECHAZADA` con causa) | DONE (2026-10-15) | Sin regresiones respecto a la linea base de 6 fallos preexistentes; Playwright en verde |
 | EFC-009 | Staging | Deploy y smoke real: `GET /documentos/{uuid}` responde y la `0000004` de `4543629-0` queda "Rechazada" tras verificar | DONE (2026-10-15) | Evidencia registrada |
-| EFC-010 | Prod, preparacion | Chequeo real de solo lectura de `GET /documentos/{uuid}` sobre la `0000047`; marcar como notificada la `0000003` de `80044279-2` (PLAN §4) **con OK del usuario**; backup | PARTIAL (chequeo de solo lectura DONE; marca de 2823, backup y deploy en espera) | Respuesta `REJECTED`; `accion_notificada_at` marcado solo en 2823 |
-| EFC-011 | Prod | Deploy, readiness y caso de prueba de la `0000047` (estado "Rechazada" y correo recibido) | PENDIENTE | CA-04 |
+| EFC-010 | Prod, preparacion | Chequeo real de solo lectura de `GET /documentos/{uuid}` sobre la `0000047`; marcar como notificada la `0000003` de `80044279-2` (PLAN §4) **con OK del usuario**; backup | DONE (2026-10-19) | Respuesta `REJECTED`; `accion_notificada_at` marcado solo en 2823 |
+| EFC-011 | Prod | Deploy, readiness y caso de prueba de la `0000047` (estado "Rechazada" y correo recibido) | PARTIAL (deploy y readiness DONE el 2026-10-19; falta observar CA-04 a las 13:34 UTC) | CA-04 |
 | EFC-012 | Cierre | Repasar SPEC/PLAN/TASKS | PENDIENTE | Sin desvios sin documentar |
 
 ## Evidencia
@@ -84,3 +86,24 @@
   - El usuario decidio **no desplegar todavia**. Prod sigue en `0deef35`, no se marco la 2823 y no se tomo backup.
   - Mientras tanto, el worker de prod (codigo viejo) sigue viendo ambas como `PENDIENTE_SIFEN`, asi que no hay riesgo de correo hasta el deploy.
 - 2026-10-15/16: EFC-010, preparacion de produccion. Chequeo de solo lectura desde el contenedor `api` de prod con la clave compartida: `GET /documentos/{uuid}` de FE prod responde 200 con `status: REJECTED` para la `0000047` de `5057016-1` y para la `0000003` de `80044279-2`. El usuario decidio no desplegar todavia (horario transaccional). Prod sigue en `0deef35`; no se marco la 2823 ni se tomo el backup previo.
+- 2026-10-19, EFC-010 y EFC-011 (deploy), produccion. Domingo 18 a las 22:40 hora de Paraguay (01:40 UTC del 19), fuera del horario transaccional, con OK del usuario.
+  - **Pre-chequeos:**
+    - prod en `0deef35`, healthy, 41 GB libres;
+    - outbox `factura_emision_outbox` sin trabajo en vuelo (282 `DONE`, ultimo movimiento el 2026-10-17 19:14 UTC);
+    - 7 documentos con agenda. 5 de ellos estan `EMITIDA` con agenda vieja, inocuos porque `claimNextVerificacion` solo toma `PENDIENTE_SIFEN`/`EMITIENDO`.
+  - **Backup:** `~/backups/facturacion-simple-prod/facturacion_simple-20261019-023937-pre-estado-canonico.dump`, 63876144 bytes, permisos 600, sha256 `dce6dd0e...454eb3f7`.
+    - `pg_restore --list`: 36 `TABLE DATA`.
+    - Restaurado en un `postgres:16-alpine` descartable con `--network none`. Los conteos dan identicos a prod: 36 tablas, 286 facturas, 282 outbox, 6 facturadores, 7 tenants, y la misma ultima `created_at`.
+  - **D-4, opcion (a), por decision del usuario:** `accion_notificada_at` marcado solo en `fiscal_document_id = '2823'` (UPDATE 1). La `2826` (`0000047`) quedo sin marcar.
+  - **Deploy:** `APP_ENV_FILE=.env.production bash scripts/deploy.sh` con la VPS en `7fe6ae8` (`origin/master`). Migraciones: `applied: []`, 0001-0034 omitidas.
+    - api y frontend healthy;
+    - 0 logs de nivel >= 40 en los primeros minutos, worker de verificacion activo;
+    - `getDocumentoCanonico` presente en el `dist` de la imagen;
+    - staging intacto.
+    - Se ignoro `limpieza.sql`, un archivo sin versionar en la VPS que no es de este cambio.
+  - **Readiness:** `/tmp/check_facturadores.py` da `TODOS_LISTOS`, los 6 facturadores `ready=True` y sin fallas.
+  - **Canonico desde el contenedor nuevo**, en solo lectura: `GET /documentos/{uuid}?env=prod` de la `0000047` responde HTTP 200 con `status: REJECTED` (`FE_GATEWAY_MODE=real`).
+  - **Playwright smoke** sobre `https://factura.ventax.app/app/` (el frontend no cambio en este commit): mobile 390x844 y desktop 1280x800 cargan el login con HTTP 200 y sin scroll horizontal. El unico error de consola es el 401 esperado del chequeo de sesion sin login.
+    - `scripts/smoke-deploy.cjs` no se corrio completo porque requiere credenciales de operador de prod.
+  - **Pendiente CA-04:** la proxima verificacion agendada de la `0000047` es el 2026-10-19 a las 13:34:51 UTC. Ahi debe pasar a `RECHAZADA`, quedar con `accion_notificada_at` y enviar el correo a los operadores de `5057016-1`.
+    - La `0000003` (`2823`) tiene agenda el 2026-10-19 a las 12:50 UTC: debe pasar a `RECHAZADA` sin correo.
