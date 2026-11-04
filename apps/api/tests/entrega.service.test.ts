@@ -306,7 +306,7 @@ describe("entrega service", () => {
     expect(html).toContain("<!doctype html>");
     expect(html).toContain("Ver factura PDF");
     expect(html).toContain("Descargar documento electronico");
-    expect(html).toContain('/app/brand/VENTAX-PRINCIPAL.svg');
+    expect(html).toContain('/app/brand/segel-logo-fondo-claro.svg');
     expect(html).toContain(`/public/d/${"A".repeat(43)}/kude.pdf`);
     expect(html).toContain(`/public/d/${"A".repeat(43)}/xml`);
     expect(html).toContain("Cliente &lt;script&gt;alert(1)&lt;/script&gt;");

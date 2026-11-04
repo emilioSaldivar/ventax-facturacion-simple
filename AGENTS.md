@@ -58,6 +58,9 @@ La fuente de verdad de este proyecto es:
 - `docs/SPEC_BACKOFFICE_ADMIN_v0.1.md`
 - `docs/PLAN_BACKOFFICE_ADMIN_v0.1.md`
 - `docs/TASKS_BACKOFFICE_ADMIN_v0.1.md`
+- `docs/SPEC_IDENTIDAD_MARCA_SEGEL_v0.1.md`
+- `docs/PLAN_IDENTIDAD_MARCA_SEGEL_v0.1.md`
+- `docs/TASKS_IDENTIDAD_MARCA_SEGEL_v0.1.md`
 - `spec/openapi.yaml`
 
 Los documentos bajo `contexto_facturacion_electronica/` y `contexto_pos_graciela/` son antecedentes. No son la especificacion final del nuevo producto.

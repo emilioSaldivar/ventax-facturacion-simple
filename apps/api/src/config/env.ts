@@ -30,7 +30,7 @@ const envSchema = z.object({
   APP_VERSION: z.string().default("dev"),
   RESEND_API_KEY: z.string().optional(),
   EMAIL_FROM: z.string().email().default("facturacion@ventax.app"),
-  EMAIL_FROM_NAME: z.string().default("Ventax Facturación Simple"),
+  EMAIL_FROM_NAME: z.string().default("Segel Facturación Simple"),
   SMTP_HOST: z.string().optional(),
   SMTP_PORT: z.coerce.number().int().positive().default(587),
   SMTP_SECURE: z.enum(["true", "false"]).default("false").transform((v) => v === "true"),

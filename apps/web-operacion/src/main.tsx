@@ -547,7 +547,7 @@ function NotaPublicaView({ token }: { token: string }) {
 
   if (loading) {
     return (
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100dvh", fontFamily: "Inter, sans-serif" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100dvh", fontFamily: "var(--segel-font)" }}>
         Cargando...
       </div>
     );
@@ -555,7 +555,7 @@ function NotaPublicaView({ token }: { token: string }) {
 
   if (!data?.valido) {
     return (
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100dvh", fontFamily: "Inter, sans-serif", gap: "12px", color: "#374151" }}>
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100dvh", fontFamily: "var(--segel-font)", gap: "12px", color: "#374151" }}>
         <div style={{ fontSize: "40px" }}>🔍</div>
         <div style={{ fontSize: "16px", fontWeight: 600 }}>Documento no encontrado</div>
         <div style={{ fontSize: "14px", color: "#6b7280" }}>El enlace no es válido o el documento fue eliminado.</div>
@@ -569,15 +569,15 @@ function NotaPublicaView({ token }: { token: string }) {
   const pdfUrl = `/api/v1/verificar/nota/${token}/pdf`;
 
   return (
-    <div style={{ minHeight: "100dvh", background: "#f4f8fa", fontFamily: "Inter, ui-sans-serif, sans-serif" }}>
+    <div style={{ minHeight: "100dvh", background: "#ffffff", fontFamily: "var(--segel-font)" }}>
       {/* Header */}
       <div style={{ background: "#fff", borderBottom: "1px solid #e5e7eb", padding: "14px 20px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <div style={{ fontWeight: 700, fontSize: "16px", color: "#07a7e1", letterSpacing: "0.5px" }}>Ventax</div>
+        <img src="/app/brand/segel-logo-fondo-claro.svg" alt="Segel" width={136} height={40} style={{ display: "block" }} />
         <a
           href={pdfUrl}
           target="_blank"
           rel="noreferrer"
-          style={{ background: "#07a7e1", color: "#fff", padding: "8px 16px", borderRadius: "8px", textDecoration: "none", fontWeight: 600, fontSize: "14px" }}
+          style={{ background: "var(--color-brand)", color: "#fff", padding: "8px 16px", borderRadius: "8px", textDecoration: "none", fontWeight: 600, fontSize: "14px" }}
         >
           Descargar PDF
         </a>
@@ -642,7 +642,7 @@ function NotaPublicaView({ token }: { token: string }) {
         </div>
 
         <div style={{ textAlign: "center", fontSize: "12px", color: "#9ca3af", marginTop: "20px" }}>
-          Documento emitido con Ventax · ventax.app
+          Documento emitido con Segel
         </div>
       </div>
     </div>
@@ -677,7 +677,7 @@ function ReciboPublicaView({ token }: { token: string }) {
 
   if (loading) {
     return (
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100dvh", fontFamily: "Inter, sans-serif" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100dvh", fontFamily: "var(--segel-font)" }}>
         Cargando...
       </div>
     );
@@ -685,7 +685,7 @@ function ReciboPublicaView({ token }: { token: string }) {
 
   if (!data?.valido) {
     return (
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100dvh", fontFamily: "Inter, sans-serif", gap: "12px", color: "#374151" }}>
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100dvh", fontFamily: "var(--segel-font)", gap: "12px", color: "#374151" }}>
         <div style={{ fontSize: "40px" }}>🔍</div>
         <div style={{ fontSize: "16px", fontWeight: 600 }}>Documento no encontrado</div>
         <div style={{ fontSize: "14px", color: "#6b7280" }}>El enlace no es válido o el documento fue eliminado.</div>
@@ -702,14 +702,14 @@ function ReciboPublicaView({ token }: { token: string }) {
     <main style={{
       minHeight: "100vh",
       padding: "18px",
-      background: "linear-gradient(180deg, rgb(7 167 225 / 0.1), transparent 280px), #f4f8fa",
-      fontFamily: "Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+      background: "#ffffff",
+      fontFamily: "var(--segel-font)",
       color: "#18242a",
       boxSizing: "border-box"
     }}>
       <section style={{ display: "grid", gap: "14px", width: "min(100%, 760px)", margin: "0 auto" }}>
         <div style={{ display: "inline-flex", alignItems: "center", width: "fit-content", minHeight: "42px" }}>
-          <img src="/app/brand/VENTAX-PRINCIPAL.svg" alt="Ventax" width={142} height={46} style={{ display: "block", width: "142px", height: "auto" }} />
+          <img src="/app/brand/segel-logo-fondo-claro.svg" alt="Segel" width={157} height={46} style={{ display: "block", width: "157px", height: "auto" }} />
         </div>
 
         <article style={{ display: "grid", gap: "14px", border: "1px solid #d7e5ea", borderRadius: "8px", background: "#ffffff", padding: "16px" }}>
@@ -756,7 +756,7 @@ function ReciboPublicaView({ token }: { token: string }) {
             ) : null}
           </dl>
 
-          <div style={{ borderRadius: "8px", background: "#eef7fb", padding: "14px" }}>
+          <div style={{ borderRadius: "8px", background: "var(--segel-primary-50)", padding: "14px" }}>
             <dt style={{ color: "#65747b", fontSize: "12px", fontWeight: 800 }}>Importe</dt>
             <dd style={{ margin: "2px 0 0", fontSize: "26px", fontWeight: 900 }}>{data.importe != null ? formatGuaranies(data.importe) : ""}</dd>
           </div>
@@ -766,13 +766,13 @@ function ReciboPublicaView({ token }: { token: string }) {
               href={pdfUrl}
               target="_blank"
               rel="noreferrer"
-              style={{ display: "grid", minHeight: "48px", placeItems: "center", borderRadius: "8px", border: "1px solid #07a7e1", background: "#07a7e1", color: "#ffffff", fontWeight: 900, lineHeight: 1.15, padding: "8px 12px", textDecoration: "none" }}
+              style={{ display: "grid", minHeight: "48px", placeItems: "center", borderRadius: "8px", border: "1px solid var(--color-brand)", background: "var(--color-brand)", color: "#ffffff", fontWeight: 900, lineHeight: 1.15, padding: "8px 12px", textDecoration: "none" }}
             >
               Ver recibo PDF
             </a>
             <a
               href={xmlUrl}
-              style={{ display: "grid", minHeight: "48px", placeItems: "center", borderRadius: "8px", border: "1px solid #c6d9df", background: "#ffffff", color: "#006b86", fontWeight: 900, lineHeight: 1.15, padding: "8px 12px", textDecoration: "none" }}
+              style={{ display: "grid", minHeight: "48px", placeItems: "center", borderRadius: "8px", border: "1px solid #c6d9df", background: "#ffffff", color: "var(--color-brand-dark)", fontWeight: 900, lineHeight: 1.15, padding: "8px 12px", textDecoration: "none" }}
             >
               Descargar documento electrónico
             </a>
@@ -1165,7 +1165,7 @@ function OnboardingFlow({
       setPhase("otp");
     } catch (err) {
       if (err instanceof ApiClientError && err.status === 412) {
-        setError(`Tu cuenta (${username}) no tiene correo electronico configurado. Ya le avisamos a Ventax y te van a contactar. Si es urgente, escribi a facturacion@ventax.app indicando tu usuario.`);
+        setError(`Tu cuenta (${username}) no tiene correo electronico configurado. Ya le avisamos a Segel y te van a contactar. Si es urgente, escribi a facturacion@ventax.app indicando tu usuario.`);
       } else {
         setError(err instanceof Error ? err.message : "Error al solicitar codigo de verificacion.");
       }
@@ -1208,7 +1208,7 @@ function OnboardingFlow({
       setOtpCooldown(60);
     } catch (err) {
       if (err instanceof ApiClientError && err.status === 412) {
-        setError(`Tu cuenta (${username}) no tiene correo electronico configurado. Ya le avisamos a Ventax y te van a contactar. Si es urgente, escribi a facturacion@ventax.app indicando tu usuario.`);
+        setError(`Tu cuenta (${username}) no tiene correo electronico configurado. Ya le avisamos a Segel y te van a contactar. Si es urgente, escribi a facturacion@ventax.app indicando tu usuario.`);
       } else {
         setError(err instanceof Error ? err.message : "Error al reenviar codigo.");
       }
@@ -1576,7 +1576,7 @@ function OperationHome({
       {showInstallHint && !isStandalone && !updatePending ? (
         <section className="install-banner" aria-live="polite">
           <div>
-            <strong>Instala Ventax en tu dispositivo</strong>
+            <strong>Instala Segel en tu dispositivo</strong>
             <small>
               {installPromptEvent
                 ? "Acceso rapido desde pantalla de inicio, como una app."
@@ -4308,7 +4308,7 @@ function InvoiceEditor({
     }
 
     const payload = {
-      title: "Factura Ventax",
+      title: "Factura Segel",
       text: "Factura disponible para compartir",
       url
     };
@@ -5239,11 +5239,11 @@ function LoadingScreen({ message }: { message: string }) {
 
 function BrandMark({ compact = false }: { compact?: boolean }) {
   return (
-    <div className={compact ? "brand-mark compact" : "brand-mark"} aria-label="Ventax Factura">
+    <div className={compact ? "brand-mark compact" : "brand-mark"} aria-label="Segel Factura">
       <img
-        alt="Ventax"
+        alt="Segel"
         className="brand-logo"
-        src={compact ? "/app/brand/VENTAX-ISO-CELESTE.svg" : "/app/brand/VENTAX-PRINCIPAL.svg"}
+        src={compact ? "/app/brand/segel-isotipo.svg" : "/app/brand/segel-logo-fondo-claro.svg"}
       />
     </div>
   );
@@ -5298,7 +5298,7 @@ function fmtFecha(iso: string | null | undefined): string {
 
 function buildWhatsAppShareUrl(publicUrl: string, phone: string): string {
   const digits = normalizeParaguayWhatsAppDigits(phone);
-  const text = encodeURIComponent(`Comprobante Ventax: ${publicUrl}`);
+  const text = encodeURIComponent(`Comprobante Segel: ${publicUrl}`);
   if (!digits) {
     return `https://wa.me/?text=${text}`;
   }
@@ -6427,7 +6427,7 @@ function NotasView({
     async function shareNotaLink() {
       if (!notaPublicUrl) return;
       try {
-        if (navigator.share) { await navigator.share({ title: `${tipoLabel} Ventax`, url: notaPublicUrl }); return; }
+        if (navigator.share) { await navigator.share({ title: `${tipoLabel} Segel`, url: notaPublicUrl }); return; }
         await navigator.clipboard.writeText(notaPublicUrl);
         setDeliveryMessage("Enlace copiado.");
       } catch { setDeliveryMessage(notaPublicUrl); }
@@ -6971,7 +6971,7 @@ function NotasView({
                                 setMenuOpenId(null);
                                 const url = `${window.location.origin}/verificar/nota/${nota.verification_token!}`;
                                 void (navigator.share
-                                  ? navigator.share({ title: `${filtroTipo === "PRESUPUESTO" ? "Presupuesto" : "Pedido"} Ventax`, url })
+                                  ? navigator.share({ title: `${filtroTipo === "PRESUPUESTO" ? "Presupuesto" : "Pedido"} Segel`, url })
                                   : navigator.clipboard.writeText(url));
                               }}>Compartir enlace</button>
                               <button role="menuitem" type="button" onClick={() => {

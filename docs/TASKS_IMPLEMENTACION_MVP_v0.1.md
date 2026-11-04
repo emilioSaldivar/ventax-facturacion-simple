@@ -325,3 +325,11 @@ Despliegue a produccion 2026-10-19 02:41 UTC (domingo 18 a las 22:41 hora de Par
 verificado por restauracion, 6/6 facturadores listos, Playwright smoke 390x844 y 1280x800 en
 `factura.ventax.app`. El caso CA-04 (correo del worker para la `0000047`) queda para la verificacion
 agendada del 2026-10-19 a las 13:34 UTC (detalle en EFC-011).
+
+## Referencia de evidencia — Identidad de marca Segel v0.1 (2026-11-04)
+
+Matriz y evidencia en `docs/TASKS_IDENTIDAD_MARCA_SEGEL_v0.1.md`. Rama `feat/identidad-segel`, desplegada solo en el
+stack local. Marca tomada de `segel.com.py`; kit reutilizable en `packages/shared/brand/`.
+Validacion: 445 tests (mismos 6 fallos preexistentes), Playwright 8 pantallas en 390x844 y 1280x800,
+PWA instalable por CDP. `playwright-mock-flow` falla igual en `f08037d`, por lo que el flujo de emision completo queda
+sin validar por Playwright.

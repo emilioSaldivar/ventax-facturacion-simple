@@ -316,7 +316,7 @@ function LoginView({
   return (
     <main className="auth-shell">
       <section className="auth-panel">
-        <div className="auth-eyebrow">Ventax Backoffice</div>
+        <div className="auth-eyebrow">Segel Backoffice</div>
         <div className="auth-title">Acceso interno</div>
         <form className="auth-form" onSubmit={(e) => void submit(e)}>
           <FormField label="Usuario" required>

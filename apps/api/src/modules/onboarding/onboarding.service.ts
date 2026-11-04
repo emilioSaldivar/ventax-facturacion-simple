@@ -104,7 +104,7 @@ export async function requestOtp(
     throw new HttpError(
       412,
       "EMAIL_REQUIRED",
-      "No hay correo electronico configurado para tu cuenta. Ya notificamos a Ventax — te contactaremos a la brevedad."
+      "No hay correo electronico configurado para tu cuenta. Ya notificamos a Segel — te contactaremos a la brevedad."
     );
   }
 

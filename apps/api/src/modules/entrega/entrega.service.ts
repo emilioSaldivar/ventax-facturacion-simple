@@ -192,15 +192,15 @@ export function renderPublicDocumentHtml(documento: PublicDocumentResponse): str
     <style>
       :root {
         color: #18242a;
-        background: #f4f8fa;
-        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background: #ffffff;
+        font-family: "Montserrat", Arial, Helvetica, sans-serif;
       }
       * { box-sizing: border-box; }
       body { margin: 0; }
       main {
         min-height: 100vh;
         padding: 18px;
-        background: linear-gradient(180deg, rgb(7 167 225 / 0.1), transparent 280px), #f4f8fa;
+        background: #ffffff;
       }
       .shell {
         display: grid;
@@ -216,7 +216,7 @@ export function renderPublicDocumentHtml(documento: PublicDocumentResponse): str
       }
       .brand img {
         display: block;
-        width: 142px;
+        width: 157px;
         height: auto;
       }
       .panel {
@@ -256,7 +256,7 @@ export function renderPublicDocumentHtml(documento: PublicDocumentResponse): str
       dd { margin: 2px 0 0; font-size: 17px; font-weight: 900; overflow-wrap: anywhere; }
       .total {
         border-radius: 8px;
-        background: #eef7fb;
+        background: #fdf3f4;
         padding: 14px;
       }
       .total dd { font-size: 26px; }
@@ -272,13 +272,13 @@ export function renderPublicDocumentHtml(documento: PublicDocumentResponse): str
         border: 1px solid #c6d9df;
         border-radius: 8px;
         background: #ffffff;
-        color: #006b86;
+        color: #000000;
         font-weight: 900;
         line-height: 1.15;
         padding: 8px 12px;
         text-decoration: none;
       }
-      a.primary { border-color: #07a7e1; background: #07a7e1; color: #ffffff; }
+      a.primary { border-color: #dd0a19; background: #dd0a19; color: #ffffff; }
       a.disabled { pointer-events: none; color: #7a8b92; opacity: 0.58; }
       @media (min-width: 620px) {
         main { padding: 28px; }
@@ -290,7 +290,7 @@ export function renderPublicDocumentHtml(documento: PublicDocumentResponse): str
     <main>
       <section class="shell" aria-labelledby="public-document-title">
         <div class="brand">
-          <img src="/app/brand/VENTAX-PRINCIPAL.svg" alt="Ventax" width="142" height="46">
+          <img src="/app/brand/segel-logo-fondo-claro.svg" alt="Segel" width="157" height="46">
         </div>
         <article class="panel">
           <div class="heading">
@@ -370,11 +370,11 @@ function buildEmailStatusMessage(status: EmailStatusResponse["status"], hasEmail
   }
 
   if (status === "SENT") {
-    return "Ventax informo envio de email.";
+    return "Segel informo envio de email.";
   }
 
   if (status === "FAILED") {
-    return "Ventax informo fallo de envio (email no cargado o incorrecto); Usar link publico o WhatsApp.";
+    return "Segel informo fallo de envio (email no cargado o incorrecto); Usar link publico o WhatsApp.";
   }
 
   return "Estado de email delegado no disponible.";
@@ -396,7 +396,7 @@ function formatPublicEstado(estado: PublicDocumentResponse["estado"]): string {
 
 function formatPublicEmailStatus(status: PublicDocumentResponse["email_status"]): string {
   if (status === "DELEGATED") {
-    return "Delegado a Ventax FE";
+    return "Delegado a Segel";
   }
   if (status === "SENT") {
     return "Enviado";

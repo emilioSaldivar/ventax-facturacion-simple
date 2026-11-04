@@ -1,25 +1,31 @@
 {
-  "name": "Ventax Factura",
+  "name": "Segel Factura",
   "short_name": "Factura",
   "start_url": "/app/",
   "scope": "/app/",
   "display": "standalone",
   "background_color": "#ffffff",
-  "theme_color": "#00A7C8",
+  "theme_color": "#DD0A19",
   "icons": [
     {
-      "src": "/app/icons/ventax-icon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
+      "src": "/app/icons/segel-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/app/icons/ventax-maskable.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
+      "src": "/app/icons/segel-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/app/icons/segel-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
       "purpose": "maskable"
     }
   ],
   "categories": ["business", "productivity"],
-  "description": "Operacion mobile-first para emitir y entregar comprobantes Ventax."
+  "description": "Operacion mobile-first para emitir y entregar comprobantes Segel."
 }

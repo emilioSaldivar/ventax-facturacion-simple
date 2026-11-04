@@ -5,8 +5,9 @@ const CACHE_VERSION = "__CACHE_VERSION__";
 const CACHE_NAME = `ventax-operacion-static-${CACHE_VERSION}`;
 const STATIC_ASSETS = [
   "/app/manifest.webmanifest",
-  "/app/icons/ventax-icon.svg",
-  "/app/icons/ventax-maskable.svg"
+  "/app/icons/segel-icon-192.png",
+  "/app/icons/segel-icon-512.png",
+  "/app/icons/segel-maskable-512.png"
 ];
 
 self.addEventListener("install", (event) => {

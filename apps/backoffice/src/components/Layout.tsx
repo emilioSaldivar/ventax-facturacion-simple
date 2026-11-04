@@ -17,7 +17,7 @@ export function Layout({ username, role, activeSection, onNavigate, onLogout, br
     <div className="app-layout">
       <aside className="sidebar" aria-label="Navegacion">
         <div className="sidebar-brand">
-          <div className="brand-label">Ventax</div>
+          <div className="brand-label">Segel</div>
           <div className="brand-name">Backoffice</div>
         </div>
 

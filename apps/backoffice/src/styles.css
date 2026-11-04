@@ -1,10 +1,12 @@
+@import "../../../packages/shared/brand/segel-identity.css";
+
 :root {
   --bg: #f4f8fa;
   --surface: #ffffff;
   --border: #d7e5ea;
   --border-light: #e8f1f4;
-  --primary: #07a7e1;
-  --primary-dark: #006b86;
+  --primary: var(--segel-primary);
+  --primary-dark: var(--segel-secondary);
   --text: #18242a;
   --muted: #65747b;
   --success-bg: #e7f7ef;
@@ -14,7 +16,7 @@
   --danger: #dc2626;
   --danger-bg: #fef2f2;
   --radius: 8px;
-  --font: Inter, ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font: var(--segel-font);
   --sidebar-w: 220px;
 }
 
@@ -25,7 +27,7 @@ body {
   font-family: var(--font);
   font-size: 14px;
   color: var(--text);
-  background: var(--bg);
+  background: var(--segel-background);
   line-height: 1.5;
 }
 
@@ -43,7 +45,7 @@ a { color: var(--primary-dark); }
   display: grid;
   place-items: center;
   padding: 24px;
-  background: var(--bg);
+  background: var(--segel-background);
 }
 
 .auth-panel {
@@ -148,7 +150,7 @@ a { color: var(--primary-dark); }
 }
 
 .nav-item:hover { background: var(--border-light); color: var(--text); }
-.nav-item.active { background: #e8f6fd; color: var(--primary-dark); }
+.nav-item.active { background: var(--segel-primary-50); color: var(--primary-dark); }
 
 .sidebar-footer {
   padding: 10px 8px;
@@ -505,7 +507,7 @@ tbody tr:hover td { background: var(--bg); }
   font-family: var(--font);
 }
 
-.sub-nav-item.active { background: #e8f6fd; color: var(--primary-dark); border-color: #b3dff2; }
+.sub-nav-item.active { background: var(--segel-primary-50); color: var(--primary-dark); border-color: var(--segel-primary-200); }
 .sub-nav-item:hover:not(.active) { background: var(--border-light); }
 
 .loading-screen {

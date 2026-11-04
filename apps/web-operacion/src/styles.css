@@ -1,10 +1,14 @@
+@import "../../../packages/shared/brand/segel-identity.css";
+
 :root {
-  --color-brand: #07a7e1;
-  --color-brand-dark: #006b86;
+  --color-brand: var(--segel-primary);
+  --color-brand-dark: var(--segel-secondary);
+  --accent: var(--segel-primary);
+  --accent-subtle: var(--segel-primary-50);
   --color-ink: #18242a;
   --color-muted: #65747b;
   --color-line: #d7e5ea;
-  --color-bg: #f4f8fa;
+  --color-bg: var(--segel-background);
   --color-surface: #ffffff;
   --color-success: #087f5b;
   --color-success-bg: #e7f7ef;
@@ -17,8 +21,7 @@
   --shadow-panel: 0 18px 60px rgb(24 36 42 / 0.12);
   color: var(--color-ink);
   background: var(--color-bg);
-  font-family:
-    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: var(--segel-font);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
 }
@@ -55,9 +58,7 @@ button:disabled {
 .auth-shell,
 .operation-shell {
   min-height: 100vh;
-  background:
-    linear-gradient(180deg, rgb(7 167 225 / 0.1), transparent 280px),
-    var(--color-bg);
+  background: var(--color-bg);
 }
 
 .auth-shell {
@@ -95,14 +96,13 @@ button:disabled {
 
 .brand-logo {
   display: block;
-  width: 154px;
-  height: auto;
-  max-height: 42px;
+  width: auto;
+  height: 48px;
 }
 
 .brand-mark.compact .brand-logo {
   width: 34px;
-  max-height: 34px;
+  height: 34px;
 }
 
 .auth-copy {
@@ -199,12 +199,12 @@ h2 {
 .documents-filters select:focus,
 .credit-note-motivo textarea:focus {
   border-color: var(--color-brand);
-  box-shadow: 0 0 0 3px rgb(7 167 225 / 0.18);
+  box-shadow: 0 0 0 3px rgb(221 10 25 / 0.18);
 }
 
 .login-form input:focus {
   border-color: var(--color-brand);
-  box-shadow: 0 0 0 3px rgb(7 167 225 / 0.18);
+  box-shadow: 0 0 0 3px rgb(221 10 25 / 0.18);
 }
 
 .password-input {
@@ -273,7 +273,7 @@ h2 {
 }
 
 .primary-action:hover:not(:disabled) {
-  background: #048fc4;
+  background: var(--segel-primary-600);
 }
 
 .secondary-action {
@@ -416,17 +416,17 @@ h2 {
 .menu-item.active,
 .menu-item:hover:not(:disabled) {
   border-color: var(--color-brand);
-  box-shadow: 0 0 0 3px rgb(7 167 225 / 0.12);
+  box-shadow: 0 0 0 3px rgb(221 10 25 / 0.12);
 }
 
 .menu-item-featured {
   min-height: 66px;
-  border-color: #8fcde2;
-  background: #edf8fd;
+  border-color: var(--segel-primary-200);
+  background: var(--segel-primary-50);
 }
 
 .menu-item-primary {
-  background: #f3fbff;
+  background: var(--segel-primary-50);
 }
 
 .menu-item-secondary {
@@ -448,7 +448,7 @@ h2 {
 
 .menu-item-badge {
   justify-self: end;
-  border: 1px solid #8fcde2;
+  border: 1px solid var(--segel-primary-200);
   border-radius: 999px;
   background: #ffffff;
   color: var(--color-brand-dark);
@@ -516,16 +516,16 @@ h2 {
   gap: 10px;
   max-width: 520px;
   margin: 0 auto 12px;
-  border: 1px solid #9ed9ec;
+  border: 1px solid var(--segel-primary-200);
   border-radius: 8px;
-  background: #ebf8fe;
+  background: var(--segel-primary-50);
   padding: 12px;
 }
 
 .install-banner strong {
   display: block;
   margin: 0;
-  color: #0c4f68;
+  color: var(--segel-secondary);
   font-size: 14px;
 }
 
@@ -691,6 +691,11 @@ dd {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+}
+
+/* Una palabra sola, como "Volver", no se parte al ajustar el ancho del boton. */
+.header-actions .ghost-action {
+  overflow-wrap: normal;
 }
 
 .header-actions {
@@ -888,7 +893,7 @@ dd {
 .document-row.active,
 .document-row:hover {
   border-color: var(--color-brand);
-  box-shadow: 0 0 0 3px rgb(7 167 225 / 0.12);
+  box-shadow: 0 0 0 3px rgb(221 10 25 / 0.12);
 }
 
 .document-row span {
@@ -1300,7 +1305,7 @@ dd {
 
 .line-table-row.active {
   border-color: var(--color-brand);
-  box-shadow: 0 0 0 3px rgb(7 167 225 / 0.12);
+  box-shadow: 0 0 0 3px rgb(221 10 25 / 0.12);
 }
 
 .line-row-main {
@@ -1692,8 +1697,8 @@ dd {
 }
 
 .action-group-primary {
-  border-color: #b9dff0;
-  background: #f3fbff;
+  border-color: var(--segel-primary-200);
+  background: var(--segel-primary-50);
 }
 
 .action-group-secondary {
@@ -1758,7 +1763,7 @@ dd {
   display: grid;
   gap: 4px;
   border-radius: 8px;
-  background: #eef7fb;
+  background: var(--segel-primary-50);
   padding: 10px 12px;
 }
 
@@ -1875,7 +1880,7 @@ dd {
 }
 
 .client-row-menu button:hover:not(:disabled) {
-  background: #edf8fd;
+  background: var(--segel-primary-50);
 }
 
 .client-row-menu button:disabled {
@@ -1949,7 +1954,7 @@ dd {
 .spinner {
   width: 34px;
   height: 34px;
-  border: 4px solid #d7edf5;
+  border: 4px solid var(--segel-primary-100);
   border-top-color: var(--color-brand);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
@@ -2180,6 +2185,11 @@ dd {
   border-bottom-color: var(--accent, #2563eb);
 }
 
+/* La pestana activa tiene fondo de marca: su texto no puede tomar el mismo color. */
+.filter-tabs button.active {
+  color: #ffffff;
+}
+
 /* ─── Presupuestos v0.2 styles ──────────────────────────────────────────────── */
 
 .status-pill.pending {
@@ -2262,9 +2272,9 @@ dd {
   border-radius: 2px;
 }
 .active-state-btn {
-  background: #dbeafe !important;
-  color: #1d4ed8 !important;
-  border-color: #93c5fd !important;
+  background: var(--segel-primary-50) !important;
+  color: var(--segel-primary-700) !important;
+  border-color: var(--segel-primary-200) !important;
 }
 
 /* List toolbar */

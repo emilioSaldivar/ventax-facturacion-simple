@@ -1,23 +1,24 @@
+import { env } from "../../config/env";
 import type { EmailTemplate, OtpPurpose } from "./email.types";
 
-// Isotipo Ventax (la X) — un solo <polygon>, compatible con todos los clientes de email
-const VENTAX_ISO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 749.04 766.14" width="36" height="37" role="img" aria-label="Ventax" style="display:inline-block;vertical-align:middle;"><polygon fill="#ffffff" points="683.23 194.95 749.04 194.95 704.56 .99 388.55 194.95 482.22 194.95 396.73 321.91 339.37 193.48 142.44 193.48 265.73 428.08 114.87 619.97 0 765.15 213.1 765.15 360.35 544.8 411.29 676.38 619.35 676.38 489.21 434.08 683.23 194.95"/></svg>`;
+// El logo va por URL absoluta: los clientes de correo no resuelven rutas relativas.
+const HEADER_LOGO = `<img src="${env.PUBLIC_APP_BASE_URL.replace(/\/$/, "")}/app/brand/segel-logo-fondo-claro.png" alt="Segel" width="164" height="48" style="display:inline-block;vertical-align:middle;border:0;">`;
 
-const BRAND_COLOR = "#07a7e1";
-const BRAND_NAME = "Ventax Facturación Simple";
+const BRAND_COLOR = "#dd0a19";
+const BRAND_NAME = "Segel Facturación Simple";
 
 const OTP_PURPOSE_CONFIG: Record<OtpPurpose, { subject: string; headline: string; description: string; preheader: string }> = {
   onboarding: {
-    subject: "Tu código de verificación — Ventax Facturación Simple",
+    subject: "Tu código de verificación — Segel Facturación Simple",
     headline: "Verificación de identidad",
-    description: "Ingresá este código en la aplicación para confirmar la aceptación de los <strong>Términos y Condiciones</strong> de Ventax Facturación Simple.",
+    description: "Ingresá este código en la aplicación para confirmar la aceptación de los <strong>Términos y Condiciones</strong> de Segel Facturación Simple.",
     preheader: "Tu código de verificación para activar tu cuenta."
   },
   password_reset: {
-    subject: "Código para restablecer tu contraseña — Ventax",
+    subject: "Código para restablecer tu contraseña — Segel",
     headline: "Restablecer contraseña",
     description: "Ingresá este código para continuar con el proceso de restablecimiento de tu contraseña.",
-    preheader: "Código para restablecer tu contraseña en Ventax."
+    preheader: "Código para restablecer tu contraseña en Segel."
   }
 };
 
@@ -29,8 +30,7 @@ export function otpTemplate(otpCode: string, displayName: string, purpose: OtpPu
   const html = buildLayout({
     preheader: config.preheader,
     headerContent: `
-      ${VENTAX_ISO_SVG}
-      <span style="color:#ffffff;font-size:17px;font-weight:bold;vertical-align:middle;margin-left:10px;letter-spacing:-0.3px;">${escapeHtml(BRAND_NAME)}</span>
+      ${HEADER_LOGO}
     `,
     bodyContent: `
       <p style="margin:0 0 6px 0;font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:0.8px;color:${BRAND_COLOR};">${escapeHtml(config.headline)}</p>
@@ -57,7 +57,7 @@ function buildOtpDigitGrid(digits: string[]): string {
   const cells = digits
     .map(
       (d) =>
-        `<td style="width:48px;height:60px;background:#f0f9ff;border:2px solid ${BRAND_COLOR};border-radius:10px;text-align:center;vertical-align:middle;font-size:30px;font-weight:700;color:#0e2430;font-family:'Courier New',Courier,monospace;line-height:1;">${escapeHtml(d)}</td>`
+        `<td style="width:48px;height:60px;background:#fdf3f4;border:2px solid ${BRAND_COLOR};border-radius:10px;text-align:center;vertical-align:middle;font-size:30px;font-weight:700;color:#0e2430;font-family:'Courier New',Courier,monospace;line-height:1;">${escapeHtml(d)}</td>`
     )
     .join(`<td style="width:6px;"></td>`);
 
@@ -93,7 +93,7 @@ function buildLayout({ preheader, headerContent, bodyContent }: {
 
           <!-- Header -->
           <tr>
-            <td style="background:${BRAND_COLOR};padding:22px 32px;text-align:center;">
+            <td style="background:#ffffff;border-bottom:1px solid #e5e7eb;padding:22px 32px;text-align:center;">
               ${headerContent}
             </td>
           </tr>
@@ -150,8 +150,7 @@ export function adminEmailRequiredTemplate(username: string, displayName: string
   const html = buildLayout({
     preheader: `El usuario ${username} necesita su correo configurado para activar su cuenta.`,
     headerContent: `
-      ${VENTAX_ISO_SVG}
-      <span style="color:#ffffff;font-size:17px;font-weight:bold;vertical-align:middle;margin-left:10px;letter-spacing:-0.3px;">${escapeHtml(BRAND_NAME)}</span>
+      ${HEADER_LOGO}
     `,
     bodyContent: `
       <p style="margin:0 0 6px 0;font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:0.8px;color:#f59e0b;">Correo faltante — Accion requerida</p>
@@ -175,7 +174,7 @@ export function adminEmailRequiredTemplate(username: string, displayName: string
   });
 
   const text = [
-    "Solicitud de configuracion de email — Ventax Facturacion Simple",
+    "Solicitud de configuracion de email — Segel Facturacion Simple",
     "",
     `El usuario "${username}"${displayName ? ` (${displayName})` : ""} intento completar su activacion pero no tiene correo electronico configurado.`,
     "",
@@ -186,7 +185,7 @@ export function adminEmailRequiredTemplate(username: string, displayName: string
   ].join("\n");
 
   return {
-    subject: `[Ventax] Usuario sin email: ${username}`,
+    subject: `[Segel] Usuario sin email: ${username}`,
     html,
     text
   };
@@ -214,8 +213,7 @@ export function accionRequeridaTemplate(ctx: AccionFiscalEmailContext): EmailTem
   const html = buildLayout({
     preheader: `${nombreDoc} ${safeNumero}: ${ctx.titulo}`,
     headerContent: `
-      ${VENTAX_ISO_SVG}
-      <span style="color:#ffffff;font-size:17px;font-weight:bold;vertical-align:middle;margin-left:10px;letter-spacing:-0.3px;">${escapeHtml(BRAND_NAME)}</span>
+      ${HEADER_LOGO}
     `,
     bodyContent: `
       <p style="margin:0 0 6px 0;font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:0.8px;color:#f59e0b;">Requiere acción</p>
@@ -225,7 +223,7 @@ export function accionRequeridaTemplate(ctx: AccionFiscalEmailContext): EmailTem
       <table cellpadding="0" cellspacing="0" role="presentation" style="margin:0 auto;">
         <tr>
           <td style="border-radius:8px;background:${BRAND_COLOR};">
-            <a href="${ctx.appUrl}" style="display:inline-block;padding:12px 24px;font-size:14px;font-weight:600;color:#ffffff;text-decoration:none;">Abrir en Ventax</a>
+            <a href="${ctx.appUrl}" style="display:inline-block;padding:12px 24px;font-size:14px;font-weight:600;color:#ffffff;text-decoration:none;">Abrir en Segel</a>
           </td>
         </tr>
       </table>
@@ -243,7 +241,7 @@ export function accionRequeridaTemplate(ctx: AccionFiscalEmailContext): EmailTem
     `— ${BRAND_NAME}`
   ].join("\n");
 
-  return { subject: `[Ventax] ${nombreDoc} ${ctx.numeroFiscal ?? ""} requiere acción`.trim(), html, text };
+  return { subject: `[Segel] ${nombreDoc} ${ctx.numeroFiscal ?? ""} requiere acción`.trim(), html, text };
 }
 
 export interface SoportePayloadContext {
@@ -284,8 +282,7 @@ export function requiereSoporteTemplate(
   const html = buildLayout({
     preheader: `${nombreDoc} ${safeNumero}: necesita revisión de soporte`,
     headerContent: `
-      ${VENTAX_ISO_SVG}
-      <span style="color:#ffffff;font-size:17px;font-weight:bold;vertical-align:middle;margin-left:10px;letter-spacing:-0.3px;">${escapeHtml(BRAND_NAME)}</span>
+      ${HEADER_LOGO}
     `,
     bodyContent: `
       <p style="margin:0 0 6px 0;font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:0.8px;color:#dc2626;">Requiere soporte</p>
@@ -306,7 +303,7 @@ export function requiereSoporteTemplate(
       <table cellpadding="0" cellspacing="0" role="presentation" style="margin:0 auto;">
         <tr>
           <td style="border-radius:8px;background:${BRAND_COLOR};">
-            <a href="${ctx.appUrl}" style="display:inline-block;padding:12px 24px;font-size:14px;font-weight:600;color:#ffffff;text-decoration:none;">Abrir en Ventax</a>
+            <a href="${ctx.appUrl}" style="display:inline-block;padding:12px 24px;font-size:14px;font-weight:600;color:#ffffff;text-decoration:none;">Abrir en Segel</a>
           </td>
         </tr>
       </table>
@@ -327,7 +324,7 @@ export function requiereSoporteTemplate(
     `— ${BRAND_NAME}`
   ].join("\n");
 
-  return { subject: `[Ventax] ${nombreDoc} ${ctx.numeroFiscal ?? ""} necesita revisión de soporte`.trim(), html, text };
+  return { subject: `[Segel] ${nombreDoc} ${ctx.numeroFiscal ?? ""} necesita revisión de soporte`.trim(), html, text };
 }
 
 function escapeHtml(str: string): string {

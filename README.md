@@ -1,4 +1,4 @@
-# Ventax Facturacion Simple Cliente
+# Segel Facturacion Simple Cliente
 
 Aplicacion web mobile-first para emitir facturas electronicas simples consumiendo el backend fiscal `facturacion-electronica`.
 

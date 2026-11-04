@@ -1,0 +1,64 @@
+/*
+ * Identidad Segel - Soluciones inteligentes
+ * Valores tomados de https://segel.com.py/ (ver README.md).
+ * Solo define fuentes y variables: importarlo no cambia nada hasta usar `--segel-*`.
+ */
+
+@font-face {
+  font-family: "Montserrat";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("./fonts/montserrat/montserrat-latin-400-normal.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Montserrat";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("./fonts/montserrat/montserrat-latin-500-normal.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Montserrat";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("./fonts/montserrat/montserrat-latin-600-normal.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Montserrat";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("./fonts/montserrat/montserrat-latin-700-normal.woff2") format("woff2");
+}
+
+:root {
+  --segel-font: "Montserrat", Arial, Helvetica, sans-serif;
+
+  /* Colores de marca: valores exactos de la web oficial */
+  --segel-primary: #dd0a19;
+  --segel-secondary: #000000;
+  --segel-background: #ffffff;
+
+  /* Escala del primario: 500 es exacto, el resto se calcula mezclando con blanco o negro */
+  --segel-primary-50: #fdf3f4;
+  --segel-primary-100: #fce6e8;
+  --segel-primary-200: #f6c2c6;
+  --segel-primary-300: #f19da3;
+  --segel-primary-400: #e7545e;
+  --segel-primary-500: #dd0a19;
+  --segel-primary-600: #c70916;
+  --segel-primary-700: #a60813;
+  --segel-primary-800: #85060f;
+  --segel-primary-900: #6c050c;
+  --segel-primary-950: #420308;
+
+  /* Estados: valores de la web oficial */
+  --segel-status-pending: #ffc107;
+  --segel-status-completed: #198754;
+  --segel-status-failed: #dc3545;
+}
