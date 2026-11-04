@@ -10,7 +10,7 @@
 
 - `SPEC`: DONE (D-1 a D-5 confirmadas por el usuario, 2026-11-04).
 - `PLAN`: DONE.
-- `TASKS`: SGL-001 a SGL-010, SGL-012 y SGL-014 a SGL-016 DONE. SGL-011 y SGL-017 PARTIAL (V-2, V-5 y V-6 con salvedades). SGL-013 PENDIENTE.
+- `TASKS`: SGL-001 a SGL-010, SGL-012 y SGL-014 a SGL-016 y SGL-018 DONE. SGL-011 y SGL-017 PARTIAL (V-2, V-5 y V-6 con salvedades). SGL-013 PENDIENTE.
 - Destino: solo staging (D-9). Produccion no se toca.
 
 ## Matriz
@@ -33,7 +33,7 @@
 | SGL-015 | Revision | Aplicar rojo, negro, Montserrat y logos oficiales en apps, API y correos (PLAN §6) | DONE (2026-11-04) | V-1, V-2 y V-3 |
 | SGL-016 | Revision | Fondo blanco (PLAN §6) | DONE (2026-11-04) | V-3 y CA-09 |
 | SGL-017 | Revision | Repetir V-1 a V-4 y V-6 sobre `bash scripts/deploy.sh` | PARTIAL (2026-11-04), ver Evidencia | Evidencia en esta matriz |
-| SGL-018 | Staging | Desplegar en staging segun PLAN §7 y verificar | PENDIENTE | Identidad visible, FE de staging responde, produccion sin cambios y checkout en `master` |
+| SGL-018 | Staging | Desplegar en staging segun PLAN §7 y verificar | DONE (2026-11-04) | Identidad visible, FE de staging responde, produccion sin cambios y checkout en `master` |
 | SGL-013 | Cierre | Decidir que hacer con `TMP/` una vez copiados los assets | PENDIENTE | Decision del usuario. `TMP/` no entra en ningun commit |
 
 ## Verificacion
@@ -95,3 +95,5 @@ git grep -nEi 'ventax-(icon|maskable)|07a7e1|00a7c8|006b86|7 167 225|eef7fb|e8f6
 | SGL-017 regresiones visuales | 2026-11-04 | Las capturas revelaron fallos que el script no cubria. (1) Pestana activa rojo sobre rojo, **causada por `--accent` de este cambio**: una regla posterior pisaba el texto blanco. (2) Hover de `.primary-action` en celeste y 12 acentos celestes mas. (3) "Volver" partido por el ancho de Montserrat. Corregidos, y (1) y (3) quedaron en el script. Recorrido mobile de 7 pantallas del menu sin desborde. No se revisaron formularios internos ni modales a ojo. |
 | SGL-017 backoffice mobile | 2026-11-04 | Desborde preexistente: 666 px en `f08037d` y 687 px en la rama, sobre 390 px. La barra lateral tiene ancho fijo. Fuera de alcance; excepcion documentada en el script. |
 | SGL-017 V-5 y V-6 | 2026-11-04 | Sin cambios respecto de la evidencia anterior: V-5 parcial por diff. Pasan `backoffice-import`, `cancelacion-rechazo` y `segmentacion-f0-f1`. `mock-flow` sigue roto desde antes; `estado-canonico` y `reintento-emision` no corrieron. |
+| SGL-018 | 2026-11-04 | `304d597` desplegado en staging con bundle. Contenedores `api` y `frontend` healthy, 0 errores en 10 min. FE de staging (`fe-test-api-1`, el mismo de `festag-api.ventax.app`) responde `ok` desde el contenedor. `EMAIL_FROM` y `EMAIL_FROM_NAME` siguen en Ventax. `https://staging-factura.ventax.app/app/` responde 200 con titulo `Segel Factura`. `playwright-identidad-segel` por tunel SSH: 17 OK con la API mockeada. Produccion: mismas fechas de creacion y titulo `Ventax Factura`. Checkout de la VPS de vuelta en `master` (`7fe6ae8`). No se emitio un documento real contra el FE de staging. |
+| SGL-018 datos reales | 2026-11-04 | Sin nuevo deploy: `sw.js` confirma `304d597`. Playwright contra `https://staging-factura.ventax.app` y API real, 390x844 y 1280x800: login, backoffice, nota, recibo y comprobante reales, 200 y sin textos Ventax. Tokens leidos de la base de staging solo en lectura, sin imprimirlos. Observado en 390 px: un importe de nota parte "Gs." y el numero en dos lineas por el ancho de Montserrat. Sin login operativo ni emision real; PDF/KUDE no abiertos. Produccion sin cambios. |
