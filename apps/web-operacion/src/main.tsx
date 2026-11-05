@@ -1165,7 +1165,7 @@ function OnboardingFlow({
       setPhase("otp");
     } catch (err) {
       if (err instanceof ApiClientError && err.status === 412) {
-        setError(`Tu cuenta (${username}) no tiene correo electronico configurado. Ya le avisamos a Segel y te van a contactar. Si es urgente, escribi a facturacion@ventax.app indicando tu usuario.`);
+        setError(`Tu cuenta (${username}) no tiene correo electronico configurado. Ya le avisamos a Segel y te van a contactar. Si es urgente, escribi a facturacion@segel.com.py indicando tu usuario.`);
       } else {
         setError(err instanceof Error ? err.message : "Error al solicitar codigo de verificacion.");
       }
@@ -1208,7 +1208,7 @@ function OnboardingFlow({
       setOtpCooldown(60);
     } catch (err) {
       if (err instanceof ApiClientError && err.status === 412) {
-        setError(`Tu cuenta (${username}) no tiene correo electronico configurado. Ya le avisamos a Segel y te van a contactar. Si es urgente, escribi a facturacion@ventax.app indicando tu usuario.`);
+        setError(`Tu cuenta (${username}) no tiene correo electronico configurado. Ya le avisamos a Segel y te van a contactar. Si es urgente, escribi a facturacion@segel.com.py indicando tu usuario.`);
       } else {
         setError(err instanceof Error ? err.message : "Error al reenviar codigo.");
       }
