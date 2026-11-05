@@ -774,8 +774,12 @@ export class PgFacturaRepository implements FacturaRepository {
           select o.id
           from factura_emision_outbox o
           join facturas_operativas f on f.id = o.factura_operativa_id
-          where o.estado in ('PENDING', 'FAILED_TEMP')
-            and o.next_attempt_at <= now()
+          where (
+              (o.estado in ('PENDING', 'FAILED_TEMP') and o.next_attempt_at <= now())
+              -- La API murio durante la llamada a FE. Reenviar es seguro: la idempotency_key
+              -- es la misma (SPEC_RECUPERACION_EMISION_TRABADA). 5 min supera FE_API_TIMEOUT_MS.
+              or (o.estado = 'PROCESSING' and o.locked_at < now() - interval '5 minutes')
+            )
             and f.deleted_at is null
           order by o.next_attempt_at asc, o.created_at asc
           limit 1
