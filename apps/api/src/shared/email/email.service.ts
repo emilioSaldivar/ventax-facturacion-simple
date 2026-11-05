@@ -74,5 +74,5 @@ export async function sendOtpEmail(
 }
 
 export async function sendAdminEmailRequiredNotification(username: string, displayName: string | null): Promise<void> {
-  await sendEmail("facturacion@ventax.app", adminEmailRequiredTemplate(username, displayName));
+  await sendEmail(env.VENTAX_NOTIFY_EMAIL ?? env.EMAIL_FROM, adminEmailRequiredTemplate(username, displayName));
 }

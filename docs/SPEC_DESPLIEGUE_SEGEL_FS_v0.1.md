@@ -1,0 +1,90 @@
+# SPEC Despliegue Segel en VPS propia v0.1
+
+**Fecha:** 2026-11-05 · **Rama:** `feat/identidad-segel` · **Estado:** preparacion en curso, sin desplegar.
+
+## Alineacion
+
+- `AGENTS.md`
+- `docs/SPEC_IDENTIDAD_MARCA_SEGEL_v0.1.md`
+- `docs/SPEC_RED_COMPARTIDA_FISCAL_v0.1.md`
+- `docs/GUIA_DEPLOY_STAGING_PRODUCCION_v0.1.md`
+
+Este alcance reemplaza, solo para esta instancia, D-3, D-4 y D-9 de la identidad de marca: aqui hay servidor propio, y nada visible puede salir como Ventax.
+
+## Objetivo
+
+Levantar en la VPS `segel-fs` una instancia independiente de facturacion simple (FS) y `facturacion-electronica` (FE), con marca Segel, empezando en SIFEN test. Solo se publican los dos frontends; FS y FE se comunican por una red Docker interna, igual que en Hetzner. El equipo de infraestructura configura NGINX con lo que este proyecto le entrega.
+
+## Decisiones del usuario (2026-11-05)
+
+| ID | Tema | Decision |
+|---|---|---|
+| D-1 | NGINX | Lo configura infraestructura. Se le entrega la configuracion a aplicar |
+| D-2 | Dominio | `segel.com.py` y sus subdominios. La raiz es la web oficial y no se toca |
+| D-3 | SIFEN | Primero test. Luego carga en la VPS para medir capacidad y memoria. Produccion es un paso aparte |
+| D-4 | Commit FS | Base `e40b51c`, mas las correcciones de este alcance |
+| D-5 | Marca | Nada puede salir como Ventax |
+
+## Reglas
+
+- **RN-01.** Solo se publican los frontends, en `10.100.0.145`, nunca en `0.0.0.0`: `DOCKER-USER` esta vacia y firewalld inactivo. Esa IP sirve tanto si NGINX corre en la VPS como en otro equipo. API y Postgres quedan en `127.0.0.1` o sin publicar.
+- **RN-02.** Red `segel_fiscal`, con el alias `facturacion-electronica`. Separada de cualquier red Ventax.
+- **RN-03.** Secretos propios, generados en la VPS. Ninguno se comparte con Ventax ni se versiona.
+- **RN-04.** Se usa el FE de `branding/segel-staging` (`c337d9e`) sin modificarlo.
+- **RN-05.** Sin casilla Segel, el correo queda desactivado. Nunca se usa el SMTP ni el remitente de Ventax.
+- **RN-06.** Sin T&C de Segel activos, no se da de alta ningun usuario (ver B-1).
+- **RN-07.** La rama no entra a `master` y la produccion de Ventax no cambia.
+- **RN-08.** El paso de test a produccion arranca con bases vacias: los datos de prueba no conviven con documentos fiscales reales.
+
+## Subdominios
+
+Se replica el esquema de Hetzner. Pendiente de confirmacion (P-1).
+
+| Host | Destino | Uso |
+|---|---|---|
+| `factura.segel.com.py` | `10.100.0.145:8092` | App del operador (`/app/`) y enlaces publicos |
+| `backoffice.segel.com.py` | `10.100.0.145:8092` | Backoffice de FS (`/backoffice/`) |
+| `feprod-backoffice.segel.com.py` | `10.100.0.145:8100` | Admin de FE |
+
+`facturacion.segel.com.py` ya existe y apunta a `68.183.118.119`: no se reutiliza. No se publica un host `fe-api`, porque el pedido es exponer solo los frontends; el frontend de FE reenvia `/v1/` a su API.
+
+## Rastros de Ventax
+
+| Elemento | Tratamiento |
+|---|---|
+| Aviso `sendAdminEmailRequiredNotification` a `facturacion@ventax.app` | **Se corrige.** Va a `VENTAX_NOTIFY_EMAIL` o, si falta, a `EMAIL_FROM` |
+| Contacto en plantillas de correo | **Se corrige.** Usa `EMAIL_FROM` |
+| Defaults de `EMAIL_FROM`, `PUBLIC_APP_BASE_URL` y `FE_API_BASE_URL` | **Se corrigen.** El ultimo enviaria la clave fiscal a un host de Ventax si faltara la variable |
+| T&C `0018` y `0019`: proveedor Ventax y datos personales | **Bloqueado** (B-1) |
+| Logo por defecto de KuDE (`assets/logo.jpeg`, dice "Prototipo") | `KUDE_LOGO_PATH` apunta a `kude-logo-vacio.png`. Falta comprobar que sale en un KuDE real |
+| Cookie `ventax_refresh_token`, claves de `localStorage` y cache del service worker | Fuera de alcance: no son contenido, solo se ven con herramientas de desarrollo. Renombrarlos toca los scripts de carga y de Playwright |
+| Variable `VENTAX_NOTIFY_EMAIL`, base por defecto del loader y `ventax_logos/` en la imagen de FE | Fuera de alcance: nombres internos |
+
+## Bloqueos y pendientes
+
+- **B-1. T&C.** Los T&C activos nombran a Ventax y a una persona fisica como proveedor, con su RUC, domicilio y WhatsApp. Hacen falta los datos legales de Segel y la revision del texto. No se inventan.
+- **P-1.** Confirmar los subdominios y que `facturacion.segel.com.py` no es el destino previsto.
+- **P-2. Correo.** `segel.com.py` usa Microsoft 365 con `spf ... -all`: enviar por otro proveedor seria rechazado. Hace falta una casilla, y que el tenant permita SMTP AUTH, o una alternativa autorizada.
+- **P-3. Acceso.** Infraestructura o el usuario deben aplicar el grupo `docker` y el disco. Sin VPN no hay acceso a la VPS.
+- **P-4. Portainer.** Quien administre `portainer_agent` puede leer los secretos de los contenedores. Conviene saber quien tiene acceso y limitar el puerto 9002.
+
+## Limites conocidos
+
+- El nginx interno de cada frontend no define `client_max_body_size`: se aplica 1 MB aunque el nginx externo permita mas. Un logo mayor a 1 MB devuelve 413 en FE. No se modifica FE.
+- Sin SMTP, FS deja los correos, incluido el OTP, en texto plano en sus logs (`email.service.ts`). Es aceptable solo con usuarios de prueba.
+
+## Fuera de alcance
+
+- La configuracion de TLS, DNS y NGINX, que hace infraestructura.
+- El diseno de la prueba de carga: tendra SPEC propio. Debe usar SIFEN simulado (`SPEC_VERIFICACION_CAPACIDAD_200` D-2), no SIFEN test real. `scripts/carga/stack.sh` esta pensado para la estacion local.
+- La habilitacion de SIFEN produccion.
+
+## Criterios de aceptacion
+
+- **CA-01.** Las imagenes se construyen desde commits, no desde el directorio de trabajo.
+- **CA-02.** En la VPS, solo los frontends quedan publicados fuera de `127.0.0.1`.
+- **CA-03.** Desde la API de FS, `http://facturacion-electronica:8080/v1/health` responde `ok`.
+- **CA-04.** Las pantallas y correos de la instancia no contienen "Ventax".
+- **CA-05.** Tras reiniciar la VPS, los dos stacks vuelven solos.
+- **CA-06.** Infraestructura recibe una configuracion aplicable sin leer este repositorio.
+- **CA-07.** Hay backup diario de las dos bases, con restauracion probada.

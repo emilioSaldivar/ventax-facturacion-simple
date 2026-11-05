@@ -111,7 +111,7 @@ function buildLayout({ preheader, headerContent, bodyContent }: {
               <p style="margin:0;font-size:12px;color:#9ca3af;">
                 <strong style="color:#6b7280;">${escapeHtml(BRAND_NAME)}</strong>
                 &nbsp;·&nbsp;
-                <a href="mailto:facturacion@ventax.app" style="color:#9ca3af;text-decoration:none;">facturacion@ventax.app</a>
+                <a href="mailto:${escapeHtml(env.EMAIL_FROM)}" style="color:#9ca3af;text-decoration:none;">${escapeHtml(env.EMAIL_FROM)}</a>
               </p>
             </td>
           </tr>
@@ -139,7 +139,7 @@ function buildTextVersion(otpCode: string, displayName: string, purposeDescripti
     "Si no solicitaste este código, ignorá este mensaje.",
     "",
     `— ${BRAND_NAME}`,
-    "facturacion@ventax.app"
+    env.EMAIL_FROM
   ].join("\n");
 }
 
@@ -181,7 +181,7 @@ export function adminEmailRequiredTemplate(username: string, displayName: string
     "Accion requerida: contacta al usuario y configura su email en el backoffice.",
     "",
     `— ${BRAND_NAME}`,
-    "facturacion@ventax.app"
+    env.EMAIL_FROM
   ].join("\n");
 
   return {
