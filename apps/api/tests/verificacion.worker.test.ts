@@ -80,7 +80,7 @@ class FakeRepository implements Partial<FacturaRepository> {
 
   async updateFiscalStatus(input: Parameters<FacturaRepository["updateFiscalStatus"]>[0]): Promise<DocumentoResponse | null> {
     if (!this.findByIdResponse) return null;
-    return { ...this.findByIdResponse, estado: input.estado };
+    return { ...this.findByIdResponse, estado: input.estado, fiscal_status_raw: input.fiscalStatusRaw ?? null };
   }
 
   async bulkUpdateDocumentUuidByCdc(): Promise<void> {
@@ -101,6 +101,9 @@ class FakeRepository implements Partial<FacturaRepository> {
 }
 
 class FakeGateway implements Partial<FiscalGateway> {
+  /** Si se fija, reemplaza al status canonico que se deriva del estado declarado. */
+  public statusCanonico: string | null = null;
+
   constructor(private readonly response: FiscalRefreshStatusResponse | FiscalGatewayError) {}
 
   async refreshFacturaStatus(): Promise<FiscalRefreshStatusResponse> {
@@ -115,7 +118,7 @@ class FakeGateway implements Partial<FiscalGateway> {
     if (this.response instanceof FiscalGatewayError) {
       throw this.response;
     }
-    const status = STATUS_CANONICO_POR_ESTADO[this.response.estado] ?? null;
+    const status = this.statusCanonico ?? STATUS_CANONICO_POR_ESTADO[this.response.estado] ?? null;
     return { status, estado: this.response.estado, current_cdc: this.response.current_cdc, nro_factura: null, raw: { document_uuid: documentUuid, status } };
   }
 }
@@ -255,6 +258,66 @@ describe("verificacion fiscal worker", () => {
 
     expect(repo.scheduleCalls).toHaveLength(1);
     expect(repo.scheduleCalls[0].nextAt).toBeNull();
+  });
+
+  describe("documentos en cola de FE (SPEC_VERIFICACION_DOCUMENTOS_EN_COLA)", () => {
+    const enCola = (documentoExtra: Partial<DocumentoResponse> = {}, pendiente: Partial<PendingVerificacion> = {}) => {
+      const repo = new FakeRepository();
+      repo.findByIdResponse = buildDocumento({ estado: "PENDIENTE_SIFEN", ...documentoExtra });
+      repo.claimQueue = [buildPendingVerificacion(pendiente)];
+      return repo;
+    };
+    const correr = async (repo: FakeRepository, gateway: FakeGateway) => {
+      const stop = startVerificacionFiscalWorker({
+        repository: repo as unknown as FacturaRepository,
+        gateway: gateway as unknown as FiscalGateway,
+        intervalMs: 100000,
+        batchSize: 10
+      });
+      stop();
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    };
+    const pendienteEnCola = { estado: "PENDIENTE_SIFEN", current_cdc: null, status_raw: "QUEUED_BATCH", result_code: null, result_message: null, raw: {} } as FiscalRefreshStatusResponse;
+
+    it("CA-01: en cola reprograma a 15 min y no gasta intentos, por mas consultas que lleve", async () => {
+      const repo = enCola({}, { attempts: 4 });
+      const antes = Date.now();
+      await correr(repo, new FakeGateway(pendienteEnCola));
+
+      expect(repo.scheduleCalls).toHaveLength(1);
+      expect(repo.scheduleCalls[0].attempts).toBe(0);
+      const espera = repo.scheduleCalls[0].nextAt!.getTime() - antes;
+      expect(espera).toBeGreaterThanOrEqual(14 * 60 * 1000);
+      expect(espera).toBeLessThanOrEqual(16 * 60 * 1000);
+    });
+
+    it("CA-02: si el documento ya salio de la cola, rige el backoff vigente", async () => {
+      const repo = enCola({}, { attempts: 2 });
+      const gateway = new FakeGateway(pendienteEnCola);
+      gateway.statusCanonico = "SENT_BATCH";
+      const antes = Date.now();
+      await correr(repo, gateway);
+
+      expect(repo.scheduleCalls[0].attempts).toBe(2);
+      expect(repo.scheduleCalls[0].nextAt!.getTime() - antes).toBeGreaterThanOrEqual(59 * 60 * 1000);
+    });
+
+    it("CA-03: pasado el corte de 30 dias sale de la agenda aunque siga en cola", async () => {
+      const viejo = new Date(Date.now() - 31 * 24 * 60 * 60 * 1000).toISOString();
+      const repo = enCola({}, { createdAt: viejo, attempts: 1 });
+      await correr(repo, new FakeGateway(pendienteEnCola));
+
+      expect(repo.scheduleCalls[0].nextAt).toBeNull();
+    });
+
+    it("RN-04: si la consulta falla no se sabe si sigue en cola, y rige el backoff vigente", async () => {
+      const repo = enCola({ fiscal_status_raw: "QUEUED_BATCH" }, { attempts: 3 });
+      const antes = Date.now();
+      await correr(repo, new FakeGateway(new FiscalGatewayError("UPSTREAM_ERROR", "fallo")));
+
+      expect(repo.scheduleCalls[0].attempts).toBe(3);
+      expect(repo.scheduleCalls[0].nextAt!.getTime() - antes).toBeGreaterThanOrEqual(5 * 60 * 60 * 1000);
+    });
   });
 
   it("no arranca ningun tick si intervalMs es muy alto y se detiene inmediatamente (worker apagable)", async () => {

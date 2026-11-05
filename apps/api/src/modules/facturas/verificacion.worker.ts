@@ -23,6 +23,13 @@ const BACKOFF_MS = [
 
 const DIAS_CORTE_VERIFICACION = 30;
 
+/**
+ * Un documento que FE todavia no envio no esta fallando: no gasta intentos ni agranda el
+ * backoff, y se vuelve a mirar con la frecuencia de los lotes (SPEC_VERIFICACION_DOCUMENTOS_EN_COLA).
+ */
+const ESTADO_EN_COLA = "QUEUED_BATCH";
+const INTERVALO_EN_COLA_MS = 15 * 60 * 1000;
+
 function nextBackoffMs(attempts: number): number {
   const index = Math.min(Math.max(attempts, 1), BACKOFF_MS.length) - 1;
   return BACKOFF_MS[index] ?? BACKOFF_MS[BACKOFF_MS.length - 1]!;
@@ -55,9 +62,11 @@ export function startVerificacionFiscalWorker(options: {
     const gateway = options.gateway;
 
     let resultingEstado = item.estado;
+    let estadoCanonico: string | null = null;
     try {
       const updated = await refreshFiscalStatusForDocumento(item.facturadorId, item.documentoId, options.repository, gateway);
       resultingEstado = updated.estado;
+      estadoCanonico = updated.fiscal_status_raw;
 
       // Seccion 2.9: notificar por correo, a lo sumo una vez por documento, cuando la
       // verificacion deja el documento en un estado de accion que requiere intervencion.
@@ -99,6 +108,15 @@ export function startVerificacionFiscalWorker(options: {
       // Seccion 2.3: pasado el corte, deja de verificarse automaticamente — deriveAccion
       // ya lo refleja como REQUIERE_SOPORTE por antiguedad.
       await options.repository.scheduleNextVerificacion({ documentoId: item.documentoId, nextAt: null, attempts: item.attempts });
+      return;
+    }
+
+    if (estadoCanonico === ESTADO_EN_COLA) {
+      await options.repository.scheduleNextVerificacion({
+        documentoId: item.documentoId,
+        nextAt: new Date(Date.now() + INTERVALO_EN_COLA_MS),
+        attempts: 0
+      });
       return;
     }
 
