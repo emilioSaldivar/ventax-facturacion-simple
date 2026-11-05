@@ -162,6 +162,9 @@ paths:
     get:
       tags: [Clientes]
       summary: Buscar cliente por documento en agenda y base compartida
+      description: >-
+        La agenda del facturador se busca por fragmento de documento o de razon social. La base
+        compartida solo responde al documento exacto, y sin direccion, telefono ni email.
       parameters:
         - in: query
           name: q

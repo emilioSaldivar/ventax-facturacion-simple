@@ -124,19 +124,18 @@ export class PgClienteRepository implements ClienteRepository {
             ci.documento_tipo,
             ci.documento,
             ci.razon_social,
-            ci.direccion,
-            ci.telefono,
-            ci.email::text as email,
+            -- Datos de contacto de otro facturador: nunca salen de su agenda.
+            null::text as direccion,
+            null::text as telefono,
+            null::text as email,
             ci.naturaleza,
             2 as priority
           from cliente_identidades ci
           where ci.deleted_at is null
             and ci.activo = true
-            and (
-              ci.documento_normalizado ilike $2
-              or ci.documento ilike $3
-              or ci.razon_social ilike $3
-            )
+            -- Solo documento exacto (SPEC_BUSQUEDA_CLIENTES_ENTRE_FACTURADORES RN-02): por
+            -- fragmento o por nombre, cualquiera listaria clientes de otros facturadores.
+            and ci.documento_normalizado = $5
             and not exists (
               select 1
               from facturador_clientes fc
@@ -154,7 +153,7 @@ export class PgClienteRepository implements ClienteRepository {
         order by priority, razon_social
         limit $4
       `,
-      [input.facturadorId, likeDoc, likeQ, input.limit]
+      [input.facturadorId, likeDoc, likeQ, input.limit, documentoQ]
     );
 
     return result.rows.map(mapSearchRow);
