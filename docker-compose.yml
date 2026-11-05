@@ -1,6 +1,7 @@
 services:
   postgres:
     image: postgres:16-alpine
+    restart: unless-stopped
     logging: &default-logging
       driver: json-file
       options:
@@ -21,6 +22,7 @@ services:
       retries: 20
 
   api:
+    restart: unless-stopped
     build:
       context: .
       dockerfile: infra/docker/api.Dockerfile
@@ -67,6 +69,7 @@ services:
         condition: service_healthy
 
   frontend:
+    restart: unless-stopped
     build:
       context: .
       dockerfile: infra/docker/frontend.Dockerfile
@@ -83,6 +86,7 @@ services:
       retries: 20
 
   dnit-ruc-loader-cron:
+    restart: unless-stopped
     build:
       context: ./dnit-ruc-loader
       dockerfile: Dockerfile
