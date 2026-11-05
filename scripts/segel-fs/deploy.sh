@@ -2,13 +2,13 @@
 # Prepara la instancia Segel desde la estacion. No arranca nada: el arranque es up.sh.
 #
 #   deploy.sh bundle <dir>   arma en <dir> los archivos que van al servidor (tambien para ensayo local)
-#   deploy.sh files          copia esos archivos a $SEGEL_HOST:/opt/segel
+#   deploy.sh files          copia esos archivos a $SEGEL_HOST:$REMOTE_ROOT
 #   deploy.sh images         transfiere las imagenes construidas con build-images.sh
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 SEGEL_HOST="${SEGEL_HOST:-segel-fs}"
-REMOTE_ROOT="${REMOTE_ROOT:-/opt/segel}"
+REMOTE_ROOT="${REMOTE_ROOT:-/home/esaldivar/segel}"
 FS_REF="${FS_REF:-HEAD}"
 FE_REPO="${FE_REPO:-$ROOT_DIR/../../FACTURACION_ELECTRONICA_MVP/facturacion-electronica}"
 FE_REF="${FE_REF:-branding/segel-staging}"
@@ -32,8 +32,8 @@ bundle() {
 }
 
 preflight() {
-  ssh "$SEGEL_HOST" "docker ps >/dev/null && test -w '$REMOTE_ROOT' && df -h /var '$REMOTE_ROOT'" || {
-    echo "$SEGEL_HOST no esta listo: hace falta acceso a Docker y $REMOTE_ROOT escribible (TASKS SFS-008)." >&2
+  ssh "$SEGEL_HOST" "docker ps >/dev/null && mkdir -p '$REMOTE_ROOT' && df -h /var '$REMOTE_ROOT'" || {
+    echo "$SEGEL_HOST no esta listo: hace falta acceso a Docker y poder crear $REMOTE_ROOT." >&2
     exit 1
   }
 }
@@ -53,7 +53,7 @@ case "${1:-}" in
     ;;
   images)
     preflight
-    docker save "${IMAGES[@]}" | gzip -1 | ssh "$SEGEL_HOST" 'gunzip | docker load'
+    docker save "${IMAGES[@]}" | nice -n 19 gzip -1 | ssh "$SEGEL_HOST" 'gunzip | docker load'
     ;;
   *)
     echo "Uso: deploy.sh {bundle <dir>|files|images}" >&2

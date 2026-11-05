@@ -38,7 +38,7 @@ Levantar en la VPS `segel-fs` una instancia independiente de facturacion simple 
 
 ## Subdominios
 
-Se replica el esquema de Hetzner. Pendiente de confirmacion (P-1).
+Se replica el esquema de Hetzner. Confirmados por el usuario el 2026-11-05.
 
 | Host | Destino | Uso |
 |---|---|---|
@@ -63,10 +63,25 @@ Se replica el esquema de Hetzner. Pendiente de confirmacion (P-1).
 ## Bloqueos y pendientes
 
 - **B-1. T&C.** Los T&C activos nombran a Ventax y a una persona fisica como proveedor, con su RUC, domicilio y WhatsApp. Hacen falta los datos legales de Segel y la revision del texto. No se inventan.
-- **P-1.** Confirmar los subdominios y que `facturacion.segel.com.py` no es el destino previsto.
-- **P-2. Correo.** `segel.com.py` usa Microsoft 365 con `spf ... -all`: enviar por otro proveedor seria rechazado. Hace falta una casilla, y que el tenant permita SMTP AUTH, o una alternativa autorizada.
-- **P-3. Acceso.** Infraestructura o el usuario deben aplicar el grupo `docker` y el disco. Sin VPN no hay acceso a la VPS.
+- **P-2. Correo.** Cuenta `no-reply-facturacion@segel.com.py` en `smtp.office365.com:587`, remitente "Facturacion Electronica Segel". El usuario carga la contrasena en la VPS. Falta comprobar un envio real, y definir una direccion de contacto que reciba correo: `facturacion@segel.com.py`, usada en el aviso de cuenta sin correo, no esta confirmada.
+- **P-3. Recursos.** Decision del usuario (2026-11-05): no se modifican disco ni recursos de la VPS. Se trabaja con lo que hay: `/var` (9,3 G) para Docker y `/home/esaldivar/segel` (`/home`, 3,7 G) para archivos. Infraestructura solo se ocupa de NGINX. Sin VPN no hay acceso a la VPS.
 - **P-4. Portainer.** Quien administre `portainer_agent` puede leer los secretos de los contenedores. Conviene saber quien tiene acceso y limitar el puerto 9002.
+
+## Acceso sin NGINX
+
+Mientras NGINX no este listo, los portales se usan por VPN con un tunel SSH hacia `localhost`:
+
+```bash
+ssh -N -L 18092:10.100.0.145:8092 -L 18100:10.100.0.145:8100 segel-fs
+```
+
+| Portal | Direccion |
+|---|---|
+| App de FS | `http://localhost:18092/app/` |
+| Backoffice de FS | `http://localhost:18092/backoffice/` |
+| Admin de FE | `http://localhost:18100/` |
+
+No se usa `http://10.100.0.145:8092` directo aunque la VPN llegue: la cookie de sesion de FS es `Secure`, y el navegador solo la acepta sin HTTPS en `localhost`. Sin ella, la sesion no se renueva.
 
 ## Limites conocidos
 

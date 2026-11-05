@@ -7,25 +7,25 @@
 
 ## Estado General
 
-- `SPEC` y `PLAN`: DONE, con B-1 y P-1 a P-4 abiertos.
-- Sin desplegar. La VPS no se modifico.
+- `SPEC` y `PLAN`: DONE, con B-1, P-2, P-3 y P-4 abiertos.
+- Imagenes construidas y ensayadas en local. Sin desplegar: la VPS no se modifico.
 
 ## Matriz
 
 | ID | Fase | Tarea | Estado | Criterio de aceptacion |
 | --- | --- | --- | --- | --- |
 | SFS-001 | Relevamiento | Relevar `segel-fs` y Hetzner | DONE (2026-11-05) | Evidencia E-1 |
-| SFS-002 | Codigo | Eliminar destinatario, contacto y defaults de Ventax | DONE sin commit (2026-11-05), E-2 | `npm run test`, `typecheck` y `lint` sin fallas nuevas |
-| SFS-003 | Codigo | `FRONTEND_BIND_IP` en `docker-compose.yml` | DONE sin commit (2026-11-05), E-2 | Sin la variable, `compose config` sigue en `127.0.0.1` |
-| SFS-004 | Infra | Plantillas de entorno y configuracion NGINX | DONE sin commit (2026-11-05), E-2 | Sin secretos; `check-no-secrets` en verde |
-| SFS-005 | Infra | Scripts `build-images`, `deploy`, `init-env` y `up` | PARTIAL: falta el ensayo SFS-007 | `bash -n` y ensayo SFS-007 |
-| SFS-006 | Build | Commit autorizado y build desde ese commit | BLOQUEADA: autorizacion, y prueba de estres en curso en la estacion | `X-App-Version` igual al commit |
-| SFS-007 | Ensayo | Levantar los dos stacks en local | PENDIENTE | Salud, alias de red y login de FE por su frontend |
-| SFS-008 | Host | Grupo `docker`, disco y salida a M365 | BLOQUEADA (P-3) | `df` y `id` correctos |
+| SFS-002 | Codigo | Eliminar destinatario, contacto y defaults de Ventax | DONE (2026-11-05), E-2 | `npm run test`, `typecheck` y `lint` sin fallas nuevas |
+| SFS-003 | Codigo | `FRONTEND_BIND_IP` en `docker-compose.yml` | DONE (2026-11-05), E-2 | Sin la variable, `compose config` sigue en `127.0.0.1` |
+| SFS-004 | Infra | Plantillas de entorno y configuracion NGINX | DONE (2026-11-05), E-2 | Sin secretos; `check-no-secrets` en verde |
+| SFS-005 | Infra | Scripts `build-images`, `deploy`, `init-env` y `up` | DONE (2026-11-05), E-3; `deploy.sh files` e `images` sin probar contra la VPS | `bash -n` y ensayo SFS-007 |
+| SFS-006 | Build | Commit autorizado y build desde ese commit | DONE (2026-11-05), FS `78b8781`, FE `c337d9e`, E-3 | `X-App-Version` igual al commit |
+| SFS-007 | Ensayo | Levantar los dos stacks en local | DONE (2026-11-05), E-3 | Salud, alias de red y login de FE por su frontend |
+| SFS-008 | Host | Grupo `docker` y salida a M365, sin cambios de disco (P-3) | DONE (2026-11-05) | `id` con `docker`; 587 abierto |
 | SFS-009 | Deploy | Desplegar en `segel-fs` | PENDIENTE | CA-02 y CA-03 |
-| SFS-010 | Entrega | Enviar configuracion a infraestructura | BLOQUEADA (P-1) | CA-06 |
+| SFS-010 | Entrega | Enviar configuracion a infraestructura | PARTIAL: documento listo y subdominios confirmados, falta compartirlo | CA-06 |
 | SFS-011 | Marca | T&C de Segel | BLOQUEADA (B-1) | Migracion nueva, sin "Ventax" en el T&C activo |
-| SFS-012 | Correo | Configurar la casilla Segel en FS y FE | BLOQUEADA (P-2) | Correo recibido, con SPF y DKIM validos |
+| SFS-012 | Correo | Configurar la casilla Segel en FS y FE | PARTIAL: plantillas listas; falta la contrasena en la VPS y un envio real (P-2) | Correo recibido, con SPF y DKIM validos |
 | SFS-013 | Puesta en marcha | Primer admin en cada stack, facturador de prueba y carga inicial del padron DNIT | PENDIENTE | Login en ambos backoffices y busqueda de RUC |
 | SFS-014 | Validacion | Emision real contra SIFEN test y recorrido con Playwright (mobile y desktop) | PENDIENTE | CA-04 y documento aprobado |
 | SFS-015 | Operacion | Backups con restauracion probada y prueba de reinicio | PENDIENTE | CA-05 y CA-07 |
@@ -52,4 +52,17 @@ Solo lectura, en `segel-fs` y Hetzner, mas la salida con root que entrego el usu
 - `node scripts/check-no-secrets.cjs`: en verde.
 - `docker compose config`, sin `FRONTEND_BIND_IP`: `127.0.0.1:8092`, sin cambio.
 - Ensayo en seco con `init-env.sh`, sin levantar nada: archivos en modo 600, no sobrescribe uno existente. FS y FE publican el frontend en `10.100.0.145`; APIs y Postgres FS en `127.0.0.1`; red `segel_fiscal` y alias `facturacion-electronica` correctos.
-- Sin validar todavia: build de imagenes, arranque real y `up.sh`. El build se postergo porque `fe-volumen-api` estaba cerca de 200 % de CPU en la estacion.
+- El build se postergo hasta que termino la prueba de estres de la estacion.
+
+### E-3. Build y ensayo local (2026-11-05)
+
+Paquete de `deploy.sh bundle`, `init-env.sh` y `up.sh`, con `SEGEL_BIND_IP=127.0.0.1` y puertos altos. Eliminado al terminar, con sus volumenes y su red.
+
+- Nueve imagenes desde `git archive`. `X-App-Version: 78b8781`.
+- Migraciones de FS y FE correctas. Contenedores sanos, con `restart: unless-stopped`.
+- Desde `segel-fs-api-1`, `http://facturacion-electronica:8080/v1/health` responde `{"status":"ok",...,"db":true}` (CA-03).
+- Primer admin de FE con la clave de bootstrap y login por el frontend de FE: 201 y token.
+- `node` (uid 1000) escribe en `cert-uploads`. El caso uid 1001 solo se puede comprobar en la VPS.
+- Playwright, 390x844 y 1366x800, sobre `/app/`, `/backoffice/` y admin de FE: sin errores de pagina, sin "Ventax" en el texto; capturas revisadas a ojo. Solo pantallas de login, y previas al arreglo del aviso, que no aparece en ellas.
+- **Falla encontrada y corregida:** el bundle de la app contenia `facturacion@ventax.app` en el aviso de cuenta sin correo (`main.tsx`), oculto en una busqueda anterior por lineas truncadas. Commit `78b8781`. El bundle reconstruido solo conserva claves tecnicas.
+- **Sigue abierto:** el T&C activo (v1.5) menciona a Ventax 120 veces (B-1). El admin de FE no tiene marca Segel: es neutro y de uso interno.

@@ -10,15 +10,14 @@ En Hetzner se construye en el servidor desde un checkout. Aca se construye en la
 
 El diseno de red y de stacks es el de Hetzner. FE se usa sin cambios; su `deploy-prod.sh` no sirve aca porque siempre compila.
 
-## 1. Host (lo aplica root)
+## 1. Host
 
-1. Grupo `docker` para `esaldivar`.
-2. Ampliar `sda3`, sumar 10 G a `/var` y crear el LV `segel` en `/opt/segel`.
+El grupo `docker` de `esaldivar` ya esta aplicado. No se modifican disco ni recursos (SPEC P-3). Se calcula para `/var`: unos 3,8 G de imagenes, 0,7 G del padron y el crecimiento de las bases, sobre 8,7 G libres.
 
 ## 2. Disposicion en la VPS
 
 ```text
-/opt/segel/
+/home/esaldivar/segel/
   bin/          init-env.sh, up.sh, templates/
   fs/           docker-compose.yml, .env.segel, dnit-ruc-loader/data
   fe/           docker-compose.prod.yml, .env.segel
@@ -61,7 +60,7 @@ La imagen corre como `node` (uid 1000) y `esaldivar` es uid 1001. En Hetzner coi
 1. Correcciones de codigo, con pruebas.
 2. Commit en la rama, previa autorizacion del usuario.
 3. Build de imagenes y ensayo local de los dos stacks.
-4. Aplicacion del host y comprobacion de salida a `smtp.office365.com:587`.
+4. Comprobacion de acceso y de salida a `smtp.office365.com:587`.
 5. `deploy.sh`, `init-env.sh`, `up.sh`.
 6. Entrega a infraestructura.
 7. T&C de Segel (B-1), primer admin de cada stack y facturador de prueba.
@@ -74,7 +73,8 @@ La imagen corre como `node` (uid 1000) y `esaldivar` es uid 1001. En Hetzner coi
 | Riesgo | Mitigacion |
 |---|---|
 | Un deploy de Hetzner desde esta rama lleva los defaults nuevos | Las variables estan definidas en sus `.env` y la regla de no desplegar la rama en produccion sigue vigente |
-| `/var` se llena con versiones viejas de imagenes | Prune tras cada deploy y alerta de disco de infraestructura |
+| `/var` se llena con versiones viejas de imagenes o con el padron | Prune tras cada deploy, medir `df` en cada etapa, e informar si no alcanza. No se amplia sin decision del usuario |
+| Backups en `/home` (3,7 G) | Retencion corta y copia fuera de la VPS |
 | La VPN corta los puertos locales de Docker | No correr el ensayo ni carga local con la VPN arriba |
 | Build local compite con pruebas de estres en la estacion | Mirar la carga antes de compilar |
 
