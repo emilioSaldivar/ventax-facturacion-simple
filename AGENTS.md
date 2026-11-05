@@ -61,6 +61,22 @@ La fuente de verdad de este proyecto es:
 - `docs/SPEC_IDENTIDAD_MARCA_SEGEL_v0.1.md`
 - `docs/PLAN_IDENTIDAD_MARCA_SEGEL_v0.1.md`
 - `docs/TASKS_IDENTIDAD_MARCA_SEGEL_v0.1.md`
+- `docs/SPEC_VERIFICACION_CAPACIDAD_200_v0.1.md`
+- `docs/PLAN_VERIFICACION_CAPACIDAD_200_v0.1.md`
+- `docs/TASKS_VERIFICACION_CAPACIDAD_200_v0.1.md`
+- `docs/OPERACION_VERIFICACION_CAPACIDAD_v0.1.md`
+- `docs/SPEC_BUSQUEDA_CLIENTES_ENTRE_FACTURADORES_v0.1.md`
+- `docs/PLAN_BUSQUEDA_CLIENTES_ENTRE_FACTURADORES_v0.1.md`
+- `docs/TASKS_BUSQUEDA_CLIENTES_ENTRE_FACTURADORES_v0.1.md`
+- `docs/SPEC_API_TRAS_REINICIO_POSTGRES_v0.1.md`
+- `docs/PLAN_API_TRAS_REINICIO_POSTGRES_v0.1.md`
+- `docs/TASKS_API_TRAS_REINICIO_POSTGRES_v0.1.md`
+- `docs/SPEC_RECUPERACION_EMISION_TRABADA_v0.1.md`
+- `docs/PLAN_RECUPERACION_EMISION_TRABADA_v0.1.md`
+- `docs/TASKS_RECUPERACION_EMISION_TRABADA_v0.1.md`
+- `docs/SPEC_VERIFICACION_DOCUMENTOS_EN_COLA_v0.1.md`
+- `docs/PLAN_VERIFICACION_DOCUMENTOS_EN_COLA_v0.1.md`
+- `docs/TASKS_VERIFICACION_DOCUMENTOS_EN_COLA_v0.1.md`
 - `spec/openapi.yaml`
 
 Los documentos bajo `contexto_facturacion_electronica/` y `contexto_pos_graciela/` son antecedentes. No son la especificacion final del nuevo producto.

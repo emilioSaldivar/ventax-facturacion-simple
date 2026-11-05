@@ -18,3 +18,26 @@ Registro de iniciativas pendientes, con su estado. Cada iniciativa se refina a S
 | Backups — no hay dump automatizado de las DB de facturacion simple en la VPS; el ultimo es del 2026-05-23 y `scripts/install-backup-cron.sh` nunca se instalo para este stack | Pendiente de SPEC | PENDIENTE DE REFINAMIENTO | 2026-08-28 |
 | Red compartida con facturacion-electronica — migrar de fe-{prod,test}_default a ventax_fiscal_{prod,test} con alias facturacion-electronica, estandar declarado por el proveedor (precedente pos-graciela: 50s -> 476ms) | [SPEC_RED_COMPARTIDA_FISCAL_v0.1.md](SPEC_RED_COMPARTIDA_FISCAL_v0.1.md) | CERRADA — staging y produccion migrados a ventax_fiscal_{test,prod}, verificado funcional (2026-08-29) | 2026-08-29 |
 | Estado fiscal canonico — el SaaS deriva el estado de la respuesta cruda de SIFEN y no del `status` de FE: en prod, 93 documentos "Procesando" estan APPROVED en FE y 5 REJECTED (2 del 2026-10-12) | [SPEC_ESTADO_FISCAL_CANONICO_v0.1.md](SPEC_ESTADO_FISCAL_CANONICO_v0.1.md) | SPEC en borrador — decisiones D-1 a D-4 pendientes del usuario | 2026-10-15 |
+
+## Hallazgos de la verificacion de capacidad (2026-11-05)
+
+Se mantienen vivos en el documento compartido con FE (https://claude.ai/artifact/R2D8zaz46VZCrc4FsiEP81) y con evidencia en `docs/TASKS_VERIFICACION_CAPACIDAD_200_v0.1.md`. Cada arreglo sigue su propia cadena SDD, en esta rama. Despues se decide que pasa a `master`.
+
+| ID | Prioridad | Hallazgo | Estado |
+|---|---|---|---|
+| FS-01 | Critica | `/clientes/search` expone telefono, correo y direccion de clientes de otros facturadores, buscando por fragmento de nombre | Corregido en `SPEC_BUSQUEDA_CLIENTES_ENTRE_FACTURADORES_v0.1`, sin desplegar |
+| FS-02 | Critica | Si PostgreSQL se reinicia, la API muere y no vuelve: sin manejo de error del pool ni `restart:` | Corregido en `SPEC_API_TRAS_REINICIO_POSTGRES_v0.1`, sin desplegar |
+| FS-03 | Critica | Si la API muere en plena emision, FE recibe la factura y la app queda en `PROCESSING`, sin uuid ni verificacion, diciendo "No necesitas hacer nada" | Corregido en `SPEC_RECUPERACION_EMISION_TRABADA_v0.1`, sin desplegar. Falta confirmar con FE real |
+| FS-04 | Media | La cola emite 12 facturas por minuto: una rafaga de 200 tarda 17 min | Confirmado en mock. A medir con FE |
+| FS-05 | Alta | Cola global sin reparto: un cliente con mucho volumen demora a todos | Hipotesis |
+| FS-06 | Alta | Con la clave compartida invalida la emision sigue y fallan KUDE, verificacion y cancelacion, mientras la pantalla dice "Verificacion automatica en curso" | Confirmado en F3 real |
+| FS-14 | Media | KUDE da 500 `INTERNAL_ERROR` con FE inalcanzable o clave invalida, en vez de un error de servicio | Confirmado en F1 y F3 |
+| FS-15 | Media | WhatsApp, Compartir y Copiar enlace activos en facturas sin numero fiscal; "Email: Enviado" en una factura en cola | Hipotesis: visto en capturas, falta probar que recibe el cliente |
+| FS-16 | Baja | Con clave de consumidor invalida el mensaje dice "error tecnico temporal", aunque no sale sola | Confirmado en F4 |
+| FS-07 | Media | Una factura aprobada se ve "Procesando" hasta la siguiente consulta (min 5, 35, 95) | Confirmado en `real-e8`: 19 aprobadas en FE sin reflejar, hasta 51 min |
+| FS-12 | Media | KUDE con p95 de 4,9 s, contra 3 s; la app lo pide a FE en cada descarga | Confirmado en `real-e8`, 36 descargas. Falta separar la parte de cada equipo |
+| FS-08 | Media | Cancelar usa el CDC local, que puede quedar viejo tras un reenvio | Hipotesis |
+| FS-11 | Alta | `refresh-status` no protege documentos anulados: con FE-02, una factura anulada puede volver a verse emitida | Leido en el codigo. A medir en E9 |
+| FS-13 | Media | La verificacion trata el 409 `DOCUMENT_QUEUED_BATCH` de FE como error y gasta intentos: una factura aun en cola avanza en el backoff (30 min, 1 h, 6 h) y puede verse aprobada horas tarde | Corregido en `SPEC_VERIFICACION_DOCUMENTOS_EN_COLA_v0.1`, sin desplegar. Medido en `real-e8`: 194 facturas con proxima verificacion a 5 o 6 horas |
+| FS-17 | Media | `upsertForFacturador` sobrescribe la razon social global con lo que cargue cualquier facturador, y otro puede verla por documento exacto | Hipotesis, leida en el codigo. Pendiente de SPEC |
+| FS-09 | Baja | La pestana activa "Facturas" es casi ilegible, azul sobre azul | Confirmado |
