@@ -114,7 +114,7 @@ La proteccion de FS-11 evita consultar a SIFEN un documento ya anulado. Con el f
 
 | ID | Que | Propuesta | Decide |
 |---|---|---|---|
-| D-1 | FS-25: (A) retirar las 6; (B) retirar 5 y conservar "Inutilizar numeracion" migrada a la ruta publicada `POST /evento/inutilizacionnumfactura`; (C) hacerlas funcionar, con rutas nuevas de FE para consumidores o con credenciales de administrador de FE en FS | A. B suma trabajo y hay que verificar esa ruta. C es un cambio de contrato en FE, y "Reintentar mismo CDC" no funcionaria igual | Usuario |
+| D-1 | FS-25 | **Decidido por el usuario (2026-11-06): opcion C, reorientada.** No se trata de reparar las 6 acciones para soporte interno, sino de que el operador final se autogestione desde FS: corregir RUC y nombre de un rechazo, y reenviar o corregir un correo fallido. Solo las acciones que se usen facil e intuitivamente. Pidio la opinion de FE antes de definir: consultada, sin respuesta. Sale de este SPEC y tendra su propia cadena (`AUTOGESTION_OPERADOR`). El bloque interno actual no se toca hasta entonces | Usuario |
 | D-2 | Cuando se despliega | Junto con el proximo tag de FE: FS-20 lo necesita y FS-24 necesita su bandera. Un solo cambio en produccion | Usuario, con confirmacion directa |
 
 ## 9. Otros errores abiertos, fuera de este SPEC
