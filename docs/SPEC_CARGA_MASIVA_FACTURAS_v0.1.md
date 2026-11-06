@@ -88,7 +88,9 @@ La pestana Facturas no cambia de columnas en esta version; las facturas de carga
 | Del cliente | `CLIENTE` | El del archivo |
 
 - **RN-20.** Un numerador usa una sola forma de numerar. En FE, el numerador es unico por emisor, establecimiento, punto y tipo de documento. FE rechaza una carga `CLIENTE` sobre un numerador que numera FE.
-- **RN-21.** FS guarda la forma de numerar facturas por contexto operativo, con `SERVICIO` por defecto, y la manda en cada subida. La cambia solo un usuario interno. **Hoy no existe:** FS tiene una sola variable por instancia, `FE_SERVICE_NUMBERING`, y no una configuracion por cliente. Decidido por el usuario (D-1). Que FE ademas la guarde en su numerador es una decision de FE con el usuario (su D27) y no cambia este SPEC.
+- **RN-21.** FS guarda la forma de numerar facturas por contexto operativo, con `SERVICIO` por defecto, y la manda en cada subida. La cambia solo un usuario interno. **Hoy no existe:** FS tiene una sola variable por instancia, `FE_SERVICE_NUMBERING`, y no una configuracion por cliente. Decidido por el usuario (D-1).
+- **RN-21b.** FE tambien la guarda, en su numerador, por punto y tipo de documento, y se configura desde su backoffice (decision del usuario con FE, seccion 16 del pedido). **Ante una diferencia manda FE:** si lo que envia FS no coincide, FE rechaza la carga con el motivo y FS lo muestra. Si el numerador de FE no esta configurado, vale lo que envia FS. Soporte debe configurar el mismo valor en los dos sistemas.
+- **RN-21c.** `POST /v1/factura` de FE no cambia: FE no rechaza una factura emitida una por una sobre un numerador del cliente. La unica proteccion contra ese cruce es RN-22, en FS.
 - **RN-22.** En un punto `CLIENTE`, FS no ofrece "Nueva factura" para ese contexto, porque esa emision usa el mismo numerador con numeracion de FE. Las notas de credito siguen disponibles: usan otro numerador y FE no las rechaza.
 - **RN-23.** Esta forma de numerar es una excepcion aprobada a la regla general: la decide el archivo del cliente, nunca el frontend, que no calcula ni incrementa numeros.
 
@@ -131,7 +133,7 @@ Rutas propias de FS: se definen en el PLAN y se documentan en `spec/openapi.yaml
 
 | ID | Que | Decision del usuario (2026-11-06) |
 |---|---|---|
-| D-1 | Donde vive la forma de numerar | Por contexto operativo, en FS (RN-21) |
+| D-1 | Donde vive la forma de numerar | Por contexto operativo, en FS (RN-21). Ademas en el numerador de FE, que manda ante una diferencia (RN-21b) |
 | D-2 | Origen del archivo | El cliente sube el CSV de su sistema, tal cual, y es responsable de su contenido |
 | D-3 | Varios puntos en un archivo | No. Un solo punto, que debe coincidir con el del perfil (RN-03) |
 | D-4 | Saldo | Fuera de esta version. Queda registrado en el backlog |
@@ -140,5 +142,7 @@ Rutas propias de FS: se definen en el PLAN y se documentan en `spec/openapi.yaml
 | D-7 | Orden frente a FS-24 y FS-25 | Lo define FS: seccion 2 del PLAN |
 
 **Abierto con FE:** nombres finales de campos y parametros, que FE fija en su OpenAPI (su tarea CMA-215); tope definitivo del archivo. `modo=AUTO` queda fuera de la fase 1 si el usuario acepta la propuesta de FE; FS no lo usa.
+
+**Correo:** FE lo envia despues de la aprobacion de SIFEN; el estado del correo de un comprobante aparece recien entonces. Recibos por archivo: fuera de la primera etapa.
 
 **Sin dato de volumen (D-6):** no hay cifra para dimensionar. Los topes son los de FE (5.000 comprobantes por archivo, 20 MB provisional). Antes del primer cliente real hay que medir con su volumen.

@@ -133,4 +133,5 @@ Componente nuevo en `apps/web-operacion/src/carga-masiva.tsx`: `main.tsx` ya tie
 | Memoria de la API con archivos de 20 MB | Limite de 2 subidas simultaneas. Medir antes del primer cliente |
 | Sin dato de volumen real (D-6) | Declarado en el SPEC. Medir con el primer cliente antes de habilitarlo |
 | Un contexto pasa de `SERVICIO` a `CLIENTE` con facturas ya emitidas | Aviso en el backoffice. La proteccion real es la validacion de FE sobre su numerador |
+| La forma de numerar queda distinta en FS y en FE | FE rechaza la carga con el motivo y FS lo muestra. El aviso del backoffice de FS recuerda configurar tambien FE. Mejora posible: que FE publique la configuracion del numerador y FS la lea, en vez de duplicarla |
 | El filtro por perfil deja sin ver cargas a un usuario que cambia de contexto | Es el comportamiento de la segmentacion vigente. Soporte interno ve todas |
