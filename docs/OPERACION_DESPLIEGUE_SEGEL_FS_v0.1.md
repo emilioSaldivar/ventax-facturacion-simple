@@ -52,6 +52,8 @@ Una contrasena SMTP con `#` no lleva comillas, y no puede tener un espacio antes
 - `ss -tln`: solo `8092` y `8100` en `10.100.0.145`; `8091`, `9989` y `5434` en `127.0.0.1`.
 - Dentro de `fe-segel-api-1`: `SIFEN_ENV` es el ambiente elegido.
 
+Para aplicar un cambio de `.env.segel`, correr de nuevo `bash bin/up.sh`, que tambien reinicia el frontend de FS. Sin ese reinicio, recrear la API deja al frontend con la IP vieja y responde 502.
+
 ## Fase 3. Acceso por tunel (en la estacion)
 
 ```bash

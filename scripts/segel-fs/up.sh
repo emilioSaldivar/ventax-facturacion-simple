@@ -28,6 +28,9 @@ docker run --rm --user 0 --network none --entrypoint chown -v "$runtime:/d" fe-s
   # env_file del compose lee APP_ENV_FILE del shell; --env-file no alcanza.
   export APP_ENV_FILE=.env.segel
   docker compose --env-file .env.segel -f docker-compose.yml up -d --no-build
+  # El nginx del frontend resuelve "api" al arrancar: si la API se recreo y el frontend no,
+  # queda con la IP vieja y responde 502.
+  docker compose --env-file .env.segel -f docker-compose.yml restart frontend
 )
 
 echo "FS -> FE por la red interna:"

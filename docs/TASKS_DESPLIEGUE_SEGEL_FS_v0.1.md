@@ -112,3 +112,9 @@ Fases 1 a 4 del runbook, con FS `3e4f637` y FE `c337d9e`, sobre bases vacias. Se
 - Facturador cargado con `cargar-facturador.py`, sin bloqueantes. Operador activado con `activar-operador-test.cjs`.
 - `up.sh` no ejecuta `verify-cert-storage.sh`: la falta de certificado no detiene los stacks. No se copian certificados desde Hetzner.
 
+### E-8. Subdominios definitivos (2026-11-05)
+
+- `app.factura`, `backoffice.factura` y `fe-back.factura` bajo `segel.com.py`: plantillas, NGINX, VPS y documento de infraestructura.
+- **Falla encontrada:** al recrear solo la API de FS, el frontend quedo con la IP vieja y el login dio 502. `up.sh` ahora reinicia el frontend, y queda en el runbook.
+- Los tres nombres ya resuelven en DNS, a direcciones de Cloudflare.
+
