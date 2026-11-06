@@ -8,7 +8,7 @@
 ## Estado General
 
 - `SPEC` y `PLAN`: DONE, con B-1 y P-4 abiertos.
-- Desplegado en `segel-fs`, FS `78b8781` y FE `c337d9e`, con SIFEN test. Acceso por tunel; falta NGINX de infraestructura. Sin emision real todavia.
+- Desplegado en `segel-fs`, FS `96e635d` y FE `c337d9e`, con SIFEN test. Acceso por tunel; falta NGINX de infraestructura. Sin emision real todavia.
 
 ## Matriz
 
@@ -82,3 +82,10 @@ Stacks `fe-segel` y `segel-fs` en `/home/esaldivar/segel`, sin cambios de disco 
 - **Hallazgo:** `003_seed_awapura.sql` de FE carga en toda base nueva al emisor real AWAPURA (80136968-1), con referencia a un certificado de una persona. El archivo no esta en la VPS. Pendiente decision del usuario (P-5).
 - **Sin validar:** envio real de correo, KuDE, emision, reinicio de la VPS y backups.
 - **Numeradores:** el equipo de FE los reviso y no los cambia: el margen de +1000 alcanza (FE 001-001 en 1016, FE 001-002 en 1094, NCE 001-002 en 1009). Se confirma con la primera emision aprobada, que requiere certificado y CSC. Los scripts quedan fijados en FE `c337d9e` hasta que FE anuncie un tag: la punta de `branding/segel-staging` tiene correcciones sin validar.
+
+### E-5. Correo y ajustes (2026-11-05)
+
+- Contrasena SMTP cargada por el usuario en `fs/.env.segel` y copiada dentro de la VPS a `fe/.env.segel`, sin mostrarla. Longitud correcta en los contenedores. Contiene `#` sin comillas: Compose la conserva porque no tiene un espacio antes.
+- Autenticacion SMTP correcta desde FS y FE. Un correo real desde FS a la casilla del usuario: servidor responde 250. Falta confirmar la recepcion y probar el correo de factura de FE, que depende de emitir.
+- AWAPURA (80136968-1) desactivado por API de FE; 5057016-1 sigue activo.
+- FS `96e635d`: contacto `no-reply-facturacion@segel.com.py`. `X-App-Version` por `APP_VERSION`; el bundle ya no contiene otra direccion. Imagenes anteriores de FS retiradas; `/var` 44 %.
