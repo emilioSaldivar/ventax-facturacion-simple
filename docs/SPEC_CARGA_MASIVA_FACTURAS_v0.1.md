@@ -40,10 +40,13 @@ El resultado de SIFEN llega en minutos o en horas: la persona sube, se va y vuel
 
 ### Confirmacion y acciones
 
-- **RN-06.** FS sube siempre con `modo=CONFIRMAR`. Nada se emite sin confirmacion de una persona. `AUTO` no se usa en esta version.
+- **RN-06.** Nada se emite sin confirmacion de una persona. FE no tiene modo automatico: la subida no lleva parametro `modo` (decision del usuario con FE, seccion 17 del pedido).
 - **RN-07.** Antes de confirmar se muestra cuantos comprobantes se emitiran y cuantos quedan afuera. Confirmar emite facturas reales, y la pantalla lo dice.
 - **RN-08.** Los botones Confirmar, Cancelar y Reintentar dependen de `acciones` de FE: FS no deduce reglas por estado.
 - **RN-09.** Un rechazo de SIFEN no se reintenta solo: queda informado con su motivo. Los numeros salteados se avisan; inutilizarlos es del cliente.
+- **RN-09b.** Un comprobante en `ERROR` es un fallo de FE, no un rechazo. FE lo reintenta solo hasta 3 veces; despues la carga no termina hasta que alguien lo reintente o lo cancele. La pantalla lo dice y ofrece las dos acciones, segun `acciones`.
+- **RN-09c.** Cancelar alcanza a los comprobantes `PENDIENTE` y `ERROR`. Los ya preparados siguen su curso, y la pantalla lo avisa antes de cancelar.
+- **RN-09d.** FE prepara una carga por emisor a la vez. Una carga confirmada que espera a otra queda `EN_COLA`: la pantalla la muestra como "En espera de otra carga", distinta de "Emitiendo".
 
 ### Permisos (decision de FS, criterio del usuario)
 
@@ -73,7 +76,7 @@ Mobile primero: la tabla se vuelve tarjetas en pantalla angosta. Usa los compone
 | Listado | Cargas por fecha y estado, con archivo, totales y avance. "Nueva carga" y "Descargar plantilla" |
 | Nueva carga | Facturador, punto y perfil que se usaran; forma de numerar; seleccion del archivo |
 | Informe | Validos, con error y con aviso. Por comprobante: fila, columna y mensaje. Confirmar o cancelar |
-| Avance | Totales de la carga, ultima actualizacion, y que se puede cerrar la pantalla |
+| Avance | Totales de la carga, ultima actualizacion, y que se puede cerrar la pantalla. En `EN_SIFEN` dice que sigue esperando a SIFEN y que puede tardar horas: no es un error |
 | Resultado | Por comprobante: numero, referencia de venta, estado, CDC, motivo de SIFEN, correo y enlace al documento. Filtros y descarga del resultado |
 
 Mensajes propios de FS: archivo repetido (`200`, abre la carga anterior), tope superado (`413`, con el tope), demasiadas cargas o cuota diaria (`429`, con la espera), sin permiso (`403`).
@@ -141,7 +144,7 @@ Rutas propias de FS: se definen en el PLAN y se documentan en `spec/openapi.yaml
 | D-6 | Primer cliente y volumen | Todavia no hay cliente. Se prepara la funcion y se prueba con los clientes de prueba, en local |
 | D-7 | Orden frente a FS-24 y FS-25 | Lo define FS: seccion 2 del PLAN |
 
-**Abierto con FE:** nombres finales de campos y parametros, que FE fija en su OpenAPI (su tarea CMA-215); tope definitivo del archivo. `modo=AUTO` queda fuera de la fase 1 si el usuario acepta la propuesta de FE; FS no lo usa.
+**Abierto con FE:** nombres finales de campos y parametros, que FE fija en su OpenAPI (su tarea CMA-215); tope definitivo del archivo.
 
 **Correo:** FE lo envia despues de la aprobacion de SIFEN; el estado del correo de un comprobante aparece recien entonces. Recibos por archivo: fuera de la primera etapa.
 

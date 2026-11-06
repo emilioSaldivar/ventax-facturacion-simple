@@ -60,7 +60,7 @@ Modulo nuevo `apps/api/src/modules/cargas/` (rutas, servicio, repositorio, tipos
 
 - Dependencia nueva: `multer`, con almacenamiento en memoria. Limite `CARGA_MAX_BYTES`, 20 MB por defecto. El archivo no se escribe en disco ni se guarda.
 - Como mucho 2 subidas a la vez por proceso; la tercera responde `429`. Tope de memoria: 40 MB mas la copia del reenvio.
-- FS manda a FE los bytes recibidos, sin tocarlos, con `emisor_id`, `formato=CSV`, `version=1`, `modo=CONFIRMAR`, `numeracion` del contexto, perfil (salvo `NO_REQUERIDO`), actividad, establecimiento y punto. FE exige que perfil y punto coincidan, y rechaza el archivo entero si una fila trae otro punto.
+- FS manda a FE los bytes recibidos, sin tocarlos, con `emisor_id`, `formato=CSV`, `version=1`, `numeracion` del contexto, perfil (salvo `NO_REQUERIDO`), actividad, establecimiento y punto. FE exige que perfil y punto coincidan, y rechaza el archivo entero si una fila trae otro punto.
 - Clave: la de consumidor del facturador (`resolveConsumerGateway`). Sin clave propia, `409` con mensaje claro: no se usa la compartida.
 - Tiempo de espera propio para la subida: 60 s.
 - `202` y `200` de FE crean o reutilizan la fila local por `fe_carga_id`. El `200` responde con `repetida: true`.
@@ -94,7 +94,7 @@ Worker nuevo `cargas-sync.worker.ts`, arrancado en `server.ts` junto a los otros
 - **Estado vigente:** el `estado` del comprobante no cambia tras la emision. Si el comprobante trae `documento_estado`, ese decide, con `mapDocumentStatusCanonico`: una factura cancelada llega como `CANCELLED` y queda `ANULADA`.
 - **Estados finales:** una factura `ANULADA` no cambia. Una `EMITIDA` o `RECHAZADA` solo cambia si FE informa otro estado final. Asi una cancelacion hecha desde FS no se revierte.
 - **Campos:** `usuario_id` es quien confirmo; `actividad_punto_perfil_id` el de la carga; `numero_fiscal` el `numero_asignado`; `carga_numero_archivo` el `numero_archivo`; `verificacion_next_at` nulo (RN-17); `email_estado` segun `correo`; snapshots e items desde el detalle.
-- **Frecuencia:** 1 min mientras la carga este `VALIDANDO` o `EN_PREPARACION`; 5 min en `EN_SIFEN`. En `EN_SIFEN` los resultados no llegan antes de unos 10 min del envio de cada lote. Al llegar a `FINALIZADA`, `RECHAZADA` o `CANCELADA` hace una pasada mas y deja `sync_next_at` nulo: desde ahi, un cambio hecho fuera de FS se ve con "Verificar estado fiscal". Pasadas 72 h sin terminar, sigue cada 30 min y registra un aviso.
+- **Frecuencia:** 1 min mientras la carga este `VALIDANDO` o `EN_PREPARACION`; 5 min en `EN_COLA` y `EN_SIFEN`. Una carga `VALIDADA` sin confirmar no se sincroniza: no cambia sola. En `EN_SIFEN` los resultados no llegan antes de unos 10 min del envio de cada lote. Al llegar a `FINALIZADA`, `RECHAZADA` o `CANCELADA` hace una pasada mas y deja `sync_next_at` nulo: desde ahi, un cambio hecho fuera de FS se ve con "Verificar estado fiscal". Pasadas 72 h sin terminar, sigue cada 30 min y registra un aviso: puede ser SIFEN lento o un comprobante en `ERROR` que espera reintento o cancelacion.
 - **Fallo de FE:** no cambia nada y reintenta en el intervalo siguiente (RN-19).
 - **No toca** `facturador_clientes`, `cliente_identidades` ni el catalogo (RN-16).
 
@@ -121,7 +121,7 @@ Componente nuevo en `apps/web-operacion/src/carga-masiva.tsx`: `main.tsx` ya tie
 
 - Unitarias e integracion del modulo: permisos y aislamiento, subida y reenvio sin cambios (mismo hash), repeticion, mapeo de estados, idempotencia del worker, estados finales, fallo de FE.
 - `npm run test`, `npm run typecheck`, `npm run lint`, `npm run build`.
-- Playwright contra el stack de `bash scripts/deploy.sh` con el mock: mobile 390 px y desktop 1280 px. Escenarios: archivo rechazado, informe con errores y avisos, confirmar, avance, resultado, archivo repetido, punto con numeracion del cliente sin "Nueva factura".
+- Playwright contra el stack de `bash scripts/deploy.sh` con el mock: mobile 390 px y desktop 1280 px. Escenarios: archivo rechazado, informe con errores y avisos, confirmar, carga en espera de otra, avance, comprobante en error con reintento, resultado, archivo repetido, punto con numeracion del cliente sin "Nueva factura".
 - Nunca en `segel-fs` ni en Hetzner.
 
 ## 10. Riesgos
