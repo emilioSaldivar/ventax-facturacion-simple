@@ -65,7 +65,11 @@ Modulo nuevo `apps/api/src/modules/cargas/` (rutas, servicio, repositorio, tipos
 - FS manda a FE los bytes recibidos, sin tocarlos, y en la URL `emisor_id`, `formato=CSV`, `version=1`, `numeracion` del contexto, perfil (salvo `NO_REQUERIDO`), actividad, establecimiento y punto. FE exige que perfil y punto coincidan, y rechaza el archivo entero si una fila trae otro punto.
 - Clave: la de consumidor del facturador (`resolveConsumerGateway`). Sin clave propia, `409` con mensaje claro: no se usa la compartida.
 - Tiempo de espera propio para la subida: 60 s.
-- `202` y `200` de FE crean o reutilizan la fila local por `fe_carga_id`. El `200` responde con `repetida: true`.
+- `202` y `200` de FE crean o reutilizan la fila local por `fe_carga_id`. FE indica la repeticion con `creada: false`, y FS la pasa a la pantalla.
+- **Repeticion (implementado en FE):** la clave es emisor, ambiente y sha256 de los bytes recibidos. El nombre, el perfil y la actividad no cuentan. Una carga `RECHAZADA` o `CANCELADA` no bloquea volver a subir el mismo archivo: crea una carga nueva.
+- Por eso, ante un timeout de la subida, FS reintenta una vez con los mismos bytes: no duplica.
+- `nombre_archivo`: opcional, hasta 200 caracteres, solo informativo. FS lo recorta a ese largo.
+- `413` trae `tope_bytes`. Un `.zip` que supera el tope al descomprimirse no da `413`: queda como carga `RECHAZADA` con `TOPE_SUPERADO`.
 - Errores de FE: `403`, `413`, `422` y `429` se devuelven con su codigo y el mensaje de FE; no se convierten en `502`.
 - Un `422` con `motivos` por parametros que no corresponden al emisor (perfil, punto, actividad o forma de numerar) no crea carga en FE ni fila en FS. Es un problema de configuracion, no del archivo: la pantalla muestra el motivo y pide contactar a soporte.
 

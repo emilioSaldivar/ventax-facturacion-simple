@@ -80,7 +80,7 @@ Mobile primero: la tabla se vuelve tarjetas en pantalla angosta. Usa los compone
 | Avance | Totales de la carga, ultima actualizacion, y que se puede cerrar la pantalla. En `EN_SIFEN` dice que sigue esperando a SIFEN y que puede tardar horas: no es un error |
 | Resultado | Por comprobante: numero, referencia de venta, estado, CDC, motivo de SIFEN, correo y enlace al documento. Filtros y descarga del resultado |
 
-Mensajes propios de FS: archivo repetido (`200`, abre la carga anterior), tope superado (`413`, con el tope), demasiadas cargas o cuota diaria (`429`, con la espera), sin permiso (`403`).
+Mensajes propios de FS: archivo repetido (abre la carga anterior; si se subio con el perfil equivocado, hay que cancelarla y subir de nuevo, porque el mismo archivo con otro perfil es la misma carga), tope superado (`413`, con el tope), demasiadas cargas o cuota diaria (`429`, con la espera), sin permiso (`403`).
 
 La pestana Facturas no cambia de columnas en esta version; las facturas de carga llevan una marca que enlaza a su carga.
 
