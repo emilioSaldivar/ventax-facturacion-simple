@@ -13,3 +13,4 @@
 | CFS-002 | `PENDING` (CA-03) | PARTIAL: codigo y migracion listos; la migracion aun no se aplico en ningun ambiente, y falta verlo en la app |
 | CFS-003 | Consultar el resultado final del correo (RN-04) | DONE con pruebas unitarias (2026-11-06); falta probar contra el tag |
 | CFS-004 | Probar contra el FE del tag | PENDIENTE |
+| CFS-005 | Clave estable de nota de credito (RN-05) | DONE (2026-11-06); falta verlo con Playwright al redesplegar |

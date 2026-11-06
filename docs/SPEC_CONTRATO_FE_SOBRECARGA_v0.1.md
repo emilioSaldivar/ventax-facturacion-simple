@@ -12,6 +12,7 @@ FS debe entender dos respuestas nuevas de FE, publicadas en `GUIA_INTEGRACION_CO
 - **RN-02.** El outbox espera lo que indica `Retry-After` (segundos enteros), o `details.retry_after_seconds`, o 5 s; acotado entre 1 y 300 s. El documento sigue `EMITIENDO` y no se notifica al operador. El corte por antiguedad existente no cambia.
 - **RN-03.** `email_status: PENDING` se conserva como tal y se muestra "En cola". No indica nada sobre la aprobacion de SIFEN.
 - **RN-04.** Mientras el correo este en `PENDING`, FS consulta `email_status` en `GET /v1/documentos/{uuid}` cuando se abre el documento. `SENT`, `FAILED` y `NOT_APPLICABLE` son finales, y un estado final no retrocede. Si FE no responde o no informa el campo, sigue "En cola", sin error. No hay sondeo de fondo: el estado solo se muestra al abrir el documento.
+- **RN-05.** Reenviar una nota de credito reutiliza la misma clave mientras la app siga abierta, porque tras un corte de red no se sabe si FE la creo. El `409` de FE con `idempotent: true` es la nota existente; otro `409`, como `CREDIT_NOTE_TOTAL_EXCEEDED`, es un error. Sin el tag de FE, la clave no protege en FE, y el reenvio tras un timeout debe revisarse a mano.
 
 ## Pendientes
 

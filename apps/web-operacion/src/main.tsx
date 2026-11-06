@@ -2001,7 +2001,7 @@ function DocumentsView({
         const notaCredito = await api.request<DocumentoResponse>(`/facturas/${reasonModal.documentoId}/nota-credito`, {
           method: "POST",
           headers: {
-            "Idempotency-Key": createIdempotencyKey()
+            "Idempotency-Key": notaCreditoIdempotencyKey(reasonModal.documentoId)
           },
           body: JSON.stringify({ motivo })
         });
@@ -2015,7 +2015,7 @@ function DocumentsView({
         const notaCredito = await api.request<DocumentoResponse>(`/facturas/${reasonModal.documentoId}/nota-credito`, {
           method: "POST",
           headers: {
-            "Idempotency-Key": createIdempotencyKey()
+            "Idempotency-Key": notaCreditoIdempotencyKey(reasonModal.documentoId)
           },
           body: JSON.stringify({ motivo })
         });
@@ -3305,7 +3305,7 @@ function CreditNoteView({
       const notaCredito = await api.request<DocumentoResponse>(`/facturas/${selected.documento.id}/nota-credito`, {
         method: "POST",
         headers: {
-          "Idempotency-Key": createIdempotencyKey()
+          "Idempotency-Key": notaCreditoIdempotencyKey(selected.documento.id)
         },
         body: JSON.stringify({ motivo: motivo.trim() })
       });
@@ -5274,6 +5274,19 @@ function createCatalogoDraft(): CatalogoDraft {
 
 function createIdempotencyKey(): string {
   return `ui-${Date.now()}-${crypto.randomUUID()}`;
+}
+
+// Un corte de red no dice si FE creo la nota: reenviar con otra clave podria duplicarla.
+// La clave se conserva por factura hasta tener respuesta (SPEC_CONTRATO_FE_SOBRECARGA RN-05).
+const clavesNotaCredito = new Map<string, string>();
+
+function notaCreditoIdempotencyKey(documentoId: string): string {
+  let clave = clavesNotaCredito.get(documentoId);
+  if (!clave) {
+    clave = createIdempotencyKey();
+    clavesNotaCredito.set(documentoId, clave);
+  }
+  return clave;
 }
 
 function getNextFiscalNumber(current: string | undefined): string {

@@ -121,3 +121,20 @@ describe("contrato FE: correo en cola", () => {
     expect(consulta).not.toHaveBeenCalled();
   });
 });
+
+describe("contrato FE: nota de credito", () => {
+  afterEach(() => vi.unstubAllGlobals());
+  const solicitudNc = { ...(solicitud as object), factura_referencia: { documento_id: "d", cdc: "0".repeat(44) }, motivo: "x" } as never;
+
+  it("el 409 con idempotent: true es la nota existente", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => respuesta(409, { document_id: "1", document_uuid: "u", cdc: "c", nro_documento: "0001009", status: "QUEUED_BATCH", idempotent: true })));
+    const r = await gatewayReal().emitNotaCredito(solicitudNc);
+    expect(r).toMatchObject({ document_uuid: "u", numero_fiscal: "0001009", idempotent: true });
+  });
+
+  it("otro 409 sigue siendo un error", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => respuesta(409, { error: "CREDIT_NOTE_TOTAL_EXCEEDED" })));
+    await expect(gatewayReal().emitNotaCredito(solicitudNc)).rejects.toMatchObject({ code: "UPSTREAM_ERROR" });
+  });
+});
+
