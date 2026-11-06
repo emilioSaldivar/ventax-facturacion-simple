@@ -64,6 +64,8 @@ Usa `DNIT_STATEMENT_TIMEOUT=15min`: con el limite de 60 s del loader, el paso fi
 
 Para aplicar un cambio de `.env.segel`, correr de nuevo `bash bin/up.sh`, que tambien reinicia el frontend de FS. Sin ese reinicio, recrear la API deja al frontend con la IP vieja y responde 502.
 
+El administrador nuevo debe aceptar los T&C antes de usar el backoffice, y esa pantalla solo existe en la app (FS-18): entrar una vez por `/app/`, aceptar y recien despues usar `/backoffice/`.
+
 ## Fase 3. Acceso por tunel (en la estacion)
 
 ```bash
