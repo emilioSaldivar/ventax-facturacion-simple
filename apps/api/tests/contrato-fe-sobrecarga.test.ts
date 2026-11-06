@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createFiscalGateway } from "../src/modules/fiscal-gateway/fiscal-gateway.client";
 import { FiscalGatewayError, type FiscalGateway } from "../src/modules/fiscal-gateway/fiscal-gateway.types";
-import { processNextQueuedFiscalEmission } from "../src/modules/facturas/facturas.service";
+import { processNextQueuedFiscalEmission, refreshFiscalStatusForDocumento } from "../src/modules/facturas/facturas.service";
 import { getEmailStatus } from "../src/modules/entrega/entrega.service";
 
 // SPEC_CONTRATO_FE_SOBRECARGA_v0.1.
@@ -135,6 +135,24 @@ describe("contrato FE: nota de credito", () => {
   it("otro 409 sigue siendo un error", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => respuesta(409, { error: "CREDIT_NOTE_TOTAL_EXCEEDED" })));
     await expect(gatewayReal().emitNotaCredito(solicitudNc)).rejects.toMatchObject({ code: "UPSTREAM_ERROR" });
+  });
+});
+
+describe("FS-11: documento anulado", () => {
+  it("no consulta SIFEN con refresh y conserva ANULADA", async () => {
+    const actualizaciones: Array<Record<string, unknown>> = [];
+    const repo = {
+      findById: async () => ({ id: "d", estado: "ANULADA", document_uuid: "u", cdc: "c", fiscal_status: null }),
+      updateFiscalStatus: async (input: Record<string, unknown>) => {
+        actualizaciones.push(input);
+        return { id: "d", estado: input.estado };
+      }
+    } as never;
+    const refresh = vi.fn();
+    const gateway = { refreshFacturaStatus: refresh, getDocumentoCanonico: async () => ({ status: "APPROVED", estado: "EMITIDA", current_cdc: "c", raw: {} }) } as unknown as FiscalGateway;
+    await refreshFiscalStatusForDocumento("f", "d", repo, gateway);
+    expect(refresh).not.toHaveBeenCalled();
+    expect(actualizaciones[0]).toMatchObject({ estado: "ANULADA" });
   });
 });
 

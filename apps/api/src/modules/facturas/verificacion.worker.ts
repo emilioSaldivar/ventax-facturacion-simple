@@ -28,7 +28,7 @@ const DIAS_CORTE_VERIFICACION = 30;
  * backoff, y se vuelve a mirar con la frecuencia de los lotes (SPEC_VERIFICACION_DOCUMENTOS_EN_COLA).
  */
 const ESTADO_EN_COLA = "QUEUED_BATCH";
-const INTERVALO_EN_COLA_MS = 15 * 60 * 1000;
+const INTERVALO_EN_COLA_MS = 5 * 60 * 1000;
 
 function nextBackoffMs(attempts: number): number {
   const index = Math.min(Math.max(attempts, 1), BACKOFF_MS.length) - 1;

@@ -33,7 +33,7 @@ Levantar en la VPS `segel-fs` una instancia independiente de facturacion simple 
 - **RN-01.** Solo se publican los frontends, en `10.100.0.145`, nunca en `0.0.0.0`: `DOCKER-USER` esta vacia y firewalld inactivo. Esa IP sirve tanto si NGINX corre en la VPS como en otro equipo. API y Postgres quedan en `127.0.0.1` o sin publicar.
 - **RN-02.** Red `segel_fiscal`, con el alias `facturacion-electronica`. Separada de cualquier red Ventax.
 - **RN-03.** Secretos propios, generados en la VPS. Ninguno se comparte con Ventax ni se versiona.
-- **RN-04.** Se usa el FE de `branding/segel-staging` (`c337d9e`) sin modificarlo.
+- **RN-04.** Se usa el FE del tag `segel-rc1` sin modificarlo.
 - **RN-05.** Sin casilla Segel, el correo queda desactivado. Nunca se usa el SMTP ni el remitente de Ventax.
 - **RN-06.** Sin T&C de Segel activos, no se da de alta ningun usuario.
 - **RN-07.** La rama no entra a `master` y la produccion de Ventax no cambia.
@@ -69,7 +69,7 @@ Definidos por el usuario el 2026-11-05. App y backoffice de FS comparten puerto 
 - **B-1. T&C.** Resuelto: T&C `segel-1.0`, version del 5 de noviembre de 2026, con SEGEL S.A. (RUC 80026570-0) como proveedor (migracion `0035`, `docs/contract/TERMINOS_CONDICIONES_SEGEL_FACTURACION_SIMPLE_v1_0.md`). Sin la seccion 2.1, que no aplica a una persona juridica, ni WhatsApp comercial, porque no hay uno definido. El texto se adapto de la version de Ventax y falta su revision legal.
 - **P-2. Correo.** Resuelto: cuenta y contacto `no-reply-facturacion@segel.com.py` en `smtp.office365.com:587`, remitente "Facturacion Electronica Segel", decision del usuario. El usuario carga la contrasena en la VPS.
 - **P-3. Recursos.** Decision del usuario (2026-11-05): no se modifican disco ni recursos de la VPS. Se trabaja con lo que hay: `/var` (9,3 G) para Docker y `/home/esaldivar/segel` (`/home`, 3,7 G) para archivos. Infraestructura solo se ocupa de NGINX. Sin VPN no hay acceso a la VPS.
-- **P-5. Emisor sembrado.** Resuelto: la migracion `003_seed_awapura.sql` de FE crea al emisor real AWAPURA (80136968-1) en toda base nueva. En esta instancia se desactivo, por decision del usuario (2026-11-05): solo se usa 5057016-1. Hay que repetirlo si la base se recrea, por ejemplo al pasar a produccion (RN-08).
+- **P-5. Emisor sembrado.** Resuelto: la migracion `003_seed_awapura.sql` de FE crea al emisor real AWAPURA (80136968-1) en toda base nueva. En esta instancia se desactivo, por decision del usuario (2026-11-05): solo se usa 5057016-1. Desde `segel-rc1`, FE ya no lo crea en una base nueva.
 - **P-4. Portainer.** Quien administre `portainer_agent` puede leer los secretos de los contenedores. Conviene saber quien tiene acceso y limitar el puerto 9002.
 
 ## Acceso sin NGINX

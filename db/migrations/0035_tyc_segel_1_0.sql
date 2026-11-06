@@ -6,7 +6,7 @@ update tyc_versiones set activo = false where activo = true;
 insert into tyc_versiones (version, document_hash, document_content, activo, published_at)
 values (
   'segel-1.0',
-  '13ce82f8a5abbaeab21dad07148a31b6e1c856ce60cfa911fdaaefdde7f76b02',
+  '2fbdde827b2d5b413391295238c53405ae07b2ec4c63e63411ac07c2270617f0',
   $tyc_segel$# TÉRMINOS Y CONDICIONES DE USO Y CONTRATACIÓN
 
 ## SEGEL FACTURACIÓN SIMPLE
@@ -16,7 +16,7 @@ values (
 **Estado:** Versión inicial para uso dentro del sistema con aceptación electrónica por checkbox y OTP
 **Proveedor:** SEGEL S.A.
 **RUC:** 80026570-0
-**Domicilio:** Avda. Artigas N.º 2427 c/ Damas Argentinas, República del Paraguay
+**Domicilio:** Avda. Artigas N.º 2427 c/ Damas Argentinas, ciudad de Asunción, República del Paraguay
 **Servicio:** Segel Facturación Simple
 **Modalidad:** Software como Servicio — SaaS
 **Ámbito:** República del Paraguay
@@ -39,7 +39,7 @@ La aceptación electrónica de estos Términos y Condiciones tendrá validez com
 
 El Servicio es prestado por:
 
-**SEGEL S.A.**, Sociedad Anónima constituida conforme a las leyes de la República del Paraguay, con RUC N.º **80026570-0**, con domicilio en Avda. Artigas N.º 2427 c/ Damas Argentinas, República del Paraguay, representada por el Sr. **MICHAEL JACK HERSCHKOWICZ LAMPL**, con C.I. N.º 5.187.962, en carácter de REPRESENTANTE LEGAL.
+**SEGEL S.A.**, Sociedad Anónima constituida conforme a las leyes de la República del Paraguay, con RUC N.º **80026570-0**, con domicilio en Avda. Artigas N.º 2427 c/ Damas Argentinas, ciudad de Asunción, República del Paraguay, representada por el Sr. **MICHAEL JACK HERSCHKOWICZ LAMPL**, con C.I. N.º 5.187.962, en carácter de REPRESENTANTE LEGAL.
 **Correo de contacto:** [no-reply-facturacion@segel.com.py](mailto:no-reply-facturacion@segel.com.py)
 **Sitio web:** https://segel.com.py
 

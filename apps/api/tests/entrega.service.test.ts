@@ -318,7 +318,7 @@ describe("entrega service", () => {
     const deliveryLinks = new FakeDeliveryLinkRepository();
     const gateway = new FakeFiscalGateway();
 
-    const result = await getPublicArtifact("A".repeat(43), "xml", deliveryLinks, gateway);
+    const result = await getPublicArtifact("A".repeat(43), "xml", deliveryLinks, new FakeFacturaRepository(), gateway);
 
     expect(gateway.lastXmlUuid).toBe("aaaaaaaa-aaaa-4aaa-baaa-aaaaaaaaaaaa");
     expect(result.content_type).toBe("application/xml");
@@ -336,7 +336,7 @@ describe("entrega service", () => {
     const gateway = new FakeFiscalGateway();
 
     const publicDocument = await getPublicDocument("A".repeat(43), deliveryLinks);
-    const artifact = await getPublicArtifact("A".repeat(43), "kude_pdf", deliveryLinks, gateway);
+    const artifact = await getPublicArtifact("A".repeat(43), "kude_pdf", deliveryLinks, new FakeFacturaRepository(), gateway);
 
     expect(publicDocument.estado).toBe("RECHAZADA");
     expect(publicDocument.artifacts.kude_pdf).toEqual({

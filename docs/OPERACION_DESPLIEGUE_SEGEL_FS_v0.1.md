@@ -27,7 +27,7 @@ bash scripts/segel-fs/deploy.sh files
 bash scripts/segel-fs/deploy.sh images
 ```
 
-FE queda fijado en `c337d9e`. Para otra version: `FE_REF=<commit>`, solo cuando FE anuncie un tag.
+FE queda fijado en `segel-rc1`. Para otra version: `FE_REF=<tag>`, solo cuando FE lo anuncie. La version de FE se comprueba por este tag: FE no expone `X-App-Version`.
 
 **Verificar:** `docker images` en la VPS muestra las nueve imagenes `segel-fs-*` y `fe-segel-*`.
 
@@ -48,7 +48,7 @@ Una contrasena SMTP con `#` no lleva comillas, y no puede tener un espacio antes
 **Verificar:**
 
 - `up.sh` termina con `"status":"ok"` desde FS hacia FE.
-- `bootstrap.sh` informa T&C activo `segel-1.0` y AWAPURA con `activo = f`. Cuando FE anuncie el tag sin esa semilla, se quitan sus sentencias de `bootstrap.sh` y lo esperado son 0 emisores.
+- `bootstrap.sh` informa T&C activo `segel-1.0` y 0 emisores en una base nueva. La base de test conserva a AWAPURA inactivo, de una version anterior de FE.
 - `ss -tln`: solo `8092` y `8100` en `10.100.0.145`; `8091`, `9989` y `5434` en `127.0.0.1`.
 - Dentro de `fe-segel-api-1`: `SIFEN_ENV` es el ambiente elegido.
 
@@ -150,7 +150,7 @@ Luego repetir las fases 2 a 6 con estas diferencias:
 | `--ambiente` | `test` | `prod` |
 | `--sumar-numerador` | `1000` | No se usa: `siguiente_numero` real y confirmado en el archivo |
 | Origen del emisor | `fe-test` | JSON con los datos del cliente |
-| `FE_REF` | `c337d9e` | El tag que anuncie FE sin la semilla de AWAPURA |
+| `FE_REF` | `segel-rc1` | El tag que FE anuncie como final |
 | Timbrado, certificado y CSC | De test | De produccion, los que entrega la SET |
 | OTP del operador | Por base de datos | Por correo; no usar `activar-operador-test.cjs` |
 | Contrasena de administradores | Prueba | Nueva y privada |

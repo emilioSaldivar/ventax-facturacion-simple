@@ -1162,6 +1162,7 @@ describe("facturas service", () => {
     const repo = new FakeFacturaRepository();
     repo.findByIdResponse = buildDocumento({
       document_uuid: null,
+      cdc: null,
       estado: "ERROR_TEMPORAL"
     });
     const gateway = new FakeFiscalGateway(new FiscalGatewayError("UPSTREAM_ERROR", "Should not emit"));
@@ -1354,7 +1355,8 @@ describe("facturas service", () => {
     repo.existing = buildDocumento({
       id: "88888888-8888-4888-8888-888888888888",
       tipo: "NOTA_CREDITO",
-      documento_relacionado_id: "66666666-6666-4666-8666-666666666666"
+      documento_relacionado_id: "66666666-6666-4666-8666-666666666666",
+      estado: "EMITIDA"
     });
     const gateway = new FakeFiscalGateway(new FiscalGatewayError("UPSTREAM_ERROR", "Should not emit"));
 
@@ -2387,7 +2389,8 @@ describe("facturas service", () => {
 
     expect(retry.revision_number).toBe(2);
     expect(derived.derived_document_id).toBe("doc-2");
-    expect(canceled.action_result).toBe("CANCELLED");
+    // RN-F1-1.3: desde F1 devuelve el documento local, no la respuesta de FE.
+    expect(canceled.id).toBe(repo.findByIdResponse.id);
     expect(voided.event_id).toBe("evt-void-1");
     expect(repo.auditEvents.map((event) => event.eventType)).toEqual([
       "FACTURA_GESTION_RETRY_SAME_CDC",
@@ -2411,9 +2414,7 @@ describe("facturas service", () => {
     await expect(createDocumentoDerived(support, repo.findByIdResponse.id, { mode: "BATCH" }, repo, gateway)).rejects.toMatchObject({
       statusCode: 409
     });
-    await expect(cancelDocumentoSend(support, repo.findByIdResponse.id, { comment: "x" }, repo, gateway)).rejects.toMatchObject({
-      statusCode: 409
-    });
+    // RN-F1-1.6: cancel-send no tiene ventana: aplica antes de transmitir a SIFEN.
     await expect(voidDocumentoNumber(support, repo.findByIdResponse.id, { motivo: "x" }, repo, gateway)).rejects.toMatchObject({
       statusCode: 409
     });

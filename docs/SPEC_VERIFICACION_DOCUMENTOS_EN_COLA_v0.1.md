@@ -8,14 +8,14 @@ Mientras FE tiene el documento sin enviar (`QUEUED_BATCH`), cada consulta del wo
 
 ## Reglas
 
-- **RN-01.** Si el estado canónico de FE es `QUEUED_BATCH`, el único estado de cola del contrato publicado, el worker reprograma a 15 minutos, la frecuencia de los lotes, y deja `verificacion_attempts` en 0.
+- **RN-01.** Si el estado canónico de FE es `QUEUED_BATCH`, el único estado de cola del contrato publicado, el worker reprograma a 5 minutos, la frecuencia de los lotes, y deja `verificacion_attempts` en 0.
 - **RN-02.** Al salir de la cola rige el backoff vigente (30 min, 1 h, 6 h, 12 h, 24 h), desde el primer intento.
 - **RN-03.** El corte de 30 días se aplica igual.
 - **RN-04.** Si la consulta canónica falla, rige el backoff vigente: no se sabe si sigue en cola.
 
 ## Criterios de aceptación
 
-- **CA-01.** Con estado canónico `QUEUED_BATCH`, próxima consulta a 15 min y 0 intentos, por más consultas que lleve.
+- **CA-01.** Con estado canónico `QUEUED_BATCH`, próxima consulta a 5 min y 0 intentos, por más consultas que lleve.
 - **CA-02.** Con otro estado no terminal, backoff vigente.
 - **CA-03.** Un documento de más de 30 días sale de la agenda aunque siga en cola.
 - **CA-04.** Una factura que pasa de cola a aprobada se ve `EMITIDA` en la siguiente consulta.

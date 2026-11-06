@@ -272,9 +272,12 @@ export async function refreshFiscalStatusForDocumento(
 
   // Paso SIFEN, best-effort (SPEC_ESTADO_FISCAL_CANONICO_v0.1 RN-02/RN-03): pide a FE una consulta
   // fresca y trae codigo y mensaje para explicar la causa. No decide el estado.
+  // FS-11: una consulta con refresh en FE puede devolver una factura cancelada a aprobada (FE-02).
+  // Un documento anulado no se vuelve a consultar en SIFEN.
+  const anulado = documento.estado === "ANULADA";
   let refreshed: Awaited<ReturnType<FiscalGateway["refreshFacturaStatus"]>> | null = null;
   try {
-    refreshed = await gateway.refreshFacturaStatus({ documentUuid });
+    refreshed = anulado ? null : await gateway.refreshFacturaStatus({ documentUuid });
   } catch (error) {
     if (!(error instanceof FiscalGatewayError)) {
       throw error;
@@ -285,6 +288,9 @@ export async function refreshFiscalStatusForDocumento(
   try {
     // Paso canonico, obligatorio (RN-01): el estado lo decide el `status` de FE.
     const canonico = await gateway.getDocumentoCanonico(documentUuid);
+    if (anulado && canonico.estado !== "ANULADA") {
+      logger.warn({ documentoId, status: canonico.status }, "refresh fiscal: documento anulado con otro estado en FE; se conserva anulado.");
+    }
     if (!canonico.estado) {
       logger.warn({ documentoId, status: canonico.status }, "refresh fiscal: status canonico desconocido, se conserva el estado");
     }
@@ -296,7 +302,7 @@ export async function refreshFiscalStatusForDocumento(
     const updated = await repository.updateFiscalStatus({
       facturadorId,
       documentoId,
-      estado: canonico.estado ?? documento.estado,
+      estado: anulado ? "ANULADA" : canonico.estado ?? documento.estado,
       fiscalStatus: mergeFiscalStatus(documento.fiscal_status, { ...(refreshed?.raw ?? {}), canonical: canonico.raw }),
       cdc: cdcActualizado,
       fiscalStatusRaw: canonico.status,

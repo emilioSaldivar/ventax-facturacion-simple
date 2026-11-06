@@ -279,7 +279,7 @@ describe("verificacion fiscal worker", () => {
     };
     const pendienteEnCola = { estado: "PENDIENTE_SIFEN", current_cdc: null, status_raw: "QUEUED_BATCH", result_code: null, result_message: null, raw: {} } as FiscalRefreshStatusResponse;
 
-    it("CA-01: en cola reprograma a 15 min y no gasta intentos, por mas consultas que lleve", async () => {
+    it("CA-01: en cola reprograma a 5 min y no gasta intentos, por mas consultas que lleve", async () => {
       const repo = enCola({}, { attempts: 4 });
       const antes = Date.now();
       await correr(repo, new FakeGateway(pendienteEnCola));
@@ -287,8 +287,8 @@ describe("verificacion fiscal worker", () => {
       expect(repo.scheduleCalls).toHaveLength(1);
       expect(repo.scheduleCalls[0].attempts).toBe(0);
       const espera = repo.scheduleCalls[0].nextAt!.getTime() - antes;
-      expect(espera).toBeGreaterThanOrEqual(14 * 60 * 1000);
-      expect(espera).toBeLessThanOrEqual(16 * 60 * 1000);
+      expect(espera).toBeGreaterThanOrEqual(4 * 60 * 1000);
+      expect(espera).toBeLessThanOrEqual(6 * 60 * 1000);
     });
 
     it("CA-02: si el documento ya salio de la cola, rige el backoff vigente", async () => {

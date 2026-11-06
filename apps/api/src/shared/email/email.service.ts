@@ -51,16 +51,16 @@ export async function sendEmail(to: string, template: EmailTemplate): Promise<vo
       return;
     } catch (smtpError) {
       logger.warn(
-        { to, subject: template.subject, text: template.text, err: smtpError },
-        "[SMTP] Envio fallo — email logueado en texto plano:"
+        { to, subject: template.subject, err: smtpError },
+        "[SMTP] Envio fallo."
       );
       return;
     }
   }
 
   logger.info(
-    { to, subject: template.subject, text: template.text },
-    "[DEV] Email no enviado — RESEND_API_KEY y SMTP_HOST no configurados:"
+    { to, subject: template.subject },
+    "Email no enviado: RESEND_API_KEY y SMTP no configurados."
   );
 }
 
