@@ -58,7 +58,7 @@ Modulo nuevo `apps/api/src/modules/cargas/` (rutas, servicio, repositorio, tipos
 
 **Subida:**
 
-- **Transporte: el archivo es el cuerpo del pedido,** con `Content-Type: text/csv` o `application/zip`, y el nombre en el parametro `nombre_archivo`. Propuesto por FE y aceptado por FS (seccion 19 del pedido); **falta la confirmacion del usuario.** Si no la da, se vuelve a `multipart` con `multer`.
+- **Transporte: el archivo es el cuerpo del pedido,** con `Content-Type: text/csv` o `application/zip`, y el nombre en el parametro `nombre_archivo`. Propuesto por FE, aceptado por FS (seccion 19 del pedido) y **confirmado por el usuario el 2026-11-06.**
 - Sin dependencia nueva: `express.raw` solo en esta ruta, con limite `CARGA_MAX_BYTES`, 20 MB por defecto. El navegador envia el `File` tal cual. El archivo no se escribe en disco ni se guarda.
 - Se aceptan `.csv` y `.zip`. FS no abre el `.zip`: lo reenvia igual (FE admite un solo archivo adentro, hasta 20 MB descomprimido).
 - Como mucho 2 subidas a la vez por proceso; la tercera responde `429`. Tope de memoria: 40 MB mas la copia del reenvio.
@@ -107,6 +107,8 @@ Worker nuevo `cargas-sync.worker.ts`, arrancado en `server.ts` junto a los otros
 
 ## 7. Fase D: pantalla
 
+**PC primero** (decision del usuario, SPEC seccion 4): el diseno parte de 1280 px, con tabla ancha, y se adapta hacia abajo.
+
 Componente nuevo en `apps/web-operacion/src/carga-masiva.tsx`: `main.tsx` ya tiene 7.777 lineas. Se monta como tercera pestana de `DocumentsView` (`docKindTab = "CARGA_MASIVA"`), con las clases existentes.
 
 - Vistas del SPEC, seccion 4: listado, nueva carga, informe, avance y resultado.
@@ -128,7 +130,7 @@ Componente nuevo en `apps/web-operacion/src/carga-masiva.tsx`: `main.tsx` ya tie
 
 - Unitarias e integracion del modulo: permisos y aislamiento, subida y reenvio sin cambios (mismo hash), repeticion, mapeo de estados, idempotencia del worker, estados finales, fallo de FE.
 - `npm run test`, `npm run typecheck`, `npm run lint`, `npm run build`.
-- Playwright contra el stack de `bash scripts/deploy.sh` con el mock: mobile 390 px y desktop 1280 px. Escenarios: archivo rechazado, informe con errores y avisos, confirmar, carga en espera de otra, avance, comprobante en error con reintento, resultado, archivo repetido, punto con numeracion del cliente sin "Nueva factura".
+- Playwright contra el stack de `bash scripts/deploy.sh` con el mock: desktop 1280 px primero, y 390 px para comprobar que se puede usar sin desplazamiento horizontal. Escenarios: archivo rechazado, informe con errores y avisos, confirmar, carga en espera de otra, avance, comprobante en error con reintento, resultado, archivo repetido, punto con numeracion del cliente sin "Nueva factura".
 - Nunca en `segel-fs` ni en Hetzner.
 
 ## 10. Riesgos

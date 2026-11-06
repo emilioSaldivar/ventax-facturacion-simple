@@ -70,7 +70,7 @@ El resultado de SIFEN llega en minutos o en horas: la persona sube, se va y vuel
 
 ## 4. Pantalla
 
-Mobile primero: la tabla se vuelve tarjetas en pantalla angosta. Usa los componentes y estilos de `web-operacion` (`filter-tabs`, `list-toolbar`, `documents-view`). El diseno es de FS: la pantalla de otro producto que mostro el usuario es referencia de contenido, no un modelo a copiar.
+**PC primero** (decision del usuario, 2026-11-06): la carga se hace normalmente desde una computadora, asi que esta seccion se disena para escritorio. Es una excepcion declarada al criterio mobile primero del resto del sistema. En pantalla angosta debe seguir siendo usable: la tabla se vuelve tarjetas. La subida debe ser intuitiva: elegir o arrastrar el archivo, sin pasos previos. Usa los componentes y estilos de `web-operacion` (`filter-tabs`, `list-toolbar`, `documents-view`). El diseno es de FS: la pantalla de otro producto que mostro el usuario es referencia de contenido, no un modelo a copiar.
 
 | Vista | Contenido |
 |---|---|
@@ -131,7 +131,7 @@ Rutas propias de FS: se definen en el PLAN y se documentan en `spec/openapi.yaml
 - **CA-08.** Con FE caido, la pantalla informa la ultima actualizacion y ningun estado cambia.
 - **CA-09.** Un archivo incorporado no modifica la agenda ni el catalogo.
 - **CA-10.** Nada de la interfaz, los textos o los correos sale con la marca Ventax en la instancia Segel.
-- **CA-11.** Validacion visual con Playwright, en mobile y en desktop, contra el stack de `bash scripts/deploy.sh` y FE local. Prueba conjunta P-06 con un archivo real. Nunca en `segel-fs`.
+- **CA-11.** Validacion visual con Playwright, en desktop primero y tambien en mobile, contra el stack de `bash scripts/deploy.sh` y FE local. Prueba conjunta P-06 con un archivo real. Nunca en `segel-fs`.
 
 ## 9. Decisiones
 

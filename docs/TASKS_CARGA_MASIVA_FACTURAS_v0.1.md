@@ -18,7 +18,7 @@
 | CMF-007 | Fase B: aislamiento y auditoria | Pruebas: carga de otro facturador o de otro perfil responde `404`; quedan registrados subida, confirmacion, cancelacion y reintento | TODO |
 | CMF-008 | Fase B: `spec/openapi.yaml` | Rutas y esquemas documentados; el frontend consume esos nombres | TODO |
 | CMF-009 | Fase C: worker de sincronizacion | Pruebas: crea documentos solo con `document_uuid`; dos pasadas no duplican; `ANULADA` no se revierte; fallo de FE no cambia estados; no agenda `verificacion_next_at`; no toca agenda ni catalogo | TODO |
-| CMF-010 | Fase D: pestana "Carga masiva" con sus cinco vistas | Playwright con los escenarios del PLAN, seccion 9, en 390 px y 1280 px, contra `bash scripts/deploy.sh` | TODO |
+| CMF-010 | Fase D: pestana "Carga masiva" con sus cinco vistas | Playwright con los escenarios del PLAN, seccion 9, en 1280 px primero y en 390 px, contra `bash scripts/deploy.sh` | TODO |
 | CMF-011 | Fase D: marca "Carga" y numero del archivo en Facturas | Playwright: una factura de carga abre su carga; KuDE, cancelacion y nota de credito disponibles | TODO |
 | CMF-012 | Fase E: cliente real contra el OpenAPI de FE | BLOCKED: FE no publico el contrato ni implemento las rutas | BLOCKED |
 | CMF-013 | Fase E: `CARGA_MASIVA` en `cargar-facturador.py` y `worker-cargas` en los scripts de despliegue | BLOCKED: espera el aviso de FE (P-07) | BLOCKED |
