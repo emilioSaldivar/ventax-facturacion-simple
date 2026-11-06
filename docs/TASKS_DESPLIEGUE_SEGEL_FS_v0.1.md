@@ -81,3 +81,4 @@ Stacks `fe-segel` y `segel-fs` en `/home/esaldivar/segel`, sin cambios de disco 
 - Reposo: unos 180 MiB de los stacks; 2,4 GiB disponibles. `/var` 44 %, 5,3 G libres, sin el padron.
 - **Hallazgo:** `003_seed_awapura.sql` de FE carga en toda base nueva al emisor real AWAPURA (80136968-1), con referencia a un certificado de una persona. El archivo no esta en la VPS. Pendiente decision del usuario (P-5).
 - **Sin validar:** envio real de correo, KuDE, emision, reinicio de la VPS y backups.
+- **Antes de emitir:** el equipo de FE fija un numerador propio para el emisor de prueba, porque la numeracion compartida con otros ambientes da error 1002. Los scripts quedan fijados en FE `c337d9e` hasta que FE anuncie un tag: la punta de `branding/segel-staging` tiene correcciones sin validar.
