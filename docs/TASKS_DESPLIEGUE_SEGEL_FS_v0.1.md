@@ -8,7 +8,7 @@
 ## Estado General
 
 - `SPEC` y `PLAN`: DONE, con B-1 y P-4 abiertos.
-- Desplegado en `segel-fs`, FS `96e635d` y FE `c337d9e`, con SIFEN test. Acceso por tunel; falta NGINX de infraestructura. Sin emision real todavia.
+- **Produccion desplegada en `segel-fs` (2026-11-06):** FS `8e18e87`, FE `segel-rc1`, `SIFEN_ENV=prod`, bases vacias, E-11. Falta el TLS de infraestructura, usuarios, certificado y CSC de produccion, y los datos del emisor. Sin emitir.
 
 ## Matriz
 
@@ -132,4 +132,14 @@ Ensayo local de `bd0606b`, con `init-env.sh prod`, FE `c337d9e` y dos emisores f
 - Emisor repetido y `--sumar-numerador` en prod: rechazados antes de escribir.
 - La cobertura de actividades se lee de `activity_coverage.uncovered_activity_ids` en `GET /admin/emisores/{id}/configuracion?env=<env>`; lista vacia significa todas cubiertas. La primera version del script la buscaba en la readiness, donde no existe; corregido y comprobado contra el emisor de test.
 - Sin cambio en `bootstrap.sh`: FE `c337d9e` todavia trae la semilla. Cuando FE anuncie el tag (SV-303), quitar sus sentencias y esperar 0 emisores.
+
+### E-11. Paso a produccion (2026-11-06)
+
+Decision del usuario, confirmada directamente: pruebas E3 y E4, y luego produccion. Se borro la instancia de test: bases, certificado, datos del loader, logs de contenedores y dumps.
+
+- `init-env.sh prod`: secretos nuevos. `APP_ENV=production`, `SIFEN_ENV=prod`, `FE_API_ENV=prod`, `KUDE_JASPER_AMBIENTE=2`, 4 banderas de FE. `API_KEY` de FE coincide con `FE_API_KEY` de FS.
+- SMTP repuesto sin mostrarlo, y temporal borrado. `up.sh` completo, incluido el reinicio del frontend.
+- FE: 43 migraciones, 0 emisores, 0 usuarios y 0 documentos. FS: 36 migraciones, T&C `segel-1.0` con Asuncion, 0 usuarios. Sin errores en logs.
+- Solo publicados `8092` y `8100` en `10.100.0.145`.
+- **Sin backups automaticos**, pospuestos por el usuario.
 
