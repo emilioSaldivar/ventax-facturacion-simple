@@ -34,7 +34,7 @@ El resultado de SIFEN llega en minutos o en horas: la persona sube, se va y vuel
 
 - **RN-01.** FS entrega el archivo a FE sin modificarlo (P-04): FE detecta un archivo repetido por su contenido. FS tampoco lo conserva.
 - **RN-02.** Antes de llamar a FE, el backend valida tenant, suscripcion, usuario, facturador y contexto operativo listo para emitir. `emisor_id`, perfil y actividad salen de ese contexto, nunca del navegador.
-- **RN-03.** Una carga cubre un perfil y un punto: los del contexto operativo activo del usuario al subir. La pantalla los muestra antes de subir. Un archivo trae ventas de un solo punto, y debe ser el del perfil (D-3). Lo verifica FE, porque FS no lee el contenido: FS le manda el establecimiento y el punto del contexto.
+- **RN-03.** Una carga cubre un perfil y un punto: los del contexto operativo activo del usuario al subir. La pantalla los muestra antes de subir. Un archivo trae ventas de un solo punto, y debe ser el del perfil (D-3). Lo verifica FE, porque FS no lee el contenido: FS le manda el establecimiento y el punto del contexto. Si una sola fila trae otro punto, FE rechaza el archivo entero y no procesa nada (aceptado por FE, seccion 15 del pedido).
 - **RN-04.** Los textos de error y aviso de FE se muestran tal como llegan, con fila y columna (P-05). Un texto incomprensible se corrige en FE.
 - **RN-05.** Los errores se corrigen en el archivo, no en la pantalla. La pantalla lo dice y no ofrece editar datos.
 
@@ -55,7 +55,7 @@ El resultado de SIFEN llega en minutos o en horas: la persona sube, se va y vuel
 - **RN-12.** Un comprobante entra a `facturas_operativas` cuando FE informa su `document_uuid`, con snapshot de cliente, items y totales armado con los datos que da FE. `usuario_id` es quien confirmo.
 - **RN-13.** `INVALIDO`, `CANCELADO` y `ERROR` sin `document_uuid` no crean documento. `DUPLICADO` tampoco: enlaza al existente si esta en FS.
 - **RN-14.** Incorporar es idempotente: `external_ref` estable, por carga y orden del comprobante. Repetir la sincronizacion no duplica ni pisa un estado final.
-- **RN-15.** La identidad es el `document_uuid` (`AGENTS.md`). El estado sale del `status` de FE, con la misma traduccion que el resto de los documentos.
+- **RN-15.** La identidad es el `document_uuid` (`AGENTS.md`). El `estado` del comprobante dice como termino la emision y no cambia despues; el estado vigente sale de `documento_estado`, que FE suma al comprobante, con la misma traduccion que el resto de los documentos.
 - **RN-16.** Incorporar una factura no crea ni modifica clientes de la agenda ni items del catalogo: un archivo no puede sobrescribir datos de otros (FS-17).
 
 ### Sincronizacion
@@ -139,6 +139,6 @@ Rutas propias de FS: se definen en el PLAN y se documentan en `spec/openapi.yaml
 | D-6 | Primer cliente y volumen | Todavia no hay cliente. Se prepara la funcion y se prueba con los clientes de prueba, en local |
 | D-7 | Orden frente a FS-24 y FS-25 | Lo define FS: seccion 2 del PLAN |
 
-**Abierto con FE:** que la subida acepte establecimiento y punto, para validar D-3 tambien cuando el perfil es `NO_REQUERIDO`; nombres finales de campos y parametros, que FE fija en su OpenAPI; tope definitivo del archivo.
+**Abierto con FE:** nombres finales de campos y parametros, que FE fija en su OpenAPI (su tarea CMA-215); tope definitivo del archivo. `modo=AUTO` queda fuera de la fase 1 si el usuario acepta la propuesta de FE; FS no lo usa.
 
 **Sin dato de volumen (D-6):** no hay cifra para dimensionar. Los topes son los de FE (5.000 comprobantes por archivo, 20 MB provisional). Antes del primer cliente real hay que medir con su volumen.
