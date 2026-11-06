@@ -48,7 +48,7 @@ Modulo nuevo `apps/api/src/modules/cargas/` (rutas, servicio, repositorio, tipos
 | Ruta de FS | Llama a FE | Notas |
 |---|---|---|
 | `GET /cargas/plantilla` | `GET /v1/cargas/formatos/csv/1` | Descarga |
-| `POST /cargas` | `POST /v1/cargas` | `multipart`, campo `archivo`. Ver abajo |
+| `POST /cargas` | `POST /v1/cargas` | El archivo va como cuerpo del pedido. Ver abajo |
 | `GET /cargas` | — | Desde la base de FS, paginado, filtros por fecha y estado |
 | `GET /cargas/:id` | `GET /v1/cargas/{id}` | Refresca la copia local. Si FE falla, devuelve la copia con `sincronizada_en` |
 | `GET /cargas/:id/comprobantes` | Igual en FE | Pasa pagina, tamano y filtros. Suma `documento_id` de FS cuando existe |
@@ -58,13 +58,16 @@ Modulo nuevo `apps/api/src/modules/cargas/` (rutas, servicio, repositorio, tipos
 
 **Subida:**
 
-- Dependencia nueva: `multer`, con almacenamiento en memoria. Limite `CARGA_MAX_BYTES`, 20 MB por defecto. El archivo no se escribe en disco ni se guarda.
+- **Transporte: el archivo es el cuerpo del pedido,** con `Content-Type: text/csv` o `application/zip`, y el nombre en el parametro `nombre_archivo`. Propuesto por FE y aceptado por FS (seccion 19 del pedido); **falta la confirmacion del usuario.** Si no la da, se vuelve a `multipart` con `multer`.
+- Sin dependencia nueva: `express.raw` solo en esta ruta, con limite `CARGA_MAX_BYTES`, 20 MB por defecto. El navegador envia el `File` tal cual. El archivo no se escribe en disco ni se guarda.
+- Se aceptan `.csv` y `.zip`. FS no abre el `.zip`: lo reenvia igual (FE admite un solo archivo adentro, hasta 20 MB descomprimido).
 - Como mucho 2 subidas a la vez por proceso; la tercera responde `429`. Tope de memoria: 40 MB mas la copia del reenvio.
-- FS manda a FE los bytes recibidos, sin tocarlos, con `emisor_id`, `formato=CSV`, `version=1`, `numeracion` del contexto, perfil (salvo `NO_REQUERIDO`), actividad, establecimiento y punto. FE exige que perfil y punto coincidan, y rechaza el archivo entero si una fila trae otro punto.
+- FS manda a FE los bytes recibidos, sin tocarlos, y en la URL `emisor_id`, `formato=CSV`, `version=1`, `numeracion` del contexto, perfil (salvo `NO_REQUERIDO`), actividad, establecimiento y punto. FE exige que perfil y punto coincidan, y rechaza el archivo entero si una fila trae otro punto.
 - Clave: la de consumidor del facturador (`resolveConsumerGateway`). Sin clave propia, `409` con mensaje claro: no se usa la compartida.
 - Tiempo de espera propio para la subida: 60 s.
 - `202` y `200` de FE crean o reutilizan la fila local por `fe_carga_id`. El `200` responde con `repetida: true`.
 - Errores de FE: `403`, `413`, `422` y `429` se devuelven con su codigo y el mensaje de FE; no se convierten en `502`.
+- Un `422` con `motivos` por parametros que no corresponden al emisor (perfil, punto, actividad o forma de numerar) no crea carga en FE ni fila en FS. Es un problema de configuracion, no del archivo: la pantalla muestra el motivo y pide contactar a soporte.
 
 **Aislamiento:** toda consulta filtra por `facturador_id` y por `actividad_punto_perfil_id` del contexto. Una carga ajena responde `404`.
 
@@ -104,7 +107,7 @@ Componente nuevo en `apps/web-operacion/src/carga-masiva.tsx`: `main.tsx` ya tie
 
 - Vistas del SPEC, seccion 4: listado, nueva carga, informe, avance y resultado.
 - Mientras una carga activa esta en pantalla, se refresca cada 15 s; se detiene al ocultar la pestana del navegador.
-- Confirmar pide una segunda confirmacion con la cantidad a emitir.
+- Confirmar pide una segunda confirmacion con la cantidad a emitir. Si hay comprobantes invalidos y la numeracion es del cliente, avisa antes que sus numeros quedaran salteados.
 - Textos de FE sin reescribir. Estados con las etiquetas de la seccion 7 del pedido.
 - En Facturas, las de carga muestran una marca "Carga" que abre su carga, y el numero del archivo cuando difiere del asignado.
 - Sin colores ni nombres de Ventax: usa las variables de marca actuales.

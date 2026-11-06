@@ -42,7 +42,7 @@ El resultado de SIFEN llega en minutos o en horas: la persona sube, se va y vuel
 ### Confirmacion y acciones
 
 - **RN-06.** Nada se emite sin confirmacion de una persona. FE no tiene modo automatico: la subida no lleva parametro `modo` (decision del usuario con FE, seccion 17 del pedido).
-- **RN-07.** Antes de confirmar se muestra cuantos comprobantes se emitiran y cuantos quedan afuera. Confirmar emite facturas reales, y la pantalla lo dice.
+- **RN-07.** Antes de confirmar se muestra cuantos comprobantes se emitiran y cuantos quedan afuera. Confirmar emite facturas reales, y la pantalla lo dice. Con numeracion del cliente, confirmar con comprobantes invalidos deja sus numeros salteados: la pantalla lo avisa antes.
 - **RN-08.** Los botones Confirmar, Cancelar y Reintentar dependen de `acciones` de FE: FS no deduce reglas por estado.
 - **RN-09.** Un rechazo de SIFEN no se reintenta solo: queda informado con su motivo. Los numeros salteados se avisan; inutilizarlos es del cliente.
 - **RN-09b.** Un comprobante en `ERROR` es un fallo de FE, no un rechazo. FE lo reintenta solo hasta 3 veces; despues la carga no termina hasta que alguien lo reintente o lo cancele. La pantalla lo dice y ofrece las dos acciones, segun `acciones`.
@@ -114,7 +114,7 @@ Rutas propias de FS: se definen en el PLAN y se documentan en `spec/openapi.yaml
 ## 7. Impacto en FS
 
 - **Base de datos:** tabla de cargas con `tenant_id`, `facturador_id`, contexto, `carga_id` de FE y usuarios; forma de numerar por contexto; vinculo entre factura y carga. Solo migraciones aditivas.
-- **API:** subida `multipart`, que hoy no existe. El limite global de 1 MB aplica a JSON.
+- **API:** subida de archivos, que hoy no existe. El limite global de 1 MB aplica a JSON. El transporte se define en el PLAN, seccion 5.
 - **Tamano de subida:** verificar el limite del nginx del frontend y el del NGINX de infraestructura. Si hay que cambiar este ultimo, lo hace infraestructura.
 - **Alta de facturadores:** `cargar-facturador.py` debe poder otorgar `CARGA_MASIVA` por emisor.
 - **Despliegue:** `worker-cargas` de FE (P-07) se suma a los scripts, apagado, cuando FE avise.
