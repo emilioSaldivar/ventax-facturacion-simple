@@ -43,4 +43,6 @@ FE `c337d9e`, SIFEN test real, 2 operadores, sin correo, cancelaciones en serie.
 - p95 de `POST /facturas` 231 ms, KuDE unos 3 s. VPS: minimo 2264 MiB disponibles, sin swap relevante, carga 1,28, `/var` 62 %.
 - **Hallazgo:** FE guarda la nota de credito con `client_idempotency_key` vacio. El primer resumen lo conto como "documento ajeno"; se corrigio el control. Comunicado a FE, por el riesgo de duplicar notas de credito.
 - Primer intento `e0-humo`: rechazado con 400 por un error del simulador (faltaba el precio del item). No emitio nada.
+- Reintento unico de la cancelacion de `0001102`, a pedido de FE: otra vez `0100 Error Inesperado`, 2 intentos en total. El evento firma el CDC pedido y SIFEN no muestra la cancelacion. No se insiste (RN-05). Segun FE, ese codigo es no determinista: unas 9 de 61 cancelaciones en produccion.
+- Por lectura de codigo, FS no reintenta notas de credito de forma automatica: el outbox es solo de facturas. Hasta el tag de FE, que agrega su clave, un reintento de NC podria duplicarla.
 
