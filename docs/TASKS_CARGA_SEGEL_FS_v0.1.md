@@ -12,7 +12,7 @@
 | CSF-001 | SPEC, PLAN y TASKS | DONE (2026-11-06) |
 | CSF-002 | Herramientas | DONE (2026-11-06) |
 | CSF-003 | E0 Humo | DONE (2026-11-06), E-1 |
-| CSF-004 | E1 Base | EN ESPERA del tag de FE (decision del usuario) |
+| CSF-004 | E1 Base | EN ESPERA: la sobrecarga de FE va primero, segun aviso de FE sobre el pedido del usuario. Primer intento detenido al minuto |
 | CSF-005 | E2 Doble | PENDIENTE |
 | CSF-006 | E3 Rafaga | PENDIENTE |
 | CSF-007 | E4 Fallas | PENDIENTE |
