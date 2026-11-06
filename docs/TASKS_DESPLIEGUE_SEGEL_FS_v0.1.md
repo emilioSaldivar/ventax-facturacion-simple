@@ -124,3 +124,12 @@ Fases 1 a 4 del runbook, con FS `3e4f637` y FE `c337d9e`, sobre bases vacias. Se
 - **Correccion:** `DNIT_STATEMENT_TIMEOUT`, con 60 s por defecto para no cambiar otros ambientes y `15min` en esta instancia.
 - **Resultado en `segel-fs`:** 2.028.067 filas, 12 lineas invalidas, 245 s. Tabla de 658 MB; `/var` queda en 66 %, con 3,2 G libres. Memoria disponible al terminar: 2,3 GiB.
 
+### E-10. Alta desde cero, sin FE de origen (2026-11-06)
+
+Ensayo local de `bd0606b`, con `init-env.sh prod`, FE `c337d9e` y dos emisores ficticios desde JSON. Sin certificado, sin emitir y sin contacto con SIFEN. Eliminado al terminar; la instancia de test en `segel-fs` no se toco.
+
+- Dos emisores cargados, cada uno con su consumidor (`segel-fs-99999901` y `segel-fs-99999902`), import en FS sin bloqueantes y operador creado.
+- Emisor repetido y `--sumar-numerador` en prod: rechazados antes de escribir.
+- `uncovered_activity_ids` no aparece en la readiness de FE `c337d9e`: revisar la cobertura de actividades al adoptar el tag nuevo.
+- Sin cambio en `bootstrap.sh`: FE `c337d9e` todavia trae la semilla. Cuando FE anuncie el tag (SV-303), quitar sus sentencias y esperar 0 emisores.
+
