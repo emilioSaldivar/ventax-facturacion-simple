@@ -118,3 +118,8 @@ Fases 1 a 4 del runbook, con FS `3e4f637` y FE `c337d9e`, sobre bases vacias. Se
 - **Falla encontrada:** al recrear solo la API de FS, el frontend quedo con la IP vieja y el login dio 502. `up.sh` ahora reinicia el frontend, y queda en el runbook.
 - Los tres nombres ya resuelven en DNS, a direcciones de Cloudflare.
 
+### E-9. Padron DNIT (2026-11-05)
+
+- **Falla:** primera carga con 2.018.276 filas en staging, pero `canceling statement due to statement timeout` al copiar a la tabla final: el loader fijaba 60 s en `src/db.js`. Se revirtio y la tabla siguio en 0; el cron del dia 5 habria fallado igual.
+- **Correccion:** `DNIT_STATEMENT_TIMEOUT`, con 60 s por defecto para no cambiar otros ambientes y `15min` en esta instancia.
+
