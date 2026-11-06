@@ -98,6 +98,8 @@ export interface FiscalDocumentoCanonicoResponse {
   estado: FiscalEstadoCanonico | null;
   current_cdc: string | null;
   nro_factura: string | null;
+  /** Estado del correo. null si esta version de FE no lo informa. */
+  email_status: "NOT_APPLICABLE" | "PENDING" | "SENT" | "FAILED" | null;
   raw: Record<string, unknown>;
 }
 

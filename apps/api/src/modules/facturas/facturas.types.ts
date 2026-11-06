@@ -388,6 +388,8 @@ export interface FacturaRepository {
   }): Promise<DocumentoResponse | null>;
   claimNextVerificacion(batchSize: number): Promise<PendingVerificacion[]>;
   scheduleNextVerificacion(input: { documentoId: string; nextAt: Date | null; attempts: number }): Promise<void>;
+  /** Solo cambia documentos en PENDING: un estado final no retrocede. */
+  updateEmailEstadoPendiente(documentoId: string, facturadorId: string, emailEstado: "NOT_APPLICABLE" | "SENT" | "FAILED"): Promise<void>;
   markAccionNotificada(documentoId: string): Promise<void>;
   getNotificationRecipients(facturadorId: string): Promise<string[]>;
   bulkUpdateDocumentUuidByCdc(items: Array<{ cdc: string; documentUuid: string }>): Promise<void>;

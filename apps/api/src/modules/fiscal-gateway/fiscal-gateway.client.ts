@@ -146,6 +146,7 @@ export class MockFiscalGateway implements FiscalGateway {
       estado: mapDocumentStatusCanonico(status),
       current_cdc: null,
       nro_factura: null,
+      email_status: null,
       raw: { mode: "mock", document_uuid: documentUuid, status }
     };
   }
@@ -1671,6 +1672,10 @@ function mapFiscalDocumentoCanonicoResponse(body: unknown): FiscalDocumentoCanon
     estado: mapDocumentStatusCanonico(status),
     current_cdc: stringOrNull(data.current_cdc),
     nro_factura: stringOrNull(data.nro_factura),
+    email_status:
+      data.email_status === "NOT_APPLICABLE" || data.email_status === "PENDING" || data.email_status === "SENT" || data.email_status === "FAILED"
+        ? data.email_status
+        : null,
     raw: data
   };
 }

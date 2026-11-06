@@ -52,7 +52,7 @@ entregaRouter.get(
   async (req, res, next) => {
     try {
       const context = await getOperationalContext(req.user!.id, operationalContextRepository);
-      const result = await getEmailStatus(context, String(req.params.documentoId), facturasRepository);
+      const result = await getEmailStatus(context, String(req.params.documentoId), facturasRepository, fiscalGateway);
       res.json(result);
     } catch (error) {
       next(error);

@@ -892,6 +892,17 @@ export class PgFacturaRepository implements FacturaRepository {
     );
   }
 
+  async updateEmailEstadoPendiente(documentoId: string, facturadorId: string, emailEstado: "NOT_APPLICABLE" | "SENT" | "FAILED"): Promise<void> {
+    await pool.query(
+      `
+        update facturas_operativas
+        set email_estado = $3, updated_at = now()
+        where id = $1 and facturador_id = $2 and email_estado = 'PENDING' and deleted_at is null
+      `,
+      [documentoId, facturadorId, emailEstado]
+    );
+  }
+
   async markAccionNotificada(documentoId: string): Promise<void> {
     await pool.query(
       `

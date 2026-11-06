@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { createFiscalGateway } from "../src/modules/fiscal-gateway/fiscal-gateway.client";
 import { FiscalGatewayError, type FiscalGateway } from "../src/modules/fiscal-gateway/fiscal-gateway.types";
 import { processNextQueuedFiscalEmission } from "../src/modules/facturas/facturas.service";
+import { getEmailStatus } from "../src/modules/entrega/entrega.service";
 
 // SPEC_CONTRATO_FE_SOBRECARGA_v0.1.
 const gatewayReal = () =>
@@ -75,5 +76,48 @@ describe("contrato FE: sobrecarga", () => {
     const { repo, fallos } = repositorio(new Date(Date.now() - 1000 * 60 * 60 * 24 * 30));
     await processNextQueuedFiscalEmission(repo, conError(new FiscalGatewayError("EMISSION_OVERLOADED", "x", { retry_after_seconds: 9 })));
     expect(fallos[0]).toMatchObject({ estado: "ERROR_TEMPORAL", outboxEstado: "FAILED_PERM" });
+  });
+});
+
+describe("contrato FE: correo en cola", () => {
+  const contexto = { facturador: { id: "f" } } as never;
+  function repositorio(estado: string) {
+    const guardados: string[] = [];
+    return {
+      guardados,
+      repo: {
+        findById: async () => ({ id: "d", document_uuid: "u", delivery: { email_status: estado }, cliente: { email: "a@b.invalid" }, estado: "EMITIDA", tipo: "FACTURA" }),
+        updateEmailEstadoPendiente: async (_d: string, _f: string, final: string) => { guardados.push(final); }
+      } as never
+    };
+  }
+  const gateway = (email_status: string | null) => ({ getDocumentoCanonico: async () => ({ email_status }) }) as unknown as FiscalGateway;
+
+  it("guarda el resultado final", async () => {
+    const { repo, guardados } = repositorio("PENDING");
+    const r = await getEmailStatus(contexto, "d", repo, gateway("SENT"));
+    expect(r.status).toBe("SENT");
+    expect(guardados).toEqual(["SENT"]);
+  });
+
+  it("sigue en cola si FE no informa el campo o sigue pendiente", async () => {
+    for (const valor of [null, "PENDING"]) {
+      const { repo, guardados } = repositorio("PENDING");
+      expect((await getEmailStatus(contexto, "d", repo, gateway(valor))).status).toBe("PENDING");
+      expect(guardados).toEqual([]);
+    }
+  });
+
+  it("sigue en cola si FE falla, sin error para el operador", async () => {
+    const { repo } = repositorio("PENDING");
+    const caido = { getDocumentoCanonico: async () => { throw new Error("caido"); } } as unknown as FiscalGateway;
+    expect((await getEmailStatus(contexto, "d", repo, caido)).status).toBe("PENDING");
+  });
+
+  it("no consulta FE si el estado ya es final", async () => {
+    const { repo } = repositorio("SENT");
+    const consulta = vi.fn();
+    await getEmailStatus(contexto, "d", repo, { getDocumentoCanonico: consulta } as unknown as FiscalGateway);
+    expect(consulta).not.toHaveBeenCalled();
   });
 });

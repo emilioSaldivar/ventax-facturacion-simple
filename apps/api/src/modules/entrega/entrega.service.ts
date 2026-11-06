@@ -55,10 +55,26 @@ export function generatePublicDeliveryToken(): string {
 export async function getEmailStatus(
   context: OperationalContextResponse,
   documentoId: string,
-  repository: FacturaRepository
+  repository: FacturaRepository,
+  gateway?: FiscalGateway
 ): Promise<EmailStatusResponse> {
   const documento = await getDocumentoById(context, documentoId, repository);
-  const status = documento.delivery.email_status;
+  let status = documento.delivery.email_status;
+
+  // SPEC_CONTRATO_FE_SOBRECARGA RN-04: se consulta solo mientras esta en cola. Si FE no responde,
+  // sigue "En cola" y se vuelve a intentar la proxima vez que se abra el documento.
+  if (status === "PENDING" && gateway && documento.document_uuid) {
+    try {
+      const canonico = await gateway.getDocumentoCanonico(documento.document_uuid);
+      const final = canonico.email_status;
+      if (final === "SENT" || final === "FAILED" || final === "NOT_APPLICABLE") {
+        await repository.updateEmailEstadoPendiente(documentoId, context.facturador.id, final);
+        status = final;
+      }
+    } catch (error) {
+      logger.warn({ err: error, documentoId }, "No se pudo consultar el estado del correo en FE.");
+    }
+  }
 
   return {
     status,
