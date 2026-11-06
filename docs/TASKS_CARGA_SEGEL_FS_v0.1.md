@@ -14,9 +14,9 @@
 | CSF-003 | E0 Humo | DONE (2026-11-06), E-1 |
 | CSF-004 | E1 Base | PARTIAL: cortada a los 17 min por decision del usuario, para salir a produccion |
 | CSF-005 | E2 Doble | NO SE HACE: decision del usuario (2026-11-06) |
-| CSF-006 | E3 Rafaga | PENDIENTE |
-| CSF-007 | E4 Fallas | PENDIENTE |
-| CSF-008 | Informe y limpieza | PENDIENTE |
+| CSF-006 | E3 Rafaga | DONE (2026-11-06), E-2 |
+| CSF-007 | E4 Fallas | DONE (2026-11-06), E-2 |
+| CSF-008 | Informe y limpieza | DONE (2026-11-06): se elimina la instancia de test al pasar a produccion |
 
 ## Decision de espera (2026-11-06)
 
@@ -46,4 +46,21 @@ FE `c337d9e`, SIFEN test real, 2 operadores, sin correo, cancelaciones en serie.
 - Reintento unico de la cancelacion de `0001102`, a pedido de FE: otra vez `0100 Error Inesperado`, 2 intentos en total. El evento firma el CDC pedido y SIFEN no muestra la cancelacion. No se insiste (RN-05). Segun FE, ese codigo es no determinista: unas 9 de 61 cancelaciones en produccion.
 - Por lectura de codigo, FS no reintenta notas de credito de forma automatica: el outbox es solo de facturas. Hasta el tag de FE, que agrega su clave, un reintento de NC podria duplicarla.
 - Tercer intento sobre `0001102`, con mas de 2 horas de separacion: no se hizo. El usuario pidio dejarlo para despues y priorizar una version estable de FE y FS. La factura sigue sin cancelar en SIFEN test.
+
+### E-2. E1 parcial, E3 y E4 con FE `segel-rc1` y FS `8e18e87` (2026-11-06)
+
+SIFEN test real, sin correo de clientes. Por decision del usuario, E1 se corto a los 17 min y E2 no se completo.
+
+| Corrida | Llamadas | 5xx o sin conexion | Facturas | `POST /facturas` p95 | KuDE p95 |
+| --- | --- | --- | --- | --- | --- |
+| E1 base parcial (5 operadores) | 372 | 0 | 14 emitidas | 185 ms | 3,8 s |
+| E3 rafagas solapadas (10 operadores, 3 tandas) | 814 | 0 | 30 emitidas | hasta 151 ms | hasta 9,5 s |
+| E4 con reinicios (5 operadores) | 516 | 0 | 20 emitidas | 180 ms | 5,1 s |
+
+- Cruces con FE: 0 documentos ajenos, 0 trabados, 0 numeros ni CDC repetidos, 0 eventos firmados con otro CDC.
+- Reinicios con carga: API FS 24 s y API FE 24 s hasta `healthy`, Postgres FS 10 s. La API de FS sobrevivio al reinicio de Postgres (FS-02). Tras ellos, 0 `DRAFT`, 0 correos pendientes y 0 envios sin cerrar. El tiempo incluye el intervalo de healthcheck.
+- Minimo de memoria disponible 2,05 GiB, carga maxima 2,16, `/var` 64 %. API FE hasta 374 MiB.
+- Cancelaciones: 2 rechazos `0100` en total durante las pruebas de FS, sobre `0001102` y una de E4.
+- Las 2 facturas `RECHAZADA` (`0003249`, `0003250`) son pruebas manuales a un RUC real: SIFEN test devolvio `1306` por el receptor. `0420` es la consulta posterior, y oculta el motivo: H09 de FE.
+- **No demuestra:** muchos emisores distintos, correo (lo mide FE), retoma con cola llena, ni el limite. Unas 0,3 llamadas/s: un corte breve pudo no coincidir con ninguna llamada.
 
