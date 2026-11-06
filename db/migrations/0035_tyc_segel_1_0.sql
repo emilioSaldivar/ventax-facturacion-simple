@@ -1,4 +1,4 @@
--- 0035: T&C de Segel, con PROTOTIPO S.A. como proveedor (SPEC_DESPLIEGUE_SEGEL_FS_v0.1, B-1).
+-- 0035: T&C de Segel, con SEGEL S.A. como proveedor (SPEC_DESPLIEGUE_SEGEL_FS_v0.1, B-1).
 -- Solo en la rama feat/identidad-segel. Hash: sha256 de docs/contract/TERMINOS_CONDICIONES_SEGEL_FACTURACION_SIMPLE_v1_0.md
 
 update tyc_versiones set activo = false where activo = true;
@@ -6,7 +6,7 @@ update tyc_versiones set activo = false where activo = true;
 insert into tyc_versiones (version, document_hash, document_content, activo, published_at)
 values (
   'segel-1.0',
-  '6e2457c107906b1045665a43a33a74a30234bdb9d34be0bf2d517ecceb82f81d',
+  '13ce82f8a5abbaeab21dad07148a31b6e1c856ce60cfa911fdaaefdde7f76b02',
   $tyc_segel$# TÉRMINOS Y CONDICIONES DE USO Y CONTRATACIÓN
 
 ## SEGEL FACTURACIÓN SIMPLE
@@ -14,9 +14,9 @@ values (
 **Versión:** segel-1.0
 **Fecha de última actualización:** 5 de noviembre de 2026
 **Estado:** Versión inicial para uso dentro del sistema con aceptación electrónica por checkbox y OTP
-**Proveedor:** PROTOTIPO S.A.
-**RUC:** 80091351-5
-**Domicilio:** Calle Margarita Forcado Pereira, Bo. Ypati, ciudad de Villa Elisa, República del Paraguay
+**Proveedor:** SEGEL S.A.
+**RUC:** 80026570-0
+**Domicilio:** Avda. Artigas N.º 2427 c/ Damas Argentinas, República del Paraguay
 **Servicio:** Segel Facturación Simple
 **Modalidad:** Software como Servicio — SaaS
 **Ámbito:** República del Paraguay
@@ -39,7 +39,7 @@ La aceptación electrónica de estos Términos y Condiciones tendrá validez com
 
 El Servicio es prestado por:
 
-**PROTOTIPO S.A.**, Sociedad Anónima constituida conforme a las leyes de la República del Paraguay, con RUC N.º **80091351-5**, con domicilio en Calle Margarita Forcado Pereira, Bo. Ypati, ciudad de Villa Elisa, República del Paraguay, representada por el Sr. **ALEXIS DANIEL DUARTE CORONEL**, con C.I. N.º 3.253.200, en carácter de REPRESENTANTE LEGAL, y por el Sr. **MICHAEL JACK HERSCHKOWICZ LAMPL**, con C.I. N.º 5.187.962, en carácter de PRESIDENTE, bajo la denominación comercial **Segel**.
+**SEGEL S.A.**, Sociedad Anónima constituida conforme a las leyes de la República del Paraguay, con RUC N.º **80026570-0**, con domicilio en Avda. Artigas N.º 2427 c/ Damas Argentinas, República del Paraguay, representada por el Sr. **MICHAEL JACK HERSCHKOWICZ LAMPL**, con C.I. N.º 5.187.962, en carácter de REPRESENTANTE LEGAL.
 **Correo de contacto:** [no-reply-facturacion@segel.com.py](mailto:no-reply-facturacion@segel.com.py)
 **Sitio web:** https://segel.com.py
 

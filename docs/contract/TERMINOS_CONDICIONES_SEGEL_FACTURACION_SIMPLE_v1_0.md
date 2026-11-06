@@ -5,9 +5,9 @@
 **Versión:** segel-1.0
 **Fecha de última actualización:** 5 de noviembre de 2026
 **Estado:** Versión inicial para uso dentro del sistema con aceptación electrónica por checkbox y OTP
-**Proveedor:** PROTOTIPO S.A.
-**RUC:** 80091351-5
-**Domicilio:** Calle Margarita Forcado Pereira, Bo. Ypati, ciudad de Villa Elisa, República del Paraguay
+**Proveedor:** SEGEL S.A.
+**RUC:** 80026570-0
+**Domicilio:** Avda. Artigas N.º 2427 c/ Damas Argentinas, República del Paraguay
 **Servicio:** Segel Facturación Simple
 **Modalidad:** Software como Servicio — SaaS
 **Ámbito:** República del Paraguay
@@ -30,7 +30,7 @@ La aceptación electrónica de estos Términos y Condiciones tendrá validez com
 
 El Servicio es prestado por:
 
-**PROTOTIPO S.A.**, Sociedad Anónima constituida conforme a las leyes de la República del Paraguay, con RUC N.º **80091351-5**, con domicilio en Calle Margarita Forcado Pereira, Bo. Ypati, ciudad de Villa Elisa, República del Paraguay, representada por el Sr. **ALEXIS DANIEL DUARTE CORONEL**, con C.I. N.º 3.253.200, en carácter de REPRESENTANTE LEGAL, y por el Sr. **MICHAEL JACK HERSCHKOWICZ LAMPL**, con C.I. N.º 5.187.962, en carácter de PRESIDENTE, bajo la denominación comercial **Segel**.
+**SEGEL S.A.**, Sociedad Anónima constituida conforme a las leyes de la República del Paraguay, con RUC N.º **80026570-0**, con domicilio en Avda. Artigas N.º 2427 c/ Damas Argentinas, República del Paraguay, representada por el Sr. **MICHAEL JACK HERSCHKOWICZ LAMPL**, con C.I. N.º 5.187.962, en carácter de REPRESENTANTE LEGAL.
 **Correo de contacto:** [no-reply-facturacion@segel.com.py](mailto:no-reply-facturacion@segel.com.py)
 **Sitio web:** https://segel.com.py
 

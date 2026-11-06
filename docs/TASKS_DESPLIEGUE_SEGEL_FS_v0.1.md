@@ -24,7 +24,7 @@
 | SFS-008 | Host | Grupo `docker` y salida a M365, sin cambios de disco (P-3) | DONE (2026-11-05) | `id` con `docker`; 587 abierto |
 | SFS-009 | Deploy | Desplegar en `segel-fs` | DONE (2026-11-05), E-4 | CA-02 y CA-03 |
 | SFS-010 | Entrega | Enviar configuracion a infraestructura | PARTIAL: documento listo y subdominios confirmados, falta compartirlo | CA-06 |
-| SFS-011 | Marca | T&C de Segel con PROTOTIPO S.A. | DONE sin desplegar (2026-11-05); falta revision legal | Migracion nueva, sin "Ventax" en el T&C activo |
+| SFS-011 | Marca | T&C de Segel con SEGEL S.A. | DONE sin desplegar (2026-11-05); falta revision legal | Migracion nueva, sin "Ventax" en el T&C activo |
 | SFS-012 | Correo | Configurar la casilla Segel en FS y FE | DONE (2026-11-05), E-5 | Correo recibido, con SPF y DKIM validos |
 | SFS-013 | Puesta en marcha | Primer admin en cada stack, facturador de prueba y carga inicial del padron DNIT | PARTIAL: admins, facturador y operador listos (E-4); falta el padron DNIT | Login en ambos backoffices y busqueda de RUC |
 | SFS-014 | Validacion | Emision real contra SIFEN test y recorrido con Playwright (mobile y desktop) | PARTIAL: recorrido hasta la app (E-4); falta certificado, CSC y emision | CA-04 y documento aprobado |
@@ -91,3 +91,15 @@ Stacks `fe-segel` y `segel-fs` en `/home/esaldivar/segel`, sin cambios de disco 
 - Autenticacion SMTP correcta desde FS y FE. Un correo real desde FS a la casilla del usuario: servidor responde 250. Falta confirmar la recepcion y probar el correo de factura de FE, que depende de emitir.
 - AWAPURA (80136968-1) desactivado por API de FE; 5057016-1 sigue activo.
 - FS `96e635d`: contacto `no-reply-facturacion@segel.com.py`. `X-App-Version` por `APP_VERSION`; el bundle ya no contiene otra direccion. Imagenes anteriores de FS retiradas; `/var` 44 %.
+
+### E-6. Ensayo local en modo produccion (2026-11-05)
+
+Paquete de `ace396e` con `init-env.sh prod`, `up.sh` y `bootstrap.sh`, en puertos altos de la estacion. Eliminado al terminar. Sin certificado, sin emisor propio y sin emitir.
+
+- `init-env.sh` sin argumento se niega a correr.
+- `APP_ENV=production`, `SIFEN_ENV=prod`, `KUDE_JASPER_AMBIENTE=2` y `FE_API_ENV=prod`. FE arranca y pasa su validacion de seguridad.
+- FS llega a FE por la red interna. `X-App-Version: ace396e`.
+- `bootstrap.sh`: admin de FE creado, admin de FS listo y AWAPURA con `activo = f`.
+- T&C: `segel-1.0` activo, 0 menciones a Ventax; 1.4 y 1.5 inactivas. El proveedor se cambio despues a SEGEL S.A., en la misma migracion, antes de aplicarla en la VPS.
+- Sin validar en este ensayo: conexion real con SIFEN produccion y dominios.
+

@@ -65,7 +65,7 @@ Se replica el esquema de Hetzner. Confirmados por el usuario el 2026-11-05.
 
 ## Bloqueos y pendientes
 
-- **B-1. T&C.** Resuelto: T&C `segel-1.0` con PROTOTIPO S.A. como proveedor y Segel como marca (migracion `0035`, `docs/contract/TERMINOS_CONDICIONES_SEGEL_FACTURACION_SIMPLE_v1_0.md`). Sin la seccion 2.1, que no aplica a una persona juridica, ni WhatsApp comercial, porque no hay uno definido. El texto se adapto de la version de Ventax y falta su revision legal.
+- **B-1. T&C.** Resuelto: T&C `segel-1.0`, version del 5 de noviembre de 2026, con SEGEL S.A. (RUC 80026570-0) como proveedor (migracion `0035`, `docs/contract/TERMINOS_CONDICIONES_SEGEL_FACTURACION_SIMPLE_v1_0.md`). Sin la seccion 2.1, que no aplica a una persona juridica, ni WhatsApp comercial, porque no hay uno definido. El texto se adapto de la version de Ventax y falta su revision legal.
 - **P-2. Correo.** Resuelto: cuenta y contacto `no-reply-facturacion@segel.com.py` en `smtp.office365.com:587`, remitente "Facturacion Electronica Segel", decision del usuario. El usuario carga la contrasena en la VPS.
 - **P-3. Recursos.** Decision del usuario (2026-11-05): no se modifican disco ni recursos de la VPS. Se trabaja con lo que hay: `/var` (9,3 G) para Docker y `/home/esaldivar/segel` (`/home`, 3,7 G) para archivos. Infraestructura solo se ocupa de NGINX. Sin VPN no hay acceso a la VPS.
 - **P-5. Emisor sembrado.** Resuelto: la migracion `003_seed_awapura.sql` de FE crea al emisor real AWAPURA (80136968-1) en toda base nueva. En esta instancia se desactivo, por decision del usuario (2026-11-05): solo se usa 5057016-1. Hay que repetirlo si la base se recrea, por ejemplo al pasar a produccion (RN-08).
