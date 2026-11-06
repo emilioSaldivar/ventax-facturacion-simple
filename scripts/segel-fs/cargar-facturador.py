@@ -130,4 +130,5 @@ codigo_act = next(x["codigo_actividad"] for x in d["act"] if x["id"] == per["act
 ok("operador", http("POST", f"{a.fs}/backoffice/users", {"tenant_id": ten["id"], "username": a.operador, "email": a.operador_email, "display_name": "Operador", "role": "OPERADOR_FACTURACION", "temporary_password": OP_PW, "operation_config": {"facturador_id": fac["id"], "emisor_id": fac["emisor_id"], "establecimiento": codigo_est, "punto_expedicion": codigo_pun, "perfil_emision_codigo": a.perfil, "actividad_economica_codigo": codigo_act}}, F))
 r = http("GET", f"{P}/readiness?env={a.ambiente}", None, A)
 print("FE falta:", r[1].get("missing") if isinstance(r[1], dict) else r[1])
-print("Actividades sin cobertura:", r[1].get("uncovered_activity_ids") if isinstance(r[1], dict) else "?")
+cfg = http("GET", f"{P}/configuracion?env={a.ambiente}", None, A)[1]
+print("Actividades sin cobertura:", cfg["activity_coverage"]["uncovered_activity_ids"] if isinstance(cfg, dict) else cfg)

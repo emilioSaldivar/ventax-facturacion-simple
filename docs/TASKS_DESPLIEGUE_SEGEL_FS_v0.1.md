@@ -130,6 +130,6 @@ Ensayo local de `bd0606b`, con `init-env.sh prod`, FE `c337d9e` y dos emisores f
 
 - Dos emisores cargados, cada uno con su consumidor (`segel-fs-99999901` y `segel-fs-99999902`), import en FS sin bloqueantes y operador creado.
 - Emisor repetido y `--sumar-numerador` en prod: rechazados antes de escribir.
-- `uncovered_activity_ids` no aparece en la readiness de FE `c337d9e`: revisar la cobertura de actividades al adoptar el tag nuevo.
+- La cobertura de actividades se lee de `activity_coverage.uncovered_activity_ids` en `GET /admin/emisores/{id}/configuracion?env=<env>`; lista vacia significa todas cubiertas. La primera version del script la buscaba en la readiness, donde no existe; corregido y comprobado contra el emisor de test.
 - Sin cambio en `bootstrap.sh`: FE `c337d9e` todavia trae la semilla. Cuando FE anuncie el tag (SV-303), quitar sus sentencias y esperar 0 emisores.
 
