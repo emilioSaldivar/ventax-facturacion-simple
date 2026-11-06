@@ -10,8 +10,8 @@
 | ID | Tarea | Hecho cuando | Estado |
 |---|---|---|---|
 | CMF-001 | SPEC, PLAN y TASKS | Decisiones D-1 a D-7 cerradas y documentos en `AGENTS.md` | DONE (2026-11-06) |
-| CMF-002 | Migracion `0037_carga_masiva.sql` | Aplica en una base nueva y en una con datos; el runner no reporta checksums cambiados | TODO |
-| CMF-003 | Fase A, API: `numeracion_facturas` en contextos del backoffice y en el contexto operativo; `409 NUMERACION_DEL_CLIENTE` en `POST /facturas` | Pruebas: valor por defecto `SERVICIO`; solo roles internos lo cambian; factura rechazada en contexto `CLIENTE`; nota de credito permitida | TODO |
+| CMF-002 | Migracion `0037_carga_masiva.sql` | Aplica en una base nueva y en una con datos; el runner no reporta checksums cambiados | PARTIAL (2026-11-06), E-1: falta aplicarla sobre una base con datos |
+| CMF-003 | Fase A, API: `numeracion_facturas` en contextos del backoffice y en el contexto operativo; `409` con `NUMERACION_DEL_CLIENTE` en `POST /facturas` | Pruebas: valor por defecto `SERVICIO`; solo roles internos lo cambian; factura rechazada en contexto `CLIENTE`; nota de credito permitida | PARTIAL (2026-11-06), E-2: falta probar el `PATCH` y la auditoria contra una base |
 | CMF-004 | Fase A, interfaz: selector en el backoffice y "Nueva factura" oculta con explicacion | Playwright, mobile y desktop | TODO |
 | CMF-005 | Fase B: metodos de cargas en `FiscalGateway` y en el mock, con las formas del pedido | Pruebas del mock: subida, repetida, rechazada, validada, confirmada, finalizada | TODO |
 | CMF-006 | Fase B: modulo `cargas`, con subida del archivo como cuerpo del pedido, bandera `CARGA_MASIVA_ENABLED` y limites | Pruebas: el archivo llega a FE con el mismo hash; `403`, `413`, `422` y `429` conservan codigo y mensaje; sin clave de consumidor responde `409`; bandera apagada responde `404` | TODO |
@@ -34,4 +34,14 @@
 
 ## Evidencia
 
-Sin evidencia todavia: no hay codigo.
+### E-1. Migracion 0037 (2026-11-06)
+
+Base nueva y vacia, PostgreSQL 16 en un contenedor temporal local. `npm run migrate` aplico de la 0001 a la 0037. Una segunda corrida las salto todas, sin error de checksum. Verificado: `numeracion_facturas` nace en `SERVICIO`; `cargas_masivas` tiene 19 columnas; `facturas_operativas` suma `carga_masiva_id` y `carga_numero_archivo`. **Sin probar:** una base con datos.
+
+### E-2. Forma de numerar por contexto, API (2026-11-06)
+
+- `enqueueFacturaEmission`: con `numeracion_facturas = CLIENTE` responde `409 CONFLICT`, `details.reason = NUMERACION_DEL_CLIENTE`, y no encola nada. Con `SERVICIO` o sin el campo, emite igual. Dos pruebas nuevas en `facturas.service.test.ts`.
+- La nota de credito no pasa por esa funcion: no cambia. Sin prueba propia.
+- `PATCH /backoffice/contextos/:id` acepta `numeracion_facturas` y registra el cambio en `audit_events`. Las rutas del backoffice ya exigen rol interno. **Sin prueba automatizada:** no hay pruebas del repositorio del backoffice contra una base.
+- `npm run test` de la API: 482 pasan, 0 fallan, 28 omitidas. `npm run typecheck` y `npm run lint` sin errores.
+- `spec/openapi.yaml`: `numeracion_facturas` en `FiscalContext`. Las rutas de contextos del backoffice no estaban documentadas alli y siguen sin estarlo.

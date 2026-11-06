@@ -1283,6 +1283,17 @@ export async function enqueueFacturaEmission(
     }
   }
 
+  // SPEC_CARGA_MASIVA_FACTURAS_v0.1 RN-22: en este punto el numero lo pone el archivo del
+  // cliente. Una factura con numeracion de FE usaria el mismo numerador y los cruzaria.
+  if (context.fiscal_context.numeracion_facturas === "CLIENTE") {
+    throw new HttpError(
+      409,
+      "CONFLICT",
+      "Este punto de expedicion emite facturas solo por carga de archivo. Usa Carga masiva, en Documentos.",
+      { reason: "NUMERACION_DEL_CLIENTE" }
+    );
+  }
+
   const resolvedInput = await resolveFacturaInputCliente(context, input, options.clienteRepository);
   const preview = previewFactura(context, resolvedInput);
   const externalRef = buildExternalRef(context, options.idempotencyKey);

@@ -2352,6 +2352,13 @@ components:
           type: integer
           minimum: 1
           example: 30
+        numeracion_facturas:
+          type: string
+          enum: [SERVICIO, CLIENTE]
+          description: >-
+            Forma de numerar las facturas de este contexto. `SERVICIO`: la numera el backend fiscal.
+            `CLIENTE`: el numero viene en el archivo de una carga masiva, y `POST /facturas` responde
+            `409` con `details.reason = NUMERACION_DEL_CLIENTE`. Ausente equivale a `SERVICIO`.
         tipo_transaccion_default:
           type: integer
           enum: [1, 2, 3]

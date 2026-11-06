@@ -27,6 +27,11 @@ export interface FiscalContext {
   documento_nro: string;
   credito_plazo_dias: number;
   tipo_transaccion_default: 1 | 2 | 3;
+  /**
+   * Forma de numerar las facturas de este contexto (SPEC_CARGA_MASIVA_FACTURAS_v0.1 RN-21).
+   * Ausente equivale a SERVICIO: la numera facturacion-electronica.
+   */
+  numeracion_facturas?: "SERVICIO" | "CLIENTE";
   fiscal_envio_modo?: "BATCH" | "SYNC" | "AUTO";
   batch_enabled?: boolean | null;
 }

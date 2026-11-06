@@ -29,17 +29,17 @@ Ninguno de los cuatro se despliega sin confirmacion directa del usuario.
 Aditiva. No modifica migraciones aplicadas.
 
 - `actividad_punto_perfiles.numeracion_facturas text not null default 'SERVICIO'`, con check `('SERVICIO','CLIENTE')`.
-- Tabla `cargas_masivas`: `id`, `tenant_id`, `facturador_id`, `actividad_punto_perfil_id`, `fe_carga_id` (unico por facturador), `nombre_archivo`, `numeracion`, `estado`, `totales jsonb`, `acciones jsonb`, `subida_por`, `confirmada_por`, `cancelada_por`, `sincronizada_hasta timestamptz`, `sincronizada_en timestamptz`, `sync_next_at timestamptz`, `created_at`, `updated_at`. Indice por `(facturador_id, created_at desc)` y por `sync_next_at` donde no es nulo.
+- Tabla `cargas_masivas`: `id`, `tenant_id`, `facturador_id`, `actividad_punto_perfil_id`, `fe_carga_id` (unico por facturador), `nombre_archivo`, `numeracion`, `estado`, `totales jsonb`, `acciones jsonb`, `motivos jsonb`, `subida_por`, `confirmada_por`, `cancelada_por`, `sincronizada_hasta timestamptz`, `sincronizada_en timestamptz`, `sync_next_at timestamptz`, `created_at`, `updated_at`. Indice por `(facturador_id, created_at desc)` y por `sync_next_at` donde no es nulo.
 - `facturas_operativas.carga_masiva_id uuid` (referencia, nula) y `carga_numero_archivo text`. Indice parcial por `carga_masiva_id`.
 
 `estado`, `totales` y `acciones` son una copia de lo que informa FE, para listar sin llamar a FE. La fuente es FE.
 
 ## 4. Fase A: forma de numerar por contexto
 
-- `PATCH /backoffice/contextos/:id` acepta `numeracion_facturas`. Solo roles internos, con evento de auditoria. `GET` la devuelve.
+- `PATCH /backoffice/contextos/:id` acepta `numeracion_facturas`. Solo roles internos. El cambio queda en `audit_events` (`CONTEXTO_NUMERACION_FACTURAS_CAMBIADA`, con valor anterior y nuevo). `GET` la devuelve.
 - La pantalla de contextos del backoffice muestra y permite cambiar el valor, con un aviso: cambiarla en un punto que ya emitio puede cruzar numeros.
 - `context.repository` y `OperationalContextResponse.fiscal_context` suman `numeracion_facturas`.
-- `POST /facturas` responde `409 NUMERACION_DEL_CLIENTE` si el contexto es `CLIENTE` (RN-22). La regla vive en el backend; la interfaz solo oculta "Nueva factura" y explica por que.
+- `POST /facturas` responde `409 CONFLICT` con `details.reason = NUMERACION_DEL_CLIENTE` si el contexto es `CLIENTE` (RN-22). Los codigos de error de la API son una lista cerrada; el motivo va en `details`, como en el resto. La regla vive en el backend; la interfaz solo oculta "Nueva factura" y explica por que.
 - Notas de credito: sin cambios.
 - Notas y presupuestos: "convertir en factura" queda sujeto a la misma regla.
 

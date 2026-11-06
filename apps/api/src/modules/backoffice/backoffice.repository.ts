@@ -149,6 +149,7 @@ interface ContextoRow {
   documento_nro: string | null;
   credito_plazo_dias: number;
   alias_operativo: string | null;
+  numeracion_facturas: "SERVICIO" | "CLIENTE";
   activo: boolean;
 }
 
@@ -277,6 +278,7 @@ function mapContextoRow(row: ContextoRow): BackofficeContextoResponse {
     documento_nro: row.documento_nro,
     credito_plazo_dias: row.credito_plazo_dias,
     alias_operativo: row.alias_operativo,
+    numeracion_facturas: row.numeracion_facturas,
     activo: row.activo
   };
 }
@@ -354,6 +356,7 @@ const CONTEXTO_SELECT = `
     app.documento_nro,
     app.credito_plazo_dias,
     app.alias_operativo,
+    app.numeracion_facturas,
     app.activo
   from actividad_punto_perfiles app
   join facturador_actividades a on a.id = app.actividad_id and a.deleted_at is null
@@ -1029,7 +1032,8 @@ export class PgBackofficeRepository implements BackofficeRepository {
     return result.rows[0] ? mapContextoRow(result.rows[0]) : null;
   }
 
-  async updateContexto(id: string, input: BackofficeContextoUpdateInput): Promise<BackofficeContextoResponse | null> {
+  async updateContexto(id: string, input: BackofficeContextoUpdateInput, actorId?: string): Promise<BackofficeContextoResponse | null> {
+    const anterior = input.numeracion_facturas ? await this.getContexto(id) : null;
     const result = await pool.query<{ id: string }>(
       `update actividad_punto_perfiles
        set timbrado = case when $2::boolean then $3 else timbrado end,
@@ -1038,6 +1042,7 @@ export class PgBackofficeRepository implements BackofficeRepository {
            credito_plazo_dias = coalesce($8, credito_plazo_dias),
            alias_operativo = case when $9::boolean then $10 else alias_operativo end,
            activo = coalesce($11, activo),
+           numeracion_facturas = coalesce($12, numeracion_facturas),
            updated_at = now()
        where id = $1 and deleted_at is null returning id`,
       [
@@ -1047,10 +1052,25 @@ export class PgBackofficeRepository implements BackofficeRepository {
         "documento_nro" in input, input.documento_nro ?? null,
         input.credito_plazo_dias ?? null,
         "alias_operativo" in input, input.alias_operativo ?? null,
-        input.activo ?? null
+        input.activo ?? null,
+        input.numeracion_facturas ?? null
       ]
     );
     if (!result.rows[0]) return null;
+    // SPEC_CARGA_MASIVA_FACTURAS_v0.1 RN-21: cambiar la forma de numerar queda auditado.
+    if (anterior && input.numeracion_facturas && anterior.numeracion_facturas !== input.numeracion_facturas) {
+      await pool.query(
+        `insert into audit_events (tenant_id, facturador_id, usuario_id, entity_type, entity_id, event_type, metadata)
+         select f.tenant_id, f.id, $2, 'CONTEXTO_OPERATIVO', $1, 'CONTEXTO_NUMERACION_FACTURAS_CAMBIADA', $3::jsonb
+         from facturadores f where f.id = $4`,
+        [
+          id,
+          actorId ?? null,
+          JSON.stringify({ anterior: anterior.numeracion_facturas, nueva: input.numeracion_facturas }),
+          anterior.facturador_id
+        ]
+      );
+    }
     return this.getContexto(id);
   }
 

@@ -140,6 +140,7 @@ export interface BackofficeContextoUpdateInput {
   credito_plazo_dias?: number | null;
   alias_operativo?: string | null;
   activo?: boolean;
+  numeracion_facturas?: "SERVICIO" | "CLIENTE";
 }
 
 export interface BackofficeUserUpdateInput {
@@ -245,6 +246,7 @@ export interface BackofficeContextoResponse {
   documento_nro: string | null;
   credito_plazo_dias: number;
   alias_operativo: string | null;
+  numeracion_facturas: "SERVICIO" | "CLIENTE";
   activo: boolean;
 }
 
@@ -366,7 +368,7 @@ export interface BackofficeRepository {
   createContexto(input: { facturadorId: string } & BackofficeContextoCreateInput): Promise<BackofficeContextoResponse | null>;
   listContextos(facturadorId: string): Promise<BackofficeContextoResponse[]>;
   getContexto(id: string): Promise<BackofficeContextoResponse | null>;
-  updateContexto(id: string, input: BackofficeContextoUpdateInput): Promise<BackofficeContextoResponse | null>;
+  updateContexto(id: string, input: BackofficeContextoUpdateInput, actorId?: string): Promise<BackofficeContextoResponse | null>;
 
   // Usuarios extendidos
   listUsers(query: BackofficeUserListQuery): Promise<BackofficeUserDetailResponse[]>;

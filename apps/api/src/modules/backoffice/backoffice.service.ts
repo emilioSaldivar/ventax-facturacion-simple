@@ -449,9 +449,10 @@ export async function getContexto(id: string, repository: BackofficeRepository):
 export async function updateContexto(
   id: string,
   input: BackofficeContextoUpdateInput,
-  repository: BackofficeRepository
+  repository: BackofficeRepository,
+  actorId?: string
 ): Promise<BackofficeContextoResponse> {
-  const c = await repository.updateContexto(id, input);
+  const c = await repository.updateContexto(id, input, actorId);
   if (!c) throw new HttpError(404, "NOT_FOUND", "Contexto operativo no encontrado.");
   return c;
 }

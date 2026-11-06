@@ -164,7 +164,8 @@ const contextoUpdateSchema = z.object({
   documento_nro: z.string().trim().regex(/^[0-9]{7}$/, "documento_nro debe ser 7 digitos.").nullable().optional(),
   credito_plazo_dias: z.number().int().positive().nullable().optional(),
   alias_operativo: z.string().trim().max(100).nullable().optional(),
-  activo: z.boolean().optional()
+  activo: z.boolean().optional(),
+  numeracion_facturas: z.enum(["SERVICIO", "CLIENTE"]).optional()
 }).refine((d) => Object.keys(d).length > 0, { message: "Al menos un campo requerido." });
 
 // Misma forma que operationConfigSchema menos tenant_id, que se deriva del usuario creado.
@@ -525,7 +526,7 @@ backofficeRouter.get("/backoffice/contextos/:id", ...auth, validateRequest("para
 backofficeRouter.patch("/backoffice/contextos/:id", ...auth, validateRequest("params", uuidParam), validateRequest("body", contextoUpdateSchema), async (req, res, next) => {
   try {
     const { id } = req.params as unknown as z.infer<typeof uuidParam>;
-    res.json(await updateContexto(id, req.body, backofficeRepository));
+    res.json(await updateContexto(id, req.body, backofficeRepository, req.user!.id));
   } catch (e) { next(e); }
 });
 
