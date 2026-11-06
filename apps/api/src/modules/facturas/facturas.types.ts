@@ -63,7 +63,7 @@ export type DocumentoEstado =
 
 export type DocumentoTipo = "FACTURA" | "NOTA_CREDITO";
 export type DocumentoTipoOperativo = CondicionVenta | "NOTA_CREDITO";
-export type EmailStatus = "NOT_APPLICABLE" | "DELEGATED" | "SENT" | "FAILED" | "UNKNOWN";
+export type EmailStatus = "NOT_APPLICABLE" | "DELEGATED" | "PENDING" | "SENT" | "FAILED" | "UNKNOWN";
 export type { FiscalBatchTransmissionInfo, FiscalEnvioModo };
 
 export interface DeliverySummary {

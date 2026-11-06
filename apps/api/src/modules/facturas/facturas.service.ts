@@ -1344,13 +1344,17 @@ export async function processNextQueuedFiscalEmission(
     if (error instanceof FiscalGatewayError) {
       const ageMs = Date.now() - new Date(pending.documentoCreatedAt).getTime();
       const cutover = ageMs >= HORAS_CORTE_REINTENTO_EMISION * 60 * 60 * 1000;
-      const retryAfterSeconds = nextEmisionBackoffSeconds(pending.attempts);
+      // Sobrecarga de FE: la factura no se creo. Se espera lo que indica, sin marcarla como fallida.
+      const sobrecarga = error.code === "EMISSION_OVERLOADED" && !cutover;
+      const retryAfterSeconds = sobrecarga
+        ? Number((error.details as { retry_after_seconds?: number }).retry_after_seconds ?? 5)
+        : nextEmisionBackoffSeconds(pending.attempts);
 
       const updated = await repository.failPendingEmission({
         outboxId: pending.outboxId,
         documentoId: pending.documentoId,
         outboxEstado: cutover ? "FAILED_PERM" : "FAILED_TEMP",
-        estado: cutover ? "ERROR_TEMPORAL" : error.code === "TIMEOUT" ? "PENDIENTE_SIFEN" : "ERROR_TEMPORAL",
+        estado: sobrecarga ? "EMITIENDO" : cutover ? "ERROR_TEMPORAL" : error.code === "TIMEOUT" ? "PENDIENTE_SIFEN" : "ERROR_TEMPORAL",
         error: {
           code: error.code,
           message: error.message,

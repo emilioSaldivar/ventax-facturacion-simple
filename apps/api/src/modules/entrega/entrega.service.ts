@@ -369,6 +369,10 @@ function buildEmailStatusMessage(status: EmailStatusResponse["status"], hasEmail
     return "El documento se enviara en el correo del cliente.";
   }
 
+  if (status === "PENDING") {
+    return "El correo esta en cola; se envia en breve.";
+  }
+
   if (status === "SENT") {
     return "Segel informo envio de email.";
   }

@@ -610,6 +610,15 @@ export class RealFiscalGateway implements FiscalGateway {
 
     const body = await readJson(response);
 
+    // Se distingue por `error`, no por el 503: otras respuestas de FE tambien lo usan.
+    if (response.status === 503 && (body as { error?: unknown } | null)?.error === "EMISSION_OVERLOADED") {
+      throw new FiscalGatewayError("EMISSION_OVERLOADED", "Backend fiscal al limite de emisiones simultaneas.", {
+        status: response.status,
+        body,
+        retry_after_seconds: retryAfterSeconds(response, body)
+      });
+    }
+
     if (!response.ok && !isIdempotentDocumentConflict(response.status, body)) {
       throw new FiscalGatewayError(
         response.status === 408 || response.status === 504 ? "TIMEOUT" : "UPSTREAM_ERROR",
@@ -1784,9 +1793,16 @@ function mapCancelStatus(value: string | null): FiscalCancelStatus {
   }
 }
 
+function retryAfterSeconds(response: Response, body: unknown): number {
+  const delBody = (body as { details?: { retry_after_seconds?: unknown } } | null)?.details?.retry_after_seconds;
+  const segundos = Number(response.headers.get("retry-after") ?? delBody);
+  return Number.isFinite(segundos) && segundos > 0 ? Math.min(Math.ceil(segundos), 300) : 5;
+}
+
 function mapEmailStatus(value: unknown): FiscalEmitFacturaResponse["email_status"] {
   return value === "NOT_APPLICABLE" ||
     value === "DELEGATED" ||
+    value === "PENDING" ||
     value === "SENT" ||
     value === "FAILED" ||
     value === "UNKNOWN"

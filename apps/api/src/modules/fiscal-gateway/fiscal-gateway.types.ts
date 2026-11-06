@@ -3,7 +3,7 @@ import type { FiscalContext, FacturadorSummary } from "../context/context.types"
 import type { FacturaClienteInput, FacturaItemPreview } from "../facturas/facturas.types";
 
 export type FiscalGatewayMode = "mock" | "real";
-export type FiscalGatewayErrorCode = "TIMEOUT" | "UPSTREAM_ERROR" | "UNAVAILABLE" | "INVALID_RESPONSE" | "TRANSMISSION_EVIDENCE_DETECTED";
+export type FiscalGatewayErrorCode = "TIMEOUT" | "EMISSION_OVERLOADED" | "UPSTREAM_ERROR" | "UNAVAILABLE" | "INVALID_RESPONSE" | "TRANSMISSION_EVIDENCE_DETECTED";
 export type FiscalEnvioModo = "BATCH" | "SYNC" | "AUTO";
 export type FiscalDeliveryMode = "SYNC" | "BATCH" | "AUTO_FALLBACK_BATCH" | "SYNC_FALLBACK_BATCH";
 
@@ -78,7 +78,7 @@ export interface FiscalEmitFacturaResponse {
   delivery_mode?: FiscalDeliveryMode | null;
   idempotent?: boolean | null;
   batch?: FiscalBatchTransmissionInfo | null;
-  email_status: "NOT_APPLICABLE" | "DELEGATED" | "SENT" | "FAILED" | "UNKNOWN";
+  email_status: "NOT_APPLICABLE" | "DELEGATED" | "PENDING" | "SENT" | "FAILED" | "UNKNOWN";
   raw: Record<string, unknown>;
 }
 

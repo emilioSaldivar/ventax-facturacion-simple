@@ -5679,6 +5679,9 @@ function formatEmailStatus(value: string): string {
   if (value === "DELEGATED") {
     return "Delegado";
   }
+  if (value === "PENDING") {
+    return "En cola";
+  }
   if (value === "SENT") {
     return "Enviado";
   }

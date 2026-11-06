@@ -3296,7 +3296,7 @@ components:
 
     EmailStatus:
       type: string
-      enum: [NOT_APPLICABLE, DELEGATED, SENT, FAILED, UNKNOWN]
+      enum: [NOT_APPLICABLE, DELEGATED, PENDING, SENT, FAILED, UNKNOWN]
 
     EmailStatusResponse:
       type: object
