@@ -87,6 +87,9 @@ Criterios:
 - **Sintoma esperado:** para soporte interno, las 6 acciones responden error: decision, validar impacto CDC, reintentar mismo CDC, crear DE derivado, cancelar envio local e inutilizar numeracion.
 - **Causa:** FS llama a `/admin/emisores/{id}/facturas/{documentId}/...` de FE solo con `x-api-key`. Esas rutas exigen `Authorization: Bearer` de un usuario del backoffice de FE; fuera de produccion aceptan `x-api-key` solo con `x-user-id`, que FS no manda. FE responde `401` y FS lo muestra como `502`.
 - **Evidencia:** lectura de `fiscal-gateway.client.ts` y de `require-admin-user.ts` de FE; FE lo confirmo por lectura (su V048). Sin reproducir.
+- **Historia:** FE exige `Bearer` en produccion desde el 2026-04-22 (`ba114db`). FS sumo estas acciones el 2026-05-28 (`SPEC_AUTOGESTION_AVANZADA_SOPORTE_v0.1`), probadas solo con el mock: su tarea de QA, AGS-009, quedo `PENDING`. FS nunca envio `Bearer` ni `x-user-id`. `OPERACION_PARIDAD_FE_v0.1` suponia que alcanzaba la clave compartida. Por lectura, nunca funcionaron contra un FE real.
+- **Alternativa de soporte:** el backoffice de FE ya tiene las seis, mas el reenvio.
+- **Alcance:** el mismo bloque existe en `master` (Ventax). Este SPEC cubre solo la rama Segel.
 - **Dos datos mas de FE:** "Reintentar mismo CDC" responderia siempre `409 CDC_CHANGE_REQUIRED`, porque cada regeneracion cambia el CDC (su OBS-005, sin corregir). Y sobre un documento con lote abierto, esas rutas responden `409 DOCUMENT_IN_PROCESS_AT_SIFEN` desde su fix FIX009.
 - **Riesgo:** bajo. Nadie puede reenviar un documento desde FS. El costo es mostrar a soporte botones que fallan, y mantener codigo y contrato que no sirven.
 
@@ -111,7 +114,7 @@ La proteccion de FS-11 evita consultar a SIFEN un documento ya anulado. Con el f
 
 | ID | Que | Propuesta | Decide |
 |---|---|---|---|
-| D-1 | FS-25: retirar las 6 acciones o darles autenticacion valida | Retirarlas. Darles autenticacion exige que FS maneje credenciales de administrador de FE, y una de las seis no funcionaria igual | Usuario |
+| D-1 | FS-25: (A) retirar las 6; (B) retirar 5 y conservar "Inutilizar numeracion" migrada a la ruta publicada `POST /evento/inutilizacionnumfactura`; (C) hacerlas funcionar, con rutas nuevas de FE para consumidores o con credenciales de administrador de FE en FS | A. B suma trabajo y hay que verificar esa ruta. C es un cambio de contrato en FE, y "Reintentar mismo CDC" no funcionaria igual | Usuario |
 | D-2 | Cuando se despliega | Junto con el proximo tag de FE: FS-20 lo necesita y FS-24 necesita su bandera. Un solo cambio en produccion | Usuario, con confirmacion directa |
 
 ## 9. Otros errores abiertos, fuera de este SPEC
