@@ -25,6 +25,10 @@ const ventanaRafagaMs = Number(args["ventana-rafaga-s"] ?? 60) * 1000;
 const duracionS = Number(args["duracion-s"] ?? 60);
 const probCancelar = Number(args["prob-cancelar"] ?? 0.05);
 const probReintento = Number(args["prob-reintento"] ?? 0.02);
+// Nota de credito sobre una factura aprobada que no se cancelo.
+const probNc = Number(args["prob-nc"] ?? 0);
+// Sin correo de cliente: contra un SMTP real, cada documento generaria un rebote.
+const sinCorreo = Boolean(args["sin-correo"]);
 // La app no consulta en bucle: esto representa al operador mirando la lista. Un sondeo agresivo
 // durante los 28 min de aprobacion mediria al simulador, no a la app.
 const pollMs = Number(args["poll-s"] ?? 60) * 1000;
@@ -114,7 +118,7 @@ class Operador {
         documento_tipo: "CI",
         documento: cliente.documento,
         razon_social: cliente.razon_social,
-        email: `cli-${this.datos.ref}@carga.invalid`,
+        ...(sinCorreo ? {} : { email: `cli-${this.datos.ref}@carga.invalid` }),
         direccion: "Asuncion"
       },
       items: [{ catalogo_item_id: item.id, codigo: item.codigo, descripcion: item.descripcion, cantidad: 1 + Math.floor(this.random() * 3), precio_unitario: item.precio_unitario, iva_tipo: item.iva_tipo }]
@@ -213,6 +217,15 @@ class Operador {
         registro.cancelacion = cancelada.datos?.cancelacion ?? null;
         registro.cdc_al_cancelar = actual.cdc ?? null;
         if (cancelada.status === 200) contadores.canceladas += 1;
+      } else if (this.random() < probNc) {
+        await this.asegurarSesion();
+        const nota = await this.llamar("POST", `/facturas/${registro.id}/nota-credito`, {
+          cuerpo: { motivo: "Prueba de carga" },
+          headers: { "idempotency-key": `nc-${corrida}-${this.datos.ref}-${String(this.secuencia).padStart(6, "0")}` }
+        });
+        registro.nc_status = nota.status;
+        if (nota.status >= 200 && nota.status < 300) contadores.notas_credito = (contadores.notas_credito ?? 0) + 1;
+        else errores.write({ t: Date.now(), ruta: "POST /facturas/:id/nota-credito", status: nota.status, ref: this.datos.ref, cuerpo: resumen(nota.datos) });
       }
     }
     documentos.write({ ...registro, resultado: "completa" });
