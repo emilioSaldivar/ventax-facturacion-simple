@@ -130,7 +130,7 @@ Componente nuevo en `apps/web-operacion/src/carga-masiva.tsx`: `main.tsx` ya tie
 |---|---|
 | El contrato de FE cambia de nombres al publicarse | El mock y los tipos viven en un solo archivo; la fase E los ajusta |
 | 5.000 inserciones por ciclo en `facturas_operativas` | Paginas de 200 y una transaccion por pagina. Medir en la prueba conjunta |
-| Memoria de la API con archivos de 20 MB | Limite de 2 subidas simultaneas. Medir antes del primer cliente |
+| Memoria de la API con archivos de 20 MB | Limite de 2 subidas simultaneas. Medir antes del primer cliente. Dato de FE: 5.000 comprobantes de 3 lineas pesan 2,9 MB, asi que el tope de 20 MB tiene margen |
 | Sin dato de volumen real (D-6) | Declarado en el SPEC. Medir con el primer cliente antes de habilitarlo |
 | Un contexto pasa de `SERVICIO` a `CLIENTE` con facturas ya emitidas | Aviso en el backoffice. La proteccion real es la validacion de FE sobre su numerador |
 | La forma de numerar queda distinta en FS y en FE | FE rechaza la carga con el motivo y FS lo muestra. El aviso del backoffice de FS recuerda configurar tambien FE. Mejora posible: que FE publique la configuracion del numerador y FS la lea, en vez de duplicarla |

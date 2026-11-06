@@ -36,6 +36,7 @@ El resultado de SIFEN llega en minutos o en horas: la persona sube, se va y vuel
 - **RN-02.** Antes de llamar a FE, el backend valida tenant, suscripcion, usuario, facturador y contexto operativo listo para emitir. `emisor_id`, perfil y actividad salen de ese contexto, nunca del navegador.
 - **RN-03.** Una carga cubre un perfil y un punto: los del contexto operativo activo del usuario al subir. La pantalla los muestra antes de subir. Un archivo trae ventas de un solo punto, y debe ser el del perfil (D-3). Lo verifica FE, porque FS no lee el contenido: FS le manda el establecimiento y el punto del contexto. Si una sola fila trae otro punto, FE rechaza el archivo entero y no procesa nada (aceptado por FE, seccion 15 del pedido).
 - **RN-04.** Los textos de error y aviso de FE se muestran tal como llegan, con fila y columna (P-05). Un texto incomprensible se corrige en FE.
+- **RN-04b.** El numero de fila es el de una planilla: los titulos son la fila 1 y una linea vacia cuenta. La pantalla lo aclara, y no traduce ni agrupa los codigos de FE: la lista de codigos puede crecer (seccion 18 del pedido).
 - **RN-05.** Los errores se corrigen en el archivo, no en la pantalla. La pantalla lo dice y no ofrece editar datos.
 
 ### Confirmacion y acciones
@@ -56,7 +57,7 @@ El resultado de SIFEN llega en minutos o en horas: la persona sube, se va y vuel
 ### Facturas en "Documentos" (Usuario)
 
 - **RN-12.** Un comprobante entra a `facturas_operativas` cuando FE informa su `document_uuid`, con snapshot de cliente, items y totales armado con los datos que da FE. `usuario_id` es quien confirmo.
-- **RN-13.** `INVALIDO`, `CANCELADO` y `ERROR` sin `document_uuid` no crean documento. `DUPLICADO` tampoco: enlaza al existente si esta en FS.
+- **RN-13.** `INVALIDO`, `CANCELADO` y `ERROR` sin `document_uuid` no crean documento. `DUPLICADO` tampoco: es un comprobante ya emitido antes, por otra carga o en linea, y enlaza al existente si esta en FS. Uno repetido dentro del mismo archivo llega como `INVALIDO`.
 - **RN-14.** Incorporar es idempotente: `external_ref` estable, por carga y orden del comprobante. Repetir la sincronizacion no duplica ni pisa un estado final.
 - **RN-15.** La identidad es el `document_uuid` (`AGENTS.md`). El `estado` del comprobante dice como termino la emision y no cambia despues; el estado vigente sale de `documento_estado`, que FE suma al comprobante, con la misma traduccion que el resto de los documentos.
 - **RN-16.** Incorporar una factura no crea ni modifica clientes de la agenda ni items del catalogo: un archivo no puede sobrescribir datos de otros (FS-17).
