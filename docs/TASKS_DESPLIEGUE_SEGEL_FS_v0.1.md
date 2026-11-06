@@ -103,3 +103,12 @@ Paquete de `ace396e` con `init-env.sh prod`, `up.sh` y `bootstrap.sh`, en puerto
 - T&C: `segel-1.0` activo, 0 menciones a Ventax; 1.4 y 1.5 inactivas. El proveedor se cambio despues a SEGEL S.A., en la misma migracion, antes de aplicarla en la VPS.
 - Sin validar en este ensayo: conexion real con SIFEN produccion y dominios.
 
+### E-7. Reinstalacion limpia de test (2026-11-05)
+
+Fases 1 a 4 del runbook, con FS `3e4f637` y FE `c337d9e`, sobre bases vacias. Se reenviaron solo las imagenes de FS, porque las de FE no cambiaron.
+
+- Antes de borrar: 0 certificados, 0 CSC, 0 documentos y 0 facturas.
+- `bootstrap.sh`: T&C `segel-1.0` y AWAPURA inactivo. Tras el aviso del equipo de FE tambien desactiva su certificado y CSC, porque `verify-cert-storage.sh` filtra por la fila del certificado.
+- Facturador cargado con `cargar-facturador.py`, sin bloqueantes. Operador activado con `activar-operador-test.cjs`.
+- `up.sh` no ejecuta `verify-cert-storage.sh`: la falta de certificado no detiene los stacks. No se copian certificados desde Hetzner.
+

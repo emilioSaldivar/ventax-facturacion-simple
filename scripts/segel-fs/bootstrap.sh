@@ -17,7 +17,12 @@ fe_sql() { docker exec -i fe-segel-postgres-1 sh -c 'psql -v ON_ERROR_STOP=1 -q 
 fs_sql() { docker exec -i segel-fs-postgres-1 sh -c 'psql -v ON_ERROR_STOP=1 -q -At -U "$POSTGRES_USER" -d "$POSTGRES_DB"'; }
 
 # FE: la migracion 003 siembra un emisor real ajeno a esta instancia (SPEC P-5).
-echo "update emisores set activo = false where ruc_completo = '80136968-1';" | fe_sql
+# Tambien su certificado y CSC: verify-cert-storage.sh filtra por la fila del certificado.
+fe_sql <<'SQL'
+update emisores set activo = false where ruc_completo = '80136968-1';
+update emisor_certificados set activo = false where emisor_id = (select id from emisores where ruc_completo = '80136968-1');
+update emisor_csc set activo = false where emisor_id = (select id from emisores where ruc_completo = '80136968-1');
+SQL
 printf '%s' "$PASSWORD" | docker exec -i -e USUARIO="$USUARIO" fe-segel-api-1 node -e '
 let s = "";
 process.stdin.on("data", (d) => (s += d)).on("end", async () => {
