@@ -58,14 +58,16 @@ try {
   const feDocs = consultar("fe-segel-postgres-1", "select coalesce(json_agg(x),'[]') from (select document_uuid, client_idempotency_key, numero, cdc, status from de_documents) x;");
   const porUuid = new Map(feDocs.map((d) => [String(d.document_uuid), d]));
   const usos = {};
-  let ajenos = 0, huerfanos = 0;
+  let ajenos = 0, huerfanos = 0, ncSinClave = 0;
   for (const d of fsDocs) {
     usos[d.document_uuid] = (usos[d.document_uuid] ?? 0) + 1;
     const fe = porUuid.get(String(d.document_uuid));
     if (!fe) huerfanos += 1;
+    // FE c337d9e guarda las notas de credito sin clave: no se pueden cruzar por este campo.
+    else if (d.tipo === "NOTA_CREDITO" && !fe.client_idempotency_key) ncSinClave += 1;
     else if (fe.client_idempotency_key !== d.external_ref) ajenos += 1;
   }
-  console.log(`FE-14 cruce: FS ${fsDocs.length}, FE ${feDocs.length}, documento ajeno ${ajenos}, sin documento en FE ${huerfanos}, uuid compartido ${Object.values(usos).filter((n) => n > 1).length}`);
+  console.log(`FE-14 cruce: FS ${fsDocs.length}, FE ${feDocs.length}, documento ajeno ${ajenos}, sin documento en FE ${huerfanos}, NC sin clave en FE ${ncSinClave}, uuid compartido ${Object.values(usos).filter((n) => n > 1).length}`);
   console.log("FE estados:", JSON.stringify(feDocs.reduce((a, d) => { a[d.status] = (a[d.status] ?? 0) + 1; return a; }, {})));
   const trabados = consultar("fe-segel-postgres-1", "select coalesce(json_agg(x),'[]') from (select id, numero, status from de_documents where status='DRAFT' and xml_signed is null) x;");
   const repetidos = consultar("fe-segel-postgres-1", "select coalesce(json_agg(x),'[]') from (select establecimiento, punto_expedicion, numero, count(*) n from de_documents group by 1,2,3 having count(*)>1) x;");
