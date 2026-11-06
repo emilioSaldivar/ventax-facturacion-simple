@@ -2,6 +2,8 @@
 
 **Fecha:** 2026-11-06. **SPEC:** `docs/SPEC_CARGA_MASIVA_FACTURAS_v0.1.md`. **Rama:** `feat/identidad-segel`, sin merge a `master`.
 
+**Estado: en refinamiento, sin implementar.** Decision del usuario (2026-11-06): el contrato de FE todavia cambia, asi que este PLAN se actualiza con cada avance de FE y se repasa con el usuario antes de escribir codigo.
+
 ## 1. Enfoque
 
 FS no valida ni transforma el archivo: lo recibe, comprueba permisos y contexto, y lo reenvia a FE. FS guarda una fila por carga y copia a "Documentos" las facturas que FE va creando.
@@ -17,8 +19,8 @@ El contrato de FE todavia no esta publicado. Por eso el trabajo se parte en dos:
 
 | Orden | Trabajo | Por que en ese lugar |
 |---|---|---|
-| 1 | Carga masiva, fases A a D | FE esta cerrando su contrato ahora: lo que la pantalla necesite se pide en este momento. No depende de ningun tag |
-| 2 | FS-25, acciones de "Administracion fiscal" | Chico e independiente. **Espera una decision del usuario:** retirarlas o darles autenticacion |
+| 1 | Carga masiva, fases A a D | **En pausa:** solo documentacion y refinamiento hasta que el usuario indique implementar |
+| 2 | Autogestion del operador (reemplaza a FS-25) | Borrador en `SPEC_AUTOGESTION_OPERADOR_v0.1.md`. Depende de rutas nuevas de FE |
 | 3 | Carga masiva, fase E | Depende de que FE publique e implemente |
 | 4 | FS-24, verificacion de documentos en lote | Depende del tag de FE con `RECONCILE_DEFERRED_ENABLED`; antes no puede activarse |
 

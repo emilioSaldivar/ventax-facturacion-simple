@@ -1,0 +1,85 @@
+# SPEC Autogestion del operador v0.1
+
+**Fecha:** 2026-11-06. **Estado:** borrador en refinamiento. Sin PLAN ni TASKS; no se implementa.
+**Origen:** decision del usuario sobre FS-25 (`SPEC_CORRECCIONES_TRAS_FIXES_FE_v0.1`, D-1) y opinion de `facturacion-electronica` (FE) del 2026-11-06. FE no tiene nada de esto implementado ni en su orden de trabajo.
+
+## 1. Objetivo
+
+Que el usuario final resuelva solo, desde FS, los dos problemas mas frecuentes, sin llamar a soporte:
+
+1. Una factura rechazada por datos del cliente, como el RUC o el nombre.
+2. Un correo al comprador que no salio.
+
+Criterio del usuario: no hacen falta las seis acciones internas de "Administracion fiscal". Solo las que se usen facil e intuitivamente desde FS.
+
+## 2. Como esta hoy
+
+| Caso | Hoy en FS | Problema |
+|---|---|---|
+| Rechazo por datos del cliente | "Corregir y emitir de nuevo" abre una factura nueva | Sale con otro numero. El rechazado queda sin usar, y hay que inutilizarlo ante SIFEN dentro de los 15 primeros dias del mes siguiente: FS no lo hace ni lo avisa |
+| Correo fallido | Muestra el estado | No se puede corregir la direccion ni reenviar. FE no informa el motivo |
+| Acciones internas (FS-25) | Seis botones para soporte | Llaman a rutas de FE que exigen un administrador de su backoffice: por lectura de codigo, nunca funcionaron |
+
+## 3. Acciones propuestas
+
+| Accion | Para el operador | Fundamento |
+|---|---|---|
+| A-1. Corregir los datos del cliente de una factura rechazada y reenviarla con el mismo numero | Si | Pedido del usuario. Es lo que indica el MT150 6.5 cuando la correccion no altera el CDC, y el receptor no forma parte del CDC |
+| A-2. Ver que el correo fallo, corregir la direccion y reenviar | Si | Pedido del usuario. Sin riesgo fiscal |
+| A-3. Frenar una factura antes de que salga a SIFEN | No, por ahora | FE: la ventana es de 15 min como mucho y deja un numero reservado sin emitir |
+| Decision, validar impacto CDC, reintentar mismo CDC, crear derivado | No | Tecnicas. La decision de FE alimenta el mensaje, no es un boton |
+| Inutilizar numeracion | No como boton | Pero alguien debe inutilizar los rechazados que se reemplazan: D-3 |
+
+## 4. A-1: corregir un rechazo en el mismo documento
+
+Reglas propuestas, a confirmar con el contrato que publique FE:
+
+- **RN-01.** La correccion conserva `document_uuid` y numero. Con el prerequisito de FE (seccion 6), tambien el CDC.
+- **RN-02.** Campos corregibles: documento y digito verificador del receptor, tipo y naturaleza, razon social, direccion, telefono y correo. No se corrigen fecha, items, montos, condicion ni numeracion.
+- **RN-03.** FE dice si un documento es corregible y que campos admite. FS no interpreta codigos de SIFEN para decidirlo. Reemplaza, para estos casos, al catalogo local `sifen-causa-catalogo.ts`.
+- **RN-04.** Solo con rechazo definitivo. Nunca con el lote abierto, ni sobre un numero ya inutilizado.
+- **RN-05.** Un solo camino por rechazo: donde exista la correccion en el mismo documento, FS no ofrece "Corregir y emitir de nuevo". Evita dos facturas por la misma venta.
+- **RN-06.** Plazos: la fecha de emision no cambia. FS avisa cuando la correccion ya es tardia y la bloquea cuando FE informe que supero el limite de SIFEN. Los umbrales los da FE.
+- **RN-07.** Tope de intentos y clave de idempotencia por correccion. Cada correccion queda auditada con usuario, valores anteriores y nuevos.
+- **RN-08.** La correccion actualiza el snapshot de la factura. Si tambien corrige la agenda de clientes se define en D-2; no puede sobrescribir datos de otro facturador (FS-17).
+- **RN-09.** Corrige quien puede emitir en ese facturador y perfil.
+
+Codigos que FE considera corregibles por datos del receptor: familia `1303` a `1309` (`1306` RUC inexistente, `1307` inactivo, `1309` digito verificador). `0160` a `0162` son de esquema y pueden deberse a SIFEN degradado: no se tratan como error del operador sin mirar el mensaje. Hoy el catalogo de FS los marca como corregibles: revisar.
+
+## 5. A-2: correo fallido
+
+- **RN-10.** FS muestra "no se pudo enviar" con el motivo que informe FE, en lenguaje simple.
+- **RN-11.** El operador puede reenviar a la misma direccion o a otra. El documento no cambia: el XML conserva la direccion original.
+- **RN-12.** Solo documentos aprobados, con tope de reenvios por documento.
+- **RN-13.** "Enviado" significa que el servidor de correo acepto el mensaje, no que llego. FS no promete entrega: un rebote posterior no se ve.
+
+## 6. Lo que necesita de FE
+
+| # | Pedido | Opinion de FE (2026-11-06) |
+|---|---|---|
+| 1 | Motivo del fallo de correo en la consulta del documento | Viable. Hoy guarda los primeros 500 caracteres del error, sin clasificar, y no los expone |
+| 2 | Ruta de consumidor para reenviar el correo, con direccion opcional | Viable y de bajo riesgo. Hoy no existe ninguna, ni en su backoffice |
+| 3 | Conservar el codigo de seguridad al regenerar, para que el CDC no cambie | **Prerequisito de A-1.** Cambio chico, con prueba en SIFEN test. Hoy envia el KuDE antes de la aprobacion: el comprador puede tener un QR que apunta a un CDC que no va a existir |
+| 4 | Ruta de consumidor para corregir y reenviar un rechazado | Viable. Mediano: cadena SDD completa, guia, OpenAPI y prueba en SIFEN test |
+| 5 | Bloque de correccion en `GET /v1/documentos/{uuid}`: si es corregible, que campos, y limites de plazo | FE lo propone; el catalogo de codigos vive en FE |
+
+Orden sugerido por FE: 1 y 2, luego 3, luego 4 y 5.
+
+**Sin comprobar por FE:** si SIFEN produccion acepta el mismo numero con un CDC nuevo tras un rechazo; la tabla de composicion del CDC y la de plazos de transmision, que no se leen en su copia del manual.
+
+## 7. Decisiones abiertas
+
+| ID | Que | Propuesta | Decide |
+|---|---|---|---|
+| D-1 | Prioridad y orden frente a la carga masiva | Orden de FE, empezando por el correo. FS depende de que FE publique las rutas | Usuario |
+| D-2 | ¿Corregir la factura corrige tambien al cliente en la agenda? | Ofrecerlo como opcion al corregir, solo sobre el cliente del propio facturador | Usuario |
+| D-3 | Numeros rechazados que hoy quedan sin inutilizar | Tema aparte: medir cuantos hay y definir quien los inutiliza | Usuario |
+| D-4 | Que pasa con el bloque interno de seis acciones | Retirarlo cuando A-1 y A-2 esten disponibles; hasta entonces no se toca | Usuario |
+| D-5 | Alcance: solo Segel, o tambien Ventax | Nace en la rama Segel. Ventax se decide aparte | Usuario |
+
+## 8. Fuera de alcance
+
+- Corregir items, montos o fecha de una factura rechazada.
+- Notas de credito y recibos.
+- Deteccion de rebotes de correo.
+- Cualquier cambio en `segel-fs`.

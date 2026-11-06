@@ -26,7 +26,6 @@ interface ContextRow {
   documento_nro: string;
   credito_plazo_dias: number;
   tipo_transaccion_default: number;
-  numeracion_facturas: "SERVICIO" | "CLIENTE";
   actividad_punto_perfil_id: string;
 }
 
@@ -72,7 +71,6 @@ export class PgOperationalContextRepository implements OperationalContextReposit
           app.documento_nro,
           app.credito_plazo_dias,
           app.tipo_transaccion_default,
-          app.numeracion_facturas,
           app.id as actividad_punto_perfil_id
         from usuarios u
         join tenants t on t.id = u.tenant_id
@@ -168,7 +166,6 @@ export class PgOperationalContextRepository implements OperationalContextReposit
         documento_nro: row.documento_nro,
         credito_plazo_dias: row.credito_plazo_dias,
         tipo_transaccion_default: row.tipo_transaccion_default as 1 | 2 | 3,
-        numeracion_facturas: row.numeracion_facturas,
         fiscal_envio_modo: "BATCH",
         batch_enabled: true
       },

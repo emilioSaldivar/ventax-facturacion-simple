@@ -1,6 +1,6 @@
 # SPEC Carga masiva de facturas por archivo v0.1
 
-**Fecha:** 2026-11-06. **Estado:** decisiones cerradas por el usuario el 2026-11-06 (seccion 9). Sigue `PLAN_CARGA_MASIVA_FACTURAS_v0.1.md`.
+**Fecha:** 2026-11-06. **Estado:** decisiones cerradas por el usuario el 2026-11-06 (seccion 9). Sigue `PLAN_CARGA_MASIVA_FACTURAS_v0.1.md`. **Sin implementar:** se refina a medida que FE avanza.
 **Origen:** pedido de `facturacion-electronica` (FE), `docs/PEDIDO_FACTURACION_SIMPLE_CARGA_MASIVA_v0.1.md`, con sus secciones 12 y 13. El contrato de FE es una propuesta: nada esta implementado.
 **Procedencia de las decisiones:** numeracion, documentos, roles y rama llegaron por la sesion de FE (seccion 13 del pedido). D-1 a D-7 las respondio el usuario directamente.
 

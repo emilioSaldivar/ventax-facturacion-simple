@@ -1657,31 +1657,6 @@ describe("facturas service", () => {
     expect(repo.lastInput?.externalRef).toMatch(/^fac_[a-f0-9]{32}$/);
   });
 
-  it("RN-22 carga masiva: un contexto con numeracion del cliente no emite facturas una por una", async () => {
-    const repo = new FakeFacturaRepository();
-    const contextoCliente: OperationalContextResponse = {
-      ...context,
-      fiscal_context: { ...context.fiscal_context, numeracion_facturas: "CLIENTE" }
-    };
-
-    await expect(
-      enqueueFacturaEmission(contextoCliente, emitInput, repo, { idempotencyKey: "idem-numeracion-cliente" })
-    ).rejects.toMatchObject({ statusCode: 409, code: "CONFLICT", details: { reason: "NUMERACION_DEL_CLIENTE" } });
-    expect(repo.lastQueuedInput).toBeNull();
-  });
-
-  it("RN-22 carga masiva: con numeracion de FE, explicita o ausente, la emision sigue igual", async () => {
-    const repo = new FakeFacturaRepository();
-    const contextoServicio: OperationalContextResponse = {
-      ...context,
-      fiscal_context: { ...context.fiscal_context, numeracion_facturas: "SERVICIO" }
-    };
-
-    const result = await enqueueFacturaEmission(contextoServicio, emitInput, repo, { idempotencyKey: "idem-numeracion-fe" });
-
-    expect(result.estado).toBe("EMITIENDO");
-  });
-
   it("queues fiscal emission without calling fiscal gateway", async () => {
     const repo = new FakeFacturaRepository();
 
