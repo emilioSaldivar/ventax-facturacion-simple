@@ -29,6 +29,15 @@ const probReintento = Number(args["prob-reintento"] ?? 0.02);
 const probNc = Number(args["prob-nc"] ?? 0);
 // Sin correo de cliente: contra un SMTP real, cada documento generaria un rebote.
 const sinCorreo = Boolean(args["sin-correo"]);
+// Cancelaciones de a una: el FE sin la correccion de FE-01 puede firmar el evento de otra factura.
+const cancelarEnSerie = Boolean(args["cancelar-en-serie"]);
+let colaCancelaciones = Promise.resolve();
+const enSerie = (tarea) => {
+  if (!cancelarEnSerie) return tarea();
+  const resultado = colaCancelaciones.then(tarea, tarea);
+  colaCancelaciones = resultado.catch(() => {});
+  return resultado;
+};
 // La app no consulta en bucle: esto representa al operador mirando la lista. Un sondeo agresivo
 // durante los 28 min de aprobacion mediria al simulador, no a la app.
 const pollMs = Number(args["poll-s"] ?? 60) * 1000;
@@ -212,7 +221,7 @@ class Operador {
         errores.write({ t: Date.now(), ruta: "GET /facturas/:id/files/kude.pdf", status: 200, ref: this.datos.ref, cuerpo: "la respuesta no es un PDF", clave });
       }
       if (this.random() < probCancelar) {
-        const cancelada = await this.llamar("POST", `/facturas/${registro.id}/cancelar`, { cuerpo: { motivo: "Prueba de carga: anulacion simulada" }, clave });
+        const cancelada = await enSerie(() => this.llamar("POST", `/facturas/${registro.id}/cancelar`, { cuerpo: { motivo: "Prueba de carga: anulacion simulada" }, clave }));
         registro.cancelacion_status = cancelada.status;
         registro.cancelacion = cancelada.datos?.cancelacion ?? null;
         registro.cdc_al_cancelar = actual.cdc ?? null;

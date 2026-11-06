@@ -47,6 +47,37 @@ if (fs.existsSync(csv)) {
   console.log(`Contenedores, max MiB: API FS ${Math.max(...num("fs_api_mib"))}, API FE ${Math.max(...num("fe_api_mib"))}, PG FS ${Math.max(...num("fs_pg_mib"))}, PG FE ${Math.max(...num("fe_pg_mib"))}, batch ${Math.max(...num("fe_batch_mib"))}`);
 }
 
+// Cruces con FE (FE-14, FE-15 y FE-01): el documento de FE debe ser el de esta venta, y la
+// cancelacion debe firmar el CDC pedido. Un 200 o un estado local no alcanzan.
+function consultar(contenedor, sql) {
+  const salida = execFileSync("ssh", ["-o", "BatchMode=yes", process.env.SEGEL_HOST ?? "segel-fs", `docker exec -i ${contenedor} sh -c 'psql -q -At -U "$POSTGRES_USER" -d "$POSTGRES_DB"'`], { input: sql }).toString();
+  return JSON.parse(salida.trim() || "[]");
+}
+try {
+  const fsDocs = consultar("segel-fs-postgres-1", "select coalesce(json_agg(x),'[]') from (select external_ref, document_uuid, numero_fiscal, cdc, tipo, estado, cancelacion_status from facturas_operativas where document_uuid is not null) x;");
+  const feDocs = consultar("fe-segel-postgres-1", "select coalesce(json_agg(x),'[]') from (select document_uuid, client_idempotency_key, numero, cdc, status from de_documents) x;");
+  const porUuid = new Map(feDocs.map((d) => [String(d.document_uuid), d]));
+  const usos = {};
+  let ajenos = 0, huerfanos = 0;
+  for (const d of fsDocs) {
+    usos[d.document_uuid] = (usos[d.document_uuid] ?? 0) + 1;
+    const fe = porUuid.get(String(d.document_uuid));
+    if (!fe) huerfanos += 1;
+    else if (fe.client_idempotency_key !== d.external_ref) ajenos += 1;
+  }
+  console.log(`FE-14 cruce: FS ${fsDocs.length}, FE ${feDocs.length}, documento ajeno ${ajenos}, sin documento en FE ${huerfanos}, uuid compartido ${Object.values(usos).filter((n) => n > 1).length}`);
+  console.log("FE estados:", JSON.stringify(feDocs.reduce((a, d) => { a[d.status] = (a[d.status] ?? 0) + 1; return a; }, {})));
+  const trabados = consultar("fe-segel-postgres-1", "select coalesce(json_agg(x),'[]') from (select id, numero, status from de_documents where status='DRAFT' and xml_signed is null) x;");
+  const repetidos = consultar("fe-segel-postgres-1", "select coalesce(json_agg(x),'[]') from (select establecimiento, punto_expedicion, numero, count(*) n from de_documents group by 1,2,3 having count(*)>1) x;");
+  console.log(`FE-15 trabados: ${trabados.length}. Numeros repetidos en FE: ${repetidos.length}`);
+  const eventos = consultar("fe-segel-postgres-1", "select coalesce(json_agg(x),'[]') from (select id, type, status, cdc, position(cdc in coalesce(payload_xml,'')) > 0 cdc_en_xml from de_events where cdc is not null) x;");
+  const fsCanceladas = fsDocs.filter((d) => d.cancelacion_status);
+  const cdcEventos = new Set(eventos.map((e) => e.cdc));
+  console.log(`FE-01: eventos ${eventos.length}, firma con otro CDC ${eventos.filter((e) => !e.cdc_en_xml).length}, cancelaciones en FS ${fsCanceladas.length}, sin evento con su CDC ${fsCanceladas.filter((d) => !cdcEventos.has(d.cdc)).length}`);
+} catch (e) {
+  console.log("sin cruce con FE:", e.message.slice(0, 200));
+}
+
 const prefijo = `cg-${corrida}-%`;
 const sql = `
 select 'fs_estado', estado, tipo, count(*) from facturas_operativas where idempotency_key like '${prefijo}' or idempotency_key like 'nc-${corrida}-%' group by 2,3 order by 2,3;

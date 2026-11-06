@@ -64,7 +64,7 @@ const psql = (sql) => remoto("docker exec -i segel-fs-postgres-1 sh -c 'psql -v 
     const item = await http("POST", "/catalogo/items", { token: t, cuerpo: cuerpoItem });
     operadores[ref] = {
       ref, username, password, facturador_id: fac.id, emisor_id: fac.emisor_id, perfil_volumen: "normal", completo: true, clientes,
-      items: [{ id: item.datos?.id ?? item.datos?.item_id, codigo: cuerpoItem.codigo, descripcion: cuerpoItem.descripcion }]
+      items: [{ id: item.datos?.id ?? item.datos?.item_id, ...cuerpoItem }]
     };
     escribirPrivado(OPERADORES_FILE, JSON.stringify(operadores));
     console.log(`${username} listo`);
