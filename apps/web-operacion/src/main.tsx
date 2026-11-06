@@ -5508,6 +5508,9 @@ function mensajeCancelacion(doc: DocumentoResponse): string {
   }
   if (c.status === "REJECTED") {
     const motivo = c.rejection_message ? `: ${c.rejection_message}.` : ".";
+    if (c.rejection_code === "0100") {
+      return "SIFEN no pudo procesar la anulacion en este momento y la factura sigue vigente. Espera un minuto y reintenta.";
+    }
     return c.retryable
       ? `SIFEN rechazo la anulacion${motivo} Podes reintentar: suele resolverse en el segundo intento.`
       : `SIFEN rechazo la anulacion de forma definitiva${motivo} Si corresponde, emiti una nota de credito.`;

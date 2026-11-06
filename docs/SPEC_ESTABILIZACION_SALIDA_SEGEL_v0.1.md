@@ -17,6 +17,9 @@ Dejar FS estable para desplegar en produccion, corrigiendo lo que puede danar da
 | FS-07 | Una factura aprobada seguia "Procesando" hasta 15 min mas, con el documento en cola de FE | Con el documento en cola, se vuelve a consultar cada 5 min |
 | E-03 | 6 pruebas fallaban: quedaron viejas tras cambios deliberados, entre ellos RN-F1-1.3 y RN-F1-1.6 | Actualizadas; no eran regresiones |
 | E-04 | Faltaba la ciudad en los T&C | Asuncion |
+| FS-20 | Tras un refresh, FS guardaba `0420` y perdia la causa real del rechazo | Lee el motivo original en `/documentos/{uuid}/sifen`. Solo funciona con el fix H09 de FE: antes, ese motivo se pierde. Sin desplegar |
+| FS-21 | `0422` se tomaba como aprobado aunque el documento estuviera cancelado | El estado manda sobre el codigo. Sin desplegar |
+| FS-23 | Ante `0100`, el operador podia reintentar enseguida; un caso de FE se acepto a los 59 s | Mensaje: esperar un minuto. Registra segundos desde la creacion del documento para que FE confirme o descarte la hipotesis. Sin desplegar |
 
 ## Pendiente, sin corregir
 

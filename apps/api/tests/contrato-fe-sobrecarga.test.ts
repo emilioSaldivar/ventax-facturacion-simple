@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createFiscalGateway } from "../src/modules/fiscal-gateway/fiscal-gateway.client";
+import { createFiscalGateway, extraerMotivoRechazo } from "../src/modules/fiscal-gateway/fiscal-gateway.client";
 import { FiscalGatewayError, type FiscalGateway } from "../src/modules/fiscal-gateway/fiscal-gateway.types";
 import { processNextQueuedFiscalEmission, refreshFiscalStatusForDocumento } from "../src/modules/facturas/facturas.service";
 import { getEmailStatus } from "../src/modules/entrega/entrega.service";
@@ -153,6 +153,67 @@ describe("FS-11: documento anulado", () => {
     await refreshFiscalStatusForDocumento("f", "d", repo, gateway);
     expect(refresh).not.toHaveBeenCalled();
     expect(actualizaciones[0]).toMatchObject({ estado: "ANULADA" });
+  });
+});
+
+describe("FS-20 y FS-21: motivo de rechazo y 0422", () => {
+  afterEach(() => vi.unstubAllGlobals());
+  it("lee las formas reales de FE: lote y sincronico", () => {
+    expect(extraerMotivoRechazo({ "ns2:dEstRes": "Rechazado", "ns2:gResProc": { "ns2:dCodRes": "1306", "ns2:dMsgRes": "TEST" } })).toEqual({ code: "1306", message: "TEST" });
+    expect(extraerMotivoRechazo({ "ns2:rRetEnviDe": { "ns2:rProtDe": { "ns2:gResProc": { "ns2:dCodRes": "1306", "ns2:dMsgRes": "TEST" } } } })).toEqual({ code: "1306", message: "TEST" });
+  });
+
+  it("una consulta no trae motivo", () => {
+    expect(extraerMotivoRechazo({ "ns2:rEnviConsDeResponse": { "ns2:dCodRes": "0420", "ns2:dMsgRes": "No existe" } })).toBeNull();
+    expect(extraerMotivoRechazo(null)).toBeNull();
+  });
+
+  function repositorio(sifen_result_code: string | null = "1306") {
+    const guardados: Array<Record<string, unknown>> = [];
+    return {
+      guardados,
+      repo: {
+        findById: async () => ({ id: "d", estado: "PENDIENTE_SIFEN", document_uuid: "u", cdc: "c", fiscal_status: null, sifen_result_code }),
+        updateFiscalStatus: async (input: Record<string, unknown>) => {
+          guardados.push(input);
+          return { id: "d", estado: input.estado };
+        }
+      } as never
+    };
+  }
+  const gatewayRechazo = (getMotivoRechazo: () => Promise<unknown>) =>
+    ({
+      refreshFacturaStatus: async () => ({ result_code: "0420", result_message: "No existe", raw: {} }),
+      getDocumentoCanonico: async () => ({ status: "REJECTED", estado: "RECHAZADA", current_cdc: "c", raw: {} }),
+      getMotivoRechazo
+    }) as unknown as FiscalGateway;
+
+  it("guarda el motivo real y no el 0420", async () => {
+    const { repo, guardados } = repositorio();
+    await refreshFiscalStatusForDocumento("f", "d", repo, gatewayRechazo(async () => ({ code: "1306", message: "TEST" })));
+    expect(guardados[0]).toMatchObject({ estado: "RECHAZADA", sifenResultCode: "1306", sifenResultMessage: "TEST" });
+  });
+
+  it("sin motivo, no pisa lo guardado con 0420", async () => {
+    const { repo, guardados } = repositorio();
+    await refreshFiscalStatusForDocumento("f", "d", repo, gatewayRechazo(async () => { throw new Error("caido"); }));
+    expect(guardados[0]).toMatchObject({ estado: "RECHAZADA", sifenResultCode: null, sifenResultMessage: null });
+  });
+
+  it("sin motivo ni nada guardado, informa 0420", async () => {
+    const { repo, guardados } = repositorio(null);
+    await refreshFiscalStatusForDocumento("f", "d", repo, gatewayRechazo(async () => null));
+    expect(guardados[0]).toMatchObject({ estado: "RECHAZADA", sifenResultCode: "0420" });
+  });
+
+  it("0422 con status CANCELLED no se da por aprobado", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => respuesta(200, { document_id: "1", document_uuid: "u", cdc: "c", status: "CANCELLED", result_code: "0422" })));
+    expect((await gatewayReal().emitFactura(solicitud)).estado).toBe("PENDIENTE_SIFEN");
+  });
+
+  it("0422 sin status sigue aprobado, como antes", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => respuesta(200, { document_id: "1", document_uuid: "u", cdc: "c", result_code: "0422" })));
+    expect((await gatewayReal().emitFactura(solicitud)).estado).toBe("EMITIDA");
   });
 });
 

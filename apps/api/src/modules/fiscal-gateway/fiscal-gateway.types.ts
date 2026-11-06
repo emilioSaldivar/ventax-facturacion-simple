@@ -103,6 +103,11 @@ export interface FiscalDocumentoCanonicoResponse {
   raw: Record<string, unknown>;
 }
 
+export interface FiscalMotivoRechazo {
+  code: string;
+  message: string | null;
+}
+
 export interface FiscalRefreshStatusResponse {
   /**
    * Valor neutro: siempre PENDIENTE_SIFEN. La consulta a SIFEN no decide el estado
@@ -400,6 +405,8 @@ export interface FiscalGateway {
   emitFactura(request: FiscalEmitFacturaRequest): Promise<FiscalEmitFacturaResponse>;
   emitNotaCredito(request: FiscalEmitNotaCreditoRequest): Promise<FiscalEmitNotaCreditoResponse>;
   refreshFacturaStatus(request: FiscalRefreshStatusRequest): Promise<FiscalRefreshStatusResponse>;
+  /** Motivo original de un rechazo, sin consultar a SIFEN. null si FE no lo conserva. */
+  getMotivoRechazo(documentUuid: string): Promise<FiscalMotivoRechazo | null>;
   /** GET /documentos/{uuid}: estado canonico del documento en FE (clave compartida). */
   getDocumentoCanonico(documentUuid: string): Promise<FiscalDocumentoCanonicoResponse>;
   cancelFactura(request: FiscalCancelFacturaRequest): Promise<FiscalCancelFacturaResponse>;

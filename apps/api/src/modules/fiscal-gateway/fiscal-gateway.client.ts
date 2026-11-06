@@ -25,6 +25,7 @@ import {
   type FiscalDocumentoVoidResponse,
   type FiscalGateway,
   type FiscalGatewayConfig,
+  type FiscalMotivoRechazo,
   type FiscalGatewayHealth,
   type FiscalFacturalistaResponse,
   type FiscalDocumentoCanonicoResponse,
@@ -137,6 +138,10 @@ export class MockFiscalGateway implements FiscalGateway {
         status: "APPROVED"
       }
     };
+  }
+
+  async getMotivoRechazo(): Promise<FiscalMotivoRechazo | null> {
+    return null;
   }
 
   async getDocumentoCanonico(documentUuid: string): Promise<FiscalDocumentoCanonicoResponse> {
@@ -677,6 +682,21 @@ export class RealFiscalGateway implements FiscalGateway {
     }
 
     return mapFiscalRefreshStatusCanonicoResponse(body);
+  }
+
+  async getMotivoRechazo(documentUuid: string): Promise<FiscalMotivoRechazo | null> {
+    const url = new URL(`${this.config.baseUrl}/documentos/${encodeURIComponent(documentUuid)}/sifen`);
+    url.searchParams.set("env", this.config.environment);
+    const response = await this.fetchWithTimeout(url.toString(), { method: "GET", headers: this.buildHeaders() });
+    const body = await readJson(response);
+    if (!response.ok) {
+      throw new FiscalGatewayError(
+        response.status === 408 || response.status === 504 ? "TIMEOUT" : "UPSTREAM_ERROR",
+        "Backend fiscal rechazo la consulta del motivo.",
+        { status: response.status, body }
+      );
+    }
+    return extraerMotivoRechazo((body as { status?: unknown } | null)?.status);
   }
 
   async getDocumentoCanonico(documentUuid: string): Promise<FiscalDocumentoCanonicoResponse> {
@@ -1487,11 +1507,15 @@ function mapFiscalNotaCreditoResponse(body: unknown): FiscalEmitNotaCreditoRespo
 }
 
 function mapDocumentStatusWithCode(status: string | null, fiscalCode: string | null): FiscalEmitFacturaResponse["estado"] {
-  if (isApprovedFiscalStatus(status) || isApprovedFiscalCode(fiscalCode)) {
-    return "EMITIDA";
-  }
   if (status === "REJECTED" || status === "RECHAZADO") {
     return "RECHAZADA";
+  }
+  // FS-21: SIFEN responde 0422 tambien para un documento cancelado: el codigo solo no dice "vigente".
+  if (status === "CANCELLED" || status === "VOIDED") {
+    return "PENDIENTE_SIFEN";
+  }
+  if (isApprovedFiscalStatus(status) || isApprovedFiscalCode(fiscalCode)) {
+    return "EMITIDA";
   }
   return "PENDIENTE_SIFEN";
 }
@@ -1706,6 +1730,22 @@ const ESTADO_POR_STATUS_CANONICO: Record<string, FiscalEstadoCanonico> = {
  */
 export function mapDocumentStatusCanonico(status: string | null): FiscalEstadoCanonico | null {
   return status ? ESTADO_POR_STATUS_CANONICO[status] ?? null : null;
+}
+
+/**
+ * FS-20. FE guarda la respuesta cruda de SIFEN y su forma depende del envio: lote o sincronico.
+ * La de una consulta (`ns2:rEnviConsDeResponse`) no trae el motivo: solo dice 0420.
+ */
+export function extraerMotivoRechazo(status: unknown): FiscalMotivoRechazo | null {
+  const nodo = status as Record<string, Record<string, Record<string, unknown>>> | null | undefined;
+  if (!nodo || typeof nodo !== "object") return null;
+  const candidatos = [nodo["ns2:gResProc"], nodo["ns2:rRetEnviDe"]?.["ns2:rProtDe"]?.["ns2:gResProc"]] as unknown[];
+  for (const candidato of candidatos) {
+    const resultado = (Array.isArray(candidato) ? candidato[0] : candidato) as Record<string, unknown> | undefined;
+    const code = stringOrNull(resultado?.["ns2:dCodRes"]);
+    if (code) return { code, message: stringOrNull(resultado?.["ns2:dMsgRes"]) };
+  }
+  return null;
 }
 
 function isApprovedFiscalStatus(status: string | null): boolean {

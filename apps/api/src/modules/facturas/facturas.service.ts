@@ -299,15 +299,29 @@ export async function refreshFiscalStatusForDocumento(
     const cdcVigente = canonico.current_cdc ?? refreshed?.current_cdc ?? null;
     const cdcActualizado = cdcVigente && cdcVigente !== documento.cdc ? cdcVigente : undefined;
 
+    const estadoFinal = anulado ? "ANULADA" : canonico.estado ?? documento.estado;
+
+    // FS-20: el refresh de un rechazado solo responde 0420. El motivo real esta guardado en FE.
+    let motivo: Awaited<ReturnType<FiscalGateway["getMotivoRechazo"]>> = null;
+    if (estadoFinal === "RECHAZADA") {
+      try {
+        motivo = await gateway.getMotivoRechazo(documentUuid);
+      } catch (error) {
+        logger.warn({ documentoId, err: error }, "refresh fiscal: no se pudo leer el motivo del rechazo.");
+      }
+    }
+    // Sin motivo disponible, 0420 sirve solo si no hay nada mejor guardado: nunca pisa una causa real.
+    const codigoConsulta = estadoFinal === "RECHAZADA" && refreshed?.result_code === "0420" && documento.sifen_result_code ? null : refreshed;
+
     const updated = await repository.updateFiscalStatus({
       facturadorId,
       documentoId,
-      estado: anulado ? "ANULADA" : canonico.estado ?? documento.estado,
+      estado: estadoFinal,
       fiscalStatus: mergeFiscalStatus(documento.fiscal_status, { ...(refreshed?.raw ?? {}), canonical: canonico.raw }),
       cdc: cdcActualizado,
       fiscalStatusRaw: canonico.status,
-      sifenResultCode: refreshed?.result_code ?? null,
-      sifenResultMessage: refreshed?.result_message ?? null
+      sifenResultCode: motivo?.code ?? codigoConsulta?.result_code ?? null,
+      sifenResultMessage: motivo?.code ? motivo.message : codigoConsulta?.result_message ?? null
     });
 
     if (!updated) {
@@ -546,6 +560,14 @@ export async function cancelDocumento(
     // RN-01/RN-04: unicamente ACCEPTED anula. REJECTED deja la factura vigente, FAILED la deja
     // indeterminada, y UNKNOWN es un estado que el contrato todavia no define.
     const anula = cancelled.status === "ACCEPTED";
+
+    // Dato pedido por FE para entender el 0100: cuanto paso desde el documento hasta la cancelacion.
+    if (cancelled.status === "REJECTED") {
+      logger.warn(
+        { documentoId, rejection_code: cancelled.rejection?.code ?? null, segundos_desde_creacion: documento.created_at ? Math.round((Date.now() - new Date(documento.created_at).getTime()) / 1000) : null },
+        "cancelacion rechazada por SIFEN"
+      );
+    }
 
     const updated = await repository.cancelDocumento({
       facturadorId: context.facturador.id,
