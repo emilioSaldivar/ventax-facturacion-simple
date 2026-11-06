@@ -41,13 +41,13 @@ Levantar en la VPS `segel-fs` una instancia independiente de facturacion simple 
 
 ## Subdominios
 
-Se replica el esquema de Hetzner. Confirmados por el usuario el 2026-11-05.
+Definidos por el usuario el 2026-11-05. App y backoffice de FS comparten puerto porque un solo frontend sirve `/app/` y `/backoffice/`. Son subdominios de segundo nivel: un certificado `*.segel.com.py` no los cubre.
 
 | Host | Destino | Uso |
 |---|---|---|
-| `factura.segel.com.py` | `10.100.0.145:8092` | App del operador (`/app/`) y enlaces publicos |
-| `backoffice.segel.com.py` | `10.100.0.145:8092` | Backoffice de FS (`/backoffice/`) |
-| `feprod-backoffice.segel.com.py` | `10.100.0.145:8100` | Admin de FE |
+| `app.factura.segel.com.py` | `10.100.0.145:8092` | App del operador (`/app/`) y enlaces publicos |
+| `backoffice.factura.segel.com.py` | `10.100.0.145:8092` | Backoffice de FS (`/backoffice/`) |
+| `fe-back.factura.segel.com.py` | `10.100.0.145:8100` | Admin de FE |
 
 `facturacion.segel.com.py` ya existe y apunta a `68.183.118.119`: no se reutiliza. No se publica un host `fe-api`, porque el pedido es exponer solo los frontends; el frontend de FE reenvia `/v1/` a su API.
 

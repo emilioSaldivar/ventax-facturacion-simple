@@ -26,7 +26,7 @@ const envSchema = z.object({
   FE_VERIFY_WORKER_INTERVAL_MS: z.coerce.number().int().positive().default(30000),
   FE_VERIFY_BATCH_SIZE: z.coerce.number().int().positive().default(10),
   VENTAX_NOTIFY_EMAIL: z.string().email().optional(),
-  PUBLIC_APP_BASE_URL: z.string().url().default("https://factura.segel.com.py"),
+  PUBLIC_APP_BASE_URL: z.string().url().default("https://app.factura.segel.com.py"),
   APP_VERSION: z.string().default("dev"),
   RESEND_API_KEY: z.string().optional(),
   EMAIL_FROM: z.string().email().default("no-reply-facturacion@segel.com.py"),

@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 // Antes de cargar env.ts: el resultado no debe depender del .env de la estacion.
 vi.hoisted(() => {
   process.env.EMAIL_FROM = "no-reply-facturacion@segel.com.py";
-  process.env.PUBLIC_APP_BASE_URL = "https://factura.segel.com.py";
+  process.env.PUBLIC_APP_BASE_URL = "https://app.factura.segel.com.py";
 });
 
 import { adminEmailRequiredTemplate, otpTemplate } from "../src/shared/email/email.templates";

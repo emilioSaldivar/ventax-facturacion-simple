@@ -231,8 +231,8 @@ describe("entrega service", () => {
     const result = await createOrGetDeliveryLink(context, "66666666-6666-4666-8666-666666666666", {}, { facturas, deliveryLinks });
 
     expect(result).toEqual({
-      public_url: `https://factura.segel.com.py/public/d/${"A".repeat(43)}`,
-      whatsapp_url: `https://wa.me/?text=${encodeURIComponent(`https://factura.segel.com.py/public/d/${"A".repeat(43)}`)}`,
+      public_url: `https://app.factura.segel.com.py/public/d/${"A".repeat(43)}`,
+      whatsapp_url: `https://wa.me/?text=${encodeURIComponent(`https://app.factura.segel.com.py/public/d/${"A".repeat(43)}`)}`,
       token_status: "ACTIVE"
     });
     expect(deliveryLinks.lastCreateInput).toBeNull();
@@ -274,11 +274,11 @@ describe("entrega service", () => {
       artifacts: {
         kude_pdf: {
           available: true,
-          url: `https://factura.segel.com.py/public/d/${"A".repeat(43)}/kude.pdf`
+          url: `https://app.factura.segel.com.py/public/d/${"A".repeat(43)}/kude.pdf`
         },
         xml: {
           available: true,
-          url: `https://factura.segel.com.py/public/d/${"A".repeat(43)}/xml`
+          url: `https://app.factura.segel.com.py/public/d/${"A".repeat(43)}/xml`
         }
       }
     });
@@ -341,11 +341,11 @@ describe("entrega service", () => {
     expect(publicDocument.estado).toBe("RECHAZADA");
     expect(publicDocument.artifacts.kude_pdf).toEqual({
       available: true,
-      url: `https://factura.segel.com.py/public/d/${"A".repeat(43)}/kude.pdf`
+      url: `https://app.factura.segel.com.py/public/d/${"A".repeat(43)}/kude.pdf`
     });
     expect(publicDocument.artifacts.xml).toEqual({
       available: true,
-      url: `https://factura.segel.com.py/public/d/${"A".repeat(43)}/xml`
+      url: `https://app.factura.segel.com.py/public/d/${"A".repeat(43)}/xml`
     });
     expect(gateway.lastPdfUuid).toBe("aaaaaaaa-aaaa-4aaa-baaa-aaaaaaaaaaaa");
     expect(artifact.content_type).toBe("application/pdf");
