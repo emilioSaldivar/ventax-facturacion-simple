@@ -65,6 +65,7 @@ Se replica el esquema de Hetzner. Confirmados por el usuario el 2026-11-05.
 - **B-1. T&C.** Los T&C activos nombran a Ventax y a una persona fisica como proveedor, con su RUC, domicilio y WhatsApp. Hacen falta los datos legales de Segel y la revision del texto. No se inventan.
 - **P-2. Correo.** Cuenta `no-reply-facturacion@segel.com.py` en `smtp.office365.com:587`, remitente "Facturacion Electronica Segel". El usuario carga la contrasena en la VPS. Falta comprobar un envio real, y definir una direccion de contacto que reciba correo: `facturacion@segel.com.py`, usada en el aviso de cuenta sin correo, no esta confirmada.
 - **P-3. Recursos.** Decision del usuario (2026-11-05): no se modifican disco ni recursos de la VPS. Se trabaja con lo que hay: `/var` (9,3 G) para Docker y `/home/esaldivar/segel` (`/home`, 3,7 G) para archivos. Infraestructura solo se ocupa de NGINX. Sin VPN no hay acceso a la VPS.
+- **P-5. Emisor sembrado.** La migracion `003_seed_awapura.sql` de FE crea al emisor real AWAPURA (80136968-1) en toda base nueva, aqui incluida. No se usa FE modificado (RN-04). Falta decidir si se desactiva en esta instancia.
 - **P-4. Portainer.** Quien administre `portainer_agent` puede leer los secretos de los contenedores. Conviene saber quien tiene acceso y limitar el puerto 9002.
 
 ## Acceso sin NGINX

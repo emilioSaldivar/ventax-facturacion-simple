@@ -8,7 +8,7 @@
 ## Estado General
 
 - `SPEC` y `PLAN`: DONE, con B-1, P-2, P-3 y P-4 abiertos.
-- Imagenes construidas y ensayadas en local. Sin desplegar: la VPS no se modifico.
+- Desplegado en `segel-fs`, FS `78b8781` y FE `c337d9e`, con SIFEN test. Acceso por tunel; falta NGINX de infraestructura. Sin emision real todavia.
 
 ## Matriz
 
@@ -22,12 +22,12 @@
 | SFS-006 | Build | Commit autorizado y build desde ese commit | DONE (2026-11-05), FS `78b8781`, FE `c337d9e`, E-3 | `X-App-Version` igual al commit |
 | SFS-007 | Ensayo | Levantar los dos stacks en local | DONE (2026-11-05), E-3 | Salud, alias de red y login de FE por su frontend |
 | SFS-008 | Host | Grupo `docker` y salida a M365, sin cambios de disco (P-3) | DONE (2026-11-05) | `id` con `docker`; 587 abierto |
-| SFS-009 | Deploy | Desplegar en `segel-fs` | PENDIENTE | CA-02 y CA-03 |
+| SFS-009 | Deploy | Desplegar en `segel-fs` | DONE (2026-11-05), E-4 | CA-02 y CA-03 |
 | SFS-010 | Entrega | Enviar configuracion a infraestructura | PARTIAL: documento listo y subdominios confirmados, falta compartirlo | CA-06 |
 | SFS-011 | Marca | T&C de Segel | BLOQUEADA (B-1) | Migracion nueva, sin "Ventax" en el T&C activo |
 | SFS-012 | Correo | Configurar la casilla Segel en FS y FE | PARTIAL: plantillas listas; falta la contrasena en la VPS y un envio real (P-2) | Correo recibido, con SPF y DKIM validos |
-| SFS-013 | Puesta en marcha | Primer admin en cada stack, facturador de prueba y carga inicial del padron DNIT | PENDIENTE | Login en ambos backoffices y busqueda de RUC |
-| SFS-014 | Validacion | Emision real contra SIFEN test y recorrido con Playwright (mobile y desktop) | PENDIENTE | CA-04 y documento aprobado |
+| SFS-013 | Puesta en marcha | Primer admin en cada stack, facturador de prueba y carga inicial del padron DNIT | PARTIAL: admins, facturador y operador listos (E-4); falta el padron DNIT | Login en ambos backoffices y busqueda de RUC |
+| SFS-014 | Validacion | Emision real contra SIFEN test y recorrido con Playwright (mobile y desktop) | PARTIAL: recorrido hasta la app (E-4); falta certificado, CSC y emision | CA-04 y documento aprobado |
 | SFS-015 | Operacion | Backups con restauracion probada y prueba de reinicio | PENDIENTE | CA-05 y CA-07 |
 | SFS-016 | Carga | Redactar SPEC de carga en la VPS | PENDIENTE | SPEC con SIFEN simulado y objetivo de memoria |
 
@@ -66,3 +66,18 @@ Paquete de `deploy.sh bundle`, `init-env.sh` y `up.sh`, con `SEGEL_BIND_IP=127.0
 - Playwright, 390x844 y 1366x800, sobre `/app/`, `/backoffice/` y admin de FE: sin errores de pagina, sin "Ventax" en el texto; capturas revisadas a ojo. Solo pantallas de login, y previas al arreglo del aviso, que no aparece en ellas.
 - **Falla encontrada y corregida:** el bundle de la app contenia `facturacion@ventax.app` en el aviso de cuenta sin correo (`main.tsx`), oculto en una busqueda anterior por lineas truncadas. Commit `78b8781`. El bundle reconstruido solo conserva claves tecnicas.
 - **Sigue abierto:** el T&C activo (v1.5) menciona a Ventax 120 veces (B-1). El admin de FE no tiene marca Segel: es neutro y de uso interno.
+
+### E-4. Despliegue y recorrido (2026-11-05)
+
+Stacks `fe-segel` y `segel-fs` en `/home/esaldivar/segel`, sin cambios de disco ni recursos. Pruebas por tunel SSH a `localhost`.
+
+- Publicados: `10.100.0.145:8092` y `:8100`. Desde la red, `5434`, `8091` y `9989` no son accesibles (CA-02).
+- FS -> FE por `facturacion-electronica`: `status ok` (CA-03), tambien tras reiniciar API y frontend de FS y API de FE.
+- `node` escribe en `cert-uploads` con el deploy en uid 1001 (PLAN §4).
+- FE: admin, emisor 5057016-1 replicado por API desde `fe-test` (sin certificado ni CSC, numeradores +1000), consumidor `segel-fs` y export.
+- FS: planes, tenants `segel-interno` y `empresa-demo`, import desde el export con `puede_aplicar: true`; advertencias `BASE_URL_DISTINTA`, `CONSUMIDOR_ESTADO_DESCONOCIDO` y `API_KEY_AUSENTE`, esperables segun el runbook.
+- Playwright, 390x844: operador con clave temporal -> cambio de clave -> T&C -> OTP (hash fijado en `tyc_otp_sessions`) -> app; la sesion sigue tras recargar. 1366x800: login del operador con la clave final. Ambos tamanos: login de `admin-backoffice` en backoffice y admin de FE. Sin errores de pagina; capturas revisadas a ojo.
+- La clave `API_KEY` de FE no aparece en los logs. Sin errores de nivel error en las API.
+- Reposo: unos 180 MiB de los stacks; 2,4 GiB disponibles. `/var` 44 %, 5,3 G libres, sin el padron.
+- **Hallazgo:** `003_seed_awapura.sql` de FE carga en toda base nueva al emisor real AWAPURA (80136968-1), con referencia a un certificado de una persona. El archivo no esta en la VPS. Pendiente decision del usuario (P-5).
+- **Sin validar:** envio real de correo, KuDE, emision, reinicio de la VPS y backups.
