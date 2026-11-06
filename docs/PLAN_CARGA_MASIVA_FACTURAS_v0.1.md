@@ -11,6 +11,8 @@ El contrato de FE todavia no esta publicado. Por eso el trabajo se parte en dos:
 - **Fases A a D, contra un mock:** no dependen de FE. El mock devuelve las formas de las secciones 7, 12 y 14 del pedido.
 - **Fase E, contra FE real:** empieza cuando FE publique su OpenAPI en `facturacion-electronica-consumer-docs` y avise que la subida y la validacion corren en su stack local. Hasta entonces no se escribe el cliente real (`AGENTS.md`: solo se consume lo publicado).
 
+**Estado del contrato de FE al 2026-11-06:** subida, plantilla, listado, detalle y comprobantes estan en su `openapi.yaml` de consumidores, en el worktree `fe-capacidad-200`, sin commit y sin correr en un stack. Faltan confirmar, cancelar, reintentar, lotes y resultado. El mock de FS usa desde ya los nombres publicados (seccion 20 del pedido).
+
 ## 2. Orden de trabajo (D-7)
 
 | Orden | Trabajo | Por que en ese lugar |
@@ -60,6 +62,7 @@ Modulo nuevo `apps/api/src/modules/cargas/` (rutas, servicio, repositorio, tipos
 
 - **Transporte: el archivo es el cuerpo del pedido,** con `Content-Type: text/csv` o `application/zip`, y el nombre en el parametro `nombre_archivo`. Propuesto por FE, aceptado por FS (seccion 19 del pedido) y **confirmado por el usuario el 2026-11-06.**
 - Sin dependencia nueva: `express.raw` solo en esta ruta, con limite `CARGA_MAX_BYTES`, 20 MB por defecto. El navegador envia el `File` tal cual. El archivo no se escribe en disco ni se guarda.
+- FS envia a FE `Content-Type: text/csv` o `application/zip`. FE responde `415` a cualquier otro; nunca `application/json`.
 - Se aceptan `.csv` y `.zip`. FS no abre el `.zip`: lo reenvia igual (FE admite un solo archivo adentro, hasta 20 MB descomprimido).
 - Como mucho 2 subidas a la vez por proceso; la tercera responde `429`. Tope de memoria: 40 MB mas la copia del reenvio.
 - FS manda a FE los bytes recibidos, sin tocarlos, y en la URL `emisor_id`, `formato=CSV`, `version=1`, `numeracion` del contexto, perfil (salvo `NO_REQUERIDO`), actividad, establecimiento y punto. FE exige que perfil y punto coincidan, y rechaza el archivo entero si una fila trae otro punto.
@@ -85,9 +88,9 @@ Worker nuevo `cargas-sync.worker.ts`, arrancado en `server.ts` junto a los otros
 
 1. Toma cargas con `sync_next_at <= now()`, con `for update skip locked`.
 2. Pide `GET /v1/cargas/{id}` y actualiza estado, totales y acciones.
-3. Solo si los totales cambiaron respecto de la copia local, pide los comprobantes con `actualizado_desde = sincronizada_hasta` y con detalle, pagina por pagina.
+3. Solo si los totales cambiaron respecto de la copia local, pide los comprobantes con `actualizado_desde = sincronizada_hasta`, `detalle=true` y `limit=200` (el maximo de FE), pagina por pagina.
 4. Por cada comprobante con `document_uuid`: inserta o actualiza en `facturas_operativas` por `(facturador_id, external_ref)`, con `external_ref = carga:<fe_carga_id>:<orden>`.
-5. Avanza `sincronizada_hasta` solo si todas las paginas se procesaron.
+5. Avanza `sincronizada_hasta` solo si todas las paginas se procesaron, y la deja en el `actualizado_en` mas nuevo recibido, no en la hora de FS: asi no depende de los relojes.
 
 | Estado del comprobante en FE | Estado en FS |
 |---|---|
@@ -100,6 +103,7 @@ Worker nuevo `cargas-sync.worker.ts`, arrancado en `server.ts` junto a los otros
 
 - **Estado vigente:** el `estado` del comprobante no cambia tras la emision. Si el comprobante trae `documento_estado`, ese decide, con `mapDocumentStatusCanonico`: una factura cancelada llega como `CANCELLED` y queda `ANULADA`.
 - **Estados finales:** una factura `ANULADA` no cambia. Una `EMITIDA` o `RECHAZADA` solo cambia si FE informa otro estado final. Asi una cancelacion hecha desde FS no se revierte.
+- **Snapshot:** `detalle` trae `fecha`, `tipoTransaccion`, `receptor`, `condicionOperacion`, `items` y `total`, con los nombres de `POST /v1/factura`. Se traduce con la inversa de lo que FS ya arma para emitir.
 - **Campos:** `usuario_id` es quien confirmo; `actividad_punto_perfil_id` el de la carga; `numero_fiscal` el `numero_asignado`; `carga_numero_archivo` el `numero_archivo`; `verificacion_next_at` nulo (RN-17); `email_estado` segun `correo`; snapshots e items desde el detalle.
 - **Frecuencia:** 1 min mientras la carga este `VALIDANDO` o `EN_PREPARACION`; 5 min en `EN_COLA` y `EN_SIFEN`. Una carga `VALIDADA` sin confirmar no se sincroniza: no cambia sola. En `EN_SIFEN` los resultados no llegan antes de unos 10 min del envio de cada lote. Al llegar a `FINALIZADA`, `RECHAZADA` o `CANCELADA` hace una pasada mas y deja `sync_next_at` nulo: desde ahi, un cambio hecho fuera de FS se ve con "Verificar estado fiscal". Pasadas 72 h sin terminar, sigue cada 30 min y registra un aviso: puede ser SIFEN lento o un comprobante en `ERROR` que espera reintento o cancelacion.
 - **Fallo de FE:** no cambia nada y reintenta en el intervalo siguiente (RN-19).
