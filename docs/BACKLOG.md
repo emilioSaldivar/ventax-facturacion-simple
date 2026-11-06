@@ -25,6 +25,8 @@ Registro de iniciativas pendientes, con su estado. Cada iniciativa se refina a S
 
 Se mantienen vivos en el documento compartido con FE (https://claude.ai/artifact/R2D8zaz46VZCrc4FsiEP81) y con evidencia en `docs/TASKS_VERIFICACION_CAPACIDAD_200_v0.1.md`. Cada arreglo sigue su propia cadena SDD, en esta rama. Despues se decide que pasa a `master`.
 
+FS-20 a FS-25 tienen su cadena en `SPEC|PLAN|TASKS_CORRECCIONES_TRAS_FIXES_FE_v0.1.md`. FS-22 se cierra sin cambio.
+
 | ID | Prioridad | Hallazgo | Estado |
 |---|---|---|---|
 | FS-01 | Critica | `/clientes/search` expone telefono, correo y direccion de clientes de otros facturadores, buscando por fragmento de nombre | Corregido en `SPEC_BUSQUEDA_CLIENTES_ENTRE_FACTURADORES_v0.1`, sin desplegar |
