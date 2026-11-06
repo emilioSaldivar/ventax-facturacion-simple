@@ -16,6 +16,8 @@ fi
 fe_sql() { docker exec -i fe-segel-postgres-1 sh -c 'psql -v ON_ERROR_STOP=1 -q -At -U "$POSTGRES_USER" -d "$POSTGRES_DB"'; }
 fs_sql() { docker exec -i segel-fs-postgres-1 sh -c 'psql -v ON_ERROR_STOP=1 -q -At -U "$POSTGRES_USER" -d "$POSTGRES_DB"'; }
 
+# SEGEL_OMITIR_ADMIN_FE=1: el admin de FE lo crea su responsable, con clave propia.
+if [[ "${SEGEL_OMITIR_ADMIN_FE:-0}" != "1" ]]; then
 printf '%s' "$PASSWORD" | docker exec -i -e USUARIO="$USUARIO" fe-segel-api-1 node -e '
 let s = "";
 process.stdin.on("data", (d) => (s += d)).on("end", async () => {
@@ -27,6 +29,7 @@ process.stdin.on("data", (d) => (s += d)).on("end", async () => {
   console.log("FE admin:", r.status === 201 ? "creado" : r.status === 401 ? "ya existia un usuario, no se cambio" : "HTTP " + r.status);
   if (![201, 401].includes(r.status)) process.exit(1);
 });'
+fi
 
 # FS: planes, tenant interno y administrador.
 fs_sql < "$ROOT/bin/templates/planes.sql"

@@ -41,7 +41,14 @@ for etapa in "${@:-e1 e2 e3 e4}"; do
     case "$e" in
       e1) correr e1-base --operadores 5 --total-por-hora 60 --duracion-s 900 ;;
       e2) correr e2-doble --operadores 10 --total-por-hora 120 --duracion-s 900 ;;
-      e3) for i in 1 2 3; do correr "e3-rafaga-$i" --operadores 10 --escenario rafaga --ventana-rafaga-s 60 --duracion-s 60 --seed "$i"; done ;;
+      e3)
+        # Solapadas a proposito: la segunda y la tercera llegan con la anterior todavia en cola.
+        for i in 1 2 3; do
+          correr "e3-rafaga-$i" --operadores 10 --escenario rafaga --ventana-rafaga-s 60 --duracion-s 60 --seed "$i" &
+          sleep 120
+        done
+        wait
+        ;;
       e4) mkdir -p test-results/carga/e4-fallas; reiniciar_con_carga & correr e4-fallas --operadores 5 --total-por-hora 60 --duracion-s 1500; wait ;;
       *) echo "Etapa desconocida: $e" >&2; exit 2 ;;
     esac

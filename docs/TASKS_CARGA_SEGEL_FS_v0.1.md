@@ -12,8 +12,8 @@
 | CSF-001 | SPEC, PLAN y TASKS | DONE (2026-11-06) |
 | CSF-002 | Herramientas | DONE (2026-11-06) |
 | CSF-003 | E0 Humo | DONE (2026-11-06), E-1 |
-| CSF-004 | E1 Base | EN ESPERA: la sobrecarga de FE va primero, segun aviso de FE sobre el pedido del usuario. Primer intento detenido al minuto |
-| CSF-005 | E2 Doble | PENDIENTE |
+| CSF-004 | E1 Base | PARTIAL: cortada a los 17 min por decision del usuario, para salir a produccion |
+| CSF-005 | E2 Doble | NO SE HACE: decision del usuario (2026-11-06) |
 | CSF-006 | E3 Rafaga | PENDIENTE |
 | CSF-007 | E4 Fallas | PENDIENTE |
 | CSF-008 | Informe y limpieza | PENDIENTE |
