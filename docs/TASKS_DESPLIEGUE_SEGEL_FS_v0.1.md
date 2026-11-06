@@ -7,7 +7,7 @@
 
 ## Estado General
 
-- `SPEC` y `PLAN`: DONE, con B-1, P-2, P-3 y P-4 abiertos.
+- `SPEC` y `PLAN`: DONE, con B-1 y P-4 abiertos.
 - Desplegado en `segel-fs`, FS `78b8781` y FE `c337d9e`, con SIFEN test. Acceso por tunel; falta NGINX de infraestructura. Sin emision real todavia.
 
 ## Matriz
@@ -25,7 +25,7 @@
 | SFS-009 | Deploy | Desplegar en `segel-fs` | DONE (2026-11-05), E-4 | CA-02 y CA-03 |
 | SFS-010 | Entrega | Enviar configuracion a infraestructura | PARTIAL: documento listo y subdominios confirmados, falta compartirlo | CA-06 |
 | SFS-011 | Marca | T&C de Segel | BLOQUEADA (B-1) | Migracion nueva, sin "Ventax" en el T&C activo |
-| SFS-012 | Correo | Configurar la casilla Segel en FS y FE | PARTIAL: plantillas listas; falta la contrasena en la VPS y un envio real (P-2) | Correo recibido, con SPF y DKIM validos |
+| SFS-012 | Correo | Configurar la casilla Segel en FS y FE | DONE (2026-11-05), E-5 | Correo recibido, con SPF y DKIM validos |
 | SFS-013 | Puesta en marcha | Primer admin en cada stack, facturador de prueba y carga inicial del padron DNIT | PARTIAL: admins, facturador y operador listos (E-4); falta el padron DNIT | Login en ambos backoffices y busqueda de RUC |
 | SFS-014 | Validacion | Emision real contra SIFEN test y recorrido con Playwright (mobile y desktop) | PARTIAL: recorrido hasta la app (E-4); falta certificado, CSC y emision | CA-04 y documento aprobado |
 | SFS-015 | Operacion | Backups con restauracion probada y prueba de reinicio | PENDIENTE | CA-05 y CA-07 |
@@ -81,4 +81,4 @@ Stacks `fe-segel` y `segel-fs` en `/home/esaldivar/segel`, sin cambios de disco 
 - Reposo: unos 180 MiB de los stacks; 2,4 GiB disponibles. `/var` 44 %, 5,3 G libres, sin el padron.
 - **Hallazgo:** `003_seed_awapura.sql` de FE carga en toda base nueva al emisor real AWAPURA (80136968-1), con referencia a un certificado de una persona. El archivo no esta en la VPS. Pendiente decision del usuario (P-5).
 - **Sin validar:** envio real de correo, KuDE, emision, reinicio de la VPS y backups.
-- **Antes de emitir:** el equipo de FE fija un numerador propio para el emisor de prueba, porque la numeracion compartida con otros ambientes da error 1002. Los scripts quedan fijados en FE `c337d9e` hasta que FE anuncie un tag: la punta de `branding/segel-staging` tiene correcciones sin validar.
+- **Numeradores:** el equipo de FE los reviso y no los cambia: el margen de +1000 alcanza (FE 001-001 en 1016, FE 001-002 en 1094, NCE 001-002 en 1009). Se confirma con la primera emision aprobada, que requiere certificado y CSC. Los scripts quedan fijados en FE `c337d9e` hasta que FE anuncie un tag: la punta de `branding/segel-staging` tiene correcciones sin validar.

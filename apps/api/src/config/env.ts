@@ -29,7 +29,7 @@ const envSchema = z.object({
   PUBLIC_APP_BASE_URL: z.string().url().default("https://factura.segel.com.py"),
   APP_VERSION: z.string().default("dev"),
   RESEND_API_KEY: z.string().optional(),
-  EMAIL_FROM: z.string().email().default("facturacion@segel.com.py"),
+  EMAIL_FROM: z.string().email().default("no-reply-facturacion@segel.com.py"),
   EMAIL_FROM_NAME: z.string().default("Segel Facturación Simple"),
   SMTP_HOST: z.string().optional(),
   SMTP_PORT: z.coerce.number().int().positive().default(587),
