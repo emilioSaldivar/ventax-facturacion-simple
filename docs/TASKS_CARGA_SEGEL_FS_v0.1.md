@@ -45,4 +45,5 @@ FE `c337d9e`, SIFEN test real, 2 operadores, sin correo, cancelaciones en serie.
 - Primer intento `e0-humo`: rechazado con 400 por un error del simulador (faltaba el precio del item). No emitio nada.
 - Reintento unico de la cancelacion de `0001102`, a pedido de FE: otra vez `0100 Error Inesperado`, 2 intentos en total. El evento firma el CDC pedido y SIFEN no muestra la cancelacion. No se insiste (RN-05). Segun FE, ese codigo es no determinista: unas 9 de 61 cancelaciones en produccion.
 - Por lectura de codigo, FS no reintenta notas de credito de forma automatica: el outbox es solo de facturas. Hasta el tag de FE, que agrega su clave, un reintento de NC podria duplicarla.
+- Tercer intento sobre `0001102`, con mas de 2 horas de separacion: no se hizo. El usuario pidio dejarlo para despues y priorizar una version estable de FE y FS. La factura sigue sin cancelar en SIFEN test.
 
