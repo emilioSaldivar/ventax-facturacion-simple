@@ -1,0 +1,60 @@
+{
+  "emisor": {
+    "ruc_base": "99999901",
+    "ruc_dv": "0",
+    "ruc_completo": "99999901-0",
+    "razon_social": "EMPRESA FICTICIA S.A.",
+    "nombre_fantasia": "EMPRESA FICTICIA",
+    "tipo_contribuyente": 2,
+    "tipo_regimen": 8
+  },
+  "act": [
+    { "id": 1, "codigo_actividad": "62010", "descripcion_actividad": "ACTIVIDAD DE EJEMPLO", "es_principal": true, "activo": true }
+  ],
+  "est": [
+    {
+      "id": 1,
+      "codigo_establecimiento": "001",
+      "denominacion": "CASA MATRIZ",
+      "direccion": "CALLE DE EJEMPLO 100",
+      "numero_casa": "100",
+      "departamento_codigo": 1,
+      "departamento_desc": "CAPITAL",
+      "distrito_codigo": 1,
+      "distrito_desc": "ASUNCION (DISTRITO)",
+      "ciudad_codigo": 1,
+      "ciudad_desc": "ASUNCION (DISTRITO)",
+      "telefono": "021000000",
+      "email": "contacto@empresa.invalid"
+    }
+  ],
+  "pun": [
+    { "id": 1, "establecimiento_id": 1, "codigo_punto": "001", "descripcion": "PUNTO PRINCIPAL" }
+  ],
+  "tim": [
+    { "id": 1, "establecimiento_id": 1, "numero_timbrado": "00000000", "fecha_inicio": "2026-01-01", "fecha_fin": null, "vigente_desde": null, "vigente_hasta": null }
+  ],
+  "num": [
+    { "id": 1, "establecimiento_id": 1, "punto_expedicion_id": 1, "tipo_documento": 1, "serie_fiscal": null, "siguiente_numero": 1 },
+    { "id": 2, "establecimiento_id": 1, "punto_expedicion_id": 1, "tipo_documento": 5, "serie_fiscal": null, "siguiente_numero": 1 }
+  ],
+  "cob": [
+    { "timbrado_id": 1, "actividad_id": 1, "establecimiento_id": 1, "punto_expedicion_id": 1, "vigente_desde": null, "vigente_hasta": null }
+  ],
+  "per": [
+    {
+      "codigo": "EJEMPLO-E001-P001-FE",
+      "descripcion": "Perfil de emision de ejemplo",
+      "actividad_id": 1,
+      "timbrado_id": 1,
+      "establecimiento_id": 1,
+      "punto_expedicion_id": 1,
+      "tipo_documento": 1,
+      "numerador_id": 1,
+      "separation_strategy": "SHARED_SEQUENCE",
+      "modo_actividad": "PRINCIPAL",
+      "vigente_desde": null,
+      "vigente_hasta": null
+    }
+  ]
+}

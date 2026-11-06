@@ -48,7 +48,7 @@ Una contrasena SMTP con `#` no lleva comillas, y no puede tener un espacio antes
 **Verificar:**
 
 - `up.sh` termina con `"status":"ok"` desde FS hacia FE.
-- `bootstrap.sh` informa T&C activo `segel-1.0` y AWAPURA con `activo = f`.
+- `bootstrap.sh` informa T&C activo `segel-1.0` y AWAPURA con `activo = f`. Cuando FE anuncie el tag sin esa semilla, se quitan sus sentencias de `bootstrap.sh` y lo esperado son 0 emisores.
 - `ss -tln`: solo `8092` y `8100` en `10.100.0.145`; `8091`, `9989` y `5434` en `127.0.0.1`.
 - Dentro de `fe-segel-api-1`: `SIFEN_ENV` es el ambiente elegido.
 
@@ -80,7 +80,12 @@ No usar la IP directa: la cookie de sesion de FS es `Secure`.
 
 ## Fase 4. Facturador
 
-Exportar la configuracion, sin certificado ni CSC, desde el FE de origen:
+Hay dos origenes para el archivo:
+
+- **Emisor que ya existe en otro FE:** exportarlo con `exportar-emisor.sql`, sin certificado ni CSC.
+- **Cliente nuevo:** armar el JSON con sus datos, siguiendo `infra/segel-fs/emisor.ejemplo.json`. Debe traer los datos como figuran en la SET, un numerador de nota de credito (tipo 5) y el `siguiente_numero` real de cada serie. `SEPARATE_EXPEDITION_POINT` exige 2 actividades y 2 puntos activos; con menos, usar `SHARED_SEQUENCE` y `PRINCIPAL`.
+
+Exportar desde el FE de origen, si corresponde:
 
 ```bash
 ssh hetzner 'docker exec -i fe-test-postgres-1 sh -c "psql -U \$POSTGRES_USER -d \$POSTGRES_DB -At -v ruc=5057016-1"' \
@@ -97,7 +102,7 @@ SEGEL_PW=... SEGEL_OPERADOR_PW=<inicial> python3 scripts/segel-fs/cargar-factura
   --perfil AC496099-E001-P002-FE-PTO
 ```
 
-`--sumar-numerador 1000` evita repetir numeros: en test, el mismo RUC y timbrado se usa en otro FE.
+`--sumar-numerador 1000` evita repetir numeros: en test, el mismo RUC y timbrado se usa en otro FE. Con `--ambiente prod` el script lo rechaza. El script valida el archivo antes de escribir, rechaza un emisor que ya exista y crea un consumidor por emisor (`segel-fs-<ruc_base>`). El tenant se crea nuevo en cada carga.
 
 Solo en test, activar el operador con OTP por base de datos:
 
@@ -143,8 +148,9 @@ Luego repetir las fases 2 a 6 con estas diferencias:
 |---|---|---|
 | `init-env.sh` | `test` | `prod` (secretos nuevos) |
 | `--ambiente` | `test` | `prod` |
-| `--sumar-numerador` | `1000` | Segun el ultimo numero real emitido; confirmar antes |
-| Origen del emisor | `fe-test` | Datos de produccion, revisados |
+| `--sumar-numerador` | `1000` | No se usa: `siguiente_numero` real y confirmado en el archivo |
+| Origen del emisor | `fe-test` | JSON con los datos del cliente |
+| `FE_REF` | `c337d9e` | El tag que anuncie FE sin la semilla de AWAPURA |
 | Timbrado, certificado y CSC | De test | De produccion, los que entrega la SET |
 | OTP del operador | Por base de datos | Por correo; no usar `activar-operador-test.cjs` |
 | Contrasena de administradores | Prueba | Nueva y privada |

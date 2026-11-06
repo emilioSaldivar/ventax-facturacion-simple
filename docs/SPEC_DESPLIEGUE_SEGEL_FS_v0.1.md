@@ -37,6 +37,7 @@ Levantar en la VPS `segel-fs` una instancia independiente de facturacion simple 
 - **RN-05.** Sin casilla Segel, el correo queda desactivado. Nunca se usa el SMTP ni el remitente de Ventax.
 - **RN-06.** Sin T&C de Segel activos, no se da de alta ningun usuario.
 - **RN-07.** La rama no entra a `master` y la produccion de Ventax no cambia.
+- **RN-09.** Cada emisor tiene su consumidor de FE (`segel-fs-<ruc_base>`). Un cliente nuevo se carga desde un JSON con sus datos, sin depender de otro FE.
 - **RN-08.** El paso de test a produccion arranca con bases vacias: los datos de prueba no conviven con documentos fiscales reales.
 
 ## Subdominios
