@@ -26,7 +26,7 @@
 | SFS-010 | Entrega | Enviar configuracion a infraestructura | PARTIAL: documento listo y subdominios confirmados, falta compartirlo | CA-06 |
 | SFS-011 | Marca | T&C de Segel con SEGEL S.A. | DONE sin desplegar (2026-11-05); falta revision legal | Migracion nueva, sin "Ventax" en el T&C activo |
 | SFS-012 | Correo | Configurar la casilla Segel en FS y FE | DONE (2026-11-05), E-5 | Correo recibido, con SPF y DKIM validos |
-| SFS-013 | Puesta en marcha | Primer admin en cada stack, facturador de prueba y carga inicial del padron DNIT | PARTIAL: admins, facturador y operador listos (E-4); falta el padron DNIT | Login en ambos backoffices y busqueda de RUC |
+| SFS-013 | Puesta en marcha | Primer admin en cada stack, facturador de prueba y carga inicial del padron DNIT | DONE (2026-11-06), E-4, E-7 y E-9 | Login en ambos backoffices y busqueda de RUC |
 | SFS-014 | Validacion | Emision real contra SIFEN test y recorrido con Playwright (mobile y desktop) | PARTIAL: recorrido hasta la app (E-4); falta certificado, CSC y emision | CA-04 y documento aprobado |
 | SFS-015 | Operacion | Backups con restauracion probada y prueba de reinicio | POSPUESTA por el usuario (D-7) | CA-05 y CA-07 |
 | SFS-016 | Carga | Redactar SPEC de lote por CSV contra SIFEN test | PENDIENTE, tras las pruebas de a una factura | SPEC aprobado |
@@ -118,8 +118,9 @@ Fases 1 a 4 del runbook, con FS `3e4f637` y FE `c337d9e`, sobre bases vacias. Se
 - **Falla encontrada:** al recrear solo la API de FS, el frontend quedo con la IP vieja y el login dio 502. `up.sh` ahora reinicia el frontend, y queda en el runbook.
 - Los tres nombres ya resuelven en DNS, a direcciones de Cloudflare.
 
-### E-9. Padron DNIT (2026-11-05)
+### E-9. Padron DNIT (2026-11-06)
 
 - **Falla:** primera carga con 2.018.276 filas en staging, pero `canceling statement due to statement timeout` al copiar a la tabla final: el loader fijaba 60 s en `src/db.js`. Se revirtio y la tabla siguio en 0; el cron del dia 5 habria fallado igual.
 - **Correccion:** `DNIT_STATEMENT_TIMEOUT`, con 60 s por defecto para no cambiar otros ambientes y `15min` en esta instancia.
+- **Resultado en `segel-fs`:** 2.028.067 filas, 12 lineas invalidas, 245 s. Tabla de 658 MB; `/var` queda en 66 %, con 3,2 G libres. Memoria disponible al terminar: 2,3 GiB.
 
