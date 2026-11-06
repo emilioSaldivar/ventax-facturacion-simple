@@ -27,7 +27,7 @@ bash scripts/segel-fs/deploy.sh files
 bash scripts/segel-fs/deploy.sh images
 ```
 
-FE queda fijado en `segel-rc1`. Para otra version: `FE_REF=<tag>`, solo cuando FE lo anuncie. La version de FE se comprueba por este tag: FE no expone `X-App-Version`.
+FE queda fijado en `segel-rc2`. Para otra version: `FE_REF=<tag>`, solo cuando FE lo anuncie. La version de FE se comprueba por este tag: FE no expone `X-App-Version`.
 
 **Verificar:** `docker images` en la VPS muestra las nueve imagenes `segel-fs-*` y `fe-segel-*`.
 

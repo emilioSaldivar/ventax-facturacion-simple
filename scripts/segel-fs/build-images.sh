@@ -7,7 +7,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 FS_REF="${FS_REF:-HEAD}"
 FE_REPO="${FE_REPO:-$ROOT_DIR/../../FACTURACION_ELECTRONICA_MVP/facturacion-electronica}"
-FE_REF="${FE_REF:-segel-rc1}"
+FE_REF="${FE_REF:-segel-rc2}"
 
 FS_SHA="$(git -C "$ROOT_DIR" rev-parse --short "$FS_REF")"
 FE_SHA="$(git -C "$FE_REPO" rev-parse --short "$FE_REF")"

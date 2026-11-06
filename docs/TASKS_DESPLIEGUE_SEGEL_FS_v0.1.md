@@ -143,3 +143,9 @@ Decision del usuario, confirmada directamente: pruebas E3 y E4, y luego producci
 - Solo publicados `8092` y `8100` en `10.100.0.145`.
 - **Sin backups automaticos**, pospuestos por el usuario.
 
+### E-12. Frontend de FE `segel-rc2` en produccion (2026-11-06)
+
+Confirmado directamente por el usuario. Contra `segel-rc1` solo cambian textos de ejemplo del frontend y documentacion, comprobado en el diff. Se recreo solo `fe-segel-frontend`, con `--no-build --no-deps`; no corrio `migrate`. Imagen anterior en la VPS como `fe-segel-frontend:rc1`, para revertir.
+
+**Decision del usuario, transmitida por FE:** esta VPS ya es produccion y deja de usarse para pruebas: sin cargas, humos ni emisiones de prueba. La carga y la prueba del primer cliente real las hace el usuario.
+
