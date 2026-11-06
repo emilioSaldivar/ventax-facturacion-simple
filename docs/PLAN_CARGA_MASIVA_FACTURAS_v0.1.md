@@ -13,7 +13,7 @@ El contrato de FE todavia no esta publicado. Por eso el trabajo se parte en dos:
 - **Fases A a D, contra un mock:** no dependen de FE. El mock devuelve las formas de las secciones 7, 12 y 14 del pedido.
 - **Fase E, contra FE real:** empieza cuando FE publique su OpenAPI en `facturacion-electronica-consumer-docs` y avise que la subida y la validacion corren en su stack local. Hasta entonces no se escribe el cliente real (`AGENTS.md`: solo se consume lo publicado).
 
-**Estado del contrato de FE al 2026-11-06:** subida, plantilla, listado, detalle y comprobantes estan en su `openapi.yaml` de consumidores, en el worktree `fe-capacidad-200`, sin commit y sin correr en un stack. Faltan confirmar, cancelar, reintentar, lotes y resultado. El mock de FS usa desde ya los nombres publicados (seccion 20 del pedido).
+**Estado del contrato de FE al 2026-11-06:** subida, plantilla, listado, detalle y comprobantes estan en su `openapi.yaml` de consumidores, en el worktree `fe-capacidad-200`, sin commit y sin correr en un stack. Al cierre del dia FE emite de punta a punta en su stack `fe-cargas` (firma real, lotes al simulador, correo tras la aprobacion) y publico tambien `GET /v1/cargas/{id}/lotes` y `GET /v1/cargas/{id}/resultado` (secciones 20 a 22 del pedido). Faltan confirmar, cancelar y reintentar. El mock de FS usa los nombres publicados.
 
 ## 2. Orden de trabajo (D-7)
 
@@ -58,7 +58,8 @@ Modulo nuevo `apps/api/src/modules/cargas/` (rutas, servicio, repositorio, tipos
 | `GET /cargas/:id/comprobantes` | Igual en FE | Pasa pagina, tamano y filtros. Suma `documento_id` de FS cuando existe |
 | `POST /cargas/:id/confirmar` | Igual en FE | Guarda `confirmada_por` y agenda la sincronizacion |
 | `POST /cargas/:id/cancelar`, `/reintentar` | Igual en FE | Auditados |
-| `GET /cargas/:id/resultado` | Igual en FE | Descarga CSV |
+| `GET /cargas/:id/resultado` | Igual en FE | Descarga CSV, una fila por comprobante, columnas del OpenAPI de FE |
+| `GET /cargas/:id/lotes` | Igual en FE | Solo rol interno: lotes SIFEN de la carga (`CREADO`, `RECIBIDO`, `CONCLUIDO`, `ERROR`) y respuestas de SIFEN, para soporte |
 
 **Subida:**
 
@@ -106,6 +107,7 @@ Worker nuevo `cargas-sync.worker.ts`, arrancado en `server.ts` junto a los otros
 - **Estado vigente:** el `estado` del comprobante no cambia tras la emision. Si el comprobante trae `documento_estado`, ese decide, con `mapDocumentStatusCanonico`: una factura cancelada llega como `CANCELLED` y queda `ANULADA`.
 - **Estados finales:** una factura `ANULADA` no cambia. Una `EMITIDA` o `RECHAZADA` solo cambia si FE informa otro estado final. Asi una cancelacion hecha desde FS no se revierte.
 - **Snapshot:** `detalle` trae `fecha`, `tipoTransaccion`, `receptor`, `condicionOperacion`, `items` y `total`, con los nombres de `POST /v1/factura`. Se traduce con la inversa de lo que FS ya arma para emitir.
+- **`sifen` y `correo`:** `sifen` trae codigo y mensaje solo con resultado (`APROBADO`, `APROBADO_CON_OBS`, `RECHAZADO`); antes es nulo. `correo` es `PENDING` hasta la aprobacion y mientras espera en la cola, luego `SENT` o `FAILED`; en un rechazado es nulo. FS guarda `email_estado` con esos valores (`PENDING` ya es valido desde la migracion 0036).
 - **Campos:** `usuario_id` es quien confirmo; `actividad_punto_perfil_id` el de la carga; `numero_fiscal` el `numero_asignado`; `carga_numero_archivo` el `numero_archivo`; `verificacion_next_at` nulo (RN-17); `email_estado` segun `correo`; snapshots e items desde el detalle.
 - **Frecuencia:** 1 min mientras la carga este `VALIDANDO` o `EN_PREPARACION`; 5 min en `EN_COLA` y `EN_SIFEN`. Una carga `VALIDADA` sin confirmar no se sincroniza: no cambia sola. En `EN_SIFEN` los resultados no llegan antes de unos 10 min del envio de cada lote. Al llegar a `FINALIZADA`, `RECHAZADA` o `CANCELADA` hace una pasada mas y deja `sync_next_at` nulo: desde ahi, un cambio hecho fuera de FS se ve con "Verificar estado fiscal". Pasadas 72 h sin terminar, sigue cada 30 min y registra un aviso: puede ser SIFEN lento o un comprobante en `ERROR` que espera reintento o cancelacion.
 - **Fallo de FE:** no cambia nada y reintenta en el intervalo siguiente (RN-19).

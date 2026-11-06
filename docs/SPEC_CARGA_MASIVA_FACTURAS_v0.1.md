@@ -46,7 +46,8 @@ El resultado de SIFEN llega en minutos o en horas: la persona sube, se va y vuel
 - **RN-08.** Los botones Confirmar, Cancelar y Reintentar dependen de `acciones` de FE: FS no deduce reglas por estado.
 - **RN-09.** Un rechazo de SIFEN no se reintenta solo: queda informado con su motivo. Los numeros salteados se avisan; inutilizarlos es del cliente.
 - **RN-09b.** Un comprobante en `ERROR` es un fallo de FE, no un rechazo. FE lo reintenta solo hasta 3 veces; despues la carga no termina hasta que alguien lo reintente o lo cancele. La pantalla lo dice y ofrece las dos acciones, segun `acciones`.
-- **RN-09c.** Cancelar alcanza a los comprobantes `PENDIENTE` y `ERROR`. Los ya preparados siguen su curso, y la pantalla lo avisa antes de cancelar.
+- **RN-09c.** Cancelar alcanza a los comprobantes `PENDIENTE` y `ERROR`. Los ya preparados siguen su curso, y la pantalla lo avisa antes de cancelar. Lo que FE ya tomo para firmar tambien termina: justo despues de cancelar pueden verse unos pocos pendientes que en segundos pasan a preparados, y la carga sigue `EN_SIFEN` hasta `FINALIZADA`, con `cancelada_en`. La pantalla no muestra eso como falla.
+- **RN-09e.** Si un comprobante no consigue su numero, los siguientes esperan: FE no adelanta numeros. Al tercer intento queda `ERROR` y el resto sigue. Un archivo que hace fallar al servicio tres veces queda `RECHAZADA` con `ERROR_INTERNO`: la pantalla lo muestra como problema del servicio, no del archivo.
 - **RN-09d.** FE prepara una carga por emisor a la vez. Una carga confirmada que espera a otra queda `EN_COLA`: la pantalla la muestra como "En espera de otra carga", distinta de "Emitiendo".
 
 ### Permisos (decision de FS, criterio del usuario)
@@ -77,7 +78,7 @@ El resultado de SIFEN llega en minutos o en horas: la persona sube, se va y vuel
 | Listado | Cargas por fecha y estado, con archivo, totales y avance. "Nueva carga" y "Descargar plantilla" |
 | Nueva carga | Facturador, punto y perfil que se usaran; forma de numerar; seleccion del archivo |
 | Informe | Validos, con error y con aviso. Por comprobante: fila, columna y mensaje. Confirmar o cancelar |
-| Avance | Totales de la carga, ultima actualizacion, y que se puede cerrar la pantalla. En `EN_SIFEN` dice que sigue esperando a SIFEN y que puede tardar horas: no es un error |
+| Avance | Totales de la carga, ultima actualizacion, y que se puede cerrar la pantalla. En `EN_SIFEN` dice que sigue esperando a SIFEN y que puede tardar horas: no es un error. Tiempos normales medidos por FE: validacion en segundos, unos 2 comprobantes por segundo al preparar, un lote de 50 por minuto al enviar; el ultimo lote de una carga puede esperar hasta 15 min la agenda del emisor, asi que una carga chica queda "en SIFEN" ese rato sin anomalia |
 | Resultado | Por comprobante: numero, referencia de venta, estado, CDC, motivo de SIFEN, correo y enlace al documento. Filtros y descarga del resultado |
 
 Mensajes propios de FS: archivo repetido (abre la carga anterior; si se subio con el perfil equivocado, hay que cancelarla y subir de nuevo, porque el mismo archivo con otro perfil es la misma carga), tope superado (`413`, con el tope), demasiadas cargas o cuota diaria (`429`, con la espera), sin permiso (`403`).
