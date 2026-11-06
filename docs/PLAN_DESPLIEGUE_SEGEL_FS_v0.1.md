@@ -18,7 +18,7 @@ El grupo `docker` de `esaldivar` ya esta aplicado. No se modifican disco ni recu
 
 ```text
 /home/esaldivar/segel/
-  bin/          init-env.sh, up.sh, templates/
+  bin/          init-env.sh, up.sh, bootstrap.sh, templates/
   fs/           docker-compose.yml, .env.segel, dnit-ruc-loader/data
   fe/           docker-compose.prod.yml, .env.segel
   fe-runtime/   secrets, runtime/{cert-seed,cert-uploads,logo-uploads}
@@ -51,9 +51,9 @@ Proyectos Compose: `fe-segel` y `segel-fs`. Compose nombra las imagenes `<proyec
 
 La imagen corre como `node` (uid 1000) y `esaldivar` es uid 1001. En Hetzner coinciden, y por eso alli alcanza `prepare-runtime-permissions.sh`. `up.sh` hace `chown` a 1000 de las carpetas de runtime usando un contenedor, sin sudo. Docker no aplica SELinux a los contenedores (`SecurityOptions` sin `selinux`, sin `daemon.json`), asi que no hace falta `:z`.
 
-## 5. Configuracion de FE para la etapa test
+## 5. Configuracion de FE por ambiente
 
-`APP_ENV=staging`, `SIFEN_ENV=test` y `KUDE_JASPER_AMBIENTE=1`, como `fe-test`. `PUBLIC_API_BASE_URL` apunta al host de FE, porque su frontend reenvia `/v1/`. `SMTP_*` vacios hasta tener la casilla (RN-05).
+`init-env.sh test|prod` define `APP_ENV`, `SIFEN_ENV`, `FE_API_ENV` y `KUDE_JASPER_AMBIENTE`. Test: `staging`, `test` y `1`, como `fe-test`. Produccion: `production`, `prod` y `2`. `PUBLIC_API_BASE_URL` apunta al host de FE, porque su frontend reenvia `/v1/`. La contrasena SMTP se carga a mano en el servidor.
 
 ## 6. Orden de ejecucion
 

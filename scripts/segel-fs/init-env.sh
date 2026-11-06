@@ -3,6 +3,14 @@
 # sola vez: API_KEY_SECRET no se puede rotar, porque invalida las claves ya emitidas.
 set -euo pipefail
 
+# Uso: init-env.sh test|prod. El ambiente se elige siempre a mano: un valor por defecto
+# podria dejar produccion emitiendo en test, o al reves.
+case "${1:-}" in
+  test) ambiente=test; app_env=staging; kude_ambiente=1 ;;
+  prod) ambiente=prod; app_env=production; kude_ambiente=2 ;;
+  *) echo "Uso: init-env.sh test|prod" >&2; exit 2 ;;
+esac
+
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 FS_ENV="$ROOT/fs/.env.segel"
 FE_ENV="$ROOT/fe/.env.segel"
@@ -28,6 +36,9 @@ jwt_refresh_secret="$(secret)"
 render() {
   sed \
     -e "s|__ROOT__|$ROOT|g" \
+    -e "s|__AMBIENTE__|$ambiente|g" \
+    -e "s|__APP_ENV__|$app_env|g" \
+    -e "s|__KUDE_AMBIENTE__|$kude_ambiente|g" \
     -e "s|__BIND_IP__|${SEGEL_BIND_IP:-10.100.0.145}|g" \
     -e "s|__FS_PORT__|${SEGEL_FS_PORT:-8092}|g" \
     -e "s|__FE_PORT__|${SEGEL_FE_PORT:-8100}|g" \

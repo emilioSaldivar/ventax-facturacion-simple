@@ -25,7 +25,8 @@ bundle() {
   git -C "$FE_REPO" show "$FE_REF:docker-compose.prod.yml" > "$dir/fe/docker-compose.prod.yml"
   git -C "$ROOT_DIR" show "$FS_REF:infra/segel-fs/fs.env.example" > "$dir/bin/templates/fs.env.example"
   git -C "$ROOT_DIR" show "$FS_REF:infra/segel-fs/fe.env.example" > "$dir/bin/templates/fe.env.example"
-  for script in init-env.sh up.sh; do
+  git -C "$ROOT_DIR" show "$FS_REF:db/seeds/002_planes_comerciales.sql" > "$dir/bin/templates/planes.sql"
+  for script in init-env.sh up.sh bootstrap.sh; do
     git -C "$ROOT_DIR" show "$FS_REF:scripts/segel-fs/$script" > "$dir/bin/$script"
     chmod +x "$dir/bin/$script"
   done

@@ -24,12 +24,14 @@
 | SFS-008 | Host | Grupo `docker` y salida a M365, sin cambios de disco (P-3) | DONE (2026-11-05) | `id` con `docker`; 587 abierto |
 | SFS-009 | Deploy | Desplegar en `segel-fs` | DONE (2026-11-05), E-4 | CA-02 y CA-03 |
 | SFS-010 | Entrega | Enviar configuracion a infraestructura | PARTIAL: documento listo y subdominios confirmados, falta compartirlo | CA-06 |
-| SFS-011 | Marca | T&C de Segel | BLOQUEADA (B-1) | Migracion nueva, sin "Ventax" en el T&C activo |
+| SFS-011 | Marca | T&C de Segel con PROTOTIPO S.A. | DONE sin desplegar (2026-11-05); falta revision legal | Migracion nueva, sin "Ventax" en el T&C activo |
 | SFS-012 | Correo | Configurar la casilla Segel en FS y FE | DONE (2026-11-05), E-5 | Correo recibido, con SPF y DKIM validos |
 | SFS-013 | Puesta en marcha | Primer admin en cada stack, facturador de prueba y carga inicial del padron DNIT | PARTIAL: admins, facturador y operador listos (E-4); falta el padron DNIT | Login en ambos backoffices y busqueda de RUC |
 | SFS-014 | Validacion | Emision real contra SIFEN test y recorrido con Playwright (mobile y desktop) | PARTIAL: recorrido hasta la app (E-4); falta certificado, CSC y emision | CA-04 y documento aprobado |
-| SFS-015 | Operacion | Backups con restauracion probada y prueba de reinicio | PENDIENTE | CA-05 y CA-07 |
-| SFS-016 | Carga | Redactar SPEC de carga en la VPS | PENDIENTE | SPEC con SIFEN simulado y objetivo de memoria |
+| SFS-015 | Operacion | Backups con restauracion probada y prueba de reinicio | POSPUESTA por el usuario (D-7) | CA-05 y CA-07 |
+| SFS-016 | Carga | Redactar SPEC de lote por CSV contra SIFEN test | PENDIENTE, tras las pruebas de a una factura | SPEC aprobado |
+| SFS-017 | Operacion | Runbook de test a produccion | DONE (2026-11-05), a ajustar con lo que dejen las pruebas | `docs/OPERACION_DESPLIEGUE_SEGEL_FS_v0.1.md` |
+| SFS-018 | Deploy | Reinstalacion limpia de test siguiendo el runbook | PENDIENTE (VPN) | Fases 1 a 4 sin desvios |
 
 ## Evidencia
 

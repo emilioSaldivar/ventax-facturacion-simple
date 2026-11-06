@@ -24,6 +24,9 @@ Levantar en la VPS `segel-fs` una instancia independiente de facturacion simple 
 | D-3 | SIFEN | Primero test. Luego carga en la VPS para medir capacidad y memoria. Produccion es un paso aparte |
 | D-4 | Commit FS | Base `e40b51c`, mas las correcciones de este alcance |
 | D-5 | Marca | Nada puede salir como Ventax |
+| D-6 | Hoja de ruta | Primero un despliegue limpio en test, con pruebas de a una factura y luego por lote CSV. Lo aprendido define el paso a paso de produccion (`docs/OPERACION_DESPLIEGUE_SEGEL_FS_v0.1.md`) |
+| D-7 | Backups | No son prioritarios por ahora |
+| D-8 | NGINX, DNS y TLS | Los hace infraestructura |
 
 ## Reglas
 
@@ -32,7 +35,7 @@ Levantar en la VPS `segel-fs` una instancia independiente de facturacion simple 
 - **RN-03.** Secretos propios, generados en la VPS. Ninguno se comparte con Ventax ni se versiona.
 - **RN-04.** Se usa el FE de `branding/segel-staging` (`c337d9e`) sin modificarlo.
 - **RN-05.** Sin casilla Segel, el correo queda desactivado. Nunca se usa el SMTP ni el remitente de Ventax.
-- **RN-06.** Sin T&C de Segel activos, no se da de alta ningun usuario (ver B-1).
+- **RN-06.** Sin T&C de Segel activos, no se da de alta ningun usuario.
 - **RN-07.** La rama no entra a `master` y la produccion de Ventax no cambia.
 - **RN-08.** El paso de test a produccion arranca con bases vacias: los datos de prueba no conviven con documentos fiscales reales.
 
@@ -55,14 +58,14 @@ Se replica el esquema de Hetzner. Confirmados por el usuario el 2026-11-05.
 | Aviso `sendAdminEmailRequiredNotification` a `facturacion@ventax.app` | **Se corrige.** Va a `VENTAX_NOTIFY_EMAIL` o, si falta, a `EMAIL_FROM` |
 | Contacto en plantillas de correo | **Se corrige.** Usa `EMAIL_FROM` |
 | Defaults de `EMAIL_FROM`, `PUBLIC_APP_BASE_URL` y `FE_API_BASE_URL` | **Se corrigen.** El ultimo enviaria la clave fiscal a un host de Ventax si faltara la variable |
-| T&C `0018` y `0019`: proveedor Ventax y datos personales | **Bloqueado** (B-1) |
+| T&C `0018` y `0019`: proveedor Ventax y datos personales | **Se corrige** con `0035`. Las versiones anteriores quedan inactivas en la base |
 | Logo por defecto de KuDE (`assets/logo.jpeg`, dice "Prototipo") | `KUDE_LOGO_PATH` apunta a `kude-logo-vacio.png`. Falta comprobar que sale en un KuDE real |
 | Cookie `ventax_refresh_token`, claves de `localStorage` y cache del service worker | Fuera de alcance: no son contenido, solo se ven con herramientas de desarrollo. Renombrarlos toca los scripts de carga y de Playwright |
 | Variable `VENTAX_NOTIFY_EMAIL`, base por defecto del loader y `ventax_logos/` en la imagen de FE | Fuera de alcance: nombres internos |
 
 ## Bloqueos y pendientes
 
-- **B-1. T&C.** Los T&C activos nombran a Ventax y a una persona fisica como proveedor, con su RUC, domicilio y WhatsApp. Hacen falta los datos legales de Segel y la revision del texto. No se inventan.
+- **B-1. T&C.** Resuelto: T&C `segel-1.0` con PROTOTIPO S.A. como proveedor y Segel como marca (migracion `0035`, `docs/contract/TERMINOS_CONDICIONES_SEGEL_FACTURACION_SIMPLE_v1_0.md`). Sin la seccion 2.1, que no aplica a una persona juridica, ni WhatsApp comercial, porque no hay uno definido. El texto se adapto de la version de Ventax y falta su revision legal.
 - **P-2. Correo.** Resuelto: cuenta y contacto `no-reply-facturacion@segel.com.py` en `smtp.office365.com:587`, remitente "Facturacion Electronica Segel", decision del usuario. El usuario carga la contrasena en la VPS.
 - **P-3. Recursos.** Decision del usuario (2026-11-05): no se modifican disco ni recursos de la VPS. Se trabaja con lo que hay: `/var` (9,3 G) para Docker y `/home/esaldivar/segel` (`/home`, 3,7 G) para archivos. Infraestructura solo se ocupa de NGINX. Sin VPN no hay acceso a la VPS.
 - **P-5. Emisor sembrado.** Resuelto: la migracion `003_seed_awapura.sql` de FE crea al emisor real AWAPURA (80136968-1) en toda base nueva. En esta instancia se desactivo, por decision del usuario (2026-11-05): solo se usa 5057016-1. Hay que repetirlo si la base se recrea, por ejemplo al pasar a produccion (RN-08).
@@ -94,6 +97,7 @@ No se usa `http://10.100.0.145:8092` directo aunque la VPN llegue: la cookie de 
 - La configuracion de TLS, DNS y NGINX, que hace infraestructura.
 - El diseno de la prueba de carga: tendra SPEC propio. Debe usar SIFEN simulado (`SPEC_VERIFICACION_CAPACIDAD_200` D-2), no SIFEN test real. `scripts/carga/stack.sh` esta pensado para la estacion local.
 - La habilitacion de SIFEN produccion.
+- La carga de facturas por CSV: requiere SPEC propio, no existe hoy.
 
 ## Criterios de aceptacion
 
