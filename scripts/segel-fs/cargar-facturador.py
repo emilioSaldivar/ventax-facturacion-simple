@@ -18,6 +18,8 @@ p.add_argument("--plan", default="PROFESIONAL")
 p.add_argument("--operador", required=True)
 p.add_argument("--operador-email", required=True)
 p.add_argument("--perfil", required=True, help="Codigo del perfil de emision del operador")
+p.add_argument("--carga-masiva", nargs="?", type=int, const=0, default=None, metavar="CUOTA_DIARIA",
+               help="Otorga CARGA_MASIVA al consumidor, con cuota diaria de comprobantes. Nunca por defecto")
 p.add_argument("--fe", default="http://localhost:18100/v1")
 p.add_argument("--fs", default="http://localhost:18092/api/v1")
 a = p.parse_args()
@@ -102,7 +104,12 @@ for x in d["per"]:
 # Un consumidor por emisor: la clave solo se entrega al crear, y compartirlo obligaria a rotarla.
 consumidor = f"segel-fs-{e['ruc_base']}"
 perms = ["FACTURA_EMIT", "DOCUMENTO_READ", "SIFEN_STATUS_READ", "IDEMPOTENCY_RECONCILE", "CANCEL_SEND", "RECIBO_WRITE", "RECIBO_READ", "RECIBO_VOID", "SIFEN_DE_CONSULTA"]
+if a.carga_masiva is not None:
+    perms.append("CARGA_MASIVA")
 c = ok("consumidor", http("POST", f"{a.fe}/admin/api-consumers", {"code": consumidor, "name": f"Segel Facturacion Simple {e['ruc_completo']}", "permissions": perms, "emisor_assignments": [{"emisor_id": e["ruc_completo"], "env": a.ambiente}]}, A))
+if a.carga_masiva:
+    # La cuota no entra al crear el consumidor: es de la asignacion a cada emisor.
+    ok("cuota", http("PUT", f"{a.fe}/admin/api-consumers/{c['id']}/emisores", {"assignments": [{"emisor_id": e["ruc_completo"], "env": a.ambiente, "cargas_cuota_diaria": a.carga_masiva}]}, A))
 code, exp = http("GET", f"{P}/configuracion/export-consumidor?formato=json&env={a.ambiente}&consumer_code={consumidor}", None, A)
 print("export", code)
 if code >= 300:

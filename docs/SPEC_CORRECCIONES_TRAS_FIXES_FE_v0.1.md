@@ -65,9 +65,11 @@ Criterios:
 
 Reglas:
 
-- **RN-24.1.** Bandera de FS `VERIFICACION_LOTE_SIN_REFRESH`, `false` por defecto. Apagada, nada cambia.
+**Refinamiento (2026-11-07):** la regla se parte en dos, porque `RECONCILE_DEFERRED_ENABLED` queda apagada en la segunda entrega y, sin ella, el `refresh` sigue siendo la unica via para destrabar un documento (RN-24.6). Esperar `SENT_BATCH` no depende de ninguna bandera; omitir el `refresh`, si.
+
+- **RN-24.0.** Siempre: un documento en `SENT_BATCH` se vuelve a mirar a los 15 min y no gasta intentos, hasta 48 h desde su creacion. Pasado ese plazo rige el backoff vigente. El fallo real es `REJECTED`, o seguir en `SENT_BATCH` a las 48 h.
+- **RN-24.1.** Bandera de FS `VERIFICACION_LOTE_SIN_REFRESH`, `false` por defecto. Apagada, el worker sigue consultando con `refresh`.
 - **RN-24.2.** Encendida, el worker lee primero el estado en FE (`GET /documentos/{uuid}`). Si es `SENT_BATCH` o `QUEUED_BATCH`, no consulta a SIFEN.
-- **RN-24.3.** Encendida, un documento en `SENT_BATCH` se vuelve a mirar a los 15 min y no gasta intentos, hasta 48 h desde su creacion. Pasado ese plazo rige el backoff vigente.
 - **RN-24.4.** Con cualquier otro estado, el flujo actual no cambia: consulta con `refresh` y backoff.
 - **RN-24.5.** "Verificar estado fiscal" siempre consulta a SIFEN, con o sin bandera.
 - **RN-24.6.** La bandera se enciende solo en una instancia cuyo FE tenga `RECONCILE_DEFERRED_ENABLED=true`. **Condicion de FE:** sin esa bandera, el `refresh` del worker es la unica via para destrabar un documento. No se retira antes.
@@ -75,7 +77,7 @@ Reglas:
 
 Criterios:
 
-- **CA-24.1.** Bandera apagada: mismas llamadas y mismos tiempos que hoy.
+- **CA-24.1.** Bandera apagada: el worker sigue llamando con `refresh=true`; en `SENT_BATCH` reprograma a 15 min sin gastar intentos.
 - **CA-24.2.** Bandera encendida y `SENT_BATCH`: 0 llamadas con `refresh=true`, proxima consulta a 15 min, intentos sin cambio.
 - **CA-24.3.** Una factura que pasa de `SENT_BATCH` a aprobada se ve `EMITIDA` en la consulta siguiente: a lo sumo 15 min mas el ciclo del worker.
 - **CA-24.4.** Un documento con mas de 48 h en `SENT_BATCH` vuelve al backoff vigente.

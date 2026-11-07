@@ -28,7 +28,7 @@ Falta: validarlos contra FE real en local (paso 3) y, para FS-23, una captura de
 
 ## 3. FS-24: diseno
 
-**Configuracion.** `VERIFICACION_LOTE_SIN_REFRESH` en `apps/api/src/config/env.ts`, `false` por defecto. `server.ts` la pasa al worker. Se suma a `infra/segel-fs/fs.env.example` en `false`.
+**Configuracion.** `VERIFICACION_LOTE_SIN_REFRESH` en `apps/api/src/config/env.ts`, `false` por defecto. `server.ts` la pasa al worker. Se suma a `infra/segel-fs/fs.env.example` en `false`, porque `RECONCILE_DEFERRED_ENABLED` queda apagada (`SPEC_DESPLIEGUE_SEGEL_FS_v0.2`, D-5).
 
 **Servicio.** `refreshFiscalStatusForDocumento` recibe una opcion `omitirRefreshEnLote`, `false` por defecto. El refresh manual (`facturas.service.ts:225`) y la reconciliacion (`:443`) no la pasan: no cambian.
 
@@ -43,7 +43,7 @@ Efecto lateral buscado: un documento en `QUEUED_BATCH` deja de hacer una consult
 **Worker** (`verificacion.worker.ts`).
 
 - Constantes nuevas: `ESTADO_EN_LOTE = "SENT_BATCH"`, `INTERVALO_EN_LOTE_MS` de 15 min y `HORAS_MAXIMAS_EN_LOTE = 48`.
-- Con la bandera encendida, estado canonico `SENT_BATCH` y menos de 48 h desde `created_at`: reprograma a 15 min y conserva los intentos tal como estaban antes de reclamar. Hoy el reclamo ya suma uno: se escribe `item.attempts - 1`, con minimo 0.
+- Con estado canonico `SENT_BATCH` y menos de 48 h desde `created_at`, con o sin bandera (RN-24.0): reprograma a 15 min y conserva los intentos tal como estaban antes de reclamar. Hoy el reclamo ya suma uno: se escribe `item.attempts - 1`, con minimo 0.
 - En cualquier otro caso, el codigo actual.
 - Si la lectura falla, `estadoCanonico` queda nulo y rige el backoff (CA-24.5).
 

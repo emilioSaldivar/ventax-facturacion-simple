@@ -37,7 +37,8 @@ if (env.FE_VERIFY_WORKER_ENABLED) {
     repository: facturasRepository,
     gateway: fiscalGateway,
     intervalMs: env.FE_VERIFY_WORKER_INTERVAL_MS,
-    batchSize: env.FE_VERIFY_BATCH_SIZE
+    batchSize: env.FE_VERIFY_BATCH_SIZE,
+    omitirRefreshEnLote: env.VERIFICACION_LOTE_SIN_REFRESH
   });
   logger.info({ intervalMs: env.FE_VERIFY_WORKER_INTERVAL_MS, batchSize: env.FE_VERIFY_BATCH_SIZE }, "verificacion fiscal worker enabled");
 }

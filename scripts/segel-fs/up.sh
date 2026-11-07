@@ -14,13 +14,19 @@ docker network inspect "$NETWORK" >/dev/null 2>&1 || docker network create "$NET
 # La imagen de FE corre como node (uid 1000) y el usuario de deploy puede tener otro uid.
 # El chown se hace desde un contenedor, sin sudo (PLAN §4).
 runtime="$ROOT/fe-runtime"
-mkdir -p "$runtime/secrets" "$runtime/runtime/cert-seed" "$runtime/runtime/cert-uploads" "$runtime/runtime/logo-uploads"
+mkdir -p "$runtime/secrets" "$runtime/runtime/cert-seed" "$runtime/runtime/cert-uploads" "$runtime/runtime/logo-uploads" "$runtime/runtime/kude-cache"
 docker run --rm --user 0 --network none --entrypoint chown -v "$runtime:/d" fe-segel-api -R 1000:1000 /d/secrets /d/runtime
 
 (
   cd "$ROOT/fe"
   export FE_ENV_FILE=.env.segel
   docker compose --env-file .env.segel -f docker-compose.prod.yml up -d --no-build
+  # El entorno de un contenedor queda fijo al crearlo: restart no relee el env_file, y una bandera
+  # nueva solo entra al recrear. --no-deps: no repite migrate ni toca Postgres.
+  docker compose --env-file .env.segel -f docker-compose.prod.yml up -d --no-build --no-deps --force-recreate \
+    api worker-batch worker-status-sync worker-cargas worker-correo
+  # Como en FS: el nginx del frontend resuelve "api" al arrancar y quedaria con la IP vieja.
+  docker compose --env-file .env.segel -f docker-compose.prod.yml restart frontend
 )
 
 (

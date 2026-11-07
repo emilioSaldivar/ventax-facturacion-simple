@@ -291,10 +291,10 @@ describe("verificacion fiscal worker", () => {
       expect(espera).toBeLessThanOrEqual(6 * 60 * 1000);
     });
 
-    it("CA-02: si el documento ya salio de la cola, rige el backoff vigente", async () => {
+    it("CA-02: si el documento ya salio de la cola con otro estado pendiente, rige el backoff vigente", async () => {
       const repo = enCola({}, { attempts: 2 });
       const gateway = new FakeGateway(pendienteEnCola);
-      gateway.statusCanonico = "SENT_BATCH";
+      gateway.statusCanonico = "ALGO_PENDIENTE";
       const antes = Date.now();
       await correr(repo, gateway);
 
@@ -317,6 +317,82 @@ describe("verificacion fiscal worker", () => {
 
       expect(repo.scheduleCalls[0].attempts).toBe(3);
       expect(repo.scheduleCalls[0].nextAt!.getTime() - antes).toBeGreaterThanOrEqual(5 * 60 * 60 * 1000);
+    });
+  });
+
+  describe("FS-24: documentos en lote", () => {
+    const pendiente = { estado: "PENDIENTE_SIFEN", current_cdc: null, status_raw: "SENT_BATCH", result_code: null, result_message: null, raw: {} } as FiscalRefreshStatusResponse;
+
+    async function correr(opciones: { attempts?: number; createdAt?: string; omitir?: boolean; status?: string; gateway?: FakeGateway } = {}) {
+      const repo = new FakeRepository();
+      repo.findByIdResponse = buildDocumento({ estado: "PENDIENTE_SIFEN" });
+      repo.claimQueue = [buildPendingVerificacion({
+        attempts: opciones.attempts ?? 3,
+        ...(opciones.createdAt ? { createdAt: opciones.createdAt } : {})
+      })];
+      const gateway = opciones.gateway ?? new FakeGateway(pendiente);
+      gateway.statusCanonico = opciones.status ?? "SENT_BATCH";
+      const refresh = vi.spyOn(gateway, "refreshFacturaStatus");
+      const antes = Date.now();
+      const stop = startVerificacionFiscalWorker({
+        repository: repo as unknown as FacturaRepository,
+        gateway: gateway as unknown as FiscalGateway,
+        intervalMs: 100000,
+        batchSize: 10,
+        omitirRefreshEnLote: opciones.omitir
+      });
+      stop();
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      return { repo, refresh, espera: repo.scheduleCalls[0]!.nextAt ? repo.scheduleCalls[0]!.nextAt.getTime() - antes : null };
+    }
+
+    it("CA-24.1: bandera apagada: consulta con refresh, reprograma a 15 min y no gasta intentos", async () => {
+      const { repo, refresh, espera } = await correr({ attempts: 3 });
+      expect(refresh).toHaveBeenCalledTimes(1);
+      expect(repo.scheduleCalls[0]!.attempts).toBe(2);
+      expect(espera).toBeGreaterThanOrEqual(14 * 60 * 1000);
+      expect(espera).toBeLessThanOrEqual(16 * 60 * 1000);
+    });
+
+    it("CA-24.2: bandera encendida y SENT_BATCH: sin refresh, 15 min, intentos sin cambio", async () => {
+      const { repo, refresh, espera } = await correr({ attempts: 3, omitir: true });
+      expect(refresh).not.toHaveBeenCalled();
+      expect(repo.scheduleCalls[0]!.attempts).toBe(2);
+      expect(espera).toBeLessThanOrEqual(16 * 60 * 1000);
+    });
+
+    it("bandera encendida y QUEUED_BATCH: sin refresh, con la regla de la cola", async () => {
+      const { refresh, espera } = await correr({ omitir: true, status: "QUEUED_BATCH" });
+      expect(refresh).not.toHaveBeenCalled();
+      expect(espera).toBeLessThanOrEqual(6 * 60 * 1000);
+    });
+
+    it("RN-24.4: bandera encendida con otro estado: consulta con refresh", async () => {
+      const { refresh } = await correr({ omitir: true, status: "ALGO_PENDIENTE" });
+      expect(refresh).toHaveBeenCalledTimes(1);
+    });
+
+    it("el primer intento no baja de cero", async () => {
+      const { repo } = await correr({ attempts: 0 });
+      expect(repo.scheduleCalls[0]!.attempts).toBe(0);
+    });
+
+    it("CA-24.4: con mas de 48 h en lote vuelve al backoff vigente", async () => {
+      const { repo, espera } = await correr({ attempts: 3, createdAt: new Date(Date.now() - 49 * 3_600_000).toISOString() });
+      expect(repo.scheduleCalls[0]!.attempts).toBe(3);
+      expect(espera).toBeGreaterThanOrEqual(5 * 3_600_000);
+    });
+
+    it("CA-24.5: si la lectura falla rige el backoff vigente", async () => {
+      const { repo, espera } = await correr({ attempts: 3, omitir: true, gateway: new FakeGateway(new FiscalGatewayError("UPSTREAM_ERROR", "fallo")) });
+      expect(repo.scheduleCalls[0]!.attempts).toBe(3);
+      expect(espera).toBeGreaterThanOrEqual(5 * 3_600_000);
+    });
+
+    it("CA-24.3: una factura que sale del lote aprobada se retira de la agenda", async () => {
+      const aprobada = { ...pendiente, estado: "EMITIDA" } as FiscalRefreshStatusResponse;
+      const { repo } = await correr({ status: "APPROVED", gateway: new FakeGateway(aprobada) });
+      expect(repo.scheduleCalls[0]!.nextAt).toBeNull();
     });
   });
 

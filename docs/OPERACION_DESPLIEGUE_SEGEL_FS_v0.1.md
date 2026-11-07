@@ -2,7 +2,7 @@
 
 Paso a paso para levantar la instancia en `segel-fs`, primero en SIFEN test y luego en produccion. Cada fase indica como se verifica. Si una verificacion falla, no seguir.
 
-> **Segunda entrega (2026-11-07):** FE `segel-rc3`, dos workers mas, `kude-cache`, banderas nuevas y carga masiva. Hasta que se ejecute, este runbook describe la instancia tal como esta hoy; los cambios estan en `docs/PLAN_DESPLIEGUE_SEGEL_FS_v0.2.md`, seccion 1, y se vuelcan aqui al implementarlos (SF2-008).
+> **Segunda entrega:** este runbook ya refleja FE `segel-rc3`, sus dos workers, `kude-cache`, las banderas nuevas y la carga masiva. En una instancia que ya existe, las variables nuevas se agregan a mano y el orden es el de `docs/PLAN_DESPLIEGUE_SEGEL_FS_v0.2.md`, secciones 3 y 4.
 
 ## Alineacion
 
@@ -29,9 +29,9 @@ bash scripts/segel-fs/deploy.sh files
 bash scripts/segel-fs/deploy.sh images
 ```
 
-FE queda fijado en `segel-rc2`. Para otra version: `FE_REF=<tag>`, solo cuando FE lo anuncie. La version de FE se comprueba por este tag: FE no expone `X-App-Version`.
+FE queda fijado en `segel-rc3`. Para otra version: `FE_REF=<tag>`, solo cuando FE lo anuncie. La version de FE se comprueba por este tag: FE no expone `X-App-Version`.
 
-**Verificar:** `docker images` en la VPS muestra las nueve imagenes `segel-fs-*` y `fe-segel-*`.
+**Verificar:** `docker images` en la VPS muestra las once imagenes `segel-fs-*` y `fe-segel-*`.
 
 ## Fase 2. Stacks (en la VPS)
 
@@ -53,6 +53,8 @@ Una contrasena SMTP con `#` no lleva comillas, y no puede tener un espacio antes
 - `bootstrap.sh` informa T&C activo `segel-1.0` y 0 emisores en una base nueva. La base de test conserva a AWAPURA inactivo, de una version anterior de FE.
 - `ss -tln`: solo `8092` y `8100` en `10.100.0.145`; `8091`, `9989` y `5434` en `127.0.0.1`.
 - Dentro de `fe-segel-api-1`: `SIFEN_ENV` es el ambiente elegido.
+- `GET /v1/health` de FE trae `java.kude.ok` y `java.firma.ok` en `true`. Con cualquiera en `false`, **no emitir**: quitar `java8_home`, poner `KUDE_JAVA_BIN=java`, correr `up.sh` y avisar a FE con la linea `java.check failed`.
+- `worker-cargas` y `worker-correo` arriba, sin reinicios en bucle. `docker logs fe-segel-worker-correo-1` muestra `email.worker start`.
 
 Cargar el padron DNIT, necesario para autocompletar clientes por RUC o cedula. El cron solo corre el dia 5 de cada mes:
 
@@ -64,7 +66,7 @@ Usa `DNIT_STATEMENT_TIMEOUT=15min`: con el limite de 60 s del loader, el paso fi
 
 **Verificar:** `dnit_ruc_contribuyentes` queda con cerca de 2 millones de filas, y `/var` conserva espacio libre.
 
-Para aplicar un cambio de `.env.segel`, correr de nuevo `bash bin/up.sh`, que tambien reinicia el frontend de FS. Sin ese reinicio, recrear la API deja al frontend con la IP vieja y responde 502.
+Para aplicar un cambio de `.env.segel`, correr de nuevo `bash bin/up.sh`: recrea la API y los workers de FE, porque `restart` no relee el `env_file`, y reinicia los dos frontends. Sin ese reinicio, recrear una API deja a su frontend con la IP vieja y responde 502.
 
 El administrador nuevo debe aceptar los T&C antes de usar el backoffice, y esa pantalla solo existe en la app (FS-18): entrar una vez por `/app/`, aceptar y recien despues usar `/backoffice/`.
 
@@ -133,7 +135,7 @@ Registrar cada resultado en `TASKS`.
 
 ## Fase 7. Lote por CSV
 
-Hoy no existe carga por CSV en la app del operador. Requiere SPEC, PLAN y TASKS propios antes de esta fase.
+Pestana "Carga masiva" de Documentos (`docs/SPEC_CARGA_MASIVA_FACTURAS_v0.1.md`). El consumidor del facturador necesita el permiso `CARGA_MASIVA` y una cuota diaria, que no se otorgan por defecto: `cargar-facturador.py --carga-masiva <cuota>` al darlo de alta, o el backoffice de FE si ya existe. Sin eso, la subida responde que la funcion no esta habilitada para el facturador. El envio es siempre por lote.
 
 ## Fase 8. Paso a produccion
 
@@ -154,7 +156,7 @@ Luego repetir las fases 2 a 6 con estas diferencias:
 | `--ambiente` | `test` | `prod` |
 | `--sumar-numerador` | `1000` | No se usa: `siguiente_numero` real y confirmado en el archivo |
 | Origen del emisor | `fe-test` | JSON con los datos del cliente |
-| `FE_REF` | `segel-rc1` | El tag que FE anuncie como final |
+| `FE_REF` | `segel-rc3` | `segel-rc3` |
 | Timbrado, certificado y CSC | De test | De produccion, los que entrega la SET |
 | OTP del operador | Por base de datos | Por correo; no usar `activar-operador-test.cjs` |
 | Contrasena de administradores | Prueba | Nueva y privada |

@@ -236,7 +236,8 @@ export async function refreshFiscalStatusForDocumento(
   facturadorId: string,
   documentoId: string,
   repository: FacturaRepository,
-  gateway: FiscalGateway
+  gateway: FiscalGateway,
+  options: { omitirRefreshEnLote?: boolean } = {}
 ): Promise<DocumentoResponse> {
   const documento = await repository.findById({ facturadorId, documentoId });
   if (!documento) {
@@ -275,6 +276,29 @@ export async function refreshFiscalStatusForDocumento(
   // FS-11: una consulta con refresh en FE puede devolver una factura cancelada a aprobada (FE-02).
   // Un documento anulado no se vuelve a consultar en SIFEN.
   const anulado = documento.estado === "ANULADA";
+
+  // FS-24, RN-24.2: con el documento en lote, FE ya consulta a SIFEN por su cuenta. Solo el worker
+  // lo pide; el boton "Verificar estado fiscal" siempre consulta (RN-24.5). Si esta lectura falla,
+  // sigue el flujo normal.
+  if (options.omitirRefreshEnLote && !anulado) {
+    const enLote = await gateway.getDocumentoCanonico(documentUuid).catch(() => null);
+    if (enLote && (enLote.status === "SENT_BATCH" || enLote.status === "QUEUED_BATCH")) {
+      const actualizado = await repository.updateFiscalStatus({
+        facturadorId,
+        documentoId,
+        estado: enLote.estado ?? documento.estado,
+        fiscalStatus: mergeFiscalStatus(documento.fiscal_status, { canonical: enLote.raw }),
+        fiscalStatusRaw: enLote.status,
+        sifenResultCode: null,
+        sifenResultMessage: null
+      });
+      if (!actualizado) {
+        throw new HttpError(404, "NOT_FOUND", "Documento no encontrado.");
+      }
+      return actualizado;
+    }
+  }
+
   let refreshed: Awaited<ReturnType<FiscalGateway["refreshFacturaStatus"]>> | null = null;
   try {
     refreshed = anulado ? null : await gateway.refreshFacturaStatus({ documentUuid });

@@ -25,6 +25,8 @@ const envSchema = z.object({
   FE_VERIFY_WORKER_ENABLED: z.enum(["true", "false"]).default("true").transform((value) => value === "true"),
   FE_VERIFY_WORKER_INTERVAL_MS: z.coerce.number().int().positive().default(30000),
   FE_VERIFY_BATCH_SIZE: z.coerce.number().int().positive().default(10),
+  /** FS-24, RN-24.6: encender solo con RECONCILE_DEFERRED_ENABLED=true en FE. Sin ella, el refresh destraba documentos. */
+  VERIFICACION_LOTE_SIN_REFRESH: z.enum(["true", "false"]).default("false").transform((value) => value === "true"),
   /** Carga masiva de facturas (SPEC_CARGA_MASIVA_FACTURAS_v0.1). Apagada: rutas 404, sin pestana, sin worker. */
   CARGA_MASIVA_ENABLED: z.enum(["true", "false"]).default("false").transform((value) => value === "true"),
   /** RN-01b: por encima del tope de FE (20 MB) y por debajo del nginx (25 MB), para que el 413 normal lo de FE. */

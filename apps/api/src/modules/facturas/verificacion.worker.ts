@@ -30,6 +30,14 @@ const DIAS_CORTE_VERIFICACION = 30;
 const ESTADO_EN_COLA = "QUEUED_BATCH";
 const INTERVALO_EN_COLA_MS = 5 * 60 * 1000;
 
+/**
+ * FS-24, RN-24.0: `SENT_BATCH` es "en proceso", no un fallo. Se espera sin gastar intentos hasta 48 h,
+ * el plazo de FE. SIFEN puede tardar horas: con backoff, una aprobacion a las 4 h se veria a las 7 h 35.
+ */
+const ESTADO_EN_LOTE = "SENT_BATCH";
+const INTERVALO_EN_LOTE_MS = 15 * 60 * 1000;
+const HORAS_MAXIMAS_EN_LOTE = 48;
+
 function nextBackoffMs(attempts: number): number {
   const index = Math.min(Math.max(attempts, 1), BACKOFF_MS.length) - 1;
   return BACKOFF_MS[index] ?? BACKOFF_MS[BACKOFF_MS.length - 1]!;
@@ -55,6 +63,8 @@ export function startVerificacionFiscalWorker(options: {
   gateway: FiscalGateway;
   intervalMs: number;
   batchSize: number;
+  /** FS-24, RN-24.1: no consultar a SIFEN con el documento en lote. */
+  omitirRefreshEnLote?: boolean;
 }): () => void {
   let running = false;
 
@@ -64,7 +74,9 @@ export function startVerificacionFiscalWorker(options: {
     let resultingEstado = item.estado;
     let estadoCanonico: string | null = null;
     try {
-      const updated = await refreshFiscalStatusForDocumento(item.facturadorId, item.documentoId, options.repository, gateway);
+      const updated = await refreshFiscalStatusForDocumento(item.facturadorId, item.documentoId, options.repository, gateway, {
+        omitirRefreshEnLote: options.omitirRefreshEnLote
+      });
       resultingEstado = updated.estado;
       estadoCanonico = updated.fiscal_status_raw;
 
@@ -116,6 +128,16 @@ export function startVerificacionFiscalWorker(options: {
         documentoId: item.documentoId,
         nextAt: new Date(Date.now() + INTERVALO_EN_COLA_MS),
         attempts: 0
+      });
+      return;
+    }
+
+    // El reclamo ya sumo uno: se devuelve, para que la espera en lote no gaste intentos.
+    if (estadoCanonico === ESTADO_EN_LOTE && ageDays * 24 < HORAS_MAXIMAS_EN_LOTE) {
+      await options.repository.scheduleNextVerificacion({
+        documentoId: item.documentoId,
+        nextAt: new Date(Date.now() + INTERVALO_EN_LOTE_MS),
+        attempts: Math.max(item.attempts - 1, 0)
       });
       return;
     }

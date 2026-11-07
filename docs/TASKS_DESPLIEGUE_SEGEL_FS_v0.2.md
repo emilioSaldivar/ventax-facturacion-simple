@@ -7,7 +7,7 @@
 
 ## Estado
 
-**Documentacion en refinamiento, sin implementar (2026-11-07, D-8).** Nada arranca hasta que el usuario lo indique, y cada paso del PLAN (scripts, ensayo local, despliegue, prueba en produccion) pide su propia confirmacion directa.
+**Paso 1 implementado (2026-11-07), por indicacion del usuario.** El ensayo local espera el tag `segel-rc3` (B-1). El despliegue y la prueba en produccion piden su propia confirmacion directa.
 
 ## Matriz
 
@@ -16,11 +16,11 @@
 | SF2-001 | — | SPEC, PLAN y TASKS v0.2 | Decisiones D-1 a D-8 registradas; documentos en `AGENTS.md` | FS | DONE (2026-11-07) |
 | SF2-002 | — | Confirmaciones pendientes del usuario: interpretacion de D-4 (100 facturas de 1.100, en 3 cargas), correo del comprador, cliente e item (B-3), respaldo manual (B-6), FS-24 dentro o fuera de la entrega (B-7) | Respuestas anotadas en el SPEC | Usuario | TODO |
 | SF2-003 | — | Tag `segel-rc3` publicado por FE | FE avisa; `git -C facturacion-electronica rev-parse segel-rc3` resuelve | FE, con autorizacion del usuario | BLOCKED (B-1) |
-| SF2-004 | 1 | `build-images.sh` y `deploy.sh`: `FE_REF=segel-rc3`, imagenes `fe-segel-worker-cargas` y `fe-segel-worker-correo` | `bash -n`; `deploy.sh bundle` en un directorio temporal lista once imagenes | FS | TODO |
-| SF2-005 | 1 | `up.sh`: crea `fe-runtime/runtime/kude-cache` antes del `chown`; `--force-recreate` de API y workers de FE tras el `up -d` | Ensayo local: la carpeta queda con dueno 1000 y FE escribe en ella; un cambio de bandera en `.env.segel` se ve en `docker exec ... printenv` tras `up.sh` | FS | TODO |
-| SF2-006 | 1 | `fe.env.example` y `fs.env.example` con las variables de "todo encendido" y las dos banderas de D-5 en `false` (RN-03) | `init-env.sh test` en local produce archivos con esos valores; `check-no-secrets` en verde | FS | TODO |
-| SF2-007 | 1 | `cargar-facturador.py --carga-masiva [cuota]` | Sin la opcion, el consumidor no recibe `CARGA_MASIVA`; con ella, el permiso y la cuota quedan en FE (ensayo local) | FS | TODO (= CMF-019 de la carga masiva) |
-| SF2-008 | 1 | Runbook `OPERACION_DESPLIEGUE_SEGEL_FS_v0.1` actualizado | Fase 1, 2 y 7 segun PLAN, seccion 1 | FS | TODO |
+| SF2-004 | 1 | `build-images.sh` y `deploy.sh`: `FE_REF=segel-rc3`, imagenes `fe-segel-worker-cargas` y `fe-segel-worker-correo` | `bash -n`; `deploy.sh bundle` en un directorio temporal lista once imagenes | FS | DONE (2026-11-07), E-0 |
+| SF2-005 | 1 | `up.sh`: crea `fe-runtime/runtime/kude-cache` antes del `chown`; `--force-recreate` de API y workers de FE tras el `up -d` | Ensayo local: la carpeta queda con dueno 1000 y FE escribe en ella; un cambio de bandera en `.env.segel` se ve en `docker exec ... printenv` tras `up.sh` | FS | DONE en codigo (2026-11-07), E-0; criterio se cierra en el ensayo local |
+| SF2-006 | 1 | `fe.env.example` y `fs.env.example` con las variables de "todo encendido" y las dos banderas de D-5 en `false` (RN-03) | `init-env.sh test` en local produce archivos con esos valores; `check-no-secrets` en verde | FS | DONE (2026-11-07), E-0 |
+| SF2-007 | 1 | `cargar-facturador.py --carga-masiva [cuota]` | Sin la opcion, el consumidor no recibe `CARGA_MASIVA`; con ella, el permiso y la cuota quedan en FE (ensayo local) | FS | DONE en codigo (2026-11-07), E-0; criterio se cierra en el ensayo local |
+| SF2-008 | 1 | Runbook `OPERACION_DESPLIEGUE_SEGEL_FS_v0.1` actualizado | Fase 1, 2 y 7 segun PLAN, seccion 1 | FS | DONE (2026-11-07) |
 | SF2-009 | 2 | Paquete local: bundle, `init-env.sh test`, archivos CSV de prueba y script generador, lista de verificacion del guion | Stack arriba con las imagenes de SF2-003 y SF2-004; sin secretos en git | FS | BLOCKED: espera SF2-003 |
 | SF2-010 | 2 | Secretos, emisor de test, certificado y CSC en el stack local (B-4, B-5) | Readiness de FE sin faltantes; correo de prueba desde FS recibido | Usuario | BLOCKED: espera SF2-009 |
 | SF2-011 | 2 | Ensayo local: guion del PLAN, seccion 2.3, pasos 1 a 9 | CA-01 y CA-06; resultados en E-1 | Usuario ejecuta, FS registra | BLOCKED: espera SF2-010 |
@@ -48,4 +48,10 @@ FE reune (2026-11-07) los numeros de FE y FS para que el usuario pida recursos a
 
 ## Evidencia
 
-Sin evidencia todavia. Al ejecutar: E-1 ensayo local, E-2 despliegue, E-3 prueba en produccion.
+### E-0. Scripts y plantillas (2026-11-07)
+
+`bash -n` de los scripts y `check-no-secrets` en verde. API: 594 pruebas pasan, 0 fallan. Ensayo en seco con `deploy.sh bundle` e `init-env.sh test`, con el compose de la punta de `branding/segel-staging` y sin levantar nada: `compose config` resuelve las imagenes `fe-segel-*` que construye `build-images.sh`, `cpus: 1` en los dos workers, `kude-cache` en `api`, `worker-batch` y `worker-correo`. Nuevos: `generar-carga.py` y `ensayo-local.sh`. Sin probar contra un stack: `up.sh` con `--force-recreate` y `cargar-facturador.py --carga-masiva`, que se prueban en el ensayo local.
+
+FS-24 entro en esta entrega, partido en dos por la condicion de FE: la espera de `SENT_BATCH` a 15 min sin gastar intentos vale siempre, y omitir el `refresh` queda con `VERIFICACION_LOTE_SIN_REFRESH=false` (`SPEC_CORRECCIONES_TRAS_FIXES_FE_v0.1`, RN-24.0 y RN-24.1). `up.sh` reinicia tambien el frontend de FE, no solo el de FS, porque recrear la API lo dejaria con la IP vieja.
+
+Pendientes: E-1 ensayo local, E-2 despliegue, E-3 prueba en produccion.

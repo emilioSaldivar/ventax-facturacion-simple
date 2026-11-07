@@ -7,7 +7,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 FS_REF="${FS_REF:-HEAD}"
 FE_REPO="${FE_REPO:-$ROOT_DIR/../../FACTURACION_ELECTRONICA_MVP/facturacion-electronica}"
-FE_REF="${FE_REF:-segel-rc2}"
+FE_REF="${FE_REF:-segel-rc3}"
 
 FS_SHA="$(git -C "$ROOT_DIR" rev-parse --short "$FS_REF")"
 FE_SHA="$(git -C "$FE_REPO" rev-parse --short "$FE_REF")"
@@ -29,7 +29,8 @@ build --build-arg "BUILD_COMMIT_SHA=$FS_SHA" -f "$WORK_DIR/fs/infra/docker/front
   -t segel-fs-frontend "$WORK_DIR/fs"
 build -t segel-fs-dnit-ruc-loader-cron "$WORK_DIR/fs/dnit-ruc-loader"
 
-build -t fe-segel-api -t fe-segel-migrate -t fe-segel-worker-batch -t fe-segel-worker-status-sync "$WORK_DIR/fe"
+build -t fe-segel-api -t fe-segel-migrate -t fe-segel-worker-batch -t fe-segel-worker-status-sync \
+  -t fe-segel-worker-cargas -t fe-segel-worker-correo "$WORK_DIR/fe"
 build -t fe-segel-frontend "$WORK_DIR/fe/frontend"
 
 echo "Imagenes listas: FS $FS_SHA / FE $FE_SHA"

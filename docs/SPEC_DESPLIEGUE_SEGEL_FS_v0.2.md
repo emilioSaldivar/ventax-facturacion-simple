@@ -7,7 +7,7 @@
 - `docs/SPEC_DESPLIEGUE_SEGEL_FS_v0.1.md`, `PLAN` y `TASKS` v0.1: la instancia ya esta en produccion con FS `8e18e87` y FE `segel-rc1` (frontend `segel-rc2`). Sus reglas siguen vigentes; esta version las amplia para la segunda entrega.
 - `docs/OPERACION_DESPLIEGUE_SEGEL_FS_v0.1.md`: runbook de la primera entrega. El PLAN v0.2 indica que cambia.
 - `docs/SPEC_CARGA_MASIVA_FACTURAS_v0.1.md`: la carga masiva de FS, implementada contra el mock (fases A a D), que esta entrega valida contra FE real y lleva a produccion.
-- `docs/SPEC_CORRECCIONES_TRAS_FIXES_FE_v0.1.md`: FS-20, FS-21 y FS-23 viajan en esta entrega; FS-24 no.
+- `docs/SPEC_CORRECCIONES_TRAS_FIXES_FE_v0.1.md`: FS-20, FS-21, FS-23 y FS-24 viajan en esta entrega.
 - Documento de FE, fuera de git: `FACTURACION_ELECTRONICA_MVP/fe-local-data/segel-fs/DESPLIEGUE_VOLUMEN_SEGEL_FS_2026-11-07.md` (corregido por FE el 2026-11-07, su FIX011). Es la fuente de las banderas y pasos del lado de FE.
 
 ## Objetivo
@@ -52,7 +52,7 @@ Llevar a `segel-fs` las mejoras de volumen de FE (tag `segel-rc3`) y la carga ma
 ## Impacto sobre lo que ya corre en `segel-fs`
 
 - `POST /v1/factura` pasa a responder `email_status: PENDING`, y el `SENT` se ve al consultar el documento. FS ya lo trata asi (FS-14 y guia 32.3).
-- Con `BATCH_LOTES_POR_CICLO=5`, habra mas documentos a la vez en `SENT_BATCH` (hasta 250 por emisor). El worker de verificacion de FS cuenta ese estado como intento y aleja la proxima consulta; FS-24 lo corrige y **no entra en esta entrega**, porque depende de `RECONCILE_DEFERRED_ENABLED`, apagada por D-5. Las facturas de carga masiva no pasan por ese worker (RN-17 de la carga masiva), asi que la prueba de D-4 no lo sufre. Queda registrado en `TASKS_CORRECCIONES_TRAS_FIXES_FE_v0.1`.
+- Con `BATCH_LOTES_POR_CICLO=5`, habra mas documentos a la vez en `SENT_BATCH` (hasta 250 por emisor). El worker de verificacion de FS los espera a 15 min sin gastar intentos (FS-24) y sigue consultando con `refresh`, porque `RECONCILE_DEFERRED_ENABLED` queda apagada por D-5. Las facturas de carga masiva no pasan por ese worker (RN-17 de la carga masiva).
 - La migracion `0037` amplia `factura_items_snapshot.cantidad` a `numeric`: las facturas existentes conservan sus valores. Comprobado en una copia de la base local (TASKS de la carga masiva, E-3); la base de produccion se respalda antes (PLAN, seccion 4).
 
 ## Bloqueos y pendientes
@@ -62,12 +62,12 @@ Llevar a `segel-fs` las mejoras de volumen de FE (tag `segel-rc3`) y la carga ma
 - **B-3. Datos de la prueba en produccion.** Cliente, correo del comprador, descripcion del item y reparto en cargas: los define el usuario (RN-07).
 - **B-4. Correo real en el ensayo local.** La casilla `no-reply-facturacion@segel.com.py` debe poder usarse desde la estacion: salida a `smtp.office365.com:587` y contrasena cargada por el usuario en los `.env` locales. Las credenciales SMTP de staging de FE no sirven (FE, V125).
 - **B-5. Emisor de test para el ensayo local.** Hace falta un emisor con certificado y CSC de SIFEN test. Propuesta: 5057016-1 exportado desde `fe-test` con `--sumar-numerador`, como en la primera entrega; el certificado y el CSC los carga el usuario en el admin del FE local.
-- **B-7. FS-24 antes del despliegue.** FE pide (2026-11-07) ajustar FS-24 antes de esta entrega, con cualquier valor de las banderas de D-5: con 5 lotes por ciclo habra hasta 250 documentos por emisor en `SENT_BATCH` a la vez, y el worker de verificacion de FS gasta un intento por cada consulta en ese estado. Propuesta de FE: `SENT_BATCH` y `QUEUED_BATCH` se esperan; el fallo real es `REJECTED` o mas de 48 h en `SENT_BATCH`. El diseno de FS-24 en `PLAN_CORRECCIONES_TRAS_FIXES_FE_v0.1` ya es ese, pero estaba atado a `RECONCILE_DEFERRED_ENABLED`; con D-5 esa atadura deja de tener sentido. **Decision pendiente del usuario (SF2-002):** incluir FS-24 en esta entrega, desatado de la bandera de FE, o dejarlo fuera y aceptar consultas mas espaciadas para las facturas de la app.
+- **B-7. FS-24 antes del despliegue.** FE pide (2026-11-07) ajustar FS-24 antes de esta entrega, con cualquier valor de las banderas de D-5: con 5 lotes por ciclo habra hasta 250 documentos por emisor en `SENT_BATCH` a la vez, y el worker de verificacion de FS gasta un intento por cada consulta en ese estado. Propuesta de FE: `SENT_BATCH` y `QUEUED_BATCH` se esperan; el fallo real es `REJECTED` o mas de 48 h en `SENT_BATCH`. El diseno de FS-24 en `PLAN_CORRECCIONES_TRAS_FIXES_FE_v0.1` ya es ese, pero estaba atado a `RECONCILE_DEFERRED_ENABLED`; con D-5 esa atadura deja de tener sentido. **Resuelto (2026-11-07):** entra en esta entrega, como FS recomendo y el usuario no objeto al indicar que se implemente lo que falta. Se parte en dos: la espera vale siempre; omitir el `refresh` sigue atado a la bandera de FE, porque sin ella es lo que destraba un documento.
 - **B-6. Backups.** Siguen pospuestos (D-7 de v0.1). Esta entrega emite 100 facturas reales y aplica dos migraciones: se pide al usuario autorizar un respaldo manual de las dos bases antes del despliegue (PLAN, seccion 4).
 
 ## Fuera de alcance
 
-- FS-24 y las banderas de D-5.
+- Las banderas de D-5.
 - Autogestion del operador (`SPEC_AUTOGESTION_OPERADOR_v0.1`).
 - Modo sincronico de emision, para cualquier facturador.
 - Backups automaticos, TLS, DNS y NGINX, que siguen en sus cadenas.

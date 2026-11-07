@@ -11,11 +11,12 @@ SEGEL_HOST="${SEGEL_HOST:-segel-fs}"
 REMOTE_ROOT="${REMOTE_ROOT:-/home/esaldivar/segel}"
 FS_REF="${FS_REF:-HEAD}"
 FE_REPO="${FE_REPO:-$ROOT_DIR/../../FACTURACION_ELECTRONICA_MVP/facturacion-electronica}"
-FE_REF="${FE_REF:-segel-rc2}"
+FE_REF="${FE_REF:-segel-rc3}"
 
 IMAGES=(
   segel-fs-api segel-fs-migrate segel-fs-frontend segel-fs-dnit-ruc-loader-cron
-  fe-segel-api fe-segel-migrate fe-segel-worker-batch fe-segel-worker-status-sync fe-segel-frontend
+  fe-segel-api fe-segel-migrate fe-segel-worker-batch fe-segel-worker-status-sync
+  fe-segel-worker-cargas fe-segel-worker-correo fe-segel-frontend
 )
 
 bundle() {
