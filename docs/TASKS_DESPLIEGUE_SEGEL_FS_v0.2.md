@@ -1,0 +1,46 @@
+# TASKS Despliegue Segel en VPS propia v0.2: segunda entrega, volumen y carga masiva
+
+## Alineacion
+
+- `docs/SPEC_DESPLIEGUE_SEGEL_FS_v0.2.md`
+- `docs/PLAN_DESPLIEGUE_SEGEL_FS_v0.2.md`
+
+## Estado
+
+**Documentacion en refinamiento, sin implementar (2026-11-07, D-8).** Nada arranca hasta que el usuario lo indique, y cada paso del PLAN (scripts, ensayo local, despliegue, prueba en produccion) pide su propia confirmacion directa.
+
+## Matriz
+
+| ID | Paso | Tarea | Hecho cuando | Quien | Estado |
+|---|---|---|---|---|---|
+| SF2-001 | — | SPEC, PLAN y TASKS v0.2 | Decisiones D-1 a D-8 registradas; documentos en `AGENTS.md` | FS | DONE (2026-11-07) |
+| SF2-002 | — | Confirmaciones pendientes del usuario: interpretacion de D-4 (100 facturas de 1.100, en 3 cargas), correo del comprador, cliente e item (B-3), respaldo manual (B-6) | Respuestas anotadas en el SPEC | Usuario | TODO |
+| SF2-003 | — | Tag `segel-rc3` publicado por FE | FE avisa; `git -C facturacion-electronica rev-parse segel-rc3` resuelve | FE, con autorizacion del usuario | BLOCKED (B-1) |
+| SF2-004 | 1 | `build-images.sh` y `deploy.sh`: `FE_REF=segel-rc3`, imagenes `fe-segel-worker-cargas` y `fe-segel-worker-correo` | `bash -n`; `deploy.sh bundle` en un directorio temporal lista once imagenes | FS | TODO |
+| SF2-005 | 1 | `up.sh`: crea `fe-runtime/runtime/kude-cache` antes del `chown` | Ensayo local: la carpeta queda con dueno 1000 y FE escribe en ella | FS | TODO |
+| SF2-006 | 1 | `fe.env.example` y `fs.env.example` con las variables de "todo encendido" y las dos banderas de D-5 en `false` (RN-03) | `init-env.sh test` en local produce archivos con esos valores; `check-no-secrets` en verde | FS | TODO |
+| SF2-007 | 1 | `cargar-facturador.py --carga-masiva [cuota]` | Sin la opcion, el consumidor no recibe `CARGA_MASIVA`; con ella, el permiso y la cuota quedan en FE (ensayo local) | FS | TODO (= CMF-019 de la carga masiva) |
+| SF2-008 | 1 | Runbook `OPERACION_DESPLIEGUE_SEGEL_FS_v0.1` actualizado | Fase 1, 2 y 7 segun PLAN, seccion 1 | FS | TODO |
+| SF2-009 | 2 | Paquete local: bundle, `init-env.sh test`, archivos CSV de prueba y script generador, lista de verificacion del guion | Stack arriba con las imagenes de SF2-003 y SF2-004; sin secretos en git | FS | BLOCKED: espera SF2-003 |
+| SF2-010 | 2 | Secretos, emisor de test, certificado y CSC en el stack local (B-4, B-5) | Readiness de FE sin faltantes; correo de prueba desde FS recibido | Usuario | BLOCKED: espera SF2-009 |
+| SF2-011 | 2 | Ensayo local: guion del PLAN, seccion 2.3, pasos 1 a 9 | CA-01 y CA-06; resultados en E-1 | Usuario ejecuta, FS registra | BLOCKED: espera SF2-010 |
+| SF2-012 | 2 | Cierre de la carga masiva contra FE real: CMF-018 y CMF-020, supuesto de `actualizado_en` con `correo` | Anotado en `TASKS_CARGA_MASIVA_FACTURAS_v0.1`; desvios del contrato corregidos y reensayados | FS | BLOCKED: espera SF2-011 |
+| SF2-013 | 3 | Respaldo manual de las dos bases en la VPS | Dos dumps en `~/segel/backups`, con tamano y `df` registrados | FS, con autorizacion del usuario | BLOCKED: espera SF2-002 y confirmacion directa |
+| SF2-014 | 3 | Construccion y transferencia (`build-images.sh`, `deploy.sh files`, `deploy.sh images`) | `docker images` en la VPS con las once imagenes | FS | BLOCKED: espera SF2-011 y confirmacion directa |
+| SF2-015 | 3 | Variables en `fe/.env.segel` y `fs/.env.segel` de la VPS, a mano | Valores de RN-03 presentes; sin `JAVA_TOOL_OPTIONS` | FS | BLOCKED: espera SF2-014 |
+| SF2-016 | 3 | `up.sh` y verificacion CA-02 | Salud, workers sin bucle, `java.*.ok` en `true`, puertos publicados correctos | FS | BLOCKED: espera SF2-015 |
+| SF2-017 | 3 | Consumidor del facturador: permiso `CARGA_MASIVA` y cuota en el backoffice de FE; contexto en `SERVICIO` en FS | `GET /v1/cargas/plantilla` con la clave del consumidor responde `200` | FS, por los backoffices | BLOCKED: espera SF2-016 y B-2 |
+| SF2-018 | 3 | Primera factura en produccion y medicion de recursos | CA-03 y CA-05 | Usuario emite, FS mide | BLOCKED: espera SF2-017 |
+| SF2-019 | 4 | Archivos de la prueba en produccion, generados con los datos del usuario y revisados por el | Tres archivos con 20, 30 y 50 filas, que suman 110.000 | FS genera, usuario revisa | BLOCKED: espera SF2-002 y SF2-018 |
+| SF2-020 | 4 | Prueba en produccion: subida, confirmacion, seguimiento y medicion | CA-04 y CA-05; resultados en E-3 | Usuario sube y confirma, FS mide | BLOCKED: espera SF2-019 y confirmacion directa |
+| SF2-021 | — | Cierre: SPEC, PLAN, TASKS v0.2, runbook, cadenas de carga masiva y correcciones, `BACKLOG` | Documentos alineados con lo desplegado; CA-07 | FS | TODO |
+
+## Preguntas abiertas a FE
+
+- Valor de `--sumar-numerador` para el emisor de test en el ensayo local (B-5).
+- Si `up.sh` deja `api` y `worker-batch` sin recrear porque su imagen no cambio: FE pide reiniciarlos igual; se confirma en el ensayo local.
+- Cuota diaria recomendada para el consumidor de produccion.
+
+## Evidencia
+
+Sin evidencia todavia. Al ejecutar: E-1 ensayo local, E-2 despliegue, E-3 prueba en produccion.

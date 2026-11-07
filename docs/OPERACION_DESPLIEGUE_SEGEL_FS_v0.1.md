@@ -2,6 +2,8 @@
 
 Paso a paso para levantar la instancia en `segel-fs`, primero en SIFEN test y luego en produccion. Cada fase indica como se verifica. Si una verificacion falla, no seguir.
 
+> **Segunda entrega (2026-11-07):** FE `segel-rc3`, dos workers mas, `kude-cache`, banderas nuevas y carga masiva. Hasta que se ejecute, este runbook describe la instancia tal como esta hoy; los cambios estan en `docs/PLAN_DESPLIEGUE_SEGEL_FS_v0.2.md`, seccion 1, y se vuelcan aqui al implementarlos (SF2-008).
+
 ## Alineacion
 
 - `docs/SPEC_DESPLIEGUE_SEGEL_FS_v0.1.md`

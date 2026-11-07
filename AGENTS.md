@@ -69,6 +69,9 @@ La fuente de verdad de este proyecto es:
 - `docs/PLAN_DESPLIEGUE_SEGEL_FS_v0.1.md`
 - `docs/TASKS_DESPLIEGUE_SEGEL_FS_v0.1.md`
 - `docs/OPERACION_DESPLIEGUE_SEGEL_FS_v0.1.md`
+- `docs/SPEC_DESPLIEGUE_SEGEL_FS_v0.2.md`
+- `docs/PLAN_DESPLIEGUE_SEGEL_FS_v0.2.md`
+- `docs/TASKS_DESPLIEGUE_SEGEL_FS_v0.2.md`
 - `docs/SPEC_CARGA_SEGEL_FS_v0.1.md`
 - `docs/PLAN_CARGA_SEGEL_FS_v0.1.md`
 - `docs/TASKS_CARGA_SEGEL_FS_v0.1.md`

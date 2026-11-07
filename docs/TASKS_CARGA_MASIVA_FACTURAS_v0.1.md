@@ -7,7 +7,7 @@
 
 ## Estado
 
-**Fases A a D implementadas y validadas contra el mock** (2026-11-07; decision del usuario, D-8; D-9 a D-13 aprobadas y D-14 decidida el mismo dia). Pendiente: la fase E contra FE real (G3). Evidencia E-1 a E-3. Ningun despliegue sin confirmacion directa del usuario. Nada se prueba en `segel-fs`.
+**Fases A a D implementadas y validadas contra el mock** (2026-11-07; decision del usuario, D-8; D-9 a D-13 aprobadas y D-14 decidida el mismo dia). Pendiente: la fase E contra FE real (G3), que ejecuta el usuario en el ensayo local de la segunda entrega (D-15, `TASKS_DESPLIEGUE_SEGEL_FS_v0.2` SF2-009 a SF2-012), y la habilitacion en `segel-fs` con su prueba en produccion (D-16, SF2-017 a SF2-020). Evidencia E-1 a E-3. Ningun despliegue sin confirmacion directa del usuario. Nada se prueba en `segel-fs`.
 
 ## Matriz
 
@@ -30,22 +30,23 @@
 | CMF-015 | D | `carga-masiva.tsx` con las cinco vistas, tercera pestana en `DocumentsView`, refresco cada 15 s, estilos (PLAN 7) | Todos los escenarios de G2 pasan en 1280 px y en 390 px sin desplazamiento horizontal | G2: `scripts/playwright-carga-masiva.cjs` | DONE (2026-11-07), E-2 |
 | CMF-016 | D | Marca "Carga" y numero del archivo en Facturas, con enlace a la carga | La factura de carga abre su carga; KuDE, cancelacion y nota de credito disponibles | G2 | DONE (2026-11-07), E-2 |
 | CMF-017 | D | `nginx.local.conf`: `client_max_body_size 25m` en `location /api/v1/`; cadena de topes nginx 25 MB > FS 24 MB > FE 20 MB (RN-01b, D-14) | Por el stack de `bash scripts/deploy.sh`: un CSV de 2 MB sube; uno de 21 MB recibe el `413` del mock con `tope_bytes = 20971520`; uno de 25 MB recibe el `413` de la API de FS con `tope_bytes = 25165824`, no del nginx (CA-15) | G2 | DONE (2026-11-07), E-2 |
-| CMF-018 | E | `RealFiscalGateway`: nueve metodos contra `tecnica/openapi.yaml` de FE | Las diez rutas de FS responden contra el stack local `fe-cargas`; CA-14 verificado | G3 | PARTIAL (2026-11-07): metodos implementados y probados con `fetch` simulado (E-1). Falta correr contra `fe-cargas`, que usa otra sesion: se coordina con FE. El despliegue espera el tag |
-| CMF-019 | E | `cargar-facturador.py --carga-masiva [cuota]`; `worker-cargas` en `build-images.sh`, `deploy.sh` y `up.sh` de `scripts/segel-fs`, apagado | Sin la opcion, el consumidor no recibe `CARGA_MASIVA`; los scripts construyen y levantan `fe-segel-worker-cargas` con `CARGAS_ENABLED=false` | G3, en local | BLOCKED: espera el tag de FE y la respuesta sobre `EMISSION_RESUME_DRAFT_ENABLED` |
-| CMF-020 | E | Prueba conjunta P-06 en local con FE | Carga finalizada y resultado visible en FS; memoria de la API con un archivo del tope y duracion de la sincronizacion con 5.000, registradas; verificado que FE mueve `actualizado_en` cuando `correo` cambia (PLAN 6, paso 3) | G3 | BLOCKED: espera CMF-018 y el stack de FE disponible |
+| CMF-018 | E | `RealFiscalGateway`: nueve metodos contra `tecnica/openapi.yaml` de FE | Las diez rutas de FS responden contra el stack local `fe-cargas`; CA-14 verificado | G3 | PARTIAL (2026-11-07): metodos implementados y probados con `fetch` simulado (E-1). Se cierra en el ensayo local de SF2-011, contra FE `segel-rc3` |
+| CMF-019 | E | `cargar-facturador.py --carga-masiva [cuota]`; `worker-cargas` en `build-images.sh`, `deploy.sh` y `up.sh` de `scripts/segel-fs`, apagado | Sin la opcion, el consumidor no recibe `CARGA_MASIVA`; los scripts construyen y levantan `fe-segel-worker-cargas` con `CARGAS_ENABLED=false` | G3, en local | TODO: `EMISSION_RESUME_DRAFT_ENABLED=true` confirmado; `worker-cargas` lo trae el compose de FE `segel-rc3`, asi que de los scripts solo cambian las imagenes (SF2-004) y la opcion del loader (SF2-007) |
+| CMF-020 | E | Prueba conjunta P-06 en local con FE | Carga finalizada y resultado visible en FS; memoria de la API con un archivo del tope y duracion de la sincronizacion con 5.000, registradas; verificado que FE mueve `actualizado_en` cuando `correo` cambia (PLAN 6, paso 3) | G3 | BLOCKED: es el guion de SF2-011, ejecutado por el usuario (D-15) |
 | CMF-021 | — | Cierre: repasar SPEC, PLAN, TASKS y `docs/BACKLOG.md` con lo descubierto | Documentos alineados con lo implementado; `AGENTS.md` sin cambios pendientes | — | TODO |
 
 ## Grupos de validacion
 
 | Grupo | Cubre | Como |
 |---|---|---|
+| G3 (detalle) | CMF-018, CMF-020 | Ensayo local de la segunda entrega, `PLAN_DESPLIEGUE_SEGEL_FS_v0.2`, seccion 2.3; lo ejecuta el usuario |
 | G1 | CMF-002 a CMF-005, CMF-007 a CMF-014 | `npm run test`, `npm run typecheck`, `npm run lint` en `apps/api`; `npm run build` del monorepo; integracion con `DATABASE_URL_TEST` sobre la base local |
 | G2 | CMF-006, CMF-015 a CMF-017 | `APP_ENV_FILE=.local/carga-masiva/env bash scripts/deploy.sh` con `FE_GATEWAY_MODE=mock` y `CARGA_MASIVA_ENABLED=true`; `node scripts/playwright-carga-masiva.cjs` y `playwright-carga-masiva-config.cjs` en 1280x800 y 390x844 |
 | G3 | CMF-018 a CMF-020 | Stack de FS con `FE_GATEWAY_MODE=real` contra el stack `fe-cargas` local de FE; nunca `segel-fs` ni Hetzner |
 
 ## Pendientes fuera de la matriz
 
-- Despliegue en `segel-fs`: solo con confirmacion directa del usuario, con `CARGA_MASIVA_ENABLED=false` hasta que FE publique el tag y se cierre G3.
+- Despliegue en `segel-fs`: decidido con `CARGA_MASIVA_ENABLED=true` (D-16), por `TASKS_DESPLIEGUE_SEGEL_FS_v0.2`, con su prueba en produccion; solo tras G3 y con confirmacion directa del usuario en cada paso.
 - Medicion con el volumen del primer cliente real, antes de habilitarlo (D-6).
 - Saldo por documento: registrado en `docs/BACKLOG.md` (D-4).
 - Preguntas a FE: tag e imagenes con `/v1/cargas`; `EMISSION_RESUME_DRAFT_ENABLED=true` como requisito; columnas del CSV de resultado; aviso previo si sube su `CARGA_MAX_BYTES`, para subir los de FS en el mismo orden (RN-01b).

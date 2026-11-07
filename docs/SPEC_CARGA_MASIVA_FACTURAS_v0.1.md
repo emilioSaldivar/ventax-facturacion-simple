@@ -28,7 +28,7 @@ El resultado de SIFEN llega en minutos o en horas: la persona sube, se va y vuel
 - Armar o convertir el archivo desde FS: el cliente sube el archivo de su sistema y es responsable de su contenido (D-2).
 - Validar el contenido fiscal del CSV en FS. Es de FE. FS tampoco interpreta el CSV de resultado: lo reenvia.
 - Correccion de comprobantes rechazados desde la carga: va por `SPEC_AUTOGESTION_OPERADOR_v0.1.md`.
-- Despliegue en `segel-fs`, y cualquier prueba alli.
+- El despliegue en `segel-fs` y la prueba en produccion: van por `SPEC_DESPLIEGUE_SEGEL_FS_v0.2` (D-16).
 
 ## 3. Reglas
 
@@ -187,9 +187,12 @@ Rutas propias de FS: PLAN, seccion 5, y `spec/openapi.yaml`.
 | D-11 | Totales del snapshot | Si el total que calcula FS desde `detalle` difiere del `total` de FE, manda FE, que es lo que esta en el XML; FS lo registra en el log y guarda el de FE en `fiscal_response_snapshot.total_fe` (PLAN 6). Aprobada 2026-11-07 |
 | D-12 | Quien ve las cargas | Operadores: solo las de su contexto operativo. `SOPORTE_INTERNO` y `ADMIN_INTERNO`: todas las del facturador (RN-11). Aprobada 2026-11-07. Se habia descrito como "igual que en `GET /facturas`": es inexacto, ver RN-11 |
 | D-13 | Archivo repetido | Si el mismo SHA-256 ya tiene en FS una carga del facturador que no esta `RECHAZADA` ni `CANCELADA`, FS devuelve esa carga sin llamar a FE cuando el usuario puede verla, y `409` cuando pertenece a otro contexto operativo (seccion 4); en los demas casos FE decide con su `200` (PLAN 5.3). Aprobada 2026-11-07 |
+| D-15 | Prueba contra FE real (G3) | La ejecuta el usuario en la estacion, con un stack FS + FE `segel-rc3` en SIFEN test y correos reales a `esaldivar.segel@gmail.com`; FS prepara stack, datos y guion. No se usa el stack `fe-cargas` de FE. Decidida 2026-11-07; detalle en `PLAN_DESPLIEGUE_SEGEL_FS_v0.2`, seccion 2 |
+| D-16 | Habilitar en `segel-fs` | Si, `CARGA_MASIVA_ENABLED=true`, en la segunda entrega, con prueba en produccion: 110.000 guaranies en facturas de 1.100 a un cliente, en varias cargas, con efecto fiscal real. Decidida 2026-11-07; `SPEC_DESPLIEGUE_SEGEL_FS_v0.2`, D-4 |
+| D-17 | Modo de envio | Siempre por lote (`BATCH`), para todos los clientes; la carga de FE ya emite asi. Decidida 2026-11-07 |
 | D-14 | Tamano del archivo | FS no limita por debajo de FE: nginx 25 MB > API de FS 24 MB > FE 20 MB, todos configurables (RN-01b). El limite de 100.000 lineas de FE cabe en su tope de 20 MB. Decidida por el usuario 2026-11-07 |
 
-**Abierto con FE:** que publique la rama con un tag e imagenes; la prueba de punta a punta en SIFEN test (su CMA-604, pendiente de autorizacion); si `EMISSION_RESUME_DRAFT_ENABLED=true` es requisito en produccion. Nombres y tope ya estan fijados en el OpenAPI publicado.
+**Abierto con FE:** que publique el tag `segel-rc3` (el usuario lo autoriza en la sesion de FE); la prueba de punta a punta en SIFEN test (su CMA-604). `EMISSION_RESUME_DRAFT_ENABLED=true` quedo confirmado como parte de "todo encendido" (`SPEC_DESPLIEGUE_SEGEL_FS_v0.2`, RN-03). Nombres y tope ya estan fijados en el OpenAPI publicado.
 
 **Correo:** FE lo envia despues de la aprobacion de SIFEN; el estado del correo de un comprobante aparece recien entonces (`correo`: `PENDING`, `SENT`, `FAILED`, o nulo sin direccion). Recibos por archivo: fuera de la primera etapa.
 
