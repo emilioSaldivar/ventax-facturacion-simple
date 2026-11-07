@@ -14,7 +14,7 @@
 | ID | Paso | Tarea | Hecho cuando | Quien | Estado |
 |---|---|---|---|---|---|
 | SF2-001 | — | SPEC, PLAN y TASKS v0.2 | Decisiones D-1 a D-8 registradas; documentos en `AGENTS.md` | FS | DONE (2026-11-07) |
-| SF2-002 | — | Confirmaciones pendientes del usuario: interpretacion de D-4 (100 facturas de 1.100, en 3 cargas), correo del comprador, cliente e item (B-3), respaldo manual (B-6) | Respuestas anotadas en el SPEC | Usuario | TODO |
+| SF2-002 | — | Confirmaciones pendientes del usuario: interpretacion de D-4 (100 facturas de 1.100, en 3 cargas), correo del comprador, cliente e item (B-3), respaldo manual (B-6), FS-24 dentro o fuera de la entrega (B-7) | Respuestas anotadas en el SPEC | Usuario | TODO |
 | SF2-003 | — | Tag `segel-rc3` publicado por FE | FE avisa; `git -C facturacion-electronica rev-parse segel-rc3` resuelve | FE, con autorizacion del usuario | BLOCKED (B-1) |
 | SF2-004 | 1 | `build-images.sh` y `deploy.sh`: `FE_REF=segel-rc3`, imagenes `fe-segel-worker-cargas` y `fe-segel-worker-correo` | `bash -n`; `deploy.sh bundle` en un directorio temporal lista once imagenes | FS | TODO |
 | SF2-005 | 1 | `up.sh`: crea `fe-runtime/runtime/kude-cache` antes del `chown` | Ensayo local: la carpeta queda con dueno 1000 y FE escribe en ella | FS | TODO |
@@ -34,6 +34,10 @@
 | SF2-019 | 4 | Archivos de la prueba en produccion, generados con los datos del usuario y revisados por el | Tres archivos con 20, 30 y 50 filas, que suman 110.000 | FS genera, usuario revisa | BLOCKED: espera SF2-002 y SF2-018 |
 | SF2-020 | 4 | Prueba en produccion: subida, confirmacion, seguimiento y medicion | CA-04 y CA-05; resultados en E-3 | Usuario sube y confirma, FS mide | BLOCKED: espera SF2-019 y confirmacion directa |
 | SF2-021 | — | Cierre: SPEC, PLAN, TASKS v0.2, runbook, cadenas de carga masiva y correcciones, `BACKLOG` | Documentos alineados con lo desplegado; CA-07 | FS | TODO |
+
+## Pedido de FE: estimacion de infraestructura
+
+FE reune (2026-11-07) los numeros de FE y FS para que el usuario pida recursos a infraestructura. Lo que FS tiene medido esta en la respuesta enviada a FE y en `TASKS_DESPLIEGUE_SEGEL_FS_v0.1` E-4 y E-9, y en `TASKS_CARGA_SEGEL_FS_v0.1`. Falta medir FS bajo carga masiva real: sale del ensayo local (SF2-011, paso 9) y de la prueba en produccion (SF2-020).
 
 ## Preguntas abiertas a FE
 
