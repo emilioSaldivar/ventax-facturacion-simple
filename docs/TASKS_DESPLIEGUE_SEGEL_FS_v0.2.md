@@ -17,7 +17,7 @@
 | SF2-002 | — | Confirmaciones pendientes del usuario: interpretacion de D-4 (100 facturas de 1.100, en 3 cargas), correo del comprador, cliente e item (B-3), respaldo manual (B-6), FS-24 dentro o fuera de la entrega (B-7) | Respuestas anotadas en el SPEC | Usuario | TODO |
 | SF2-003 | — | Tag `segel-rc3` publicado por FE | FE avisa; `git -C facturacion-electronica rev-parse segel-rc3` resuelve | FE, con autorizacion del usuario | BLOCKED (B-1) |
 | SF2-004 | 1 | `build-images.sh` y `deploy.sh`: `FE_REF=segel-rc3`, imagenes `fe-segel-worker-cargas` y `fe-segel-worker-correo` | `bash -n`; `deploy.sh bundle` en un directorio temporal lista once imagenes | FS | TODO |
-| SF2-005 | 1 | `up.sh`: crea `fe-runtime/runtime/kude-cache` antes del `chown` | Ensayo local: la carpeta queda con dueno 1000 y FE escribe en ella | FS | TODO |
+| SF2-005 | 1 | `up.sh`: crea `fe-runtime/runtime/kude-cache` antes del `chown`; `--force-recreate` de API y workers de FE tras el `up -d` | Ensayo local: la carpeta queda con dueno 1000 y FE escribe en ella; un cambio de bandera en `.env.segel` se ve en `docker exec ... printenv` tras `up.sh` | FS | TODO |
 | SF2-006 | 1 | `fe.env.example` y `fs.env.example` con las variables de "todo encendido" y las dos banderas de D-5 en `false` (RN-03) | `init-env.sh test` en local produce archivos con esos valores; `check-no-secrets` en verde | FS | TODO |
 | SF2-007 | 1 | `cargar-facturador.py --carga-masiva [cuota]` | Sin la opcion, el consumidor no recibe `CARGA_MASIVA`; con ella, el permiso y la cuota quedan en FE (ensayo local) | FS | TODO (= CMF-019 de la carga masiva) |
 | SF2-008 | 1 | Runbook `OPERACION_DESPLIEGUE_SEGEL_FS_v0.1` actualizado | Fase 1, 2 y 7 segun PLAN, seccion 1 | FS | TODO |
@@ -39,11 +39,12 @@
 
 FE reune (2026-11-07) los numeros de FE y FS para que el usuario pida recursos a infraestructura. Lo que FS tiene medido esta en la respuesta enviada a FE y en `TASKS_DESPLIEGUE_SEGEL_FS_v0.1` E-4 y E-9, y en `TASKS_CARGA_SEGEL_FS_v0.1`. Falta medir FS bajo carga masiva real: sale del ensayo local (SF2-011, paso 9) y de la prueba en produccion (SF2-020).
 
-## Preguntas abiertas a FE
+## Respuestas de FE (2026-11-07)
 
-- Valor de `--sumar-numerador` para el emisor de test en el ensayo local (B-5).
-- Si `up.sh` deja `api` y `worker-batch` sin recrear porque su imagen no cambio: FE pide reiniciarlos igual; se confirma en el ensayo local.
-- Cuota diaria recomendada para el consumidor de produccion.
+- Numeracion del ensayo local: bloque 1010000 a 1019999 del punto 001-001 de 5057016-1, reservado para FS (PLAN, seccion 2.2).
+- Cuota diaria de produccion: 500 para arrancar; 2.000 o mas con mas memoria en la VPS.
+- Recarga de banderas: `docker compose restart` no relee `env_file`; hace falta `up -d --no-build --force-recreate` de API y workers (PLAN, seccion 1 y 3).
+- La prueba real de 110.000 Gs figura en la cadena de FE como tarea compartida DEM-814.
 
 ## Evidencia
 
