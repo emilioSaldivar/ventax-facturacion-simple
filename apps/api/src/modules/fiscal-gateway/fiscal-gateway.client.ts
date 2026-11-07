@@ -2,6 +2,7 @@ import { logger } from "../../shared/logging/logger";
 import crypto from "node:crypto";
 import { env } from "../../config/env";
 import { buildFiscalGatewayConfig } from "./fiscal-gateway.config";
+import { mockCargas } from "./fiscal-gateway.mock-cargas";
 import {
   FiscalGatewayError,
   type FiscalByCdcResponse,
@@ -39,7 +40,14 @@ import {
   type FiscalReciboResult,
   type FiscalEditarReciboRequest,
   type FiscalAnularReciboRequest,
-  type FiscalReciboVerificacionResult
+  type FiscalReciboVerificacionResult,
+  type FeCarga,
+  type FeCargaComprobanteFiltros,
+  type FeCargaComprobanteLista,
+  type FeCargaErrorDetails,
+  type FeCargaLoteLista,
+  type FeCrearCargaInput,
+  type FeCrearCargaResult
 } from "./fiscal-gateway.types";
 
 export function createFiscalGateway(config: FiscalGatewayConfig): FiscalGateway {
@@ -565,6 +573,42 @@ export class MockFiscalGateway implements FiscalGateway {
       content_type: "application/xml; charset=utf-8",
       filename: `recibo-${found.numero ?? "borrador"}.xml`
     };
+  }
+
+  async crearCarga(input: FeCrearCargaInput): Promise<FeCrearCargaResult> {
+    return mockCargas.crear(input);
+  }
+
+  async getPlantillaCarga(): Promise<FiscalArtifactResponse> {
+    return mockCargas.plantilla();
+  }
+
+  async getCarga(cargaId: string): Promise<FeCarga> {
+    return mockCargas.obtener(cargaId);
+  }
+
+  async listCargaComprobantes(cargaId: string, filtros: FeCargaComprobanteFiltros): Promise<FeCargaComprobanteLista> {
+    return mockCargas.comprobantes(cargaId, filtros);
+  }
+
+  async confirmarCarga(cargaId: string): Promise<FeCarga> {
+    return mockCargas.confirmar(cargaId);
+  }
+
+  async cancelarCarga(cargaId: string): Promise<FeCarga> {
+    return mockCargas.cancelar(cargaId);
+  }
+
+  async reintentarCarga(cargaId: string): Promise<FeCarga> {
+    return mockCargas.reintentar(cargaId);
+  }
+
+  async getCargaResultado(cargaId: string): Promise<FiscalArtifactResponse> {
+    return mockCargas.resultado(cargaId);
+  }
+
+  async getCargaLotes(cargaId: string): Promise<FeCargaLoteLista> {
+    return mockCargas.lotes(cargaId);
   }
 
   private getMockRecibo(id: string): FiscalReciboResult {
@@ -1207,9 +1251,94 @@ export class RealFiscalGateway implements FiscalGateway {
     );
   }
 
-  private async fetchWithTimeout(url: string, init: RequestInit): Promise<Response> {
+  async crearCarga(input: FeCrearCargaInput): Promise<FeCrearCargaResult> {
+    const url = new URL(`${this.config.baseUrl}/cargas`);
+    url.searchParams.set("emisor_id", input.emisorId);
+    url.searchParams.set("formato", "CSV");
+    url.searchParams.set("version", "1");
+    url.searchParams.set("numeracion", input.numeracion);
+    url.searchParams.set("actividadEconomicaCodigo", input.actividadEconomicaCodigo);
+    if (input.emissionProfileCode) url.searchParams.set("emission_profile_code", input.emissionProfileCode);
+    if (input.establecimiento) url.searchParams.set("establecimiento", input.establecimiento);
+    if (input.punto) url.searchParams.set("punto", input.punto);
+    if (input.nombreArchivo) url.searchParams.set("nombre_archivo", input.nombreArchivo);
+
+    const response = await this.fetchWithTimeout(
+      url.toString(),
+      {
+        method: "POST",
+        headers: { ...this.buildHeaders(), "content-type": input.contentType },
+        body: new Uint8Array(input.contenido)
+      },
+      env.CARGA_UPLOAD_TIMEOUT_MS
+    );
+    const carga = await this.leerCarga<FeCarga>(response);
+    return { carga, creada: response.status !== 200 };
+  }
+
+  async getPlantillaCarga(): Promise<FiscalArtifactResponse> {
+    return this.descargarCarga(`${this.config.baseUrl}/cargas/formatos/csv/1`, "carga-csv-v1.csv");
+  }
+
+  async getCarga(cargaId: string): Promise<FeCarga> {
+    return this.pedirCarga<FeCarga>(`/cargas/${encodeURIComponent(cargaId)}`, "GET");
+  }
+
+  async listCargaComprobantes(cargaId: string, filtros: FeCargaComprobanteFiltros): Promise<FeCargaComprobanteLista> {
+    const query = new URLSearchParams();
+    if (filtros.estado) query.set("estado", filtros.estado);
+    if (filtros.con_advertencias) query.set("con_advertencias", "true");
+    if (filtros.actualizado_desde) query.set("actualizado_desde", filtros.actualizado_desde);
+    if (filtros.detalle) query.set("detalle", "true");
+    if (filtros.page) query.set("page", String(filtros.page));
+    if (filtros.limit) query.set("limit", String(filtros.limit));
+    return this.pedirCarga<FeCargaComprobanteLista>(`/cargas/${encodeURIComponent(cargaId)}/comprobantes?${query.toString()}`, "GET");
+  }
+
+  async confirmarCarga(cargaId: string): Promise<FeCarga> {
+    return this.pedirCarga<FeCarga>(`/cargas/${encodeURIComponent(cargaId)}/confirmar`, "POST");
+  }
+
+  async cancelarCarga(cargaId: string): Promise<FeCarga> {
+    return this.pedirCarga<FeCarga>(`/cargas/${encodeURIComponent(cargaId)}/cancelar`, "POST");
+  }
+
+  async reintentarCarga(cargaId: string): Promise<FeCarga> {
+    return this.pedirCarga<FeCarga>(`/cargas/${encodeURIComponent(cargaId)}/reintentar`, "POST");
+  }
+
+  async getCargaResultado(cargaId: string): Promise<FiscalArtifactResponse> {
+    return this.descargarCarga(`${this.config.baseUrl}/cargas/${encodeURIComponent(cargaId)}/resultado`, `resultado-${cargaId}.csv`);
+  }
+
+  async getCargaLotes(cargaId: string): Promise<FeCargaLoteLista> {
+    return this.pedirCarga<FeCargaLoteLista>(`/cargas/${encodeURIComponent(cargaId)}/lotes`, "GET");
+  }
+
+  private async pedirCarga<T>(path: string, method: "GET" | "POST"): Promise<T> {
+    const response = await this.fetchWithTimeout(`${this.config.baseUrl}${path}`, { method, headers: this.buildHeaders() });
+    return this.leerCarga<T>(response);
+  }
+
+  private async leerCarga<T>(response: Response): Promise<T> {
+    const body = await readJson(response);
+    if (!response.ok) throw errorDeCarga(response, body);
+    return body as T;
+  }
+
+  private async descargarCarga(url: string, filename: string): Promise<FiscalArtifactResponse> {
+    const response = await this.fetchWithTimeout(url, { method: "GET", headers: { ...this.buildHeaders(), accept: "text/csv" } });
+    if (!response.ok) throw errorDeCarga(response, await readJson(response));
+    return {
+      body: Buffer.from(await response.arrayBuffer()),
+      content_type: response.headers.get("content-type") ?? "text/csv; charset=utf-8",
+      filename
+    };
+  }
+
+  private async fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number = this.config.timeoutMs): Promise<Response> {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), this.config.timeoutMs);
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
       return await fetch(url, {
@@ -1836,6 +1965,27 @@ function mapCancelStatus(value: string | null): FiscalCancelStatus {
     default:
       return "UNKNOWN";
   }
+}
+
+/** /v1/cargas responde `{ error, message, details }`, con `error` como codigo de texto. */
+function errorDeCarga(response: Response, body: unknown): FiscalGatewayError {
+  const cuerpo = (body ?? {}) as { error?: unknown; message?: unknown; details?: unknown };
+  const details = cuerpo.details && typeof cuerpo.details === "object" && !Array.isArray(cuerpo.details)
+    ? (cuerpo.details as Record<string, unknown>)
+    : null;
+  const espera = Number(response.headers.get("retry-after") ?? details?.retry_after_seconds);
+  const info: FeCargaErrorDetails = {
+    status: response.status,
+    fe_code: typeof cuerpo.error === "string" ? cuerpo.error : null,
+    message: typeof cuerpo.message === "string" ? cuerpo.message : null,
+    details,
+    retry_after_seconds: Number.isFinite(espera) && espera > 0 ? Math.ceil(espera) : null
+  };
+  return new FiscalGatewayError(
+    response.status === 408 || response.status === 504 ? "TIMEOUT" : "UPSTREAM_ERROR",
+    info.message ?? "Backend fiscal rechazo la operacion de carga.",
+    info
+  );
 }
 
 function retryAfterSeconds(response: Response, body: unknown): number {

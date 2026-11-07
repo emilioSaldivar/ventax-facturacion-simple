@@ -1300,6 +1300,7 @@ function ContextosTab({
   const [editCreditoDias, setEditCreditoDias] = useState("");
   const [editAlias, setEditAlias] = useState("");
   const [editActivo, setEditActivo] = useState(true);
+  const [editNumeracion, setEditNumeracion] = useState<"SERVICIO" | "CLIENTE">("SERVICIO");
   const [saving, setSaving] = useState(false);
 
   function startEdit(c: Contexto) {
@@ -1310,6 +1311,7 @@ function ContextosTab({
     setEditCreditoDias(String(c.credito_plazo_dias ?? 0));
     setEditAlias(c.alias_operativo ?? "");
     setEditActivo(c.activo);
+    setEditNumeracion(c.numeracion_facturas ?? "SERVICIO");
   }
 
   async function saveEdit() {
@@ -1317,6 +1319,7 @@ function ContextosTab({
     setSaving(true);
     try {
       await updateContexto(editId, {
+        numeracion_facturas: editNumeracion,
         timbrado: editTimbrado || null,
         timbrado_inicio: editTimbradoInicio || null,
         documento_nro: editDocNro || null,
@@ -1370,6 +1373,16 @@ function ContextosTab({
                   <option value="false">Inactivo</option>
                 </select>
               </FormField>
+              <FormField label="Numeracion de facturas">
+                <select aria-label="Numeracion de facturas" value={editNumeracion} onChange={(e) => setEditNumeracion(e.target.value as "SERVICIO" | "CLIENTE")}>
+                  <option value="SERVICIO">La asigna el servicio</option>
+                  <option value="CLIENTE">La trae el archivo del cliente</option>
+                </select>
+              </FormField>
+              <p style={{ fontSize: 12, color: "var(--muted)", margin: 0 }}>
+                Cambiarla en un punto que ya emitio puede cruzar numeros. Configurar el mismo valor en el numerador de facturacion-electronica.
+                Con la del cliente, este punto emite solo por carga masiva.
+              </p>
               <div className="form-actions">
                 <button className="btn btn-primary btn-sm" disabled={saving} onClick={() => void saveEdit()} type="button">Guardar</button>
                 <button className="btn btn-sm" onClick={() => setEditId(null)} type="button">Cancelar</button>
@@ -1383,7 +1396,7 @@ function ContextosTab({
                   Act: {c.actividad.codigo} · Est: {c.establecimiento.codigo} · Punto: {c.punto_expedicion.codigo} · Perfil: {c.perfil_emision.codigo}
                 </div>
                 <div style={{ fontSize: 12, color: "var(--muted)" }}>
-                  Timbrado: {c.timbrado ?? "-"} · DocNro: {c.documento_nro ?? "-"} · Credito: {c.credito_plazo_dias}d
+                  Timbrado: {c.timbrado ?? "-"} · DocNro: {c.documento_nro ?? "-"} · Credito: {c.credito_plazo_dias}d · Numeracion: {c.numeracion_facturas === "CLIENTE" ? "del cliente" : "del servicio"}
                 </div>
               </div>
               <button className="btn btn-sm" onClick={() => startEdit(c)} type="button">Editar</button>

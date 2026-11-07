@@ -16,6 +16,8 @@ import type {
 
 interface FacturaRow {
   id: string;
+  carga_masiva_id?: string | null;
+  carga_numero_archivo?: string | null;
   document_uuid: string | null;
   usuario_id: string | null;
   tipo: DocumentoResponse["tipo"];
@@ -100,6 +102,8 @@ const COLUMNAS_DOCUMENTO = `
           cancelacion_retryable,
           cancelacion_intentos,
           cancelacion_last_at,
+          carga_masiva_id,
+          carga_numero_archivo,
           created_at`.trim();
 
 interface EmisorRow {
@@ -1522,6 +1526,11 @@ function buildListWhere(facturadorId: string, filters: DocumentoListFilters): { 
     clauses.push(`tipo = $${params.length}`);
   }
 
+  if (filters.carga_id) {
+    params.push(filters.carga_id);
+    clauses.push(`carga_masiva_id = $${params.length}`);
+  }
+
   if (filters.tipo_operativo) {
     if (filters.tipo_operativo === "NOTA_CREDITO") {
       clauses.push("tipo = 'NOTA_CREDITO'");
@@ -1619,6 +1628,7 @@ function mapFacturaRow(
     nce_motivo: row.nce_motivo,
     emitido_por: emisor,
     cancelacion: mapCancelacion(row),
+    carga: row.carga_masiva_id ? { id: row.carga_masiva_id, numero_archivo: row.carga_numero_archivo ?? null } : null,
     delivery: {
       public_url: null,
       whatsapp_url: null,

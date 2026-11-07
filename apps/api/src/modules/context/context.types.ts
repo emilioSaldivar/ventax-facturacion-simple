@@ -27,6 +27,11 @@ export interface FiscalContext {
   documento_nro: string;
   credito_plazo_dias: number;
   tipo_transaccion_default: 1 | 2 | 3;
+  /**
+   * Forma de numerar las facturas de este contexto (SPEC_CARGA_MASIVA_FACTURAS_v0.1 RN-21).
+   * Ausente equivale a SERVICIO: la numera facturacion-electronica.
+   */
+  numeracion_facturas?: "SERVICIO" | "CLIENTE";
   fiscal_envio_modo?: "BATCH" | "SYNC" | "AUTO";
   batch_enabled?: boolean | null;
 }
@@ -41,6 +46,8 @@ export interface OperationalContextResponse {
   facturador: FacturadorSummary;
   fiscal_context: FiscalContext;
   display?: OperationalDisplay;
+  /** La instancia tiene la carga masiva encendida (CARGA_MASIVA_ENABLED). Solo en GET /me/context. */
+  carga_masiva_habilitada?: boolean;
   /** Interno, no documentado en spec/openapi.yaml: usado solo por facturas.service.ts para persistir tipo_transaccion_default. */
   actividad_punto_perfil_id: string;
 }

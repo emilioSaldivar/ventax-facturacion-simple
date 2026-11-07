@@ -31,6 +31,7 @@ tags:
   - name: Backoffice
   - name: Notas
   - name: Recibos
+  - name: Cargas
   - name: Public
 
 security:
@@ -527,6 +528,12 @@ paths:
           fecha operativa `fecha_emision` (fallback `created_at` cuando no existe emision confirmada).
         - Filtros `q`, `desde/hasta`, `tipo_operativo` y `estado` se combinan por AND.
       parameters:
+        - in: query
+          name: carga_id
+          description: Solo las facturas de esa carga masiva.
+          schema:
+            type: string
+            format: uuid
         - in: query
           name: tipo
           schema:
@@ -1753,6 +1760,165 @@ paths:
                     type: boolean
                     example: false
 
+  /cargas:
+    get:
+      tags: [Cargas]
+      summary: Lista las cargas del contexto del operador, o del facturador para roles internos
+      description: Desde la copia local, sin llamar al backend fiscal. Con `CARGA_MASIVA_ENABLED=false`, toda ruta `/cargas` responde `404`.
+      parameters:
+        - { name: estado, in: query, schema: { type: string }, description: 'Uno o varios estados separados por coma.' }
+        - { name: desde, in: query, schema: { type: string, format: date } }
+        - { name: hasta, in: query, schema: { type: string, format: date } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+        - { name: offset, in: query, schema: { type: integer, minimum: 0, default: 0 } }
+      responses:
+        '200':
+          description: Cargas
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CargaMasivaListResponse' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [Cargas]
+      summary: Sube un archivo de ventas
+      description: |
+        El archivo es el cuerpo del pedido y se entrega sin modificar al backend fiscal. No emite nada.
+        `details.reason` puede ser `TIPO_DE_CONTENIDO_NO_ADMITIDO` (415), `ARCHIVO_VACIO` (422), `SUBIDAS_SIMULTANEAS` (429),
+        `CONTEXTO_NO_LISTO`, `SIN_CLAVE_DE_CONSUMIDOR`, `ARCHIVO_YA_SUBIDO_EN_OTRO_CONTEXTO` o `CARGA_MASIVA_NO_HABILITADA_EN_FE` (409),
+        y `FE_NO_DISPONIBLE` (502). Los `403`, `413`, `415`, `422` y `429` del backend fiscal conservan su mensaje y traen `details.fe_code`.
+      parameters:
+        - { name: nombre_archivo, in: query, schema: { type: string, maxLength: 200 } }
+      requestBody:
+        required: true
+        content:
+          text/csv:
+            schema: { type: string, format: binary }
+          application/zip:
+            schema: { type: string, format: binary }
+      responses:
+        '201':
+          description: Carga creada, en `RECIBIDA`
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CargaMasivaResponse' }
+        '200':
+          description: El archivo ya se habia subido. Devuelve esa carga, con `repetida` en `true`
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CargaMasivaResponse' }
+        '409': { description: 'Ver `details.reason`.' }
+        '413': { description: 'Archivo sobre el tope. `details.tope_bytes`.' }
+        '415': { description: 'Tipo de contenido no admitido.' }
+        '422': { description: 'Archivo vacio, o parametros que no corresponden al emisor (`details.motivos`).' }
+        '429': { description: 'Demasiadas subidas, cargas en espera o cuota diaria. Trae `Retry-After`.' }
+        '502': { description: 'Backend fiscal no disponible.' }
+  /cargas/plantilla:
+    get:
+      tags: [Cargas]
+      summary: Descarga la plantilla del archivo
+      responses:
+        '200':
+          description: Plantilla CSV
+          content:
+            text/csv:
+              schema: { type: string }
+  /cargas/{cargaId}:
+    parameters:
+      - { name: cargaId, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [Cargas]
+      summary: Detalle de una carga, refrescado desde el backend fiscal
+      description: Si el backend fiscal falla, devuelve la copia local con `sincronizada_en` y `sync_error`. Una carga ajena responde `404`.
+      responses:
+        '200':
+          description: Carga
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CargaMasivaResponse' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /cargas/{cargaId}/comprobantes:
+    parameters:
+      - { name: cargaId, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [Cargas]
+      summary: Comprobantes de una carga
+      parameters:
+        - { name: estado, in: query, schema: { type: string }, description: 'Uno o varios estados separados por coma.' }
+        - { name: con_advertencias, in: query, schema: { type: boolean } }
+        - { name: detalle, in: query, schema: { type: boolean } }
+        - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 200, default: 50 } }
+      responses:
+        '200':
+          description: Comprobantes
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CargaMasivaComprobantesResponse' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /cargas/{cargaId}/confirmar:
+    parameters:
+      - { name: cargaId, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      tags: [Cargas]
+      summary: Confirma la carga. Emite facturas reales
+      responses:
+        '200':
+          description: Carga
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CargaMasivaResponse' }
+        '409': { description: '`details.reason`: `CARGA_ACCION_NO_ADMITIDA` (con `estado` y `acciones`) o `CONTEXTO_NO_LISTO`.' }
+  /cargas/{cargaId}/cancelar:
+    parameters:
+      - { name: cargaId, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      tags: [Cargas]
+      summary: Cancela lo que no se preparo. Lo ya preparado sigue su curso
+      responses:
+        '200':
+          description: Carga
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CargaMasivaResponse' }
+        '409': { description: '`details.reason`: `CARGA_ACCION_NO_ADMITIDA`, con `estado` y `acciones`.' }
+  /cargas/{cargaId}/reintentar:
+    parameters:
+      - { name: cargaId, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      tags: [Cargas]
+      summary: Vuelve a preparar los comprobantes en `ERROR`
+      responses:
+        '200':
+          description: Carga
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CargaMasivaResponse' }
+        '409': { description: '`details.reason`: `CARGA_ACCION_NO_ADMITIDA`, con `estado` y `acciones`.' }
+  /cargas/{cargaId}/resultado:
+    parameters:
+      - { name: cargaId, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [Cargas]
+      summary: Descarga el CSV de resultado, una fila por comprobante
+      responses:
+        '200':
+          description: Resultado, reenviado tal como lo entrega el backend fiscal
+          content:
+            text/csv:
+              schema: { type: string }
+  /cargas/{cargaId}/lotes:
+    parameters:
+      - { name: cargaId, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [Cargas]
+      summary: Lotes SIFEN de la carga. Solo roles internos
+      responses:
+        '200':
+          description: Lotes
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CargaMasivaLoteListResponse' }
+        '403': { description: 'Rol sin permiso.' }
   /public/d/{token}:
     get:
       tags: [Public]
@@ -2279,6 +2445,9 @@ components:
           $ref: "#/components/schemas/FiscalContext"
         display:
           $ref: "#/components/schemas/OperationalDisplay"
+        carga_masiva_habilitada:
+          type: boolean
+          description: La instancia tiene encendida la carga masiva (`CARGA_MASIVA_ENABLED`).
 
     TenantSummary:
       type: object
@@ -2352,6 +2521,13 @@ components:
           type: integer
           minimum: 1
           example: 30
+        numeracion_facturas:
+          type: string
+          enum: [SERVICIO, CLIENTE]
+          description: >-
+            Forma de numerar las facturas de este contexto. `SERVICIO`: la numera el backend fiscal.
+            `CLIENTE`: el numero viene en el archivo de una carga masiva, y `POST /facturas` responde
+            `409` con `details.reason = NUMERACION_DEL_CLIENTE`. Ausente equivale a `SERVICIO`.
         tipo_transaccion_default:
           type: integer
           enum: [1, 2, 3]
@@ -2758,6 +2934,13 @@ components:
       type: object
       required: [id, tipo, estado, condicion_venta, cliente, items, totals, delivery]
       properties:
+        carga:
+          type: object
+          nullable: true
+          description: La factura vino de una carga masiva.
+          properties:
+            id: { type: string, format: uuid }
+            numero_archivo: { type: string, nullable: true }
         id:
           type: string
         tipo:
@@ -2827,6 +3010,172 @@ components:
           format: date-time
           nullable: true
 
+    CargaMasivaEstado:
+      type: string
+      enum: [RECIBIDA, VALIDANDO, RECHAZADA, VALIDADA, EN_COLA, EN_PREPARACION, EN_SIFEN, FINALIZADA, CANCELADA]
+    CargaMasivaProblema:
+      type: object
+      required: [codigo, mensaje]
+      properties:
+        codigo: { type: string }
+        mensaje: { type: string }
+        fila: { type: integer }
+        columna: { type: string }
+        cantidad: { type: integer }
+    CargaMasivaTotales:
+      type: object
+      description: Vacio mientras el backend fiscal no los informe.
+      properties:
+        lineas: { type: integer, nullable: true }
+        comprobantes: { type: integer, nullable: true }
+        invalidos: { type: integer }
+        duplicados: { type: integer }
+        pendientes: { type: integer }
+        preparados: { type: integer }
+        enviados: { type: integer }
+        aprobados: { type: integer }
+        aprobados_con_obs: { type: integer }
+        rechazados: { type: integer }
+        con_error: { type: integer }
+        cancelados: { type: integer }
+        con_advertencias: { type: integer }
+        numeros_salteados: { type: integer }
+        lotes_enviados: { type: integer }
+        lotes_en_proceso: { type: integer }
+        lotes_concluidos: { type: integer }
+    CargaMasivaAcciones:
+      type: object
+      properties:
+        puede_confirmar: { type: boolean }
+        puede_cancelar: { type: boolean }
+        puede_reintentar: { type: boolean }
+    CargaMasivaUsuario:
+      type: object
+      required: [id]
+      properties:
+        id: { type: string, format: uuid }
+        display_name: { type: string, nullable: true }
+    CargaMasivaResponse:
+      type: object
+      required: [id, fe_carga_id, estado, tamano_bytes, numeracion, totales, acciones, motivos, fechas, contexto, subida_por, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        fe_carga_id: { type: string }
+        estado: { $ref: '#/components/schemas/CargaMasivaEstado' }
+        nombre_archivo: { type: string, nullable: true }
+        tamano_bytes: { type: integer }
+        numeracion: { type: string, enum: [SERVICIO, CLIENTE] }
+        totales: { $ref: '#/components/schemas/CargaMasivaTotales' }
+        acciones: { $ref: '#/components/schemas/CargaMasivaAcciones' }
+        motivos:
+          type: array
+          items: { $ref: '#/components/schemas/CargaMasivaProblema' }
+        fechas:
+          type: object
+          properties:
+            recibida_en: { type: string, format: date-time, nullable: true }
+            validada_en: { type: string, format: date-time, nullable: true }
+            confirmada_en: { type: string, format: date-time, nullable: true }
+            iniciada_en: { type: string, format: date-time, nullable: true }
+            finalizada_en: { type: string, format: date-time, nullable: true }
+            cancelada_en: { type: string, format: date-time, nullable: true }
+        contexto:
+          type: object
+          properties:
+            perfil: { type: string, nullable: true }
+            establecimiento: { type: string, nullable: true }
+            punto: { type: string, nullable: true }
+            actividad: { type: string, nullable: true }
+        subida_por: { $ref: '#/components/schemas/CargaMasivaUsuario' }
+        confirmada_por:
+          allOf: [{ $ref: '#/components/schemas/CargaMasivaUsuario' }]
+          nullable: true
+        cancelada_por:
+          allOf: [{ $ref: '#/components/schemas/CargaMasivaUsuario' }]
+          nullable: true
+        sincronizada_en: { type: string, format: date-time, nullable: true }
+        sync_error: { type: string, nullable: true }
+        created_at: { type: string, format: date-time }
+        repetida: { type: boolean, description: 'Solo en la subida.' }
+    CargaMasivaListResponse:
+      type: object
+      required: [items, total]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/CargaMasivaResponse' }
+        total: { type: integer }
+    CargaMasivaComprobante:
+      type: object
+      description: Forma del comprobante del backend fiscal, mas `documento_id`.
+      required: [orden, estado, errores, advertencias, documento_id]
+      properties:
+        orden: { type: integer }
+        filas:
+          type: array
+          items: { type: integer }
+        tipo_documento: { type: string }
+        numero_archivo: { type: string, nullable: true }
+        numero_asignado: { type: string, nullable: true }
+        referencia_venta: { type: string, nullable: true }
+        estado:
+          type: string
+          enum: [PENDIENTE, INVALIDO, DUPLICADO, PREPARADO, ENVIADO, APROBADO, APROBADO_CON_OBS, RECHAZADO, ERROR, CANCELADO]
+        errores:
+          type: array
+          items: { $ref: '#/components/schemas/CargaMasivaProblema' }
+        advertencias:
+          type: array
+          items: { $ref: '#/components/schemas/CargaMasivaProblema' }
+        document_uuid: { type: string, nullable: true }
+        cdc: { type: string, nullable: true }
+        documento_estado: { type: string, nullable: true }
+        lote: { type: string, nullable: true }
+        sifen:
+          type: object
+          nullable: true
+          properties:
+            codigo: { type: string }
+            mensaje: { type: string, nullable: true }
+        correo: { type: string, nullable: true, enum: [PENDING, SENT, FAILED, null] }
+        aprobado_en: { type: string, format: date-time, nullable: true }
+        actualizado_en: { type: string, format: date-time }
+        detalle: { type: object, nullable: true, description: 'Solo con `detalle=true`.' }
+        documento_id: { type: string, format: uuid, nullable: true, description: 'Documento de FS con ese `document_uuid`.' }
+    CargaMasivaComprobantesResponse:
+      type: object
+      required: [carga_id, estado, items, page, limit, total]
+      properties:
+        carga_id: { type: string, format: uuid }
+        estado: { $ref: '#/components/schemas/CargaMasivaEstado' }
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/CargaMasivaComprobante' }
+        page: { type: integer }
+        limit: { type: integer }
+        total: { type: integer }
+    CargaMasivaLote:
+      type: object
+      properties:
+        lote_id: { type: string }
+        numero_lote: { type: string, nullable: true }
+        estado: { type: string }
+        documentos: { type: integer }
+        aprobados: { type: integer }
+        rechazados: { type: integer }
+        recepcion: { type: object, nullable: true }
+        resultado: { type: object, nullable: true }
+        enviado_en: { type: string, format: date-time, nullable: true }
+        consultado_en: { type: string, format: date-time, nullable: true }
+        concluido_en: { type: string, format: date-time, nullable: true }
+    CargaMasivaLoteListResponse:
+      type: object
+      properties:
+        carga_id: { type: string, format: uuid }
+        estado: { $ref: '#/components/schemas/CargaMasivaEstado' }
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/CargaMasivaLote' }
     DocumentoEmisor:
       type: object
       nullable: true

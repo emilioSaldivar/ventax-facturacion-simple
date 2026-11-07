@@ -467,6 +467,192 @@ export interface FiscalGateway {
   verificarRecibo(token: string): Promise<FiscalReciboVerificacionResult>;
   verificarReciboPdf(token: string): Promise<FiscalArtifactResponse>;
   verificarReciboXml(token: string): Promise<FiscalArtifactResponse>;
+  crearCarga(input: FeCrearCargaInput): Promise<FeCrearCargaResult>;
+  getPlantillaCarga(): Promise<FiscalArtifactResponse>;
+  getCarga(cargaId: string): Promise<FeCarga>;
+  listCargaComprobantes(cargaId: string, filtros: FeCargaComprobanteFiltros): Promise<FeCargaComprobanteLista>;
+  confirmarCarga(cargaId: string): Promise<FeCarga>;
+  cancelarCarga(cargaId: string): Promise<FeCarga>;
+  reintentarCarga(cargaId: string): Promise<FeCarga>;
+  getCargaResultado(cargaId: string): Promise<FiscalArtifactResponse>;
+  getCargaLotes(cargaId: string): Promise<FeCargaLoteLista>;
+}
+
+// ─── Carga masiva: formas de tecnica/openapi.yaml de FE, paquete v0.14 ───────
+
+export type FeCargaEstado = "RECIBIDA" | "VALIDANDO" | "RECHAZADA" | "VALIDADA" | "EN_COLA" | "EN_PREPARACION" | "EN_SIFEN" | "FINALIZADA" | "CANCELADA";
+export type FeComprobanteEstado = "PENDIENTE" | "INVALIDO" | "DUPLICADO" | "PREPARADO" | "ENVIADO" | "APROBADO" | "APROBADO_CON_OBS" | "RECHAZADO" | "ERROR" | "CANCELADO";
+export type FeNumeracion = "SERVICIO" | "CLIENTE";
+
+export interface FeCargaProblema {
+  codigo: string;
+  mensaje: string;
+  fila?: number;
+  columna?: string;
+  cantidad?: number;
+}
+
+export interface FeCargaAcciones {
+  puede_confirmar: boolean;
+  puede_cancelar: boolean;
+  puede_reintentar: boolean;
+}
+
+export interface FeCargaTotales {
+  lineas: number | null;
+  comprobantes: number | null;
+  invalidos: number;
+  duplicados: number;
+  pendientes: number;
+  preparados: number;
+  enviados: number;
+  aprobados: number;
+  aprobados_con_obs: number;
+  rechazados: number;
+  con_error: number;
+  cancelados: number;
+  con_advertencias: number;
+  numeros_salteados: number;
+  lotes_enviados: number;
+  lotes_en_proceso: number;
+  lotes_concluidos: number;
+}
+
+export interface FeCarga {
+  carga_id: string;
+  estado: FeCargaEstado;
+  emisor_id: string;
+  env: "test" | "prod";
+  formato: string;
+  version: string;
+  nombre_archivo: string | null;
+  tamano_bytes: number;
+  perfil: string | null;
+  establecimiento: string | null;
+  punto: string | null;
+  actividad: string | null;
+  numeracion: FeNumeracion;
+  recibida_en: string | null;
+  validada_en: string | null;
+  confirmada_en: string | null;
+  iniciada_en: string | null;
+  finalizada_en: string | null;
+  cancelada_en: string | null;
+  acciones: FeCargaAcciones;
+  motivos: FeCargaProblema[] | null;
+  totales: FeCargaTotales;
+}
+
+/** `detalle=true`: los nombres de POST /factura. */
+export interface FeCargaComprobanteDetalle {
+  fecha: string | null;
+  tipoTransaccion: number | null;
+  receptor: {
+    tipoDocumento?: string;
+    docNro?: string;
+    dv?: string;
+    razonSocial?: string;
+    naturaleza?: string;
+    direccion?: string;
+    telefono?: string;
+    email?: string;
+  } | null;
+  condicionOperacion: { tipo?: string } | null;
+  items: Array<{
+    codigo?: string | null;
+    descripcion?: string;
+    cantidad?: number;
+    precioUnitario?: number;
+    ivaTipo?: string;
+  }>;
+  total: number;
+}
+
+export interface FeCargaComprobante {
+  orden: number;
+  filas: number[];
+  tipo_documento: string;
+  numero_archivo: string | null;
+  numero_asignado: string | null;
+  referencia_venta: string | null;
+  estado: FeComprobanteEstado;
+  errores: FeCargaProblema[];
+  advertencias: FeCargaProblema[];
+  document_uuid: string | null;
+  cdc: string | null;
+  documento_estado: string | null;
+  lote: string | null;
+  sifen: { codigo: string; mensaje: string | null } | null;
+  correo: "PENDING" | "SENT" | "FAILED" | null;
+  aprobado_en: string | null;
+  actualizado_en: string;
+  detalle?: FeCargaComprobanteDetalle | null;
+}
+
+export interface FeCargaComprobanteLista {
+  carga_id: string;
+  estado: FeCargaEstado;
+  items: FeCargaComprobante[];
+  page: number;
+  limit: number;
+  total: number;
+}
+
+export interface FeCargaComprobanteFiltros {
+  estado?: string;
+  con_advertencias?: boolean;
+  actualizado_desde?: string;
+  detalle?: boolean;
+  page?: number;
+  limit?: number;
+}
+
+export interface FeCargaLote {
+  lote_id: string;
+  numero_lote: string | null;
+  estado: string;
+  documentos: number;
+  aprobados: number;
+  rechazados: number;
+  recepcion: { codigo: string; mensaje: string | null } | null;
+  resultado: { codigo: string; mensaje: string | null } | null;
+  enviado_en: string | null;
+  consultado_en: string | null;
+  concluido_en: string | null;
+}
+
+export interface FeCargaLoteLista {
+  carga_id: string;
+  estado: FeCargaEstado;
+  items: FeCargaLote[];
+}
+
+export interface FeCrearCargaInput {
+  contenido: Buffer;
+  contentType: "text/csv" | "application/zip";
+  emisorId: string;
+  numeracion: FeNumeracion;
+  actividadEconomicaCodigo: string;
+  /** Con perfil fija punto, timbrado y actividad. Sin perfil van `establecimiento` y `punto`. */
+  emissionProfileCode?: string;
+  establecimiento?: string;
+  punto?: string;
+  nombreArchivo?: string;
+}
+
+/** `creada` es false con el 200 de FE: archivo ya subido. */
+export interface FeCrearCargaResult {
+  carga: FeCarga;
+  creada: boolean;
+}
+
+/** `details` de un FiscalGatewayError de /v1/cargas: FE responde `{ error, message, details }`. */
+export interface FeCargaErrorDetails {
+  status: number;
+  fe_code: string | null;
+  message: string | null;
+  details: Record<string, unknown> | null;
+  retry_after_seconds: number | null;
 }
 
 export class FiscalGatewayError extends Error {

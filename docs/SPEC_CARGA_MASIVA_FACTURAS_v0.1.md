@@ -1,6 +1,6 @@
 # SPEC Carga masiva de facturas por archivo v0.1
 
-**Fecha:** 2026-11-07. **Estado:** listo para implementar, por decision del usuario (2026-11-07), sobre el contrato publicado por FE. Sigue `PLAN_CARGA_MASIVA_FACTURAS_v0.1.md` y `TASKS_CARGA_MASIVA_FACTURAS_v0.1.md`.
+**Fecha:** 2026-11-07. **Estado:** fases A a D implementadas y validadas contra el mock (2026-11-07), por decision del usuario, sobre el contrato publicado por FE. Fase E: ver `TASKS`. Sigue `PLAN_CARGA_MASIVA_FACTURAS_v0.1.md` y `TASKS_CARGA_MASIVA_FACTURAS_v0.1.md`.
 **Origen:** pedido de `facturacion-electronica` (FE), `docs/PEDIDO_FACTURACION_SIMPLE_CARGA_MASIVA_v0.1.md`. El contrato de FE esta publicado en su guia de consumidores (seccion 36) y en `tecnica/openapi.yaml`, paquete v0.14, commit `c0d036b` de FE (seccion 6).
 **Procedencia de las decisiones:** numeracion, documentos, roles y rama llegaron por la sesion de FE (seccion 13 del pedido). D-1 a D-8 y D-14 las respondio el usuario directamente; D-9 a D-13 son propuestas de FS aprobadas por el usuario el 2026-11-07.
 
@@ -56,7 +56,7 @@ El resultado de SIFEN llega en minutos o en horas: la persona sube, se va y vuel
 ### Permisos (decision de FS, criterio del usuario)
 
 - **RN-10.** Sin rol nuevo. Subir, confirmar, cancelar y reintentar: cualquier usuario `OPERADOR_FACTURACION` con contexto operativo en ese facturador; subir y confirmar exigen ademas que el contexto este listo para emitir (RN-02), cancelar y reintentar no. No hace falta que confirme quien subio. `SOPORTE_INTERNO` y `ADMIN_INTERNO` tambien pueden, y son los unicos que ven los lotes SIFEN de una carga.
-- **RN-11.** Un usuario ve solo las cargas de su facturador y de su contexto operativo, con la misma regla de segmentacion por perfil que `GET /facturas`: los roles internos ven todas las del facturador. Una carga ajena responde `404`, tambien por identificador directo. Queda auditado quien subio, quien confirmo, quien cancelo y quien reintento.
+- **RN-11.** Un usuario ve solo las cargas de su facturador y de su contexto operativo, los roles internos ven todas las del facturador (D-12). **Diferencia con Facturas:** `GET /facturas` hoy filtra solo por facturador, sin perfil, asi que una factura de carga la ven todos los operadores del facturador aunque la carga no. Una carga ajena responde `404`, tambien por identificador directo. Queda auditado quien subio, quien confirmo, quien cancelo y quien reintento.
 
 ### Facturas en "Documentos" (Usuario)
 
@@ -64,6 +64,7 @@ El resultado de SIFEN llega en minutos o en horas: la persona sube, se va y vuel
 - **RN-13.** `INVALIDO`, `CANCELADO`, `PENDIENTE` y `ERROR` no crean documento: nunca tienen `document_uuid`. `DUPLICADO` tampoco: es un comprobante ya emitido antes, por otra carga o en linea, y la pantalla enlaza al documento existente si esta en FS (por `document_uuid`). Uno repetido dentro del mismo archivo llega como `INVALIDO`.
 - **RN-14.** Incorporar es idempotente: `external_ref = carga:<carga_id de FE>:<orden>`, unico por facturador. Repetir la sincronizacion no duplica ni pisa un estado final.
 - **RN-15.** La identidad es el `document_uuid` (`AGENTS.md`). El `estado` del comprobante dice como termino la emision y no cambia despues; el estado vigente sale de `documento_estado`, que FE suma al comprobante, con la misma traduccion que el resto de los documentos (`mapDocumentStatusCanonico`).
+- **RN-15b.** FE admite cantidades decimales en el archivo. FS las conserva en el documento: `factura_items_snapshot.cantidad` pasa a `numeric(18,6)`. La nota de credito copia los items sin recalcular, asi que funciona. **Limite conocido:** "Corregir y emitir de nuevo" sobre una factura con cantidad decimal abre el editor, que solo admite enteras: el operador debe ajustar la linea. Las facturas emitidas una por una siguen siendo enteras.
 - **RN-16.** Incorporar una factura no crea ni modifica clientes de la agenda ni items del catalogo: un archivo no puede sobrescribir datos de otros (FS-17).
 
 ### Sincronizacion
@@ -145,7 +146,7 @@ Rutas propias de FS: PLAN, seccion 5, y `spec/openapi.yaml`.
 
 ## 7. Impacto en FS
 
-- **Base de datos:** migracion aditiva `0037_carga_masiva.sql`: tabla `cargas_masivas`, `actividad_punto_perfiles.numeracion_facturas`, `facturas_operativas.carga_masiva_id` y `carga_numero_archivo`.
+- **Base de datos:** migracion `0037_carga_masiva.sql`: tabla `cargas_masivas`, `actividad_punto_perfiles.numeracion_facturas`, `facturas_operativas.carga_masiva_id` y `carga_numero_archivo`. Aditiva, salvo ampliar `factura_items_snapshot.cantidad` a `numeric(18,6)` (RN-15b), que reescribe la tabla y no pierde datos.
 - **API:** modulo `cargas`; subida de archivos, que hoy no existe (el limite global de 1 MB aplica solo a JSON); worker de sincronizacion; `409 NUMERACION_DEL_CLIENTE` en `POST /facturas`; `numeracion_facturas` y `carga_masiva_habilitada` en `GET /me/context`; filtro `carga_id` y campo `carga` en `GET /facturas`.
 - **Tamano de subida (RN-01b):** el nginx del contenedor del frontend (`infra/nginx-or-caddy/nginx.local.conf`) no fija `client_max_body_size`, asi que hoy corta en 1 MB: hay que fijarlo en 25 MB en `location /api/v1/`. Los nginx de host (`host-segel-fs.conf`, `host-production.conf`, `host-factura-multi-env.conf`) ya tienen 25 MB. La API de FS acepta 24 MB por defecto. El NGINX publico de infraestructura, si existe, debe admitir al menos 25 MB; lo ajusta infraestructura.
 - **Alta de facturadores:** `scripts/segel-fs/cargar-facturador.py` debe poder otorgar `CARGA_MASIVA` y fijar `cargas_cuota_diaria` por emisor, de forma opcional y nunca por defecto.
@@ -180,11 +181,11 @@ Rutas propias de FS: PLAN, seccion 5, y `spec/openapi.yaml`.
 | D-5 | Nota de credito desde un punto con numeracion del cliente | Cerrada con FE: se permite, usa otro numerador (RN-22) |
 | D-6 | Primer cliente y volumen | Todavia no hay cliente. Se prepara la funcion y se prueba con los clientes de prueba, en local |
 | D-7 | Orden frente a FS-24 y autogestion | Lo define FS: seccion 2 del PLAN |
-| D-8 | Cuando implementar | 2026-11-07: ahora, sobre el contrato publicado. La migracion `0037` se escribe primero y viaja en el proximo despliegue con la bandera apagada; su unico efecto visible es una columna con valor por defecto |
+| D-8 | Cuando implementar | 2026-11-07: ahora, sobre el contrato publicado. La migracion `0037` se escribe primero y viaja en el proximo despliegue con la bandera apagada; no tiene efecto visible: columnas con valor por defecto y una cantidad mas ancha |
 | D-9 | Version de los documentos | Se refina v0.1 en lugar de abrir v0.2: el alcance no cambio, solo el estado del contrato de FE. Aprobada 2026-11-07 |
 | D-10 | `404` de FE en la subida | FS lo devuelve como `409 CONFLICT` con `details.reason = CARGA_MASIVA_NO_HABILITADA_EN_FE` y la pantalla dice que la funcion no esta habilitada para el facturador, nunca "no encontrado" (seccion 4; PLAN 5.3). Aprobada 2026-11-07 |
 | D-11 | Totales del snapshot | Si el total que calcula FS desde `detalle` difiere del `total` de FE, manda FE, que es lo que esta en el XML; FS lo registra en el log y guarda el de FE en `fiscal_response_snapshot.total_fe` (PLAN 6). Aprobada 2026-11-07 |
-| D-12 | Quien ve las cargas | Operadores: solo las de su contexto operativo. `SOPORTE_INTERNO` y `ADMIN_INTERNO`: todas las del facturador, igual que en `GET /facturas` (RN-11). Aprobada 2026-11-07 |
+| D-12 | Quien ve las cargas | Operadores: solo las de su contexto operativo. `SOPORTE_INTERNO` y `ADMIN_INTERNO`: todas las del facturador (RN-11). Aprobada 2026-11-07. Se habia descrito como "igual que en `GET /facturas`": es inexacto, ver RN-11 |
 | D-13 | Archivo repetido | Si el mismo SHA-256 ya tiene en FS una carga del facturador que no esta `RECHAZADA` ni `CANCELADA`, FS devuelve esa carga sin llamar a FE cuando el usuario puede verla, y `409` cuando pertenece a otro contexto operativo (seccion 4); en los demas casos FE decide con su `200` (PLAN 5.3). Aprobada 2026-11-07 |
 | D-14 | Tamano del archivo | FS no limita por debajo de FE: nginx 25 MB > API de FS 24 MB > FE 20 MB, todos configurables (RN-01b). El limite de 100.000 lineas de FE cabe en su tope de 20 MB. Decidida por el usuario 2026-11-07 |
 

@@ -75,6 +75,7 @@ const documentoListQuerySchema = z
     desde: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
     hasta: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
     q: z.string().trim().min(1).max(120).optional(),
+    carga_id: z.string().uuid().optional(),
     limit: z.coerce.number().int().min(1).max(100).default(20),
     offset: z.coerce.number().int().min(0).default(0)
   })

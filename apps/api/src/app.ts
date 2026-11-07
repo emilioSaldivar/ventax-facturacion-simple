@@ -7,6 +7,7 @@ import pinoHttp from "pino-http";
 import { env } from "./config/env";
 import { authRouter } from "./modules/auth/auth.routes";
 import { backofficeRouter } from "./modules/backoffice/backoffice.routes";
+import { cargasRouter } from "./modules/cargas/cargas.routes";
 import { catalogoRouter } from "./modules/catalogo/catalogo.routes";
 import { clientesRouter } from "./modules/clientes/clientes.routes";
 import { contextRouter } from "./modules/context/context.routes";
@@ -71,6 +72,7 @@ export function createApp() {
   app.use(env.API_BASE_PATH, clientesRouter);
   app.use(env.API_BASE_PATH, catalogoRouter);
   app.use(env.API_BASE_PATH, facturasRouter);
+  app.use(env.API_BASE_PATH, cargasRouter);
   app.use(env.API_BASE_PATH, entregaRouter);
   app.use(env.API_BASE_PATH, fiscalGatewayRouter);
   app.use(env.API_BASE_PATH, notasRouter);

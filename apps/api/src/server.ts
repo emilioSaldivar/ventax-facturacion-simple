@@ -1,5 +1,8 @@
 import { env } from "./config/env";
 import { createApp } from "./app";
+import { startCargasSyncWorker } from "./modules/cargas/cargas-sync.worker";
+import { cargaRepository } from "./modules/cargas/cargas.repository";
+import { gatewayDeCargas } from "./modules/cargas/cargas.routes";
 import { facturasRepository } from "./modules/facturas/facturas.repository";
 import { startFacturaEmissionWorker } from "./modules/facturas/facturas.worker";
 import { startVerificacionFiscalWorker } from "./modules/facturas/verificacion.worker";
@@ -37,4 +40,13 @@ if (env.FE_VERIFY_WORKER_ENABLED) {
     batchSize: env.FE_VERIFY_BATCH_SIZE
   });
   logger.info({ intervalMs: env.FE_VERIFY_WORKER_INTERVAL_MS, batchSize: env.FE_VERIFY_BATCH_SIZE }, "verificacion fiscal worker enabled");
+}
+
+if (env.CARGA_MASIVA_ENABLED && env.CARGAS_SYNC_WORKER_ENABLED) {
+  startCargasSyncWorker({
+    repository: cargaRepository,
+    gatewayFor: (facturadorId) => gatewayDeCargas(facturadorId),
+    intervalMs: env.CARGAS_SYNC_WORKER_INTERVAL_MS
+  });
+  logger.info({ intervalMs: env.CARGAS_SYNC_WORKER_INTERVAL_MS }, "cargas sync worker enabled");
 }

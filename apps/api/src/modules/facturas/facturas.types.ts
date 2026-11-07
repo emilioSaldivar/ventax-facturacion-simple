@@ -162,6 +162,8 @@ export interface DocumentoResponse {
   cancelacion: DocumentoCancelacion | null;
   delivery: DeliverySummary;
   created_at: string | null;
+  /** La factura vino de una carga masiva (SPEC_CARGA_MASIVA_FACTURAS_v0.1). */
+  carga?: { id: string; numero_archivo: string | null } | null;
   /** Derivado en el service (deriveAccion), no persistido — ver DocumentoAccion. */
   accion?: DocumentoAccion;
   accion_detalle?: DocumentoAccionDetalle;
@@ -176,6 +178,7 @@ export interface DocumentoListFilters {
   desde?: string;
   hasta?: string;
   q?: string;
+  carga_id?: string;
   limit: number;
   offset: number;
 }

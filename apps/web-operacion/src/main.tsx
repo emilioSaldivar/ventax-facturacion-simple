@@ -2,6 +2,8 @@ import React, { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./styles.css";
 
+import { CargaMasivaView } from "./carga-masiva";
+
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "/api/v1";
 const ACCESS_TOKEN_STORAGE_KEY = "ventax_factura_access_token";
 const BUILD_VERSION = (import.meta.env.VITE_APP_VERSION as string | undefined) ?? "dev";
@@ -127,9 +129,11 @@ interface OperationalContextResponse {
     documento_nro: string;
     credito_plazo_dias: number;
     tipo_transaccion_default?: TipoTransaccionServicio;
+    numeracion_facturas?: "SERVICIO" | "CLIENTE";
     fiscal_envio_modo?: "BATCH" | "SYNC";
     batch_enabled?: boolean | null;
   };
+  carga_masiva_habilitada?: boolean;
   display?: {
     titulo_operativo: string;
   };
@@ -172,11 +176,13 @@ function formatValidationDetails(details?: ApiValidationDetails): string {
 
 class ApiClientError extends Error {
   readonly status: number;
+  readonly details?: unknown;
 
-  constructor(status: number, message: string) {
+  constructor(status: number, message: string, details?: unknown) {
     super(message);
     this.name = "ApiClientError";
     this.status = status;
+    this.details = details;
   }
 }
 
@@ -259,6 +265,8 @@ interface DocumentoCancelacion {
 
 interface DocumentoResponse {
   id: string;
+  /** La factura vino de una carga masiva. */
+  carga?: { id: string; numero_archivo: string | null } | null;
   tipo: "FACTURA" | "NOTA_CREDITO";
   estado: DocumentoEstado;
   /** Resultado del ultimo intento de anulacion; null si nunca se intento. */
@@ -1359,6 +1367,8 @@ function OperationHome({
   onLogout: () => Promise<void>;
 }) {
   const canEmit = Boolean(readiness?.ready);
+  // SPEC_CARGA_MASIVA_FACTURAS_v0.1 RN-22: el backend tambien lo rechaza.
+  const numeracionDelCliente = context?.fiscal_context.numeracion_facturas === "CLIENTE";
   const [operationView, setOperationView] = useState<OperationView>(() => (canEmit ? "invoice" : "status"));
   const [menuOpen, setMenuOpen] = useState(false);
   const updatePending = useUpdatePending();
@@ -1482,7 +1492,7 @@ function OperationHome({
     group: "primary" | "secondary" | "admin";
     featured?: boolean;
   }> = [
-    { label: "Nueva factura", view: "invoice", disabled: !canEmit, icon: "🧾", group: "primary", featured: true },
+    { label: "Nueva factura", view: "invoice", disabled: !canEmit || numeracionDelCliente, icon: "🧾", group: "primary", featured: true },
     { label: "Agenda / Clientes", view: "clients", icon: "👥", group: "primary" },
     { label: "Documentos", view: "documents", icon: "📂", group: "primary" },
     { label: "Notas / Presupuestos", view: "notas", icon: "📋", group: "secondary" },
@@ -1548,7 +1558,7 @@ function OperationHome({
                       <span className="menu-item-icon" aria-hidden="true">{item.icon}</span>
                       <span>{item.label}</span>
                       {item.featured ? <strong className="menu-item-badge">Recomendado</strong> : null}
-                      <small>{getOperationViewHint(item.view)}</small>
+                      <small>{item.view === "invoice" && numeracionDelCliente ? "Este punto emite por carga masiva" : getOperationViewHint(item.view)}</small>
                     </button>
                   ))}
                 </div>
@@ -1620,6 +1630,7 @@ function OperationHome({
           onBack={() => goTo("invoice")}
           onGoTo={goTo}
           role={user?.role ?? "OPERADOR_FACTURACION"}
+          context={context}
         />
       ) : operationView === "clients" ? (
         <ClientesAgendaView
@@ -1636,6 +1647,7 @@ function OperationHome({
           setAccessToken={setAccessToken}
           onBack={() => goTo("invoice")}
           onConvertirEnFactura={(draft) => { setInvoiceInitialDraft(draft); goTo("invoice"); }}
+          numeracionDelCliente={numeracionDelCliente}
         />
       ) : operationView === "recibos" ? (
         <RecibosView accessToken={accessToken} setAccessToken={setAccessToken} onBack={() => goTo("invoice")} />
@@ -1745,13 +1757,15 @@ function DocumentsView({
   setAccessToken,
   onBack,
   onGoTo,
-  role
+  role,
+  context
 }: {
   accessToken: string | null;
   setAccessToken: (token: string | null) => void;
   onBack: () => void;
   onGoTo?: (view: OperationView) => void;
   role: UserSummary["role"];
+  context?: OperationalContextResponse | null;
 }) {
   const api = useMemo(() => createApiClient(accessToken, setAccessToken), [accessToken, setAccessToken]);
   const todayYmd = useMemo(() => formatYmdFromDate(new Date()), []);
@@ -1763,7 +1777,8 @@ function DocumentsView({
   const [documents, setDocuments] = useState<DocumentoResponse[]>([]);
   const [selected, setSelected] = useState<DocumentoResponse | null>(null);
   const [estadoFilter, setEstadoFilter] = useState<DocumentoEstado | "">("");
-  const [docKindTab, setDocKindTab] = useState<"FACTURAS" | "NOTAS_CREDITO">("FACTURAS");
+  const [docKindTab, setDocKindTab] = useState<"FACTURAS" | "NOTAS_CREDITO" | "CARGA_MASIVA">("FACTURAS");
+  const [cargaAbiertaId, setCargaAbiertaId] = useState<string | null>(null);
   const [tipoOperativoFilter, setTipoOperativoFilter] = useState<"TODOS" | "CONTADO" | "CREDITO">("TODOS");
   const [query, setQuery] = useState("");
   const [desde, setDesde] = useState(last7DaysYmd);
@@ -1798,6 +1813,7 @@ function DocumentsView({
   const isInternalSupport = role === "SOPORTE_INTERNO" || role === "ADMIN_INTERNO";
 
   useEffect(() => {
+    if (docKindTab === "CARGA_MASIVA") return;
     void loadDocuments();
   }, [estadoFilter, tipoOperativoFilter, desde, hasta, docKindTab]);
 
@@ -2234,6 +2250,62 @@ function DocumentsView({
     return [currentTodayDocs, currentWeekDocs];
   }, [documents]);
 
+  const pestanasDocumentos = (
+    <div className="filter-tabs" role="group" aria-label="Tipo de documento">
+      {(context?.carga_masiva_habilitada ? (["FACTURAS", "NOTAS_CREDITO", "CARGA_MASIVA"] as const) : (["FACTURAS", "NOTAS_CREDITO"] as const)).map((value) => (
+        <button
+          className={docKindTab === value ? "active" : ""}
+          key={value}
+          onClick={() => {
+            setCargaAbiertaId(null);
+            setDocKindTab(value);
+          }}
+          type="button"
+        >
+          {value === "FACTURAS" ? "Facturas" : value === "NOTAS_CREDITO" ? "Notas de credito" : "Carga masiva"}
+        </button>
+      ))}
+    </div>
+  );
+
+  if (docKindTab === "CARGA_MASIVA" && context) {
+    return (
+      <section className="documents-view documents-view-ancha" aria-labelledby="documents-title">
+        <div className="editor-heading">
+          <div>
+            <p className="eyebrow">Documentos</p>
+            <h2 id="documents-title">Carga masiva</h2>
+          </div>
+          <button className="ghost-action" onClick={onBack} type="button">
+            Volver
+          </button>
+        </div>
+        {pestanasDocumentos}
+        <CargaMasivaView
+          accessToken={accessToken}
+          api={api}
+          apiBaseUrl={API_BASE_URL}
+          cargaInicialId={cargaAbiertaId}
+          contexto={{
+            facturador: context.facturador.razon_social,
+            establecimiento: context.fiscal_context.establecimiento,
+            punto: context.fiscal_context.punto_expedicion,
+            perfil: context.fiscal_context.perfil_emision_alias ?? context.fiscal_context.perfil_emision_codigo,
+            numeracion: context.fiscal_context.numeracion_facturas ?? "SERVICIO"
+          }}
+          esInterno={isInternalSupport}
+          key={cargaAbiertaId ?? "cargas"}
+          onVerDocumento={(documentoId) => {
+            void api.get<DocumentoResponse>(`/facturas/${documentoId}`).then((documento) => {
+              setSelected(documento);
+              setDocKindTab("FACTURAS");
+            }, (causa: unknown) => setError(causa instanceof Error ? causa.message : "No se pudo abrir la factura."));
+          }}
+        />
+      </section>
+    );
+  }
+
   return (
     <section className="documents-view" aria-labelledby="documents-title">
       <div className="editor-heading">
@@ -2248,18 +2320,7 @@ function DocumentsView({
 
       {!selected ? (
       <section className="documents-filters">
-        <div className="filter-tabs" role="group" aria-label="Tipo de documento">
-          {(["FACTURAS", "NOTAS_CREDITO"] as const).map((value) => (
-            <button
-              className={docKindTab === value ? "active" : ""}
-              key={value}
-              onClick={() => setDocKindTab(value)}
-              type="button"
-            >
-              {value === "FACTURAS" ? "Facturas" : "Notas de credito"}
-            </button>
-          ))}
-        </div>
+        {pestanasDocumentos}
         <label>
           Buscar
           <input
@@ -2414,6 +2475,22 @@ function DocumentsView({
               <button className="document-row-main" onClick={() => void openDetail(documento.id)} type="button">
                 <span>
                   <strong title={documento.accion_detalle?.titulo}>{`${getDocumentoAccionIcon(documento)} ${formatDocumentoTipo(documento.tipo)} ${documento.numero_fiscal ?? "pendiente"}`}</strong>
+                  {documento.carga ? (
+                    <span className="carga-marca">
+                      <button
+                        className="carga-enlace"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setCargaAbiertaId(documento.carga!.id);
+                          setDocKindTab("CARGA_MASIVA");
+                        }}
+                        type="button"
+                      >
+                        Carga
+                      </button>
+                      {documento.carga.numero_archivo && documento.carga.numero_archivo !== documento.numero_fiscal ? ` · Archivo ${documento.carga.numero_archivo}` : null}
+                    </span>
+                  ) : null}
                   <small>{documento.cliente.razon_social}</small>
                   {formatEmisor(documento) ? <small className="document-row-emisor">Emitio {formatEmisor(documento)}</small> : null}
                 </span>
@@ -5854,7 +5931,9 @@ function createApiClient(accessToken: string | null, setAccessToken: (token: str
     }
 
     if (!response.ok) {
-      throw new ApiClientError(response.status, await readApiError(response));
+      const copia = response.clone();
+      const details = await copia.json().then((body: ApiErrorResponse) => body.error?.details, () => undefined);
+      throw new ApiClientError(response.status, await readApiError(response), details);
     }
 
     if (response.status === 204) {
@@ -6026,11 +6105,13 @@ function NotasView({
   setAccessToken,
   onBack,
   onConvertirEnFactura,
+  numeracionDelCliente = false,
 }: {
   accessToken: string | null;
   setAccessToken: (token: string | null) => void;
   onBack: () => void;
   onConvertirEnFactura: (draft: InvoiceInitialDraft) => void;
+  numeracionDelCliente?: boolean;
 }) {
   const api = useMemo(() => createApiClient(accessToken, setAccessToken), [accessToken, setAccessToken]);
   type SubView = "list" | "form" | "detail";
@@ -6534,9 +6615,10 @@ function NotasView({
         {/* Convertir en factura */}
         {puedeConvertir && notaFull ? (
           <div className="action-group">
-            <button className="primary-action wide" onClick={() => handleConvertirEnFactura(notaFull)} type="button">
+            <button className="primary-action wide" disabled={numeracionDelCliente} onClick={() => handleConvertirEnFactura(notaFull)} type="button">
               Convertir en factura
             </button>
+            {numeracionDelCliente ? <p className="muted">Este punto emite por carga masiva</p> : null}
           </div>
         ) : null}
 

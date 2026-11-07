@@ -25,6 +25,14 @@ const envSchema = z.object({
   FE_VERIFY_WORKER_ENABLED: z.enum(["true", "false"]).default("true").transform((value) => value === "true"),
   FE_VERIFY_WORKER_INTERVAL_MS: z.coerce.number().int().positive().default(30000),
   FE_VERIFY_BATCH_SIZE: z.coerce.number().int().positive().default(10),
+  /** Carga masiva de facturas (SPEC_CARGA_MASIVA_FACTURAS_v0.1). Apagada: rutas 404, sin pestana, sin worker. */
+  CARGA_MASIVA_ENABLED: z.enum(["true", "false"]).default("false").transform((value) => value === "true"),
+  /** RN-01b: por encima del tope de FE (20 MB) y por debajo del nginx (25 MB), para que el 413 normal lo de FE. */
+  CARGA_MAX_BYTES: z.coerce.number().int().positive().default(25165824),
+  CARGA_SUBIDAS_SIMULTANEAS: z.coerce.number().int().positive().default(2),
+  CARGA_UPLOAD_TIMEOUT_MS: z.coerce.number().int().positive().default(60000),
+  CARGAS_SYNC_WORKER_ENABLED: z.enum(["true", "false"]).default("true").transform((value) => value === "true"),
+  CARGAS_SYNC_WORKER_INTERVAL_MS: z.coerce.number().int().positive().default(60000),
   VENTAX_NOTIFY_EMAIL: z.string().email().optional(),
   PUBLIC_APP_BASE_URL: z.string().url().default("https://app.factura.segel.com.py"),
   APP_VERSION: z.string().default("dev"),

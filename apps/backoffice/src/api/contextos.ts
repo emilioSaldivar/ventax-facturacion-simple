@@ -20,6 +20,7 @@ export interface Contexto {
   documento_nro: string | null;
   credito_plazo_dias: number;
   alias_operativo: string | null;
+  numeracion_facturas: "SERVICIO" | "CLIENTE";
   activo: boolean;
 }
 
@@ -42,6 +43,7 @@ export interface ContextoUpdateInput {
   credito_plazo_dias?: number | null;
   alias_operativo?: string | null;
   activo?: boolean;
+  numeracion_facturas?: "SERVICIO" | "CLIENTE";
 }
 
 export function listContextos(facturadorId: string): Promise<Contexto[]> {
