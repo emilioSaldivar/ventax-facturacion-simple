@@ -2,7 +2,7 @@
 
 **Fecha:** 2026-11-07. **Estado:** listo para implementar, por decision del usuario (2026-11-07), sobre el contrato publicado por FE. Sigue `PLAN_CARGA_MASIVA_FACTURAS_v0.1.md` y `TASKS_CARGA_MASIVA_FACTURAS_v0.1.md`.
 **Origen:** pedido de `facturacion-electronica` (FE), `docs/PEDIDO_FACTURACION_SIMPLE_CARGA_MASIVA_v0.1.md`. El contrato de FE esta publicado en su guia de consumidores (seccion 36) y en `tecnica/openapi.yaml`, paquete v0.14, commit `c0d036b` de FE (seccion 6).
-**Procedencia de las decisiones:** numeracion, documentos, roles y rama llegaron por la sesion de FE (seccion 13 del pedido). D-1 a D-8 las respondio el usuario directamente.
+**Procedencia de las decisiones:** numeracion, documentos, roles y rama llegaron por la sesion de FE (seccion 13 del pedido). D-1 a D-8 y D-14 las respondio el usuario directamente; D-9 a D-13 son propuestas de FS aprobadas por el usuario el 2026-11-07.
 
 ## 1. Problema
 
@@ -35,7 +35,8 @@ El resultado de SIFEN llega en minutos o en horas: la persona sube, se va y vuel
 ### Subida y validacion
 
 - **RN-01.** FS entrega el archivo a FE sin modificarlo (P-04): FE detecta un archivo repetido por su contenido. FS tampoco lo conserva, ni en disco ni en la base.
-- **RN-02.** Antes de llamar a FE, el backend valida tenant, suscripcion, usuario, facturador y contexto operativo listo para emitir, con las mismas comprobaciones que `POST /facturas`. `emisor_id`, perfil, actividad, establecimiento y punto salen de ese contexto, nunca del navegador.
+- **RN-01b.** El tamano del archivo lo limita FE, no FS. Cada tope del camino es mayor que el siguiente, para que el `413` lo de siempre FE con su mensaje y su `tope_bytes`: nginx del frontend 25 MB > API de FS 24 MB (`CARGA_MAX_BYTES`, configurable) > FE 20 MB (`CARGA_MAX_BYTES` de FE, configurable). Si FE sube su tope, soporte sube los de FS en el mismo orden. Con la densidad medida por FE (5.000 comprobantes de dos lineas en 1,65 MB, unos 165 bytes por linea), su limite de 100.000 lineas ocupa unos 16,5 MB: entra en los 20 MB de FE y con margen en los 24 MB de FS. Decidido por el usuario (D-14).
+- **RN-02.** Antes de llamar a FE, el backend valida tenant, suscripcion, usuario, facturador y contexto operativo listo para emitir, con las mismas comprobaciones de `GET /me/readiness` que habilitan "Nueva factura" en la app. `emisor_id`, perfil, actividad, establecimiento y punto salen de ese contexto, nunca del navegador.
 - **RN-03.** Una carga cubre un perfil y un punto: los del contexto operativo activo del usuario al subir. La pantalla los muestra antes de subir. Un archivo trae ventas de un solo punto, y debe ser el del perfil (D-3). Lo verifica FE, porque FS no lee el contenido. Si una sola fila trae otro punto, FE rechaza el archivo entero y no procesa nada.
 - **RN-04.** Los textos de error y aviso de FE se muestran tal como llegan, con codigo, fila y columna (P-05). Un texto incomprensible se corrige en FE.
 - **RN-04b.** El numero de fila es el de una planilla: los titulos son la fila 1 y una linea vacia cuenta. La pantalla lo aclara, y no traduce ni agrupa los codigos de FE: la lista de codigos puede crecer. Los codigos conocidos al publicarse el contrato estan en la seccion 6.
@@ -54,7 +55,7 @@ El resultado de SIFEN llega en minutos o en horas: la persona sube, se va y vuel
 
 ### Permisos (decision de FS, criterio del usuario)
 
-- **RN-10.** Sin rol nuevo. Subir, confirmar, cancelar y reintentar: cualquier usuario `OPERADOR_FACTURACION` con contexto operativo listo en ese facturador. No hace falta que confirme quien subio. `SOPORTE_INTERNO` y `ADMIN_INTERNO` tambien pueden, y son los unicos que ven los lotes SIFEN de una carga.
+- **RN-10.** Sin rol nuevo. Subir, confirmar, cancelar y reintentar: cualquier usuario `OPERADOR_FACTURACION` con contexto operativo en ese facturador; subir y confirmar exigen ademas que el contexto este listo para emitir (RN-02), cancelar y reintentar no. No hace falta que confirme quien subio. `SOPORTE_INTERNO` y `ADMIN_INTERNO` tambien pueden, y son los unicos que ven los lotes SIFEN de una carga.
 - **RN-11.** Un usuario ve solo las cargas de su facturador y de su contexto operativo, con la misma regla de segmentacion por perfil que `GET /facturas`: los roles internos ven todas las del facturador. Una carga ajena responde `404`, tambien por identificador directo. Queda auditado quien subio, quien confirmo, quien cancelo y quien reintento.
 
 ### Facturas en "Documentos" (Usuario)
@@ -78,7 +79,7 @@ El resultado de SIFEN llega en minutos o en horas: la persona sube, se va y vuel
 | Vista | Contenido |
 |---|---|
 | Listado | Cargas por fecha y estado, con archivo, totales y avance. "Nueva carga" y "Descargar plantilla". Filtro por estado y por fecha de recepcion |
-| Nueva carga | Facturador, punto y perfil que se usaran; forma de numerar; seleccion del archivo (`.csv` o `.zip`, hasta el tope). Un aviso fijo: "Confirmar emite facturas reales" |
+| Nueva carga | Facturador, punto y perfil que se usaran; forma de numerar; seleccion del archivo (`.csv` o `.zip`, hasta 20 MB y 100.000 lineas, los topes de FE). Un aviso fijo: "Confirmar emite facturas reales" |
 | Informe | Validos, con error y con aviso. Por comprobante: numero, filas, referencia de venta, codigo y mensaje por error o aviso, con la columna. Filtros `estado` y `con_advertencias`. Confirmar o cancelar |
 | Avance | Totales de la carga, ultima actualizacion, y que se puede cerrar la pantalla. En `EN_COLA`: "En espera de otra carga". En `EN_SIFEN` dice que sigue esperando a SIFEN y que puede tardar horas: no es un error. Tiempos normales medidos por FE con 5.000 comprobantes: validacion en 11 s, unos 100 comprobantes por minuto al preparar, envio de unas dos horas por carga de 5.000. El ultimo lote, el de menos de 50, puede esperar hasta 15 min: una carga chica queda "en SIFEN" ese rato sin anomalia. La pantalla no promete hora de fin |
 | Resultado | Por comprobante: numero asignado, numero del archivo, referencia de venta, estado, CDC, codigo y mensaje de SIFEN, correo y enlace al documento en FS. Filtros y descarga del CSV de resultado |
@@ -87,8 +88,9 @@ Mensajes propios de FS, en lenguaje simple:
 
 | Situacion | Origen | Mensaje |
 |---|---|---|
-| Archivo repetido | `200` de FE | Abre la carga anterior y lo dice. Si se subio con el perfil equivocado hay que cancelarla y subir de nuevo: el mismo archivo con otro perfil es la misma carga |
-| Archivo demasiado grande | `413` de FE o de FS | Indica el tope en MB y pide partir el archivo |
+| Archivo repetido | Copia local con el mismo SHA-256 (D-13) o `200` de FE | Abre la carga anterior y lo dice. Si se subio con el perfil equivocado hay que cancelarla y subir de nuevo: el mismo archivo con otro perfil es la misma carga |
+| Archivo repetido en otro contexto operativo | Copia local con el mismo SHA-256 que el usuario no puede ver (RN-11) | `409`: "Este archivo ya fue subido en otro contexto de este facturador. Quien lo subio debe cancelarlo, o contactar a soporte". No abre la carga ajena |
+| Archivo demasiado grande | `413` de FE (lo normal, RN-01b) o de FS (solo si los topes quedaron mal configurados) | Indica el tope en MB con `tope_bytes` y pide partir el archivo |
 | Demasiadas cargas en espera | `429 CARGA_COLA_LLENA` | Indica la espera de `Retry-After` |
 | Cuota diaria superada | `429 CARGA_CUOTA_DIARIA` | Indica la espera y que la cuota la fija soporte |
 | Sin permiso | `403` | Pide contactar a soporte |
@@ -145,7 +147,7 @@ Rutas propias de FS: PLAN, seccion 5, y `spec/openapi.yaml`.
 
 - **Base de datos:** migracion aditiva `0037_carga_masiva.sql`: tabla `cargas_masivas`, `actividad_punto_perfiles.numeracion_facturas`, `facturas_operativas.carga_masiva_id` y `carga_numero_archivo`.
 - **API:** modulo `cargas`; subida de archivos, que hoy no existe (el limite global de 1 MB aplica solo a JSON); worker de sincronizacion; `409 NUMERACION_DEL_CLIENTE` en `POST /facturas`; `numeracion_facturas` y `carga_masiva_habilitada` en `GET /me/context`; filtro `carga_id` y campo `carga` en `GET /facturas`.
-- **Tamano de subida:** el nginx del contenedor del frontend (`infra/nginx-or-caddy/nginx.local.conf`) no fija `client_max_body_size`, asi que hoy corta en 1 MB: hay que fijarlo en 25 MB en `location /api/v1/`. Los nginx de host ya tienen 25 MB. El NGINX publico de infraestructura, si existe, lo ajusta infraestructura.
+- **Tamano de subida (RN-01b):** el nginx del contenedor del frontend (`infra/nginx-or-caddy/nginx.local.conf`) no fija `client_max_body_size`, asi que hoy corta en 1 MB: hay que fijarlo en 25 MB en `location /api/v1/`. Los nginx de host (`host-segel-fs.conf`, `host-production.conf`, `host-factura-multi-env.conf`) ya tienen 25 MB. La API de FS acepta 24 MB por defecto. El NGINX publico de infraestructura, si existe, debe admitir al menos 25 MB; lo ajusta infraestructura.
 - **Alta de facturadores:** `scripts/segel-fs/cargar-facturador.py` debe poder otorgar `CARGA_MASIVA` y fijar `cargas_cuota_diaria` por emisor, de forma opcional y nunca por defecto.
 - **Despliegue:** `worker-cargas` de FE (P-07) se suma a `scripts/segel-fs/build-images.sh`, `deploy.sh` y `up.sh` cuando FE publique el tag. FE exige `EMISSION_RESUME_DRAFT_ENABLED=true` junto con `CARGAS_ENABLED=true`: se confirma con FE en la fase E.
 
@@ -165,6 +167,7 @@ Rutas propias de FS: PLAN, seccion 5, y `spec/openapi.yaml`.
 - **CA-12.** Con `CARGA_MASIVA_ENABLED=false`, las rutas `/cargas` responden `404`, la pestana no aparece y `GET /facturas` y `GET /me/context` no cambian de forma salvo los campos nuevos con su valor por defecto.
 - **CA-13.** En un contexto `CLIENTE`, "Nueva factura" no se ofrece y `POST /facturas` responde `409`; una nota de credito se emite igual.
 - **CA-14.** El archivo que recibe FE tiene el mismo SHA-256 que el que eligio el usuario.
+- **CA-15.** Un archivo de 21 MB atraviesa el nginx y la API de FS y recibe el `413` de FE con `tope_bytes`; uno de 2 MB sube sin tocar ningun limite de FS.
 
 ## 9. Decisiones
 
@@ -178,9 +181,15 @@ Rutas propias de FS: PLAN, seccion 5, y `spec/openapi.yaml`.
 | D-6 | Primer cliente y volumen | Todavia no hay cliente. Se prepara la funcion y se prueba con los clientes de prueba, en local |
 | D-7 | Orden frente a FS-24 y autogestion | Lo define FS: seccion 2 del PLAN |
 | D-8 | Cuando implementar | 2026-11-07: ahora, sobre el contrato publicado. La migracion `0037` se escribe primero y viaja en el proximo despliegue con la bandera apagada; su unico efecto visible es una columna con valor por defecto |
+| D-9 | Version de los documentos | Se refina v0.1 en lugar de abrir v0.2: el alcance no cambio, solo el estado del contrato de FE. Aprobada 2026-11-07 |
+| D-10 | `404` de FE en la subida | FS lo devuelve como `409 CONFLICT` con `details.reason = CARGA_MASIVA_NO_HABILITADA_EN_FE` y la pantalla dice que la funcion no esta habilitada para el facturador, nunca "no encontrado" (seccion 4; PLAN 5.3). Aprobada 2026-11-07 |
+| D-11 | Totales del snapshot | Si el total que calcula FS desde `detalle` difiere del `total` de FE, manda FE, que es lo que esta en el XML; FS lo registra en el log y guarda el de FE en `fiscal_response_snapshot.total_fe` (PLAN 6). Aprobada 2026-11-07 |
+| D-12 | Quien ve las cargas | Operadores: solo las de su contexto operativo. `SOPORTE_INTERNO` y `ADMIN_INTERNO`: todas las del facturador, igual que en `GET /facturas` (RN-11). Aprobada 2026-11-07 |
+| D-13 | Archivo repetido | Si el mismo SHA-256 ya tiene en FS una carga del facturador que no esta `RECHAZADA` ni `CANCELADA`, FS devuelve esa carga sin llamar a FE cuando el usuario puede verla, y `409` cuando pertenece a otro contexto operativo (seccion 4); en los demas casos FE decide con su `200` (PLAN 5.3). Aprobada 2026-11-07 |
+| D-14 | Tamano del archivo | FS no limita por debajo de FE: nginx 25 MB > API de FS 24 MB > FE 20 MB, todos configurables (RN-01b). El limite de 100.000 lineas de FE cabe en su tope de 20 MB. Decidida por el usuario 2026-11-07 |
 
 **Abierto con FE:** que publique la rama con un tag e imagenes; la prueba de punta a punta en SIFEN test (su CMA-604, pendiente de autorizacion); si `EMISSION_RESUME_DRAFT_ENABLED=true` es requisito en produccion. Nombres y tope ya estan fijados en el OpenAPI publicado.
 
 **Correo:** FE lo envia despues de la aprobacion de SIFEN; el estado del correo de un comprobante aparece recien entonces (`correo`: `PENDING`, `SENT`, `FAILED`, o nulo sin direccion). Recibos por archivo: fuera de la primera etapa.
 
-**Sin dato de volumen (D-6):** no hay cifra para dimensionar. Los topes son los de FE (5.000 comprobantes por archivo, 20 MB). Antes del primer cliente real hay que medir con su volumen.
+**Sin dato de volumen (D-6):** no hay cifra para dimensionar. Los topes son los de FE (5.000 comprobantes, 100.000 lineas y 20 MB por archivo); FS solo se asegura de no cortar antes (RN-01b). Antes del primer cliente real hay que medir con su volumen.
