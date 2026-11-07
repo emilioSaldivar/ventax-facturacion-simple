@@ -24,7 +24,7 @@
 | CMF-009 | Fase C: worker de sincronizacion | Pruebas: crea documentos solo con `document_uuid`; dos pasadas no duplican; `ANULADA` no se revierte; fallo de FE no cambia estados; no agenda `verificacion_next_at`; no toca agenda ni catalogo | TODO |
 | CMF-010 | Fase D: pestana "Carga masiva" con sus cinco vistas | Playwright con los escenarios del PLAN, seccion 9, en 1280 px primero y en 390 px, contra `bash scripts/deploy.sh` | TODO |
 | CMF-011 | Fase D: marca "Carga" y numero del archivo en Facturas | Playwright: una factura de carga abre su carga; KuDE, cancelacion y nota de credito disponibles | TODO |
-| CMF-012 | Fase E: cliente real contra el OpenAPI de FE | BLOCKED: FE publico subida y consultas en su worktree, sin commit ni stack; faltan confirmar, cancelar, reintentar y resultado | BLOCKED |
+| CMF-012 | Fase E: cliente real contra el OpenAPI de FE (guia seccion 36, paquete v0.14) | Las diez operaciones responden contra el stack local `fe-cargas` | TODO. Contrato publicado; para desplegar falta el tag de FE |
 | CMF-013 | Fase E: `CARGA_MASIVA` en `cargar-facturador.py` y `worker-cargas` en los scripts de despliegue | BLOCKED: espera el aviso de FE (P-07) | BLOCKED |
 | CMF-014 | Fase E: limites de subida en los nginx | Subida de un archivo del tope por el stack local completo. El NGINX publico lo ajusta infraestructura | BLOCKED |
 | CMF-015 | Fase E: prueba conjunta P-06 en local, con un facturador de prueba y SIFEN test | Carga finalizada y resultado visible en FS. Medir memoria de la API y duracion de la sincronizacion | BLOCKED |

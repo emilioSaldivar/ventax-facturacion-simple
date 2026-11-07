@@ -8,12 +8,12 @@
 
 FS no valida ni transforma el archivo: lo recibe, comprueba permisos y contexto, y lo reenvia a FE. FS guarda una fila por carga y copia a "Documentos" las facturas que FE va creando.
 
-El contrato de FE todavia no esta publicado. Por eso el trabajo se parte en dos:
+El trabajo se parte en dos:
 
-- **Fases A a D, contra un mock:** no dependen de FE. El mock devuelve las formas de las secciones 7, 12 y 14 del pedido.
-- **Fase E, contra FE real:** empieza cuando FE publique su OpenAPI en `facturacion-electronica-consumer-docs` y avise que la subida y la validacion corren en su stack local. Hasta entonces no se escribe el cliente real (`AGENTS.md`: solo se consume lo publicado).
+- **Fases A a D, contra un mock:** no dependen de FE. El mock devuelve las formas de `tecnica/openapi.yaml` de FE (paquete v0.14).
+- **Fase E, contra FE real:** con el stack local de FE. El despliegue, ademas, espera el tag.
 
-**Estado del contrato de FE al 2026-11-06:** subida, plantilla, listado, detalle y comprobantes estan en su `openapi.yaml` de consumidores, en el worktree `fe-capacidad-200`, sin commit y sin correr en un stack. Al cierre del dia FE emite de punta a punta en su stack `fe-cargas` (firma real, lotes al simulador, correo tras la aprobacion) y publico tambien `GET /v1/cargas/{id}/lotes` y `GET /v1/cargas/{id}/resultado` (secciones 20 a 22 del pedido). Faltan confirmar, cancelar y reintentar. El mock de FS usa los nombres publicados.
+**Estado del contrato de FE al 2026-11-06:** publicado en la guia de consumidores (seccion 36) y en `tecnica/openapi.yaml`, con las diez operaciones de `/v1/cargas`, incluidas confirmar, cancelar y reintentar. Corre de punta a punta en el stack `fe-cargas` con SIFEN simulado, medido con 5.000 comprobantes. Commiteado en la rama `feat/capacidad-200-clientes`, **sin push ni tag**. Falta la prueba en SIFEN test (CMA-604). FE sigue tocando lotes y firma (`986112d`, `095a00b`), sin cambio de contrato.
 
 ## 2. Orden de trabajo (D-7)
 
@@ -58,26 +58,29 @@ Modulo nuevo `apps/api/src/modules/cargas/` (rutas, servicio, repositorio, tipos
 | `GET /cargas/:id/comprobantes` | Igual en FE | Pasa pagina, tamano y filtros. Suma `documento_id` de FS cuando existe |
 | `POST /cargas/:id/confirmar` | Igual en FE | Guarda `confirmada_por` y agenda la sincronizacion |
 | `POST /cargas/:id/cancelar`, `/reintentar` | Igual en FE | Auditados |
-| `GET /cargas/:id/resultado` | Igual en FE | Descarga CSV, una fila por comprobante, columnas del OpenAPI de FE |
+| `GET /cargas/:id/resultado` | Igual en FE | Descarga CSV, una fila por comprobante. FS lo reenvia sin leerlo: el OpenAPI de FE no fija las columnas |
 | `GET /cargas/:id/lotes` | Igual en FE | Solo rol interno: lotes SIFEN de la carga (`CREADO`, `RECIBIDO`, `CONCLUIDO`, `ERROR`) y respuestas de SIFEN, para soporte |
 
 **Subida:**
 
 - **Transporte: el archivo es el cuerpo del pedido,** con `Content-Type: text/csv` o `application/zip`, y el nombre en el parametro `nombre_archivo`. Propuesto por FE, aceptado por FS (seccion 19 del pedido) y **confirmado por el usuario el 2026-11-06.**
 - Sin dependencia nueva: `express.raw` solo en esta ruta, con limite `CARGA_MAX_BYTES`, 20 MB por defecto. El navegador envia el `File` tal cual. El archivo no se escribe en disco ni se guarda.
-- FS envia a FE `Content-Type: text/csv` o `application/zip`. FE responde `415` a cualquier otro; nunca `application/json`.
+- FS envia a FE `Content-Type: text/csv` o `application/zip`. FE admite ademas `application/octet-stream`, que FS no usa, y responde `415 CARGA_TIPO_DE_CONTENIDO_NO_ADMITIDO` a cualquier otro; nunca `application/json` ni `multipart`.
 - Se aceptan `.csv` y `.zip`. FS no abre el `.zip`: lo reenvia igual (FE admite un solo archivo adentro, hasta 20 MB descomprimido).
 - Como mucho 2 subidas a la vez por proceso; la tercera responde `429`. Tope de memoria: 40 MB mas la copia del reenvio.
-- FS manda a FE los bytes recibidos, sin tocarlos, y en la URL `emisor_id`, `formato=CSV`, `version=1`, `numeracion` del contexto, perfil (salvo `NO_REQUERIDO`), actividad, establecimiento y punto. FE exige que perfil y punto coincidan, y rechaza el archivo entero si una fila trae otro punto.
+- FS manda a FE los bytes recibidos, sin tocarlos, y en la URL `emisor_id`, `formato=CSV`, `version=1`, `numeracion` del contexto y `actividadEconomicaCodigo`; ademas `emission_profile_code` si el contexto tiene perfil, o `establecimiento` y `punto` si es `NO_REQUERIDO`. El perfil fija punto, timbrado y actividad. FE rechaza el archivo entero si una fila trae otro punto.
 - Clave: la de consumidor del facturador (`resolveConsumerGateway`). Sin clave propia, `409` con mensaje claro: no se usa la compartida.
 - Tiempo de espera propio para la subida: 60 s.
-- `202` y `200` de FE crean o reutilizan la fila local por `fe_carga_id`. FE indica la repeticion con `creada: false`, y FS la pasa a la pantalla.
+- `202` y `200` de FE crean o reutilizan la fila local por `fe_carga_id`. La repeticion la indica el codigo: `200` es un archivo ya subido. El esquema `Carga` no trae un campo `creada`. FS le dice a la pantalla si es repetida.
 - **Repeticion (implementado en FE):** la clave es emisor, ambiente y sha256 de los bytes recibidos. El nombre, el perfil y la actividad no cuentan. Una carga `RECHAZADA` o `CANCELADA` no bloquea volver a subir el mismo archivo: crea una carga nueva.
 - Por eso, ante un timeout de la subida, FS reintenta una vez con los mismos bytes: no duplica.
 - `nombre_archivo`: opcional, hasta 200 caracteres, solo informativo. FS lo recorta a ese largo.
-- `413` trae `tope_bytes`. Un `.zip` que supera el tope al descomprimirse no da `413`: queda como carga `RECHAZADA` con `TOPE_SUPERADO`.
-- Errores de FE: `403`, `413`, `422` y `429` se devuelven con su codigo y el mensaje de FE; no se convierten en `502`.
-- Un `422` con `motivos` por parametros que no corresponden al emisor (perfil, punto, actividad o forma de numerar) no crea carga en FE ni fila en FS. Es un problema de configuracion, no del archivo: la pantalla muestra el motivo y pide contactar a soporte.
+- `413` trae `details.tope_bytes`. Un `.zip` que supera el tope al descomprimirse no da `413`: queda como carga `RECHAZADA` con `TOPE_SUPERADO`.
+- Errores de FE: `403`, `413`, `422` y `429` se devuelven con su codigo y el mensaje de FE; no se convierten en `502`. El `429` conserva `Retry-After` y `details.retry_after_seconds`.
+- `422 CARGA_PARAMETROS_INVALIDOS` trae `details.motivos`, por ejemplo `ACTIVIDAD_NO_CUBIERTA`. No crea carga en FE ni fila en FS. Es un problema de configuracion, no del archivo: la pantalla muestra el motivo y pide contactar a soporte.
+- Un `404` de FE en la subida significa instancia sin la funcion o consumidor sin `CARGA_MASIVA`: FS responde con un mensaje de funcion no habilitada, no como carga inexistente.
+
+**Acciones:** confirmar, cancelar y reintentar pueden responder `409 CARGA_ACCION_NO_ADMITIDA` con las acciones vigentes: FS actualiza `acciones` en su copia y refresca la pantalla, sin mostrarlo como falla del sistema.
 
 **Aislamiento:** toda consulta filtra por `facturador_id` y por `actividad_punto_perfil_id` del contexto. Una carga ajena responde `404`.
 

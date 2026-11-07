@@ -1,7 +1,7 @@
 # SPEC Carga masiva de facturas por archivo v0.1
 
 **Fecha:** 2026-11-06. **Estado:** decisiones cerradas por el usuario el 2026-11-06 (seccion 9). Sigue `PLAN_CARGA_MASIVA_FACTURAS_v0.1.md`. **Sin implementar:** se refina a medida que FE avanza.
-**Origen:** pedido de `facturacion-electronica` (FE), `docs/PEDIDO_FACTURACION_SIMPLE_CARGA_MASIVA_v0.1.md`, con sus secciones 12 y 13. El contrato de FE es una propuesta: nada esta implementado.
+**Origen:** pedido de `facturacion-electronica` (FE), `docs/PEDIDO_FACTURACION_SIMPLE_CARGA_MASIVA_v0.1.md`, con sus secciones 12 y 13. El contrato de FE esta publicado e implementado en su rama, sin tag (seccion 6).
 **Procedencia de las decisiones:** numeracion, documentos, roles y rama llegaron por la sesion de FE (seccion 13 del pedido). D-1 a D-7 las respondio el usuario directamente.
 
 ## 1. Problema
@@ -78,10 +78,10 @@ El resultado de SIFEN llega en minutos o en horas: la persona sube, se va y vuel
 | Listado | Cargas por fecha y estado, con archivo, totales y avance. "Nueva carga" y "Descargar plantilla" |
 | Nueva carga | Facturador, punto y perfil que se usaran; forma de numerar; seleccion del archivo |
 | Informe | Validos, con error y con aviso. Por comprobante: fila, columna y mensaje. Confirmar o cancelar |
-| Avance | Totales de la carga, ultima actualizacion, y que se puede cerrar la pantalla. En `EN_SIFEN` dice que sigue esperando a SIFEN y que puede tardar horas: no es un error. Tiempos normales medidos por FE: validacion en segundos, unos 2 comprobantes por segundo al preparar, un lote de 50 por minuto al enviar; el ultimo lote de una carga puede esperar hasta 15 min la agenda del emisor, asi que una carga chica queda "en SIFEN" ese rato sin anomalia |
+| Avance | Totales de la carga, ultima actualizacion, y que se puede cerrar la pantalla. En `EN_SIFEN` dice que sigue esperando a SIFEN y que puede tardar horas: no es un error. Tiempos normales medidos por FE con 5.000 comprobantes: validacion en 11 s, unos 100 comprobantes por minuto al preparar con 2 CPU, y envio del orden de dos horas por carga de 5.000 segun la guia (36.8). La pantalla no promete una hora de fin: el envio medido fue menor (33 por minuto) y FE lo esta mejorando; el ultimo lote de una carga puede esperar hasta 15 min la agenda del emisor, asi que una carga chica queda "en SIFEN" ese rato sin anomalia |
 | Resultado | Por comprobante: numero, referencia de venta, estado, CDC, motivo de SIFEN, correo y enlace al documento. Filtros y descarga del resultado |
 
-Mensajes propios de FS: archivo repetido (abre la carga anterior; si se subio con el perfil equivocado, hay que cancelarla y subir de nuevo, porque el mismo archivo con otro perfil es la misma carga), tope superado (`413`, con el tope), demasiadas cargas o cuota diaria (`429`, con la espera), sin permiso (`403`).
+Mensajes propios de FS: archivo repetido (abre la carga anterior; si se subio con el perfil equivocado, hay que cancelarla y subir de nuevo, porque el mismo archivo con otro perfil es la misma carga), tope superado (`413`, con el tope), demasiadas cargas en espera o cuota diaria (`429`, con la espera de `Retry-After`, distinguiendo `CARGA_COLA_LLENA` de `CARGA_CUOTA_DIARIA`), sin permiso (`403`), y funcion no habilitada para el facturador (`404` de FE: falta el permiso `CARGA_MASIVA`, se resuelve con soporte).
 
 La pestana Facturas no cambia de columnas en esta version; las facturas de carga llevan una marca que enlaza a su carga.
 
@@ -101,14 +101,22 @@ La pestana Facturas no cambia de columnas en esta version; las facturas de carga
 
 ## 6. Contrato con FE
 
-Rutas `/v1/cargas` con la clave de consumidor del facturador y el permiso `CARGA_MASIVA`. Secciones 6, 7 y 12 del pedido. FE publica el OpenAPI; FS consume solo lo publicado.
+Rutas `/v1/cargas` con la clave de consumidor del facturador y el permiso `CARGA_MASIVA`, que FE no otorga por defecto: sin el permiso, o con la funcion apagada en la instancia, todas responden `404`. FS consume solo lo publicado.
 
-Aceptado por FE, sin implementar (seccion 14 del pedido):
+**Publicado por FE (2026-11-06):** guia de consumidores seccion 36 y `tecnica/openapi.yaml` con las diez operaciones, paquete v0.14 (commit `c0d036b` de FE). Esta en la rama `feat/capacidad-200-clientes` de FE, **sin push ni tag**: no hay imagen de FE que FS pueda desplegar con esto. Lo pedido en la seccion 14 del pedido quedo publicado:
 
 - `numero_asignado` y `numero_archivo` en el comprobante. Con numeracion del cliente son iguales.
-- Parametro del listado de comprobantes para traer receptor, condicion con pagos o credito, items y totales. FE fija el nombre en el OpenAPI.
-- Filtro `actualizado_desde` en comprobantes: devuelve los que cambiaron, por cambio propio o de su documento.
-- Tope del archivo: 20 MB sin comprimir, **provisional** hasta que FE mida con 5.000 comprobantes. El limite de FS y el de NGINX quedan configurables.
+- `detalle=true` en el listado de comprobantes: `fecha`, `tipoTransaccion`, `receptor`, `condicionOperacion`, `items` y `total`, con los nombres de `POST /factura`.
+- `actualizado_desde` en comprobantes: devuelve los que cambiaron, por cambio propio o de su factura.
+- Tope del archivo: 20 MB sin comprimir, ya no provisional (5.000 comprobantes de dos lineas pesan 1,65 MB).
+
+**Limites de FE (guia 36.8):** 5.000 comprobantes y 100.000 lineas por archivo; 999 items y 3 medios de pago por comprobante; 8 cargas en espera por emisor (`429 CARGA_COLA_LLENA`; una `VALIDADA` sin confirmar no cuenta); cuota diaria de comprobantes por consumidor, que fija el administrador de FE (`429 CARGA_CUOTA_DIARIA`). Todo `429` trae `Retry-After`. `fecha_emision` hasta 30 dias atras y 5 adelante; con mas de 5 de atraso se emite con la advertencia `TRANSMISION_EXTEMPORANEA`.
+
+**Codigos que la pantalla debe contemplar,** sin traducirlos (RN-04b): advertencias `NUMEROS_SALTEADOS` y `TRANSMISION_EXTEMPORANEA`; error de comprobante `NUMERO_YA_USADO`; motivo de subida `ACTIVIDAD_NO_CUBIERTA` (la actividad no esta en el timbrado de ese punto); `409 CARGA_ACCION_NO_ADMITIDA` en confirmar, cancelar o reintentar fuera de estado.
+
+**Duplicado (guia 36.4):** un comprobante con el mismo numero en el mismo punto y el mismo comprador, fecha y total que una factura ya emitida, por otra carga o por `POST /factura`, es `DUPLICADO` con el `document_uuid` existente. Con otro comprador, fecha o total, es `INVALIDO` con `NUMERO_YA_USADO`.
+
+**Sin publicar:** las columnas del CSV de `/resultado` (el OpenAPI lo declara como texto). FS lo reenvia sin leerlo, asi que no lo bloquea.
 
 Rutas propias de FS: se definen en el PLAN y se documentan en `spec/openapi.yaml`.
 
@@ -146,7 +154,7 @@ Rutas propias de FS: se definen en el PLAN y se documentan en `spec/openapi.yaml
 | D-6 | Primer cliente y volumen | Todavia no hay cliente. Se prepara la funcion y se prueba con los clientes de prueba, en local |
 | D-7 | Orden frente a FS-24 y FS-25 | Lo define FS: seccion 2 del PLAN |
 
-**Abierto con FE:** nombres finales de campos y parametros, que FE fija en su OpenAPI (su tarea CMA-215); tope definitivo del archivo.
+**Abierto con FE:** que publique la rama con un tag e imagenes; la prueba de punta a punta en SIFEN test (su CMA-604, pendiente de autorizacion). Nombres y tope ya estan fijados en el OpenAPI publicado (seccion 6).
 
 **Correo:** FE lo envia despues de la aprobacion de SIFEN; el estado del correo de un comprobante aparece recien entonces. Recibos por archivo: fuera de la primera etapa.
 
