@@ -52,6 +52,6 @@ FE reune (2026-11-07) los numeros de FE y FS para que el usuario pida recursos a
 
 `bash -n` de los scripts y `check-no-secrets` en verde. API: 594 pruebas pasan, 0 fallan. Ensayo en seco con `deploy.sh bundle` e `init-env.sh test`, con el compose de la punta de `branding/segel-staging` y sin levantar nada: `compose config` resuelve las imagenes `fe-segel-*` que construye `build-images.sh`, `cpus: 1` en los dos workers, `kude-cache` en `api`, `worker-batch` y `worker-correo`. Nuevos: `generar-carga.py` y `ensayo-local.sh`. Sin probar contra un stack: `up.sh` con `--force-recreate` y `cargar-facturador.py --carga-masiva`, que se prueban en el ensayo local.
 
-FS-24 entro en esta entrega, partido en dos por la condicion de FE: la espera de `SENT_BATCH` a 15 min sin gastar intentos vale siempre, y omitir el `refresh` queda con `VERIFICACION_LOTE_SIN_REFRESH=false` (`SPEC_CORRECCIONES_TRAS_FIXES_FE_v0.1`, RN-24.0 y RN-24.1). `up.sh` reinicia tambien el frontend de FE, no solo el de FS, porque recrear la API lo dejaria con la IP vieja.
+FS-24 entro en esta entrega, partido en dos por la condicion de FE: la espera de `SENT_BATCH` a 15 min sin gastar intentos vale siempre, y omitir el `refresh` queda con `VERIFICACION_LOTE_SIN_REFRESH=false` (`SPEC_CORRECCIONES_TRAS_FIXES_FE_v0.1`, RN-24.0 y RN-24.1).
 
 Pendientes: E-1 ensayo local, E-2 despliegue, E-3 prueba en produccion.

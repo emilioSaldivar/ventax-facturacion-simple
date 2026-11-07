@@ -66,7 +66,7 @@ Usa `DNIT_STATEMENT_TIMEOUT=15min`: con el limite de 60 s del loader, el paso fi
 
 **Verificar:** `dnit_ruc_contribuyentes` queda con cerca de 2 millones de filas, y `/var` conserva espacio libre.
 
-Para aplicar un cambio de `.env.segel`, correr de nuevo `bash bin/up.sh`: recrea la API y los workers de FE, porque `restart` no relee el `env_file`, y reinicia los dos frontends. Sin ese reinicio, recrear una API deja a su frontend con la IP vieja y responde 502.
+Para aplicar un cambio de `.env.segel`, correr de nuevo `bash bin/up.sh`: recrea la API y los workers de FE, porque `restart` no relee el `env_file`, y reinicia el frontend de FS. Sin ese reinicio, recrear su API lo deja con la IP vieja y responde 502. El de FE re-resuelve solo.
 
 El administrador nuevo debe aceptar los T&C antes de usar el backoffice, y esa pantalla solo existe en la app (FS-18): entrar una vez por `/app/`, aceptar y recien despues usar `/backoffice/`.
 

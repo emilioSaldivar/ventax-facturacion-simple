@@ -25,8 +25,6 @@ docker run --rm --user 0 --network none --entrypoint chown -v "$runtime:/d" fe-s
   # nueva solo entra al recrear. --no-deps: no repite migrate ni toca Postgres.
   docker compose --env-file .env.segel -f docker-compose.prod.yml up -d --no-build --no-deps --force-recreate \
     api worker-batch worker-status-sync worker-cargas worker-correo
-  # Como en FS: el nginx del frontend resuelve "api" al arrancar y quedaria con la IP vieja.
-  docker compose --env-file .env.segel -f docker-compose.prod.yml restart frontend
 )
 
 (

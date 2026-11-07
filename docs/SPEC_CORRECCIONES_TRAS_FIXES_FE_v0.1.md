@@ -72,7 +72,9 @@ Reglas:
 - **RN-24.2.** Encendida, el worker lee primero el estado en FE (`GET /documentos/{uuid}`). Si es `SENT_BATCH` o `QUEUED_BATCH`, no consulta a SIFEN.
 - **RN-24.4.** Con cualquier otro estado, el flujo actual no cambia: consulta con `refresh` y backoff.
 - **RN-24.5.** "Verificar estado fiscal" siempre consulta a SIFEN, con o sin bandera.
-- **RN-24.6.** La bandera se enciende solo en una instancia cuyo FE tenga `RECONCILE_DEFERRED_ENABLED=true`. **Condicion de FE:** sin esa bandera, el `refresh` del worker es la unica via para destrabar un documento. No se retira antes.
+- **RN-24.6.** Corregido por FE (2026-11-07): el `refresh` del worker **no** es lo que destraba un documento. Sin `RECONCILE_DEFERRED_ENABLED`, el poller de FE consulta los lotes abiertos y, al agotar intentos, reconcilia por CDC y re-encola. El `refresh` solo adelanta lo que FS ve. `VERIFICACION_LOTE_SIN_REFRESH` queda apagada en la segunda entrega para no cambiar dos cosas juntas; encenderla es decision aparte.
+- **RN-24.8.** Tope de consultas: el worker reclama `FE_VERIFY_BATCH_SIZE` (10) documentos cada 30 s, los de `verificacion_next_at` mas antigua, asi que no suma mas de 20 consultas por minuto a un SIFEN lento. FE pedia un tope de 20 por corrida: ya se cumple.
+- **RN-24.9.** Riesgo de FE-09, sin la bandera: un lote trabado puede terminar en un `REJECTED` con `1002` falso. Para FS no es un rechazo confiable: no reemitir sin consultar el CDC. Registrado en `docs/BACKLOG.md`.
 - **RN-24.7.** El corte de 30 dias y la regla de documentos en cola (`SPEC_VERIFICACION_DOCUMENTOS_EN_COLA_v0.1`) siguen vigentes.
 
 Criterios:
