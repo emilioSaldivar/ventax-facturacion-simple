@@ -81,12 +81,12 @@ describe("contrato FE: sobrecarga", () => {
 
 describe("contrato FE: correo en cola", () => {
   const contexto = { facturador: { id: "f" } } as never;
-  function repositorio(estado: string) {
+  function repositorio(estado: string, estadoFiscal = "EMITIDA") {
     const guardados: string[] = [];
     return {
       guardados,
       repo: {
-        findById: async () => ({ id: "d", document_uuid: "u", delivery: { email_status: estado }, cliente: { email: "a@b.invalid" }, estado: "EMITIDA", tipo: "FACTURA" }),
+        findById: async () => ({ id: "d", document_uuid: "u", delivery: { email_status: estado }, cliente: { email: "a@b.invalid" }, estado: estadoFiscal, tipo: "FACTURA" }),
         updateEmailEstadoPendiente: async (_d: string, _f: string, final: string) => { guardados.push(final); }
       } as never
     };
@@ -112,6 +112,19 @@ describe("contrato FE: correo en cola", () => {
     const { repo } = repositorio("PENDING");
     const caido = { getDocumentoCanonico: async () => { throw new Error("caido"); } } as unknown as FiscalGateway;
     expect((await getEmailStatus(contexto, "d", repo, caido)).status).toBe("PENDING");
+  });
+
+  it("FS-27, CA-27.1: un rechazado con correo deja de estar en cola", async () => {
+    const { repo, guardados } = repositorio("PENDING", "RECHAZADA");
+    const r = await getEmailStatus(contexto, "d", repo, gateway("NOT_APPLICABLE"));
+    expect(r.status).toBe("NOT_APPLICABLE");
+    expect(guardados).toEqual(["NOT_APPLICABLE"]);
+    expect(r.message).toBe("No se envio correo: SIFEN rechazo la factura.");
+  });
+
+  it("FS-27, CA-27.2: sin correo cargado, el mensaje de siempre", async () => {
+    const r = await getEmailStatus(contexto, "d", repositorio("NOT_APPLICABLE", "EMITIDA").repo, undefined);
+    expect(r.message).toContain("Cliente sin email registrado");
   });
 
   it("no consulta FE si el estado ya es final", async () => {

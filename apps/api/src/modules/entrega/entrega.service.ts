@@ -78,7 +78,7 @@ export async function getEmailStatus(
 
   return {
     status,
-    message: buildEmailStatusMessage(status, Boolean(documento.cliente.email))
+    message: buildEmailStatusMessage(status, Boolean(documento.cliente.email), documento.estado === "RECHAZADA")
   };
 }
 
@@ -376,7 +376,12 @@ function buildPublicArtifacts(token: string, cdc: string | null): PublicDocument
   };
 }
 
-function buildEmailStatusMessage(status: EmailStatusResponse["status"], hasEmail: boolean): string | null {
+function buildEmailStatusMessage(status: EmailStatusResponse["status"], hasEmail: boolean, rechazada = false): string | null {
+  // FS-27: FE no manda correo de una factura que SIFEN rechazo. No es un fallo de correo.
+  if (hasEmail && rechazada && status === "NOT_APPLICABLE") {
+    return "No se envio correo: SIFEN rechazo la factura.";
+  }
+
   if (!hasEmail || status === "NOT_APPLICABLE") {
     return "Cliente sin email registrado; usar link publico o WhatsApp.";
   }

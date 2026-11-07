@@ -903,7 +903,8 @@ export class PgFacturaRepository implements FacturaRepository {
         set email_estado = $3, updated_at = now()
         where id = $1 and facturador_id = $2 and email_estado = 'PENDING' and deleted_at is null
       `,
-      [documentoId, facturadorId, emailEstado]
+      // FS-27: la columna no admite NOT_APPLICABLE; nulo es "sin correo" al leer.
+      [documentoId, facturadorId, emailEstado === "NOT_APPLICABLE" ? null : emailEstado]
     );
   }
 

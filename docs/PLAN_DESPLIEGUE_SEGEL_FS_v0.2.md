@@ -51,7 +51,7 @@ Antes de arrancar: salida desde la estacion a `smtp.office365.com:587` y a SIFEN
 |---|---|---|
 | 1 | `curl` a `GET /v1/health` de FE | `java.kude.ok` y `java.firma.ok` en `true`. Si alguno da `false`: vuelta atras del paso Java (tabla de FE) y aviso a FE con la linea `java.check failed`; no se emite hasta resolverlo |
 | 2 | Una factura contado desde la app, a `esaldivar.segel@gmail.com` | Aprobada; respuesta con `email_status: PENDING`; `SENT` al consultar; correo recibido con remitente Segel y KuDE adjunto; estado en Documentos |
-| 2b | Mirar el asunto y el momento del correo de la factura del paso 2 | Hallazgo de FE (SPEC, B-8): si sale antes de la aprobacion, se registra para la decision del usuario |
+| 2b | Mirar el momento del correo de la factura del paso 2, y una factura rechazada a proposito | El correo llega despues de la aprobacion, sin el asunto "pendiente de aceptacion SIFEN" (SPEC, B-8). La rechazada no genera correo y FS muestra "No se envio correo: SIFEN rechazo la factura" (FS-27) |
 | 3 | Pestana Carga masiva: plantilla, subida del archivo de 10, informe, confirmar | `VALIDADA` con 10 validos; tras confirmar `EN_PREPARACION`, `EN_SIFEN`, `FINALIZADA`; 10 aprobadas sin saltos de numero |
 | 4 | Documentos | Las 10 facturas con marca "Carga", KuDE descargable, `correo` `SENT`; 10 correos recibidos |
 | 5 | Archivo con una fila invalida | Informe con codigo, fila y columna; confirmar emite solo las validas |

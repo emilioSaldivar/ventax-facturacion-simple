@@ -19,6 +19,7 @@
 | CFF-008 | FS-20, FS-24 | Plantillas, `FE_REF` y runbook | PLAN, seccion 5 | Absorbida por `TASKS_DESPLIEGUE_SEGEL_FS_v0.2` (SF2-004, SF2-006, SF2-008). `RECONCILE_DEFERRED_ENABLED` y `VERIFICACION_LOTE_SIN_REFRESH` quedan en `false` por decision del usuario (2026-11-07) |
 | CFF-009 | FS-20, FS-21, FS-23 | Validacion en stack local con el tag de FE y SIFEN test | PLAN, seccion 6 | Es el paso 7 del guion de SF2-011; FS-24 incluido, con la bandera apagada |
 | CFF-010 | FS-20, FS-21, FS-23 | Despliegue en `segel-fs` | Versiones desplegadas y banderas registradas | Viaja con la segunda entrega (SF2-014 a SF2-016) |
+| CFF-012 | FS-27 | `updateEmailEstadoPendiente` guarda nulo para `NOT_APPLICABLE`; mensaje de factura rechazada | Pruebas CA-27.1 y CA-27.2 en `contrato-fe-sobrecarga.test.ts` | DONE (2026-11-07), con pruebas unitarias; se observa en el ensayo local |
 | CFF-011 | Todos | Cierre: repasar SPEC, PLAN, TASKS y `docs/BACKLOG.md` | Documentos alineados con lo desplegado | TODO |
 
 ## Notas de FE

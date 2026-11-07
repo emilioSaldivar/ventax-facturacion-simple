@@ -14,6 +14,7 @@ Seis errores de FS que aparecieron o cambiaron con los fixes de FE-02, H09, FE-0
 | FS-23 | Rechazo `0100` al cancelar, sin orientacion | Media | Igual |
 | FS-24 | Una factura aprobada tarde sigue "Procesando" por horas | Media | Sin codigo |
 | FS-25 | Las 6 acciones de "Administracion fiscal" no funcionan | Media | Sin codigo. Espera D-1 |
+| FS-27 | Una factura rechazada con correo queda "en cola" para siempre | Alta | Codigo en la segunda entrega (seccion 7b) |
 | FS-22 | Retirar la proteccion de FS-11 | Baja | Se cierra sin cambio (seccion 7) |
 
 **No entra:** los demas hallazgos abiertos del backlog (seccion 9), la carga masiva y cualquier cambio en FE.
@@ -109,6 +110,15 @@ Criterios:
 - **CA-25.1.** Con rol interno, la pantalla de un documento no muestra las 6 acciones, y el resto del detalle funciona igual.
 - **CA-25.2.** Las 6 rutas responden `404`.
 - **CA-25.3.** Las pruebas de roles siguen pasando: ningun rol gana ni pierde otro permiso.
+
+## 7b. FS-27: correo de una factura rechazada
+
+- **Origen:** FE retiene el correo hasta la aprobacion de SIFEN (`EMAIL_TRAS_APROBACION`, decision del usuario del 2026-11-07, `segel-rc3`). Si SIFEN rechaza, FE no manda correo e informa `email_status: NOT_APPLICABLE` con `email_error: documento_rechazado_por_sifen`. No es un fallo de correo.
+- **Defecto de FS:** al resolver un correo `PENDING`, `getEmailStatus` intenta guardar `NOT_APPLICABLE` en `email_estado`, y la restriccion de la columna (migracion 0036) no admite ese valor. El error se registra como advertencia y el documento queda `PENDING`: "El correo esta en cola" para siempre, consultando a FE cada vez que se abre. Con envio por lote para todos, le pasaria a toda factura rechazada con correo. Por lectura de codigo; existia antes, pero solo FE lo dispara ahora.
+- **RN-27.1.** `NOT_APPLICABLE` se guarda como `email_estado` nulo, que FS ya lee como "sin correo". Sin migracion.
+- **RN-27.2.** Si el documento esta `RECHAZADA`, el mensaje dice que no se envio correo porque SIFEN rechazo la factura, no que el cliente no tiene correo.
+- **CA-27.1.** Con FE informando `NOT_APPLICABLE`, el estado deja de ser `PENDING` y la siguiente apertura no consulta a FE.
+- **CA-27.2.** Una factura rechazada con correo muestra el mensaje de RN-27.2; una sin correo, el de siempre.
 
 ## 7. FS-22: se cierra sin cambio
 
