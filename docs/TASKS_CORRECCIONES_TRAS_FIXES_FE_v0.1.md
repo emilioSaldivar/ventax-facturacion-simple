@@ -21,6 +21,12 @@
 | CFF-010 | Todos | Despliegue en `segel-fs` | Versiones desplegadas y banderas registradas | BLOCKED: espera CFF-009 y confirmacion directa del usuario |
 | CFF-011 | Todos | Cierre: repasar SPEC, PLAN, TASKS y `docs/BACKLOG.md` | Documentos alineados con lo desplegado | TODO |
 
+## Notas de FE
+
+### N-1. Lotes por ciclo y FS-24 (2026-11-07)
+
+Para el despliegue con `segel-rc3`, FE informa: con `BATCH_LOTES_POR_CICLO=5`, cada documento sigue en `SENT_BATCH` lo mismo que hoy (10 a 90 s medidos por FE), pero puede haber hasta 250 a la vez por emisor, en vez de 50. `SENT_BATCH` significa "en proceso", no fallo. `RECONCILE_DEFERRED_ENABLED` y `SIFEN_CONSULT_DETECTS_CANCEL_ENABLED` estan en rc3, apagadas por defecto, y su valor en `segel-fs` lo decide el usuario. FS-24 aplica con cualquiera de los dos valores, y queda por revisar su prioridad frente a ese despliegue.
+
 ## Evidencia
 
 ### E-1. FS-20, FS-21 y FS-23 (2026-11-06)
