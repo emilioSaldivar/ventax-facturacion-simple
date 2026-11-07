@@ -29,7 +29,7 @@ Validacion de este paso: `bash -n` de los scripts, `node scripts/check-no-secret
 
 ### 2.1 Stack
 
-`scripts/segel-fs/ensayo-local.sh` arma el paquete y el entorno; los archivos de prueba salen de `scripts/segel-fs/generar-carga.py`. Un paquete de `deploy.sh bundle` en la estacion, como en E-3 y E-6 de la primera entrega: `init-env.sh test`, `SEGEL_BIND_IP=127.0.0.1`, puertos altos, proyecto Compose propio para no chocar con `fs-cm` (mock) ni con los stacks de FE. Imagenes construidas por `build-images.sh` con `FE_REF=segel-rc3` y el `FS_REF` autorizado: las mismas que iran a la VPS (RN-05). Se levanta con `up.sh` y `bootstrap.sh`.
+`scripts/segel-fs/ensayo-local.sh` arma el paquete y el entorno; los archivos de prueba salen de `scripts/segel-fs/generar-carga.py`. Los pasos 1 a 6 se pueden correr por la API de FS con `scripts/segel-fs/ensayo-guion.cjs`, que solo acepta URLs locales y deja el resultado en JSON; la revision visual y la casilla de correo siguen siendo manuales. Un paquete de `deploy.sh bundle` en la estacion, como en E-3 y E-6 de la primera entrega: `init-env.sh test`, `SEGEL_BIND_IP=127.0.0.1`, puertos altos, proyecto Compose propio para no chocar con `fs-cm` (mock) ni con los stacks de FE. Imagenes construidas por `build-images.sh` con `FE_REF=segel-rc3` y el `FS_REF` autorizado: las mismas que iran a la VPS (RN-05). Se levanta con `up.sh` y `bootstrap.sh`.
 
 Despues de `init-env.sh`, el usuario agrega a mano en los dos `.env.segel` locales (permiso 600, fuera de git, RN-10):
 
@@ -42,7 +42,7 @@ Antes de arrancar: salida desde la estacion a `smtp.office365.com:587` y a SIFEN
 
 - **Emisor de test (B-5):** exportar 5057016-1 desde `fe-test` con `exportar-emisor.sql` y cargarlo con `cargar-facturador.py --ambiente test --sumar-numerador <N> --carga-masiva 1000`. FE reservo para este ensayo el bloque **1010000 a 1019999 del punto 001-001** (su stack local no pasa de 1001999 y la sesion de capacidad usa 001-002 desde 8000101): `N = 1010000 - siguiente_numero` del numerador de facturas de 001-001 en el export; el script suma el mismo `N` a los demas numeradores, que quedan tambien lejos de uso. Si SIFEN responde `1002` (numero ya usado) es el `fe-test` de Hetzner, que emite con el mismo RUC y cuyo numero FE no conoce: subir el bloque. El certificado y el CSC de test estan cargados en 5057016-1 y los carga el usuario en el admin del FE local.
 - **Operador:** `activar-operador-test.cjs`, solo valido en test.
-- **Numeracion:** el contexto operativo queda en `SERVICIO` (valor por defecto); el numerador de FE no se toca.
+- **Numeracion:** el contexto operativo queda en `SERVICIO` (valor por defecto). `cargar-facturador.py` no copia `forma_numeracion` del numerador de FE, que queda nulo; para FE, nulo vale lo que manda FS (RN-21b de la carga masiva). En produccion se confirma el valor del numerador antes de la prueba real (SF2-017).
 - **Archivo de prueba:** generado desde la plantilla de FE con 10 facturas contado de 1.100 guaranies, un item `IVA10` a 1.000 mas IVA, `receptor_email=esaldivar.segel@gmail.com`, un receptor RUC valido de SIFEN test, y `referencia_venta` propia. Un segundo archivo con una fila invalida a proposito, para ver el informe.
 
 ### 2.3 Guion
