@@ -35,6 +35,7 @@ Llevar a `segel-fs` las mejoras de volumen de FE (tag `segel-rc3`) y la carga ma
 | D-7 | Orden | Primero el ensayo local completo (D-6); despues el despliegue en `segel-fs`; al final la prueba en produccion (D-4). Cada paso arranca solo con confirmacion directa del usuario |
 | D-9 | Espera de lotes incompletos | 1 minuto en lugar de 15, por configuracion en la base de FE, sin codigo. Decidida por el usuario el 2026-11-08 en la sesion de FE |
 | D-10 | Autogestion de rechazos por API de FE | Despues de este despliegue: hoy no existe para consumidores (`SPEC_AUTOGESTION_OPERADOR_v0.1`, seccion 0). Informado por FE el 2026-11-08 como decision del usuario |
+| D-11 | Numeros rechazados | Los inutiliza FE con lo que ya existe, en esta primera etapa. La autogestion de rechazos se libera en una segunda etapa. Decidida por el usuario el 2026-11-08 |
 | D-8 | Cuando | Hoy solo se refina la documentacion; la implementacion de los cambios de scripts y el resto se ejecutan despues, por indicacion del usuario |
 
 ## Reglas

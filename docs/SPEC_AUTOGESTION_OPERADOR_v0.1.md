@@ -87,7 +87,7 @@ Orden sugerido por FE: 1 y 2, luego 3, luego 4 y 5.
 |---|---|---|---|
 | D-1 | Prioridad y orden frente a la carga masiva | Orden de FE, empezando por el correo. FS depende de que FE publique las rutas | Usuario |
 | D-2 | ¿Corregir la factura corrige tambien al cliente en la agenda? | Ofrecerlo como opcion al corregir, solo sobre el cliente del propio facturador | Usuario |
-| D-3 | Numeros rechazados que hoy quedan sin inutilizar | Decidido (seccion 0): se inutilizan si vence el plazo sin correccion. Falta definir quien la dispara: FS por `/v1/evento/inutilizacionnumfactura` con la clave compartida, o FE | Usuario, con FE |
+| D-3 | Numeros rechazados que hoy quedan sin inutilizar | Decidido (seccion 0): se inutilizan si vence el plazo sin correccion. La dispara FE con lo que ya existe, en esta primera etapa (decision del usuario, 2026-11-08). La autogestion se libera en una segunda etapa | Usuario |
 | D-4 | Que pasa con el bloque interno de seis acciones | Retirarlo cuando A-1 y A-2 esten disponibles; hasta entonces no se toca | Usuario |
 | D-5 | Alcance: solo Segel, o tambien Ventax | Nace en la rama Segel. Ventax se decide aparte | Usuario |
 
