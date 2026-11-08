@@ -27,6 +27,7 @@
 | SF2-012 | 2 | Cierre de la carga masiva contra FE real: CMF-018 y CMF-020, supuesto de `actualizado_en` con `correo` | Anotado en `TASKS_CARGA_MASIVA_FACTURAS_v0.1`; desvios del contrato corregidos y reensayados | FS | DONE (2026-11-08), E-1: carga masiva contra FE real cerrada; numero fiscal de carga verificado (`c38621a`) |
 | SF2-013 | 3 | Respaldo manual de las dos bases en la VPS | Dos dumps en `~/segel/backups`, con tamano y `df` registrados | FS, con autorizacion del usuario | NO APLICA (2026-11-08): el usuario decide no hacerlo en esta ocasion (SPEC, D-13) |
 | SF2-013b | 3 | Pendientes de FE para esta etapa: tag `segel-rc4` en origin (D-16) y lo que FE informe como pendiente (SPEC, B-9) | FE avisa que esta alineado; el usuario lo confirma | FE | DONE (2026-11-08): FE avisa el tag publicado (`f83a83c`) y la decision de D-20; `git ls-remote` lo confirma |
+| SF2-013g | 1 | Si el usuario elige `rc4.1` (D-25): `FE_REF=segel-rc4.1` en `build-images.sh` y `deploy.sh`; `NCE_EMAIL_ENABLED=true`, `EMAIL_QUEUE_POR_MINUTO=25` y `EMAIL_QUEUE_CONCURRENCY=2` en `fe.env.example` y en el runbook; verificacion de la migracion `046` | `bash -n`; `init-env.sh test` con los valores; tag publicado por FE | FS | BLOCKED: decision del usuario y push del tag por FE |
 | SF2-014 | 3 | Construccion y transferencia (`build-images.sh`, `deploy.sh files`, `deploy.sh images`) | `docker images` en la VPS con las once imagenes | FS | BLOCKED: espera SF2-013b, SF2-018b y confirmacion directa (D-14) |
 | SF2-015 | 3 | Variables en `fe/.env.segel` y `fs/.env.segel` de la VPS, a mano | Valores de RN-03 presentes; sin `JAVA_TOOL_OPTIONS` | FS | BLOCKED: espera SF2-014 |
 | SF2-016 | 3 | `up.sh` y verificacion CA-02 | Salud, workers sin bucle, `java.*.ok` en `true`, puertos publicados correctos | FS | BLOCKED: espera SF2-015 |
@@ -100,5 +101,17 @@ Stack `.local/segel-ensayo`: FE `segel-rc4` (`57368e1`) con `RECONCILE_DEFERRED_
 - **Hallazgo FS-40 (Alta):** FS dejo de sincronizar cada carga al quedar `FINALIZADA`, y los correos que salieron despues no llegaron a Documentos: 295 de 307 seguian "pendiente". Forzando una sincronizacion en la base del ensayo, las 307 pasaron a `SENT`. Registrado en `BACKLOG.md` con el arreglo propuesto; el usuario decide si entra antes del despliegue.
 - **Hallazgo FS-41:** FE no manda correo para las notas de credito (sin `receptor.email` en su esquema). Registrado en `BACKLOG.md`.
 - Medicion de la cola de correos: `test-results/medicion/volumen-correos-20261108/`, pico de `worker-correo` 91 MiB y 105 % de CPU, suma de picos 372 MiB.
+
+### E-2b. Prueba de FE `rc4.1` desde el panel (2026-11-08)
+
+Mismo stack, con FE `05d4811` (`rc4.1`) y FS `b20fa23`, `NCE_EMAIL_ENABLED=true`, `EMAIL_QUEUE_POR_MINUTO=25`, `EMAIL_QUEUE_CONCURRENCY=2`. Medicion en `test-results/medicion/rc41-20261108/`; FE la registro en su `VERIFICACION_CORREO_NC_ANULACION_Y_RITMO`, V012.
+
+- **Carga de 60** a RUC 4732402-3, con el correo `emilio.saldivar97@gmail.com` (D-24): confirmada a las 17:59:52 y finalizada a las 18:01:54. Las 60 fueron aprobadas desde el numero 1010343, en 3 lotes `0300`, con 2 consultas como maximo.
+- **Nota de credito** desde el panel sobre la 1010343, a las 18:02:18: NCE 1010003, aprobada, con correo `SENT` a las 18:04:49. FS la mostro emitida a las 18:07:37. **FS-41 resuelto por FE sin cambios en FS**: FS ya mandaba `receptor.email`.
+- **Anulacion** de la 1010344: el primer intento, a las 18:03:04, fue rechazado por SIFEN test con `0100` "Error Inesperado", reintentable (el caso de FS-23), y no genero aviso. "Reintentar anulacion" desde el panel, a las 18:03:34: aceptada, aviso encolado y enviado (FE).
+- **Correos:** 62 en total, 9, 18, 18 y 17 por minuto, con un maximo de 20 en 60 s. 0 rechazos `4xx` de Office 365, 0 reintentos y 0 `FAILED`. Cada correo tarda unos 6,5 s (KuDE 5,2 s y SMTP 1,2 s). Con `CORREO_WORKER_CPUS=1` no se llega al tope de 25: subirlo es decision del usuario (FE).
+- **Recursos:** pico de `worker-correo` 153 MiB con concurrencia 2 (tope 512 MiB); suma de picos de los once contenedores 519 MiB; sin reinicios.
+- **FS-40 reproducido:** 51 de 60 facturas siguieron con el correo "pendiente" en FS despues del cierre de la carga.
+- **Dato de FE para produccion:** la copia oculta del correo va al correo del emisor cargado en FE. En el ensayo era `facturacion@ventax.app`; en `segel-fs` hay que revisar ese dato del emisor antes de la prueba real.
 
 Pendiente: E-3, prueba en produccion.
