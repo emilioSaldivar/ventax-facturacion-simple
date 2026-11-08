@@ -1248,13 +1248,28 @@ export async function reintentarNotaCreditoPorId(
 
 async function llamarNotaCredito(gateway: FiscalGateway, request: FiscalEmitNotaCreditoRequest): Promise<ClasificacionNotaCredito> {
   try {
-    return clasificarRespuestaNotaCredito(await gateway.emitNotaCredito(request));
+    return normalizarCorreoNotaCredito(clasificarRespuestaNotaCredito(await gateway.emitNotaCredito(request)), request);
   } catch (error) {
     if (error instanceof FiscalGatewayError) {
       return clasificarRespuestaNotaCredito(error);
     }
     throw error;
   }
+}
+
+/**
+ * SPEC_CORRECCIONES_ENSAYO_VOLUMEN_v0.1, CEV-3: el correo de la nota de credito se trata como el de la
+ * factura. Si FE no informa el estado (FE anterior a 1fcb1bf) y el comprador tiene correo, queda PENDING:
+ * la consulta del detalle lo resuelve a SENT, FAILED o NOT_APPLICABLE. Nunca queda UNKNOWN.
+ */
+export function normalizarCorreoNotaCredito(
+  clasificacion: ClasificacionNotaCredito,
+  request: Pick<FiscalEmitNotaCreditoRequest, "cliente">
+): ClasificacionNotaCredito {
+  const respuesta = clasificacion.fiscalResponse;
+  if (!respuesta || (respuesta.email_status !== "UNKNOWN" && respuesta.email_status !== "DELEGATED")) return clasificacion;
+  const tieneCorreo = Boolean(request.cliente?.email?.trim());
+  return { ...clasificacion, fiscalResponse: { ...respuesta, email_status: tieneCorreo ? "PENDING" : "NOT_APPLICABLE" } };
 }
 
 export async function emitFacturaAgainstFiscalGateway(

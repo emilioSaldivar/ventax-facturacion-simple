@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { FiscalGatewayError, type FiscalEmitNotaCreditoResponse } from "../src/modules/fiscal-gateway/fiscal-gateway.types";
 import { clasificarRespuestaNotaCredito } from "../src/modules/facturas/nota-credito.clasificacion";
 import { esNotaTrabada } from "../src/modules/facturas/facturas.accion";
+import { normalizarCorreoNotaCredito } from "../src/modules/facturas/facturas.service";
 
 /** PLAN_NOTA_CREDITO_TRABADA_v0.1, seccion 3: una prueba por fila de la tabla. */
 const respuesta = (status: string, estado: FiscalEmitNotaCreditoResponse["estado"]): FiscalEmitNotaCreditoResponse => ({
@@ -80,5 +81,25 @@ describe("esNotaTrabada", () => {
   });
   it("una nota emitida no es trabada", () => {
     expect(esNotaTrabada({ tipo: "NOTA_CREDITO", estado: "EMITIDA", fiscal_status: { code: "TIMEOUT" } })).toBe(false);
+  });
+});
+
+describe("correo de la nota de credito (CEV-3)", () => {
+  const conCorreo = { cliente: { email: "a@b.py" } } as never;
+  const sinCorreo = { cliente: { email: null } } as never;
+  const base = (email_status: FiscalEmitNotaCreditoResponse["email_status"]) =>
+    clasificarRespuestaNotaCredito({ ...respuesta("QUEUED_BATCH", "PENDIENTE_SIFEN"), email_status });
+  it("FE informa PENDING: se conserva", () => {
+    expect(normalizarCorreoNotaCredito(base("PENDING"), conCorreo).fiscalResponse?.email_status).toBe("PENDING");
+  });
+  it("FE no informa y el comprador tiene correo: PENDING, nunca UNKNOWN", () => {
+    expect(normalizarCorreoNotaCredito(base("UNKNOWN"), conCorreo).fiscalResponse?.email_status).toBe("PENDING");
+  });
+  it("FE no informa y el comprador no tiene correo: NOT_APPLICABLE", () => {
+    expect(normalizarCorreoNotaCredito(base("UNKNOWN"), sinCorreo).fiscalResponse?.email_status).toBe("NOT_APPLICABLE");
+  });
+  it("una nota trabada sin respuesta no cambia", () => {
+    const trabada = clasificarRespuestaNotaCredito(error("UPSTREAM_ERROR", 502));
+    expect(normalizarCorreoNotaCredito(trabada, conCorreo)).toBe(trabada);
   });
 });
