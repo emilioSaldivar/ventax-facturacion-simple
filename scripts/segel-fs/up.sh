@@ -13,9 +13,12 @@ docker network inspect "$NETWORK" >/dev/null 2>&1 || docker network create "$NET
 
 # La imagen de FE corre como node (uid 1000) y el usuario de deploy puede tener otro uid.
 # El chown se hace desde un contenedor, sin sudo (PLAN §4).
+# Las carpetas tambien se crean desde el contenedor: en segel-fs, fe-runtime/runtime es de otro usuario
+# con permiso 755 y un mkdir del usuario de deploy falla (visto por FE en el deploy del 2026-11-08).
 runtime="$ROOT/fe-runtime"
-mkdir -p "$runtime/secrets" "$runtime/runtime/cert-seed" "$runtime/runtime/cert-uploads" "$runtime/runtime/logo-uploads" "$runtime/runtime/kude-cache"
-docker run --rm --user 0 --network none --entrypoint chown -v "$runtime:/d" fe-segel-api -R 1000:1000 /d/secrets /d/runtime
+mkdir -p "$runtime" 2>/dev/null || true
+docker run --rm --user 0 --network none --entrypoint sh -v "$runtime:/d" fe-segel-api -c \
+  'mkdir -p /d/secrets /d/runtime/cert-seed /d/runtime/cert-uploads /d/runtime/logo-uploads /d/runtime/kude-cache && chown -R 1000:1000 /d/secrets /d/runtime'
 
 (
   cd "$ROOT/fe"
