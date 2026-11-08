@@ -30,7 +30,5 @@ CREATE TABLE IF NOT EXISTS dnit_ruc_contribuyentes_staging (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS idx_dnit_ruc ON dnit_ruc_contribuyentes (ruc);
-CREATE INDEX IF NOT EXISTS idx_dnit_ruc_sin_dv ON dnit_ruc_contribuyentes (ruc_sin_dv);
-CREATE INDEX IF NOT EXISTS idx_dnit_estado ON dnit_ruc_contribuyentes (estado);
-CREATE INDEX IF NOT EXISTS idx_dnit_razon_social_tsv ON dnit_ruc_contribuyentes USING gin (to_tsvector('simple', razon_social));
+-- Sin indices extra (SPEC_INDICES_PADRON_DNIT_v0.1, FS-42): las consultas filtran por (ruc_sin_dv, dv)
+-- o por ruc_sin_dv, y las cubre uq_dnit_ruc. La migracion 0039 de la API los quita donde ya existen.
