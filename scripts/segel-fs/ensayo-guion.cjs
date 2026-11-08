@@ -215,7 +215,17 @@ async function paso(nombre, fn) {
   });
 
   await paso("6", async () => {
-    if (facturasDeCarga.length < 2) throw new Error("Hace falta el paso 3 en la misma corrida.");
+    if (facturasDeCarga.length < 2) {
+      // Corrido solo: usa las facturas emitidas, sin anular ni nota, de la carga finalizada mas reciente.
+      const cargas = (await pedir("GET", "/cargas?estado=FINALIZADA&limit=20")).datos.items;
+      for (const carga of cargas) {
+        const docs = (await pedir("GET", `/facturas?carga_id=${carga.id}&estado=EMITIDA&limit=50`)).datos.items;
+        const notas = new Set((await pedir("GET", "/facturas?tipo=NOTA_CREDITO&limit=100")).datos.items.map((n) => n.documento_relacionado_id));
+        facturasDeCarga = docs.filter((d) => !notas.has(d.id));
+        if (facturasDeCarga.length >= 2) break;
+      }
+      if (facturasDeCarga.length < 2) throw new Error("No hay dos facturas de carga emitidas para cancelar y para la nota de credito.");
+    }
     const [aCancelar, aNota] = facturasDeCarga;
     const cancelada = await pedir("POST", `/facturas/${aCancelar.id}/cancelar`, { cuerpo: { motivo: "Ensayo de cancelacion" } });
     registrar("6", "cancelar una factura de carga", cancelada.status < 300, { status: cancelada.status, estado: cancelada.datos.estado, cancelacion: cancelada.datos.cancelacion, error: cancelada.status < 300 ? undefined : cancelada.datos });

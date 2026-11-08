@@ -20,9 +20,9 @@
 | CFF-009 | FS-20, FS-21, FS-23 | Validacion en stack local con el tag de FE y SIFEN test | PLAN, seccion 6 | Es el paso 7 del guion de SF2-011; FS-24 incluido, con la bandera apagada |
 | CFF-010 | FS-20, FS-21, FS-23 | Despliegue en `segel-fs` | Versiones desplegadas y banderas registradas | Viaja con la segunda entrega (SF2-014 a SF2-016) |
 | CFF-012 | FS-27 | `updateEmailEstadoPendiente` guarda nulo para `NOT_APPLICABLE`; mensaje de factura rechazada | Pruebas CA-27.1 y CA-27.2 en `contrato-fe-sobrecarga.test.ts` | DONE (2026-11-07), con pruebas unitarias; se observa en el ensayo local |
-| CFF-013 | FS-28 | Precarga del editor desde la factura rechazada, con aviso de correccion | CA-28.1 y CA-28.2 por Playwright en 390 y 1280 px | TODO |
-| CFF-014 | FS-29 | Texto de `1306` valido en los dos ambientes, en el catalogo y en la ficha | Prueba en `facturas.accion.test.ts`; CA-29.1 por Playwright | TODO |
-| CFF-015 | FS-30 | Aviso al facturador con destinatario y estado del correo del cliente | Prueba en `facturas.notificaciones.test.ts` | TODO |
+| CFF-013 | FS-28 | Precarga del editor desde la factura rechazada, con aviso de correccion | CA-28.1 y CA-28.2 por Playwright en 390 y 1280 px | DONE (2026-11-08), E-2 |
+| CFF-014 | FS-29 | Texto de `1306` valido en los dos ambientes, en el catalogo y en la ficha | Prueba en `facturas.accion.test.ts`; CA-29.1 por Playwright | DONE (2026-11-08), E-2 |
+| CFF-015 | FS-30 | Aviso al facturador con destinatario y estado del correo del cliente | Prueba en `facturas.notificaciones.test.ts` | DONE (2026-11-08), E-2: prueba unitaria |
 | CFF-011 | Todos | Cierre: repasar SPEC, PLAN, TASKS y `docs/BACKLOG.md` | Documentos alineados con lo desplegado | TODO |
 
 ## Notas de FE
@@ -36,3 +36,10 @@ Para el despliegue con `segel-rc3`, FE informa: con `BATCH_LOTES_POR_CICLO=5`, c
 ### E-1. FS-20, FS-21 y FS-23 (2026-11-06)
 
 Commit `2b1eed9`. `npm run test` de la API: 480 pasan, 0 fallan, 28 omitidas. `npm run typecheck` sin errores. Solo pruebas unitarias: sin validar contra FE real ni SIFEN, y sin Playwright.
+
+### E-2. FS-28, FS-29 y FS-30 (2026-11-08)
+
+Commit `8d3fd83`. API: pruebas de `facturas.accion` y `facturas.notificaciones` en verde; suite completa sin fallas. Playwright `scripts/playwright-correccion-rechazo.cjs` contra el ensayo local de la segunda entrega (FS `8d3fd83`, FE `segel-rc3`), sobre la factura 1010001 rechazada por SIFEN test con `1306`, en 390x844 y 1280x800: 12 de 12. La ficha no menciona pruebas ni Marangatu test; el editor abre con el aviso de correccion, el cliente y el item de la rechazada; sin desplazamiento horizontal. No se emitio la factura corregida desde Playwright. El texto de FS-30 se valido solo con la prueba unitaria: el aviso real se vera con el proximo rechazo.
+
+La captura de la ficha mostro FS-31 y FS-32, previos a esta correccion, registrados en `docs/BACKLOG.md`.
+
