@@ -95,8 +95,8 @@ Datos definidos por el usuario el 2026-11-08 (SPEC, D-12, D-17 y D-18):
 | Punto | Valor |
 |---|---|
 | Total | 334.400 guaranies: 304 facturas de 1.100. Comprador 1: 100 (110.000). Compradores 2 y 3: 102 cada uno (112.200) |
-| Compradores | 1) RUC 4732402-3, AREVALOS NARVAEZ, GRACIELA LUCIA, correo `emilio.saldivar97@gmail.com` (D-24; antes `gracielita076@gmail.com`). 2) RUC 1160463-8, AREVALO, ANIBAL RAMON, correo `matiassaldiv@gmail.com`. 3) CI 5057036, MARIA CRISTINA SALDIVAR CAPUTO, correo `emiliomatasc@fpuna.edu.py`, a confirmar por el usuario (SPEC, D-17 y D-23) |
-| Columnas del comprador | RUC: `receptor_tipo_documento=RUC`, documento con guion y digito, naturaleza `FISICA`, nombre segun el padron DNIT (SPEC, D-23), confirmado por el usuario al revisar los archivos. CI: `CI`, `5057036`, `FISICA`, `MARIA CRISTINA SALDIVAR CAPUTO`. FE acepta `CI` en la plantilla (su SPEC de carga masiva, columna `receptor_tipo_documento`) |
+| Compradores | 1) RUC 4732402-3, AREVALOS NARVAEZ, GRACIELA LUCIA, correo `emilio.saldivar97@gmail.com` (D-24; antes `gracielita076@gmail.com`). 2) RUC 1160463-8, AREVALO, ANIBAL RAMON, correo `matiassaldiv@gmail.com`. 3) CI 5057036, MARIA CRISTINA SALDIVAR CAPUTO, correo `emiliomatasc@fpuna.edu.py`, confirmado (SPEC, D-26) |
+| Columnas del comprador | RUC: `receptor_tipo_documento=RUC`, documento con guion y digito, naturaleza `FISICA`, nombre segun el padron DNIT (SPEC, D-23), confirmado por el usuario (D-26). CI: `CI`, `5057036`, `FISICA`, `MARIA CRISTINA SALDIVAR CAPUTO`. FE acepta `CI` en la plantilla (su SPEC de carga masiva, columna `receptor_tipo_documento`) |
 | Item | "Consultoria en tecnologia de la informacion", cantidad 1, precio 1.100 con IVA 10 % incluido (base 1.000, IVA 100) |
 | Condicion | Contado, efectivo |
 | Reparto | Una carga por comprador. Carga A (comprador 1): 100 facturas, dos lotes llenos de 50; va sola, como sonda. Cargas B y C (compradores 2 y 3): 102 cada una, dos lotes llenos y uno de 2 que espera la agenda del lote incompleto (1 minuto, D-9); se suben seguidas, para medir dos cargas a la vez, el estado `EN_COLA` y el lote que no se llena |
