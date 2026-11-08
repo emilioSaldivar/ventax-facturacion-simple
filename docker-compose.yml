@@ -1,6 +1,11 @@
 services:
   postgres:
     image: postgres:16-alpine
+    # SPEC_CORRECCIONES_ENSAYO_VOLUMEN_v0.1, CEV-2: topes por variable; sin variable no limita.
+    mem_limit: ${FS_PG_MEM:-0}
+    memswap_limit: ${FS_PG_MEM:-0}
+    cpus: ${FS_PG_CPUS:-0}
+    pids_limit: ${FS_PG_PIDS:--1}
     restart: unless-stopped
     logging: &default-logging
       driver: json-file
@@ -23,6 +28,11 @@ services:
 
   api:
     restart: unless-stopped
+    # SPEC_CORRECCIONES_ENSAYO_VOLUMEN_v0.1, CEV-2: topes por variable; sin variable no limita.
+    mem_limit: ${FS_API_MEM:-0}
+    memswap_limit: ${FS_API_MEM:-0}
+    cpus: ${FS_API_CPUS:-0}
+    pids_limit: ${FS_API_PIDS:--1}
     build:
       context: .
       dockerfile: infra/docker/api.Dockerfile
@@ -52,6 +62,11 @@ services:
       retries: 20
 
   migrate:
+    # SPEC_CORRECCIONES_ENSAYO_VOLUMEN_v0.1, CEV-2: topes por variable; sin variable no limita.
+    mem_limit: ${FS_MIGRATE_MEM:-0}
+    memswap_limit: ${FS_MIGRATE_MEM:-0}
+    cpus: ${FS_MIGRATE_CPUS:-0}
+    pids_limit: ${FS_MIGRATE_PIDS:--1}
     build:
       context: .
       dockerfile: infra/docker/api.Dockerfile
@@ -70,6 +85,11 @@ services:
 
   frontend:
     restart: unless-stopped
+    # SPEC_CORRECCIONES_ENSAYO_VOLUMEN_v0.1, CEV-2: topes por variable; sin variable no limita.
+    mem_limit: ${FS_FRONTEND_MEM:-0}
+    memswap_limit: ${FS_FRONTEND_MEM:-0}
+    cpus: ${FS_FRONTEND_CPUS:-0}
+    pids_limit: ${FS_FRONTEND_PIDS:--1}
     build:
       context: .
       dockerfile: infra/docker/frontend.Dockerfile
@@ -87,6 +107,11 @@ services:
 
   dnit-ruc-loader-cron:
     restart: unless-stopped
+    # SPEC_CORRECCIONES_ENSAYO_VOLUMEN_v0.1, CEV-2: topes por variable; sin variable no limita.
+    mem_limit: ${FS_DNIT_MEM:-0}
+    memswap_limit: ${FS_DNIT_MEM:-0}
+    cpus: ${FS_DNIT_CPUS:-0}
+    pids_limit: ${FS_DNIT_PIDS:--1}
     build:
       context: ./dnit-ruc-loader
       dockerfile: Dockerfile

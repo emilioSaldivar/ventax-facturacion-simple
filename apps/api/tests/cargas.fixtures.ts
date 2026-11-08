@@ -124,6 +124,10 @@ export class FakeCargaRepository implements CargaRepository {
     });
   }
 
+  async contarCorreosPendientes(carga: { fe_carga_id: string }) {
+    return [...this.facturas.entries()].filter(([ref, f]) => ref.startsWith(`carga:${carga.fe_carga_id}:`) && f.emailEstado === "PENDING").length;
+  }
+
   async claimNextCargasSync() {
     return [...this.filas.values()];
   }

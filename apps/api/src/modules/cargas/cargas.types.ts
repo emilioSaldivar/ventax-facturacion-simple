@@ -156,4 +156,6 @@ export interface CargaRepository {
   documentosPorUuid(facturadorId: string, uuids: string[]): Promise<Map<string, string>>;
   /** Una transaccion por pagina. Idempotente por `(facturador_id, external_ref)`. */
   incorporarFacturas(carga: CargaMasivaRecord, facturas: FacturaDeCarga[]): Promise<void>;
+  /** Facturas de la carga con correo PENDING en FS (SPEC_CORRECCIONES_ENSAYO_VOLUMEN_v0.1, CEV-1). */
+  contarCorreosPendientes(carga: Pick<CargaMasivaRecord, "id" | "facturador_id" | "fe_carga_id">): Promise<number>;
 }

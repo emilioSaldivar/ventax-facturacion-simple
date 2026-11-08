@@ -32,6 +32,28 @@ export function cargaTieneDocumentos(estado: FeCargaEstado): boolean {
 }
 
 /** Espera hasta la proxima sincronizacion. Nulo: la carga no cambia sola (PLAN 6, frecuencia). */
+const TOPE_CORREO_TRAS_CIERRE_MS = 2 * 60 * MINUTO;
+
+/**
+ * SPEC_CORRECCIONES_ENSAYO_VOLUMEN_v0.1, CEV-1 (FS-40): con la carga cerrada, FE sigue enviando correos
+ * (EMAIL_TRAS_APROBACION, cola de 15 a 25 por minuto). Mientras FS tenga facturas de la carga con correo
+ * PENDING, se vuelve a sincronizar cada 5 minutos, hasta 2 horas despues del cierre. `null`: sin agenda.
+ */
+export function agendaPorCorreo(input: {
+  estado: FeCargaEstado;
+  cerradaEn: string | null | undefined;
+  pendientes: number;
+  ahora?: number;
+}): { esperaMs: number | null; vencida: boolean } {
+  const ahora = input.ahora ?? Date.now();
+  if ((input.estado !== "FINALIZADA" && input.estado !== "CANCELADA") || input.pendientes <= 0) {
+    return { esperaMs: null, vencida: false };
+  }
+  const cierre = input.cerradaEn ? new Date(input.cerradaEn).getTime() : ahora;
+  if (ahora - cierre > TOPE_CORREO_TRAS_CIERRE_MS) return { esperaMs: null, vencida: true };
+  return { esperaMs: 5 * MINUTO, vencida: false };
+}
+
 export function proximaSincronizacionMs(estado: FeCargaEstado, confirmadaEn: string | null | undefined, ahora = Date.now()): number | null {
   switch (estado) {
     case "RECIBIDA":

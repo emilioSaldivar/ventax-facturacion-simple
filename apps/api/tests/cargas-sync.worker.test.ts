@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { sincronizarCarga } from "../src/modules/cargas/cargas-sync.worker";
-import { comprobanteAFactura, numeroSinPunto, proximaSincronizacionMs, resolverEstadoFactura } from "../src/modules/cargas/cargas.mapeo";
+import { agendaPorCorreo, comprobanteAFactura, numeroSinPunto, proximaSincronizacionMs, resolverEstadoFactura } from "../src/modules/cargas/cargas.mapeo";
 import { accionSobreCarga, obtenerCarga, subirCarga } from "../src/modules/cargas/cargas.service";
 import { MockFiscalGateway } from "../src/modules/fiscal-gateway/fiscal-gateway.client";
 import { mockCargas } from "../src/modules/fiscal-gateway/fiscal-gateway.mock-cargas";
@@ -168,6 +168,29 @@ describe("frecuencia", () => {
   });
 });
 
+describe("agenda por correo pendiente tras el cierre (CEV-1, FS-40)", () => {
+  const MIN = 60_000;
+  const ahora = Date.parse("2026-11-08T18:00:00Z");
+  it("finalizada hace 10 min con pendientes: cada 5 min", () => {
+    expect(agendaPorCorreo({ estado: "FINALIZADA", cerradaEn: new Date(ahora - 10 * MIN).toISOString(), pendientes: 3, ahora })).toEqual({ esperaMs: 5 * MIN, vencida: false });
+  });
+  it("cancelada con pendientes: tambien", () => {
+    expect(agendaPorCorreo({ estado: "CANCELADA", cerradaEn: new Date(ahora - MIN).toISOString(), pendientes: 1, ahora }).esperaMs).toBe(5 * MIN);
+  });
+  it("sin pendientes: sin agenda", () => {
+    expect(agendaPorCorreo({ estado: "FINALIZADA", cerradaEn: new Date(ahora).toISOString(), pendientes: 0, ahora })).toEqual({ esperaMs: null, vencida: false });
+  });
+  it("pasadas 2 h del cierre: sin agenda y avisa", () => {
+    expect(agendaPorCorreo({ estado: "FINALIZADA", cerradaEn: new Date(ahora - 121 * MIN).toISOString(), pendientes: 5, ahora })).toEqual({ esperaMs: null, vencida: true });
+  });
+  it("sin fecha de cierre no corta", () => {
+    expect(agendaPorCorreo({ estado: "FINALIZADA", cerradaEn: null, pendientes: 2, ahora }).esperaMs).toBe(5 * MIN);
+  });
+  it("una carga en curso no la usa", () => {
+    expect(agendaPorCorreo({ estado: "EN_SIFEN", cerradaEn: null, pendientes: 9, ahora }).esperaMs).toBeNull();
+  });
+});
+
 describe("worker de sincronizacion", () => {
   let repository: FakeCargaRepository;
   let gateway: MockFiscalGateway;
@@ -198,6 +221,26 @@ describe("worker de sincronizacion", () => {
     expect(final.sync_next_at).toBeNull();
     expect([...repository.facturas.keys()].sort()).toEqual([`carga:${fila.fe_carga_id}:1`, `carga:${fila.fe_carga_id}:3`]);
     expect(repository.facturas.get(`carga:${fila.fe_carga_id}:3`)!.estado).toBe("RECHAZADA");
+  });
+
+  it("CEV-1: finalizada con correos pendientes queda agendada; sin pendientes, sale de la agenda", async () => {
+    const fila = await cargaConfirmada("001-002-0000001;PED-1;a@b.py;A");
+    await sincronizarCarga(repository.filas.get(fila.id)!, gateway, repository);
+    expect(repository.facturas.get(`carga:${fila.fe_carga_id}:1`)!.emailEstado).toBe("PENDING");
+    // FE ya cerro la carga y el correo sigue en cola: nada nuevo que incorporar.
+    const real = await gateway.getCarga(fila.fe_carga_id);
+    const getCarga = vi.spyOn(gateway, "getCarga").mockResolvedValue({ ...real, estado: "FINALIZADA", finalizada_en: new Date().toISOString() });
+    const lista = vi.spyOn(gateway, "listCargaComprobantes").mockResolvedValue({ items: [], total: 0, page: 1, limit: 200 } as never);
+    await sincronizarCarga(repository.filas.get(fila.id)!, gateway, repository);
+    const agendada = repository.filas.get(fila.id)!;
+    expect(agendada.estado).toBe("FINALIZADA");
+    expect(agendada.sync_next_at!.getTime() - Date.now()).toBeGreaterThan(4 * 60_000);
+    getCarga.mockRestore();
+    lista.mockRestore();
+    // La pasada siguiente trae el correo SENT y la carga sale de la agenda.
+    await sincronizarCarga(repository.filas.get(fila.id)!, gateway, repository);
+    expect(repository.facturas.get(`carga:${fila.fe_carga_id}:1`)!.emailEstado).toBe("SENT");
+    expect(repository.filas.get(fila.id)!.sync_next_at).toBeNull();
   });
 
   it("no pide comprobantes antes de confirmar", async () => {

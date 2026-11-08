@@ -193,6 +193,15 @@ export class PgCargaRepository implements CargaRepository {
     return mapa;
   }
 
+  async contarCorreosPendientes(carga: Pick<CargaMasivaRecord, "id" | "facturador_id" | "fe_carga_id">): Promise<number> {
+    const result = await pool.query<{ total: string }>(
+      `select count(*) as total from facturas_operativas
+       where facturador_id = $1 and carga_masiva_id = $2 and email_estado = 'PENDING' and deleted_at is null`,
+      [carga.facturador_id, carga.id]
+    );
+    return Number(result.rows[0]?.total ?? 0);
+  }
+
   async incorporarFacturas(carga: CargaMasivaRecord, facturas: Parameters<CargaRepository["incorporarFacturas"]>[1]) {
     if (facturas.length === 0) return;
     await withTransaction(async (client) => {

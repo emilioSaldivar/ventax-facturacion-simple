@@ -1,6 +1,6 @@
 import { logger } from "../../shared/logging/logger";
 import type { FiscalGateway } from "../fiscal-gateway/fiscal-gateway.types";
-import { cargaTieneDocumentos, comprobanteAFactura, proximaSincronizacionMs } from "./cargas.mapeo";
+import { agendaPorCorreo, cargaTieneDocumentos, comprobanteAFactura, proximaSincronizacionMs } from "./cargas.mapeo";
 import type { CargaMasivaRecord, CargaRepository, FacturaDeCarga } from "./cargas.types";
 
 const CARGAS_POR_CICLO = 5;
@@ -40,7 +40,20 @@ export async function sincronizarCarga(carga: CargaMasivaRecord, gateway: Fiscal
     }
   }
 
-  const esperaMs = proximaSincronizacionMs(feCarga.estado, feCarga.confirmada_en);
+  let esperaMs = proximaSincronizacionMs(feCarga.estado, feCarga.confirmada_en);
+  if (esperaMs === null) {
+    // CEV-1 (FS-40): los correos de una carga cerrada siguen saliendo; se sigue mientras haya pendientes.
+    const pendientes = await repository.contarCorreosPendientes(carga);
+    const agenda = agendaPorCorreo({
+      estado: feCarga.estado,
+      cerradaEn: feCarga.finalizada_en ?? feCarga.cancelada_en,
+      pendientes
+    });
+    esperaMs = agenda.esperaMs;
+    if (agenda.vencida) {
+      logger.warn({ carga_id: carga.id, pendientes }, "carga masiva: correos pendientes tras 2 h del cierre");
+    }
+  }
   if (esperaMs !== null && feCarga.confirmada_en && Date.now() - new Date(feCarga.confirmada_en).getTime() > 72 * 60 * 60 * 1000) {
     logger.warn({ carga_id: carga.id, estado: feCarga.estado }, "carga masiva: mas de 72 h sin terminar");
   }
