@@ -29,7 +29,7 @@ bash scripts/segel-fs/deploy.sh files
 bash scripts/segel-fs/deploy.sh images
 ```
 
-FE queda fijado en `segel-rc4` (tag publicado `f83a83c`, codigo de `57368e1`). Para otra version: `FE_REF=<tag>`, solo cuando FE lo anuncie. La version de FE se comprueba por este tag: FE no expone `X-App-Version`.
+FE queda fijado en `segel-rc4.1` (CEV-4 de `SPEC_CORRECCIONES_ENSAYO_VOLUMEN_v0.1`; tag local `3681a84` al 2026-11-08, el push lo pide el usuario en la sesion de FE). Sin el tag publicado no se construye para la VPS. Volver a `segel-rc4` (`f83a83c`) es `FE_REF=segel-rc4` y quitar `NCE_EMAIL_ENABLED`, `EMAIL_QUEUE_POR_MINUTO` y poner `EMAIL_QUEUE_CONCURRENCY=1`. Para otra version: `FE_REF=<tag>`, solo cuando FE lo anuncie. La version de FE se comprueba por este tag: FE no expone `X-App-Version`.
 
 **Verificar:** `docker images` en la VPS muestra las once imagenes `segel-fs-*` y `fe-segel-*`.
 
@@ -55,7 +55,15 @@ Una contrasena SMTP con `#` no lleva comillas, y no puede tener un espacio antes
 - Dentro de `fe-segel-api-1`: `SIFEN_ENV` es el ambiente elegido.
 - `GET /v1/health` de FE trae `java.kude.ok` y `java.firma.ok` en `true`. Con cualquiera en `false`, **no emitir**: quitar `java8_home`, poner `KUDE_JAVA_BIN=java`, correr `up.sh` y avisar a FE con la linea `java.check failed`.
 - `worker-cargas` y `worker-correo` arriba, sin reinicios en bucle. `docker logs fe-segel-worker-correo-1` muestra `email.worker start`.
-- Dentro de `fe-segel-api-1`: `RECONCILE_DEFERRED_ENABLED=true` (D-20 de despliegue v0.2), `SIFEN_CONSULT_DETECTS_CANCEL_ENABLED=false`, `BATCH_DESPACHO_SEGUNDOS=2`, `EMAIL_QUEUE_MAX_ATTEMPTS=6`, `NCE_IDEMPOTENCY_ENABLED=true`, `EMAIL_TRAS_APROBACION=true`. `docker inspect -f '{{.HostConfig.Memory}}'` de cada servicio de FE coincide con su `FE_*_MEM` (API 768m, cargas y correo 512m, batch y status-sync 256m, frontend 128m).
+- **Topes de recursos** (CEV-2). La VPS tiene 3,6 GiB y 4 vCPU compartidos con los servicios del administrador; la suma de topes de FE y FS es de unos 3,1 GiB. Verificar en todos los contenedores:
+
+  ```bash
+  docker ps -a --format '{{.Names}}' | grep -E 'fe-segel|segel-fs' | xargs docker inspect -f \
+    '{{.Name}} mem={{.HostConfig.Memory}} cpus={{.HostConfig.NanoCpus}} pids={{.HostConfig.PidsLimit}} oom={{.State.OOMKilled}} reinicios={{.RestartCount}} log={{index .HostConfig.LogConfig.Config "max-size"}}'
+  ```
+
+  Cada servicio debe mostrar su tope (`mem` distinto de 0) y `log=10m`. Si un contenedor aparece con `oom=true` o reinicios que suben: ver `docker logs` del servicio, subir su tope en `fs/.env.segel` (`FS_*_MEM`) o `fe/.env.segel` (`FE_*_MEM`) con el pico observado mas un 50 %, correr `up.sh` y avisar a FS y FE. No subir topes sin mirar la suma: con mas de 3,1 GiB se come el margen del sistema.
+- Dentro de `fe-segel-api-1`: `RECONCILE_DEFERRED_ENABLED=true` (D-20 de despliegue v0.2), `SIFEN_CONSULT_DETECTS_CANCEL_ENABLED=false`, `BATCH_DESPACHO_SEGUNDOS=2`, `EMAIL_QUEUE_MAX_ATTEMPTS=6`, `NCE_IDEMPOTENCY_ENABLED=true`, `EMAIL_TRAS_APROBACION=true`, y con `rc4.1` `NCE_EMAIL_ENABLED=true`, `EMAIL_QUEUE_POR_MINUTO=25`, `EMAIL_QUEUE_CONCURRENCY=2`. La migracion `046` de FE suma columnas a `de_events`. `docker inspect -f '{{.HostConfig.Memory}}'` de cada servicio de FE coincide con su `FE_*_MEM` (API 768m, cargas y correo 512m, batch y status-sync 256m, frontend 128m).
 
 Agenda de los lotes incompletos (decision del usuario, D-9 de despliegue v0.2). Es escritura en la base de FE: en produccion se ejecuta solo con autorizacion directa del usuario en ese momento, y antes se anotan los valores actuales de la fila para la vuelta atras:
 
@@ -159,7 +167,11 @@ MEDIR_DESTINO=vps bash scripts/segel-fs/medir-carga.sh fin <corrida>  # resumen 
 
 Solo lee. El resumen trae linea base y cierre, tiempos de cada carga, lotes y consultas, rechazos `1002`, correos en reintento, picos por contenedor y reinicios. Frenar y no subir la carga siguiente ante: un rechazo SIFEN en la carga sonda, un contenedor reiniciando, FE + FS + Postgres sobre 3 GiB, un correo `FAILED`, un lote con mas de 20 consultas o un salto de numero. Los correos pendientes y en reintento tambien se ven en la pagina "Operacion" del backoffice de FE (`correo_reintentando`, `correo_failed_24h`); con `rc4` un correo puede quedar `PENDING` hasta una hora antes de `FAILED`.
 
-**Notas de credito** (`SPEC_NOTA_CREDITO_TRABADA_v0.1`). Una nota que FE no confirmo se ve como "Nota credito sin confirmar" con el boton "Reintentar nota de credito": reintenta con la misma clave y FE `rc4` la completa con el mismo numero. No pedir soporte salvo que siga asi 48 horas.
+**Notas de credito** (`SPEC_NOTA_CREDITO_TRABADA_v0.1`). Una nota que FE no confirmo se ve como "Nota credito sin confirmar" con el boton "Reintentar nota de credito": reintenta con la misma clave y FE `rc4` la completa con el mismo numero. No pedir soporte salvo que siga asi 48 horas. Con `rc4.1` la nota de credito le llega por correo al comprador.
+
+**Anulaciones.** SIFEN puede responder `0100` "Error Inesperado" a una anulacion (visto en el ensayo): el documento sigue emitido y la pantalla ofrece "Reintentar anulacion". El aviso por correo al comprador solo sale cuando la anulacion queda aceptada.
+
+**Antes de la prueba real** (CEV-5): revisar en el backoffice de FE el correo del emisor de produccion. FE lo pone en copia oculta de cada correo; en el ensayo era `facturacion@ventax.app`.
 
 ## Fase 8. Paso a produccion
 
