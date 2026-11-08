@@ -97,7 +97,7 @@ Datos definidos por el usuario el 2026-11-08 (SPEC, D-12, D-17 y D-18):
 | Total | 334.400 guaranies: 304 facturas de 1.100. Comprador 1: 100 (110.000). Compradores 2 y 3: 102 cada uno (112.200) |
 | Compradores | 1) RUC 4732402-3, AREVALOS NARVAEZ, GRACIELA LUCIA, correo `emilio.saldivar97@gmail.com` (D-24; antes `gracielita076@gmail.com`). 2) RUC 1160463-8, AREVALO, ANIBAL RAMON, correo `matiassaldiv@gmail.com`. 3) CI 5057036, MARIA CRISTINA SALDIVAR CAPUTO, correo `emiliomatasc@fpuna.edu.py`, confirmado (SPEC, D-26) |
 | Columnas del comprador | RUC: `receptor_tipo_documento=RUC`, documento con guion y digito, naturaleza `FISICA`, nombre segun el padron DNIT (SPEC, D-23), confirmado por el usuario (D-26). CI: `CI`, `5057036`, `FISICA`, `MARIA CRISTINA SALDIVAR CAPUTO`. FE acepta `CI` en la plantilla (su SPEC de carga masiva, columna `receptor_tipo_documento`) |
-| Item | "Consultoria en tecnologia de la informacion", cantidad 1, precio 1.100 con IVA 10 % incluido (base 1.000, IVA 100) |
+| Item | "Prestacion de servicios de consultoria en informatica" (D-29), codigo `SRV-CI`, cantidad 1, precio 1.100 con IVA 10 % incluido (base 1.000, IVA 100). Punto 001-002, actividad 96099 |
 | Condicion | Contado, efectivo |
 | Reparto | Una carga por comprador. Carga A (comprador 1): 100 facturas, dos lotes llenos de 50; va sola, como sonda. Cargas B y C (compradores 2 y 3): 102 cada una, dos lotes llenos y uno de 2 que espera la agenda del lote incompleto (1 minuto, D-9); se suben seguidas, para medir dos cargas a la vez, el estado `EN_COLA` y el lote que no se llena |
 | Cuota | 304 facturas entran en la cuota diaria de 500 del consumidor; las tres cargas se hacen el mismo dia |
@@ -148,7 +148,7 @@ Ademas de lo de la tabla, en las cargas B y C se anota cuanto tarda en salir el 
 FS entrega los tres archivos y esta lista. El usuario la sigue y FS mide en paralelo.
 
 1. FS toma la linea base y arranca el muestreo. Avisa cuando esta listo.
-2. En el panel, con el operador del facturador: pestana **Carga masiva**, **Nueva carga**.
+2. En el panel, con el operador del facturador y el contexto **001-002** activo (D-29): pestana **Carga masiva**, **Nueva carga**. La pantalla de nueva carga muestra el contexto: debe decir 001-002 y "La asigna el servicio".
 3. Arrastrar el archivo de la carga A. Esperar a que termine "Validando el archivo".
 4. Revisar el informe: 100 filas validas, ninguna con problemas, y el total esperado. Si aparece cualquier error, no confirmar y avisar a FS.
 5. **Confirmar y emitir.** La carga pasa por "En proceso", "En SIFEN" y "Finalizada".
