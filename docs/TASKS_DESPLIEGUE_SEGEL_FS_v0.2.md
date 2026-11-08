@@ -23,8 +23,8 @@
 | SF2-008 | 1 | Runbook `OPERACION_DESPLIEGUE_SEGEL_FS_v0.1` actualizado | Fase 1, 2 y 7 segun PLAN, seccion 1 | FS | DONE (2026-11-07) |
 | SF2-009 | 2 | Paquete local: bundle, `init-env.sh test`, archivos CSV de prueba y script generador, lista de verificacion del guion | Stack arriba con las imagenes de SF2-003 y SF2-004; sin secretos en git | FS | DONE (2026-11-07), por FE con `ensayo-local.sh`, E-1 |
 | SF2-010 | 2 | Secretos, emisor de test, certificado y CSC en el stack local (B-4, B-5) | Readiness de FE sin faltantes; correo de prueba desde FS recibido | Usuario | DONE (2026-11-07), E-1 |
-| SF2-011 | 2 | Ensayo local: guion del PLAN, seccion 2.3, pasos 1 a 9 | CA-01 y CA-06; resultados en E-1 | Usuario ejecuta, FS registra | PARTIAL (2026-11-08), E-1: pasos 1 a 7 hechos; faltan el 8 (apagar banderas) y el 9 (medicion de memoria) |
-| SF2-012 | 2 | Cierre de la carga masiva contra FE real: CMF-018 y CMF-020, supuesto de `actualizado_en` con `correo` | Anotado en `TASKS_CARGA_MASIVA_FACTURAS_v0.1`; desvios del contrato corregidos y reensayados | FS | PARTIAL (2026-11-08), E-1: carga masiva contra FE real cerrada; queda verificar en pantalla el numero fiscal de carga (`c38621a`) |
+| SF2-011 | 2 | Ensayo local: guion del PLAN, seccion 2.3, pasos 1 a 9 | CA-01 y CA-06; resultados en E-1 | Usuario ejecuta, FS registra | DONE (2026-11-08), E-1: pasos 1 a 9; en el paso 8 se probo la bandera de FS, la de FE (`CARGAS_ENABLED`) la opera FE |
+| SF2-012 | 2 | Cierre de la carga masiva contra FE real: CMF-018 y CMF-020, supuesto de `actualizado_en` con `correo` | Anotado en `TASKS_CARGA_MASIVA_FACTURAS_v0.1`; desvios del contrato corregidos y reensayados | FS | DONE (2026-11-08), E-1: carga masiva contra FE real cerrada; numero fiscal de carga verificado (`c38621a`) |
 | SF2-013 | 3 | Respaldo manual de las dos bases en la VPS | Dos dumps en `~/segel/backups`, con tamano y `df` registrados | FS, con autorizacion del usuario | BLOCKED: espera SF2-002 y confirmacion directa |
 | SF2-014 | 3 | Construccion y transferencia (`build-images.sh`, `deploy.sh files`, `deploy.sh images`) | `docker images` en la VPS con las once imagenes | FS | BLOCKED: espera SF2-011 y confirmacion directa |
 | SF2-015 | 3 | Variables en `fe/.env.segel` y `fs/.env.segel` de la VPS, a mano | Valores de RN-03 presentes; sin `JAVA_TOOL_OPTIONS` | FS | BLOCKED: espera SF2-014 |
@@ -68,4 +68,8 @@ Stack armado por FE con `ensayo-local.sh`, `up.sh`, `bootstrap.sh` y `cargar-fac
 - Correcciones encontradas en el ensayo: FS-27, FS-28, FS-29, FS-30, FS-31 y el formato del numero fiscal de carga. Playwright de FS-28, FS-29 y FS-31: 18 de 18.
 - FE midio el pool SMTP: 5,9 s el primer correo y 1,1 s los siguientes. Espera de lotes incompletos bajada a 1 minuto en el ensayo: una factura sola entro en lote a los 36 s.
 
-Pendientes: pasos 8 y 9 del guion; E-2 despliegue; E-3 prueba en produccion.
+- Numero fiscal de carga (`c38621a`): una carga de 1 factura quedo como `1010017`, sin prefijo de punto, y la busqueda por numero la encuentra.
+- Paso 8 (FS `772630a`): con `CARGA_MASIVA_ENABLED=false` y la API recreada (`up -d --no-deps --force-recreate api`), `GET /cargas` responde `404`, el boton "Carga masiva" no aparece en Documentos (Playwright 390x844 y 1280x800) y los 14 documentos de carga siguen listados (CA-06). Vuelta a `true`: `200`, el boton vuelve, mismos documentos. La bandera de FE `CARGAS_ENABLED` no se toco: la opera FE en su stack.
+- Paso 9: carga de 3 facturas de 1.100 Gs con los correos en curso, `docker stats` cada 5 s durante 5 min. En reposo, FS (API, web, Postgres, cron) unos 81 MiB y FE (API, 4 workers, web, Postgres) unos 105 MiB. Pico por contenedor: `worker-correo` 123 MiB y 68 % de CPU, `worker-cargas` 53 MiB, `worker-batch` 48 MiB, API de FE 43 MiB, API de FS 42 MiB; la suma de los picos da 413 MiB para los once contenedores. `kude-cache` ocupa 764 KB con 20 documentos. Las 3 facturas quedaron `EMITIDA` con correo `SENT` (1010018 a 1010020). La muestra es chica: la referencia de la carga grande sale de la prueba en produccion (SF2-020).
+
+Pendientes: E-2 despliegue; E-3 prueba en produccion.
