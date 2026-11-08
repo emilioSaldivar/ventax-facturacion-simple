@@ -2631,6 +2631,7 @@ function DocumentsView({
                 <div className={`accion-banner ${accionBannerClass(selected.accion)}`}>
                   <p className="accion-banner-titulo">{selected.accion_detalle.titulo}</p>
                   <p className="accion-banner-descripcion">{selected.accion_detalle.descripcion}</p>
+                  {selected.estado === "RECHAZADA" ? <p className="accion-banner-descripcion">{AVISO_INUTILIZACION}</p> : null}
                   {selected.accion_detalle.acciones_sugeridas.length > 0 || puedeVerificarAhora(selected) ? (
                     <div className="accion-banner-acciones">
                       {puedeVerificarAhora(selected) ? (
