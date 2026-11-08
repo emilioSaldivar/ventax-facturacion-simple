@@ -20,6 +20,10 @@ Paso a paso para levantar la instancia en `segel-fs`, primero en SIFEN test y lu
 
 Disco, CPU y memoria de la VPS no se modifican. Se necesita VPN para llegar por SSH.
 
+## Fase 0. Respaldo obligatorio (decision del usuario, D-28 de despliegue v0.2)
+
+Antes de tocar nada en una instancia que ya tiene datos: `pg_dump -Fc` de las dos bases (FS y FE) hacia la estacion, con el tamano anotado, y comprobar que cada archivo se restaura en un Postgres descartable antes de seguir. Medir `df -h /var /home` antes y despues. Sin respaldo comprobado no se despliega.
+
 ## Fase 1. Imagenes y archivos (en la estacion)
 
 ```bash
@@ -63,6 +67,8 @@ Una contrasena SMTP con `#` no lleva comillas, y no puede tener un espacio antes
   ```
 
   Cada servicio debe mostrar su tope (`mem` distinto de 0) y `log=10m`. Si un contenedor aparece con `oom=true` o reinicios que suben: ver `docker logs` del servicio, subir su tope en `fs/.env.segel` (`FS_*_MEM`) o `fe/.env.segel` (`FE_*_MEM`) con el pico observado mas un 50 %, correr `up.sh` y avisar a FS y FE. No subir topes sin mirar la suma: con mas de 3,1 GiB se come el margen del sistema.
+
+  **Con la VPS de 8 GB** (D-28): cambiar en `fs/.env.segel` a los valores comentados en `fs.env.example` (API 384m, Postgres 1024m, frontend 96m, DNIT 384m, migrate 256m) y en `fe/.env.segel` a los de la seccion 4b del runbook de FE; correr `up.sh` y verificar con el `docker inspect` de arriba. Recrear los Postgres corta las API unos segundos: hacerlo fuera de horario. Las CPU no cambian; `CORREO_WORKER_CPUS=2` desde el despliegue.
 - Dentro de `fe-segel-api-1`: `RECONCILE_DEFERRED_ENABLED=true` (D-20 de despliegue v0.2), `SIFEN_CONSULT_DETECTS_CANCEL_ENABLED=false`, `BATCH_DESPACHO_SEGUNDOS=2`, `EMAIL_QUEUE_MAX_ATTEMPTS=6`, `NCE_IDEMPOTENCY_ENABLED=true`, `EMAIL_TRAS_APROBACION=true`, y con `rc4.1` `NCE_EMAIL_ENABLED=true`, `EMAIL_QUEUE_POR_MINUTO=25`, `EMAIL_QUEUE_CONCURRENCY=2`. La migracion `046` de FE suma columnas a `de_events`. `docker inspect -f '{{.HostConfig.Memory}}'` de cada servicio de FE coincide con su `FE_*_MEM` (API 768m, cargas y correo 512m, batch y status-sync 256m, frontend 128m).
 
 Agenda de los lotes incompletos (decision del usuario, D-9 de despliegue v0.2). Es escritura en la base de FE: en produccion se ejecuta solo con autorizacion directa del usuario en ese momento, y antes se anotan los valores actuales de la fila para la vuelta atras:
@@ -171,7 +177,7 @@ Solo lee. El resumen trae linea base y cierre, tiempos de cada carga, lotes y co
 
 **Anulaciones.** SIFEN puede responder `0100` "Error Inesperado" a una anulacion (visto en el ensayo): el documento sigue emitido y la pantalla ofrece "Reintentar anulacion". El aviso por correo al comprador solo sale cuando la anulacion queda aceptada.
 
-**Antes de la prueba real** (CEV-5): revisar en el backoffice de FE el correo del emisor de produccion. FE lo pone en copia oculta de cada correo; en el ensayo era `facturacion@ventax.app`.
+**Copia oculta:** FE pone en copia oculta de cada correo el correo del emisor; `facturacion@ventax.app` es correcto (decision del usuario, D-28).
 
 ## Fase 8. Paso a produccion
 

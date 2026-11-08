@@ -56,3 +56,13 @@ Pedida por el usuario a FE, pensando en la VPS nueva de `segel-fs`: 4 vCPU y 8 G
 - Pico de `worker-correo` 153 MiB de 384 y 198 % de CPU. Suma de picos de los 11 contenedores: 596 MiB.
 - FS paso solo las 60 a `SENT` a las 20:26:34 y saco la carga de la agenda (FS-40).
 - Medicion en `test-results/medicion/cpu2-20261108/`. El valor de `CORREO_WORKER_CPUS` para produccion lo decide el usuario con FE.
+
+### E-5. Carga final para cerrar `rc4.1` (2026-11-08, 20:47 UTC)
+
+FE `974eb13` (el tope cuenta cada envio hasta 60 s despues de terminar, `f88c437`), FS `20838aa`, `worker-correo` con 2 CPU y concurrencia 2, 11 contenedores en 4 nucleos. Carga de 60 desde el panel a `emilio.saldivar97@gmail.com`.
+
+- La carga se confirmo a las 20:47:28 y finalizo a las 20:49:29, con 60 aprobadas.
+- Los correos salieron de 20:48:34 a 20:51:00: 10, 25, 24 y 1 por minuto. **Maximo en cualquier ventana movil de 60 s: 25.** 60 `SENT` y ninguno `FAILED`.
+- Pico de `worker-correo` 140 MiB y 204 % de CPU. Suma de picos 580 MiB.
+- FS paso solo las 60 a `SENT` a las 20:55:40.
+- Medicion en `test-results/medicion/tope-20261108/`.

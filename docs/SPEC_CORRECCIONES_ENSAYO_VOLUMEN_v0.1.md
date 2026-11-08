@@ -67,8 +67,10 @@ Corregir lo que el ensayo de volumen mostro del lado de FS y dejar a FS y FE con
 
 ## CEV-5. Verificaciones de produccion
 
-- **RN-14.** Antes de la prueba real, revisar en el backoffice de FE el correo del emisor de produccion: FE lo usa como copia oculta de cada correo (en el ensayo era `facturacion@ventax.app`).
+- **RN-14.** **Resuelto (D-28 de despliegue v0.2): la copia oculta a `facturacion@ventax.app` es correcta.** Antes de la prueba real, revisar en el backoffice de FE el correo del emisor de produccion: FE lo usa como copia oculta de cada correo (en el ensayo era `facturacion@ventax.app`).
 - **RN-15.** Una anulacion puede volver con `0100` "Error Inesperado" de SIFEN (FS-23, visto en el ensayo): el operador usa "Reintentar anulacion". Se documenta en el runbook.
+
+- **RN-16. VPS de 8 GB (D-28).** Al recibir los 8 GB, FS pasa a: API 384m, Postgres 1024m (padron DNIT), frontend 96m, cargador DNIT 384m y migrate 256m; suma de FS unos 1,9 GiB, como sugirio FE. FE pasa a los de su seccion 4b (unos 3,8 GiB). Quedan unos 2,3 GB para el sistema, los agentes del administrador y la cache de disco. Las CPU no cambian.
 
 ## Fuera De Alcance
 
