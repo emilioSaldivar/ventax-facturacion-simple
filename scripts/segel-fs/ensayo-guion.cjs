@@ -218,9 +218,11 @@ async function paso(nombre, fn) {
     if (facturasDeCarga.length < 2) throw new Error("Hace falta el paso 3 en la misma corrida.");
     const [aCancelar, aNota] = facturasDeCarga;
     const cancelada = await pedir("POST", `/facturas/${aCancelar.id}/cancelar`, { cuerpo: { motivo: "Ensayo de cancelacion" } });
-    registrar("6", "cancelar una factura de carga", cancelada.status < 300, { status: cancelada.status, estado: cancelada.datos.estado, cancelacion: cancelada.datos.cancelacion });
+    registrar("6", "cancelar una factura de carga", cancelada.status < 300, { status: cancelada.status, estado: cancelada.datos.estado, cancelacion: cancelada.datos.cancelacion, error: cancelada.status < 300 ? undefined : cancelada.datos });
     const nota = await pedir("POST", `/facturas/${aNota.id}/nota-credito`, { cuerpo: { motivo: "Ensayo de nota de credito" }, clave: `ensayo-nc-${sufijo}` });
-    registrar("6", "nota de credito sobre una factura de carga", nota.status < 300, { status: nota.status, estado: nota.datos.estado });
+    registrar("6", "nota de credito sobre una factura de carga", nota.status < 300, { status: nota.status, estado: nota.datos.estado, error: nota.status < 300 ? undefined : nota.datos });
+    // Sin cancelacion aceptada por FS no hay nada que esperar.
+    if (cancelada.status >= 300) throw new Error(`cancelacion rechazada: ${JSON.stringify(cancelada.datos).slice(0, 300)}`);
     const anulada = await esperar("cancelacion aceptada", async () => {
       const d = (await pedir("GET", `/facturas/${aCancelar.id}`)).datos;
       return d.estado === "ANULADA" ? d : null;

@@ -48,6 +48,9 @@ describe("sifen-causa-catalogo", () => {
     const causa = resolveCausaSifen("1306", null);
     expect(causa.categoria).toBe("USUARIO");
     expect(causa.acciones).toContain("CORREGIR_REEMITIR");
+    // FS-29: el texto vale en produccion, no habla del ambiente de pruebas.
+    expect(`${causa.titulo} ${causa.descripcion}`).not.toMatch(/prueba|Marangatu test|homologacion/i);
+    expect(causa.descripcion).toContain("digito verificador");
   });
 
   it("cae a SOPORTE por default cuando no hay codigo ni mensaje reconocido (RN-V4)", () => {

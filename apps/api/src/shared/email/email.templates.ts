@@ -204,6 +204,12 @@ export interface AccionFiscalEmailContext {
  * la verificacion fiscal automatica detecto una causa que el propio operador puede
  * corregir (reintentar, corregir datos y reemitir, crear nota de credito).
  */
+/**
+ * FS-30: el aviso va a los usuarios del facturador, nunca al cliente. Solo sale por documentos no
+ * aprobados, y FE retiene el correo al cliente hasta la aprobacion: el cliente no recibio nada.
+ */
+const AVISO_PARA_FACTURADOR = "Este aviso es para el equipo de facturacion. Su cliente no recibio esta factura por correo.";
+
 export function accionRequeridaTemplate(ctx: AccionFiscalEmailContext): EmailTemplate {
   const nombreDoc = ctx.documentoTipo === "NOTA_CREDITO" ? "Nota de crédito" : "Factura";
   const safeTitulo = escapeHtml(ctx.titulo);
@@ -219,7 +225,8 @@ export function accionRequeridaTemplate(ctx: AccionFiscalEmailContext): EmailTem
       <p style="margin:0 0 6px 0;font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:0.8px;color:#f59e0b;">Requiere acción</p>
       <p style="margin:0 0 20px 0;font-size:16px;color:#111827;">${nombreDoc} <strong>${safeNumero}</strong></p>
       <p style="margin:0 0 12px 0;font-size:15px;font-weight:600;color:#111827;">${safeTitulo}</p>
-      <p style="margin:0 0 24px 0;font-size:14px;line-height:1.6;color:#4b5563;">${safeDescripcion}</p>
+      <p style="margin:0 0 16px 0;font-size:14px;line-height:1.6;color:#4b5563;">${safeDescripcion}</p>
+      <p style="margin:0 0 24px 0;font-size:13px;line-height:1.6;color:#6b7280;">${AVISO_PARA_FACTURADOR}</p>
       <table cellpadding="0" cellspacing="0" role="presentation" style="margin:0 auto;">
         <tr>
           <td style="border-radius:8px;background:${BRAND_COLOR};">
@@ -235,6 +242,8 @@ export function accionRequeridaTemplate(ctx: AccionFiscalEmailContext): EmailTem
     "",
     ctx.titulo,
     ctx.descripcion,
+    "",
+    AVISO_PARA_FACTURADOR,
     "",
     `Abrir: ${ctx.appUrl}`,
     "",

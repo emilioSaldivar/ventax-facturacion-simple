@@ -28,10 +28,11 @@ const CATALOGO: CatalogoEntry[] = [
     codes: ["1306"],
     causa: {
       categoria: "USUARIO",
-      titulo: "Receptor no valido en el ambiente de pruebas",
+      // FS-29: vale en produccion y en pruebas. En produccion casi siempre es un RUC mal tipeado.
+      titulo: "RUC del cliente no encontrado",
       descripcion:
-        "SIFEN (homologacion) rechazo el documento porque el receptor no esta habilitado para pruebas. " +
-        "Use un receptor existente en Marangatu test o uno ya validado previamente.",
+        "SIFEN no encontro el RUC del cliente en el registro de la SET. Revise el numero y el digito verificador. " +
+        "Si el cliente no tiene RUC, emita con su cedula. Use Corregir y emitir de nuevo: la factura sale con numero nuevo.",
       acciones: ["CORREGIR_REEMITIR"]
     }
   },

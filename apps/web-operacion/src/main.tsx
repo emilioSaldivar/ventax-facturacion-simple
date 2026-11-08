@@ -1608,6 +1608,7 @@ function OperationHome({
 
       {operationView === "invoice" ? (
         <InvoiceEditor
+          key={invoiceInitialDraft?.corrige_numero ?? "factura"}
           accessToken={accessToken}
           canEmit={canEmit}
           context={context}
@@ -1629,6 +1630,7 @@ function OperationHome({
           setAccessToken={setAccessToken}
           onBack={() => goTo("invoice")}
           onGoTo={goTo}
+          onCorregirFactura={(draft) => { setInvoiceInitialDraft(draft); goTo("invoice"); }}
           role={user?.role ?? "OPERADOR_FACTURACION"}
           context={context}
         />
@@ -1758,7 +1760,8 @@ function DocumentsView({
   onBack,
   onGoTo,
   role,
-  context
+  context,
+  onCorregirFactura
 }: {
   accessToken: string | null;
   setAccessToken: (token: string | null) => void;
@@ -1766,6 +1769,7 @@ function DocumentsView({
   onGoTo?: (view: OperationView) => void;
   role: UserSummary["role"];
   context?: OperationalContextResponse | null;
+  onCorregirFactura?: (draft: InvoiceInitialDraft) => void;
 }) {
   const api = useMemo(() => createApiClient(accessToken, setAccessToken), [accessToken, setAccessToken]);
   const todayYmd = useMemo(() => formatYmdFromDate(new Date()), []);
@@ -2610,7 +2614,11 @@ function DocumentsView({
                         </button>
                       ) : null}
                       {selected.accion_detalle.acciones_sugeridas.includes("CORREGIR_REEMITIR") ? (
-                        <button className="secondary-action" onClick={() => onGoTo?.("invoice")} type="button">
+                        <button
+                          className="secondary-action"
+                          onClick={() => (onCorregirFactura ? onCorregirFactura(borradorDeCorreccion(selected)) : onGoTo?.("invoice"))}
+                          type="button"
+                        >
                           Corregir y emitir de nuevo
                         </button>
                       ) : null}
@@ -4025,12 +4033,14 @@ function InvoiceEditor({
     if (!initialDraft || initialDraftAppliedRef.current) return;
     initialDraftAppliedRef.current = true;
 
-    setCliente(prev => ({
-      ...prev,
-      razon_social: initialDraft.cliente_nombre,
-      documento: initialDraft.cliente_ruc ?? "",
-      documento_tipo: initialDraft.cliente_ruc ? "RUC" : "RUC",
-    }));
+    setCliente(prev => initialDraft.cliente
+      ? { ...prev, ...initialDraft.cliente, cliente_id: null }
+      : {
+          ...prev,
+          razon_social: initialDraft.cliente_nombre,
+          documento: initialDraft.cliente_ruc ?? "",
+          documento_tipo: initialDraft.cliente_ruc ? "RUC" : "RUC",
+        });
 
     if (initialDraft.items.length > 0) {
       setLines(initialDraft.items.map(item => ({
@@ -4689,6 +4699,13 @@ function InvoiceEditor({
           </button>
         </div>
       </div>
+
+      {initialDraft?.corrige_numero !== undefined ? (
+        <p className="editor-alert ready" role="status">
+          Corrigiendo la factura rechazada {initialDraft.corrige_numero ?? "sin numero"}. Revise los datos del cliente:
+          la factura se emite con numero nuevo y la rechazada queda como esta.
+        </p>
+      ) : null}
 
       {headerDetailsOpen ? (
         <section className="invoice-band" ref={comprobanteSectionRef}>
@@ -5862,10 +5879,27 @@ function formatSifenSummary(summary: SifenSummary | null): string {
   return summary.status ?? "Sin respuesta fiscal resumida";
 }
 
+/** FS-28: la factura nueva parte de los datos de la rechazada; la rechazada no cambia. */
+function borradorDeCorreccion(documento: DocumentoResponse): InvoiceInitialDraft {
+  return {
+    cliente_nombre: documento.cliente.razon_social,
+    cliente_ruc: documento.cliente.documento_tipo === "RUC" ? documento.cliente.documento : null,
+    cliente: { ...documento.cliente, cliente_id: null },
+    corrige_numero: documento.numero_fiscal,
+    items: documento.items.map((item) => ({
+      descripcion: item.descripcion,
+      cantidad: item.cantidad,
+      precio_unitario: item.precio_unitario,
+      iva_tipo: item.iva_tipo,
+      catalog_item_id: item.catalogo_item_id ?? null
+    }))
+  };
+}
+
 function getRejectedSifenMessage(summary: SifenSummary | null): string {
   const base = `Documento rechazado por SIFEN: ${formatSifenSummary(summary)}.`;
   if (summary?.code === "1306") {
-    return `${base} Use un receptor existente en Marangatu test o un receptor ya validado para pruebas aprobadas.`;
+    return `${base} SIFEN no encontro el RUC del cliente: revise el numero y el digito verificador, o emita con la cedula si no tiene RUC.`;
   }
   return `${base} Revise los datos del receptor y el detalle fiscal antes de reintentar.`;
 }
@@ -6066,6 +6100,10 @@ interface NotaConItems extends NotaListItem {
 interface InvoiceInitialDraft {
   cliente_nombre: string;
   cliente_ruc: string | null;
+  /** FS-28: cliente completo de la factura que se corrige. Si viene, manda sobre nombre y RUC. */
+  cliente?: FacturaClienteInput;
+  /** FS-28: numero de la factura rechazada que se corrige. */
+  corrige_numero?: string | null;
   items: Array<{
     descripcion: string;
     cantidad: number;

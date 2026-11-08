@@ -66,6 +66,10 @@ describe("notifyAccionRequerida", () => {
     expect(sendEmailMock).toHaveBeenCalledTimes(2);
     const [, template] = sendEmailMock.mock.calls[0];
     expect(template.subject).toContain("requiere acción");
+    // FS-30: el aviso dice a quien va y que el cliente no recibio correo.
+    expect(template.text).toContain("Este aviso es para el equipo de facturacion.");
+    expect(template.text).toContain("Su cliente no recibio esta factura por correo.");
+    expect(template.html).toContain("Su cliente no recibio esta factura por correo.");
   });
 
   it("envia el template REQUIERE_SOPORTE con el bloque de datos cuando esSoporte=true", async () => {

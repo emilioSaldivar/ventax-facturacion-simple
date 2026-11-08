@@ -20,6 +20,9 @@
 | CFF-009 | FS-20, FS-21, FS-23 | Validacion en stack local con el tag de FE y SIFEN test | PLAN, seccion 6 | Es el paso 7 del guion de SF2-011; FS-24 incluido, con la bandera apagada |
 | CFF-010 | FS-20, FS-21, FS-23 | Despliegue en `segel-fs` | Versiones desplegadas y banderas registradas | Viaja con la segunda entrega (SF2-014 a SF2-016) |
 | CFF-012 | FS-27 | `updateEmailEstadoPendiente` guarda nulo para `NOT_APPLICABLE`; mensaje de factura rechazada | Pruebas CA-27.1 y CA-27.2 en `contrato-fe-sobrecarga.test.ts` | DONE (2026-11-07), con pruebas unitarias; se observa en el ensayo local |
+| CFF-013 | FS-28 | Precarga del editor desde la factura rechazada, con aviso de correccion | CA-28.1 y CA-28.2 por Playwright en 390 y 1280 px | TODO |
+| CFF-014 | FS-29 | Texto de `1306` valido en los dos ambientes, en el catalogo y en la ficha | Prueba en `facturas.accion.test.ts`; CA-29.1 por Playwright | TODO |
+| CFF-015 | FS-30 | Aviso al facturador con destinatario y estado del correo del cliente | Prueba en `facturas.notificaciones.test.ts` | TODO |
 | CFF-011 | Todos | Cierre: repasar SPEC, PLAN, TASKS y `docs/BACKLOG.md` | Documentos alineados con lo desplegado | TODO |
 
 ## Notas de FE

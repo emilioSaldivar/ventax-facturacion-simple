@@ -15,6 +15,9 @@ Seis errores de FS que aparecieron o cambiaron con los fixes de FE-02, H09, FE-0
 | FS-24 | Una factura aprobada tarde sigue "Procesando" por horas | Media | Sin codigo |
 | FS-25 | Las 6 acciones de "Administracion fiscal" no funcionan | Media | Sin codigo. Espera D-1 |
 | FS-27 | Una factura rechazada con correo queda "en cola" para siempre | Alta | Codigo en la segunda entrega (seccion 7b) |
+| FS-28 | "Corregir y emitir de nuevo" abre el editor vacio | Alta | Codigo en la segunda entrega (seccion 7c) |
+| FS-29 | El mensaje de `1306` solo sirve en pruebas | Alta | Igual |
+| FS-30 | El aviso al facturador no dice que es para el ni que el cliente no recibio correo | Media | Igual |
 | FS-22 | Retirar la proteccion de FS-11 | Baja | Se cierra sin cambio (seccion 7) |
 
 **No entra:** los demas hallazgos abiertos del backlog (seccion 9), la carga masiva y cualquier cambio en FE.
@@ -119,6 +122,16 @@ Criterios:
 - **RN-27.2.** Si el documento esta `RECHAZADA`, el mensaje dice que no se envio correo porque SIFEN rechazo la factura, no que el cliente no tiene correo.
 - **CA-27.1.** Con FE informando `NOT_APPLICABLE`, el estado deja de ser `PENDING` y la siguiente apertura no consulta a FE.
 - **CA-27.2.** Una factura rechazada con correo muestra el mensaje de RN-27.2; una sin correo, el de siempre.
+
+## 7c. FS-28, FS-29 y FS-30: corregir un rechazo sin confundir a nadie
+
+Vistos por el usuario en el ensayo local del 2026-11-07, sobre la factura rechazada a proposito con `1306`. Decision del usuario: corregirlos antes del despliegue en `segel-fs`.
+
+- **FS-28.** "Corregir y emitir de nuevo" solo navegaba al editor vacio. **RN-28.1:** abre el editor con el cliente (tipo y numero de documento, razon social, naturaleza, direccion, telefono y correo) y los items de la factura rechazada. **RN-28.2:** el editor muestra que se esta corrigiendo la factura N, que se emitira con numero nuevo y que la rechazada queda como esta. **RN-28.3:** nada cambia en la rechazada ni en el backend: es una factura nueva, con su propia clave de idempotencia. Corregir en el mismo documento, con el mismo numero, sigue siendo A-1 de `SPEC_AUTOGESTION_OPERADOR_v0.1`.
+- **FS-29.** El texto de `1306` hablaba solo del ambiente de pruebas. **RN-29.1:** dice lo que vale en produccion y en pruebas: SIFEN no encontro el RUC del cliente en el registro de la SET; revisar numero y digito verificador, o emitir con la cedula si el cliente no tiene RUC. **RN-29.2:** el mismo criterio en el mensaje de la ficha del documento (`getRejectedSifenMessage`), que repetia el texto de pruebas.
+- **FS-30.** **RN-30.1:** el aviso "requiere accion" dice que es para el equipo de facturacion y que el cliente no recibio la factura por correo. Solo se manda por documentos no aprobados, asi que la frase es cierta en todos los casos con el correo retenido hasta la aprobacion.
+
+Criterios: **CA-28.1** el editor abre con cliente e items de la rechazada y el aviso de correccion; **CA-28.2** emitir crea una factura nueva y la rechazada no cambia; **CA-29.1** ni la ficha ni el banner de un `1306` mencionan "pruebas" ni "Marangatu test"; **CA-30.1** el aviso incluye las dos frases de RN-30.1. Validacion: pruebas unitarias y Playwright en 390 y 1280 px sobre el ensayo local.
 
 ## 7. FS-22: se cierra sin cambio
 
