@@ -34,7 +34,23 @@ function registrar(paso, verificacion, ok, detalle = {}) {
 }
 
 let token = null;
-async function pedir(metodo, ruta, { cuerpo, tipo = "application/json", clave: idempotencia, crudo = false } = {}) {
+async function iniciarSesion() {
+  const login = await (await fetch(`${FS}/auth/login`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ username: usuario, password: clave }) })).json();
+  if (!login.access_token || login.pending_actions?.length) throw new Error(`Login del operador incompleto: ${JSON.stringify(login.pending_actions ?? login.error ?? {})}. Activarlo antes (activar-operador-test.cjs).`);
+  token = login.access_token;
+}
+
+// El token dura 15 minutos y las esperas de SIFEN son mas largas: ante un 401, nueva sesion y un reintento.
+async function pedir(metodo, ruta, opciones = {}, reintento = true) {
+  const r = await pedirUnaVez(metodo, ruta, opciones);
+  if (r.status === 401 && reintento) {
+    await iniciarSesion();
+    return pedir(metodo, ruta, opciones, false);
+  }
+  return r;
+}
+
+async function pedirUnaVez(metodo, ruta, { cuerpo, tipo = "application/json", clave: idempotencia, crudo = false } = {}) {
   const headers = { authorization: `Bearer ${token}` };
   if (cuerpo !== undefined) headers["content-type"] = tipo;
   if (idempotencia) headers["idempotency-key"] = idempotencia;
@@ -84,7 +100,7 @@ async function esperarFinal(id) {
     // "Verificar estado fiscal", como el boton del operador: no depende de la agenda del worker.
     const r = await pedir("POST", `/facturas/${id}/refresh-status`, { cuerpo: {} });
     const doc = r.status < 300 ? r.datos : (await pedir("GET", `/facturas/${id}`)).datos;
-    return ["EMITIDA", "RECHAZADA"].includes(doc.estado) ? doc : null;
+    return doc && ["EMITIDA", "RECHAZADA"].includes(doc.estado) ? doc : null;
   });
 }
 
@@ -121,9 +137,7 @@ async function paso(nombre, fn) {
 }
 
 (async () => {
-  const login = await (await fetch(`${FS}/auth/login`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ username: usuario, password: clave }) })).json();
-  if (!login.access_token || login.pending_actions?.length) throw new Error(`Login del operador incompleto: ${JSON.stringify(login.pending_actions ?? login.error ?? {})}. Activarlo antes (activar-operador-test.cjs).`);
-  token = login.access_token;
+  await iniciarSesion();
 
   const salud = await (await fetch(`${FE}/health`)).json().catch(() => ({}));
   registrar("1", "FE: java.kude.ok y java.firma.ok en true", salud?.java?.kude?.ok === true && salud?.java?.firma?.ok === true, salud?.java ?? salud);
