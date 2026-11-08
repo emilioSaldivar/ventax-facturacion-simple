@@ -24,7 +24,7 @@
 | CFF-014 | FS-29 | Texto de `1306` valido en los dos ambientes, en el catalogo y en la ficha | Prueba en `facturas.accion.test.ts`; CA-29.1 por Playwright | DONE (2026-11-08), E-2 |
 | CFF-015 | FS-30 | Aviso al facturador con destinatario y estado del correo del cliente | Prueba en `facturas.notificaciones.test.ts` | DONE (2026-11-08), E-2: prueba unitaria |
 | CFF-016 | FS-31 | Sin entrega para documentos sin validez, en API y en pantalla | CA-31.1 y CA-31.2 | DONE (2026-11-08), E-3 |
-| CFF-017 | FS-33 a FS-36 | Volver a la carga, estado en el listado, ayuda a soporte en la carga, aviso de inutilizacion | CA-33.1 a CA-36.1 por Playwright | TODO |
+| CFF-017 | FS-33 a FS-36 | Volver a la carga, estado en el listado, ayuda a soporte en la carga, aviso de inutilizacion | CA-33.1 a CA-36.1 por Playwright | DONE (2026-11-08), E-4 |
 | CFF-011 | Todos | Cierre: repasar SPEC, PLAN, TASKS y `docs/BACKLOG.md` | Documentos alineados con lo desplegado | TODO |
 
 ## Notas de FE
@@ -49,3 +49,8 @@ La captura de la ficha mostro FS-31 y FS-32, previos a esta correccion, registra
 
 Commit `6518c72`. API: 601 pruebas pasan, 0 fallan; nuevas en `entrega.service.test.ts` para el `409 DOCUMENTO_SIN_VALIDEZ` en los cuatro estados y el `404` del KuDE de un enlace anterior. Se reemplazo la prueba que mantenia el KuDE publico de un rechazado, por decision del usuario. Playwright `playwright-correccion-rechazo.cjs` en el ensayo local (FS `6518c72`), 390x844 y 1280x800: 18 de 18. La rechazada 1010001 muestra el aviso y no ofrece ver ni compartir; la emitida 1010000 conserva las acciones. FS-28 y FS-29 siguen en verde con la imagen nueva.
 
+### E-4. FS-33 a FS-36 y numero de la carga (2026-11-08)
+
+Commits `5d26b5a` y `772630a` (FS-36 tambien en el recuadro de accion). Las dos imagenes de FS se reconstruyeron con el mismo SHA para evitar el aviso de version nueva. Playwright `scripts/playwright-ensayo-documentos.cjs` en el ensayo local (FS `772630a`, FE `segel-rc3`), 390x844 y 1280x800: 14 de 14. La anulada 1010014 muestra "Anulada" en el listado sin el icono de emitida (CA-34.1); la rechazada 1010001 avisa que su numero queda pendiente de inutilizar (CA-36.1); "Copiar datos para soporte" copia el error `TOTAL_NO_COINCIDE` y el archivo de la carga (CA-35.1); "Ver factura" desde la carga ofrece "← Volver a la carga" y vuelve al mismo detalle (CA-33.1); sin desplazamiento horizontal. Playwright `playwright-correccion-rechazo.cjs`: 18 de 18 con la misma imagen.
+
+Numero fiscal de la carga (`c38621a`): una carga nueva de 1 factura de 1.100 Gs por la API del ensayo quedo EMITIDA con `numero_fiscal = 1010017`, sin el prefijo de punto, y `GET /facturas?q=1010017` la encuentra. Las facturas de cargas anteriores a `c38621a` conservan el formato viejo solo en el ensayo local; segel-fs no tiene cargas.
