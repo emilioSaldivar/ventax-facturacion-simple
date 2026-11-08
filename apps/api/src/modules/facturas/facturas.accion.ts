@@ -39,12 +39,30 @@ export type DeriveAccionInput = Pick<
  * Ser candidato no autoriza a reencolar: el servicio confirma con FE antes (RN-02).
  */
 export function puedeReintentarEmision(documento: DeriveAccionInput): boolean {
+  // SPEC_NOTA_CREDITO_TRABADA_v0.1: la nota no pasa por el outbox de emision; se reintenta con su propia accion.
+  if (documento.tipo === "NOTA_CREDITO") return false;
   return (
     (documento.estado === "ERROR_TEMPORAL" || documento.estado === "PENDIENTE_SIFEN") &&
     !documento.document_uuid &&
     !documento.cdc &&
     typeof documento.fiscal_status?.code === "string"
   );
+}
+
+/** Codigos con los que FS marca una nota de credito que FE pudo dejar a medias (SPEC_NOTA_CREDITO_TRABADA_v0.1). */
+export const CODIGOS_NOTA_TRABADA = ["TRANSMISSION_FAILED", "DRAFT", "ISSUE_NCE_FAILED", "TIMEOUT"] as const;
+const HORAS_NOTA_TRABADA_SOPORTE = 48;
+
+/**
+ * Nota trabada (SPEC_NOTA_CREDITO_TRABADA_v0.1, Definiciones): nota de credito pendiente cuyo ultimo
+ * intento contra FE termino en error o en un `409 idempotent` con `DRAFT`/`TRANSMISSION_FAILED`.
+ * Solo se destraba reintentando con la misma clave (RN-05).
+ */
+export function esNotaTrabada(documento: Pick<DeriveAccionInput, "tipo" | "estado" | "fiscal_status">): boolean {
+  if (documento.tipo !== "NOTA_CREDITO") return false;
+  if (documento.estado !== "PENDIENTE_SIFEN" && documento.estado !== "EMITIENDO") return false;
+  const code = documento.fiscal_status?.code;
+  return typeof code === "string" && (CODIGOS_NOTA_TRABADA as readonly string[]).includes(code);
 }
 
 /**
@@ -80,6 +98,29 @@ export function deriveAccion(documento: DeriveAccionInput): { accion: DocumentoA
 
     case "EMITIENDO":
     case "PENDIENTE_SIFEN":
+      if (esNotaTrabada(documento)) {
+        // RN-06: nunca "En proceso": nada la mueve si el operador no reintenta.
+        if (ageHours >= HORAS_NOTA_TRABADA_SOPORTE) {
+          return {
+            accion: "REQUIERE_SOPORTE",
+            accion_detalle: buildSoporteDetalle(
+              documento,
+              "Nota de crédito sin confirmar",
+              `El servicio fiscal no confirmó esta nota de crédito en más de ${HORAS_NOTA_TRABADA_SOPORTE} horas. Necesita revisión de soporte.`
+            )
+          };
+        }
+        return {
+          accion: "REQUIERE_ACCION",
+          accion_detalle: {
+            titulo: "Nota de crédito sin confirmar",
+            descripcion:
+              "El servicio fiscal no confirmó esta nota de crédito. Puede reintentarla: se completa con el mismo número, sin duplicarse.",
+            acciones_sugeridas: ["REINTENTAR_NOTA_CREDITO"],
+            soporte_payload: null
+          }
+        };
+      }
       if (ageDays > DIAS_VENCIMIENTO_VERIFICACION) {
         return {
           accion: "REQUIERE_SOPORTE",
@@ -126,6 +167,23 @@ export function deriveAccion(documento: DeriveAccionInput): { accion: DocumentoA
 
     case "RECHAZADA": {
       const causa = resolveCausaSifen(documento.sifen_result_code, documento.sifen_result_message);
+      if (documento.tipo === "NOTA_CREDITO") {
+        // RN-07: una nota rechazada se corrige emitiendo otra sobre la misma factura, nunca desde el editor de facturas.
+        const detalle =
+          causa.categoria === "USUARIO"
+            ? { titulo: causa.titulo, descripcion: causa.descripcion, acciones_sugeridas: [] as AccionSugerida[], soporte_payload: null }
+            : buildSoporteDetalle(documento, causa.titulo, causa.descripcion);
+        return {
+          accion: causa.categoria === "USUARIO" ? "REQUIERE_ACCION" : "REQUIERE_SOPORTE",
+          accion_detalle: {
+            ...detalle,
+            acciones_sugeridas: [
+              "NUEVA_NOTA_CREDITO",
+              ...detalle.acciones_sugeridas.filter((a) => a !== "CORREGIR_REEMITIR" && a !== "CREAR_NCE")
+            ]
+          }
+        };
+      }
       if (causa.categoria === "USUARIO") {
         return {
           accion: "REQUIERE_ACCION",

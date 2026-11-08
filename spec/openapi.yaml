@@ -1118,13 +1118,22 @@ paths:
       tags: [NotasCredito]
       summary: Emitir Nota de Credito Electronica desde factura elegible
       description: |
-        Emite una NCE total en el MVP. Solo acepta facturas `EMITIDA` con CDC
-        y bloquea una segunda NCE total sobre la misma factura. El envio fiscal
-        tambien usa `envio.mode=BATCH` por defecto y puede quedar
-        `PENDIENTE_SIFEN` mientras SIFEN procesa el lote.
+        Emite una NCE total en el MVP. Solo acepta facturas `EMITIDA` con CDC.
+        A lo sumo una nota viva por factura: una nota `RECHAZADA` no bloquea otra
+        (SPEC_NOTA_CREDITO_TRABADA_v0.1, RN-02). El envio fiscal usa `envio.mode=BATCH`
+        y puede quedar `PENDIENTE_SIFEN` mientras SIFEN procesa el lote.
+
+        La clave de idempotencia hacia FE la deriva el servidor a partir de la factura
+        y el numero de intento: el encabezado `Idempotency-Key` se acepta y se ignora (RN-01).
+
+        Si FE responde `502`/`504` (`TRANSMISSION_FAILED`) o `500` (`ISSUE_NCE_FAILED`), o un
+        `409 idempotent` con `DRAFT`/`TRANSMISSION_FAILED`, la nota se guarda igual como
+        "sin confirmar" (`PENDIENTE_SIFEN`, `accion = REQUIERE_ACCION`,
+        `acciones_sugeridas = [REINTENTAR_NOTA_CREDITO]`) y responde `201` (RN-03, RN-04).
+        Si la factura ya tiene una nota sin confirmar, este pedido la reintenta con la misma
+        clave y responde `200` (RN-02).
       parameters:
         - $ref: "#/components/parameters/DocumentoId"
-        - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
         required: true
         content:
@@ -1132,8 +1141,14 @@ paths:
             schema:
               $ref: "#/components/schemas/NotaCreditoEmitRequest"
       responses:
+        "200":
+          description: La factura tenia una nota sin confirmar; se reintento con la misma clave
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DocumentoResponse"
         "201":
-          description: NCE emitida o en proceso
+          description: NCE emitida, en proceso o guardada sin confirmar
           content:
             application/json:
               schema:
@@ -1143,7 +1158,9 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
         "409":
-          description: Factura no elegible o ya tiene NCE total
+          description: >-
+            Factura no elegible, ya tiene una nota viva, o FE responde `CREDIT_NOTE_TOTAL_EXCEEDED`
+            (FE registra una nota que FS no conoce; requiere soporte, RN-10)
           content:
             application/json:
               schema:
@@ -1151,13 +1168,42 @@ paths:
         "422":
           $ref: "#/components/responses/ValidationError"
         "502":
-          description: Backend fiscal rechazo la NCE
+          description: >-
+            FE rechazo el pedido con un error que no crea la nota (400, 401, 404, 409 no idempotente,
+            422, 429). Los errores que pudieron crearla se guardan y responden 201
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-        "504":
-          description: Timeout al emitir NCE contra backend fiscal
+  /facturas/{documentoId}/nota-credito/reintentar:
+    post:
+      tags: [NotasCredito]
+      summary: Reintentar una nota de credito sin confirmar
+      description: |
+        `documentoId` es la nota. Vuelve a llamar a FE con la misma clave y los mismos datos
+        (SPEC_NOTA_CREDITO_TRABADA_v0.1, RN-05). Con FE `segel-rc4` la nota se completa con el
+        mismo numero, sin duplicarse. Si FE todavia no la confirma, sigue sin confirmar.
+      parameters:
+        - $ref: "#/components/parameters/DocumentoId"
+      responses:
+        "200":
+          description: Nota actualizada (emitida, rechazada o todavia sin confirmar)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DocumentoResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: La nota no esta pendiente de reintento, o FE responde `CREDIT_NOTE_TOTAL_EXCEEDED`
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: FE rechazo el pedido con un error que no corresponde a la nota
           content:
             application/json:
               schema:

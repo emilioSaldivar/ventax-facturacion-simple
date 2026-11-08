@@ -17,6 +17,7 @@ import {
   createDocumentoDerived,
   enqueueFacturaEmission,
   emitNotaCreditoTotal,
+  reintentarNotaCreditoPorId,
   getBatchPendientesGestion,
   getDocumentoDecision,
   getDocumentoById,
@@ -463,11 +464,30 @@ facturasRouter.post(
   async (req, res, next) => {
     try {
       const context = await getOperationalContext(req.user!.id, operationalContextRepository);
-      const idempotencyKey = parseIdempotencyKey(req.get("idempotency-key"));
-      const result = await emitNotaCreditoTotal(context, String(req.params.documentoId), req.body, facturasRepository, fiscalGateway, {
-        idempotencyKey
-      });
-      res.status(201).json(result);
+      // SPEC_NOTA_CREDITO_TRABADA_v0.1, RN-01: la clave la deriva el servidor; el encabezado se ignora.
+      const { documento, reintento } = await emitNotaCreditoTotal(
+        context,
+        String(req.params.documentoId),
+        req.body,
+        facturasRepository,
+        fiscalGateway
+      );
+      res.status(reintento ? 200 : 201).json(documento);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+facturasRouter.post(
+  "/facturas/:documentoId/nota-credito/reintentar",
+  requireAuth,
+  validateRequest("params", documentoParamsSchema),
+  async (req, res, next) => {
+    try {
+      const context = await getOperationalContext(req.user!.id, operationalContextRepository);
+      const result = await reintentarNotaCreditoPorId(context, String(req.params.documentoId), facturasRepository, fiscalGateway);
+      res.json(result);
     } catch (error) {
       next(error);
     }

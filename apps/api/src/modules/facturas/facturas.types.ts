@@ -1,3 +1,4 @@
+import type { AccionSugerida } from "./sifen-causa-catalogo";
 import type { FiscalCancelStatus } from "../fiscal-gateway/fiscal-gateway.types";
 import type { TaxCalculatedLine, TaxTotals, TipoIva } from "@facturacion-simple/shared";
 import type { ClienteNaturaleza, DocumentoIdentidadTipo } from "../clientes/clientes.types";
@@ -103,7 +104,7 @@ export interface DocumentoAccionSoportePayload {
 export interface DocumentoAccionDetalle {
   titulo: string;
   descripcion: string;
-  acciones_sugeridas: Array<"REINTENTAR" | "CORREGIR_REEMITIR" | "CREAR_NCE" | "CONTACTAR_SOPORTE">;
+  acciones_sugeridas: AccionSugerida[];
   soporte_payload: DocumentoAccionSoportePayload | null;
 }
 
@@ -321,6 +322,15 @@ export interface FacturaPersistInput {
   estado: DocumentoEstado;
 }
 
+export interface NotaCreditoReintentoInput {
+  facturadorId: string;
+  documentoId: string;
+  estado: DocumentoEstado;
+  fiscalResponse: FiscalEmitNotaCreditoResponse | null;
+  fiscalError: Record<string, unknown> | null;
+  trabada: boolean;
+}
+
 export interface FacturaQueuedPersistInput {
   tenantId: string;
   facturadorId: string;
@@ -344,6 +354,8 @@ export interface NotaCreditoPersistInput {
   fiscalResponse: FiscalEmitNotaCreditoResponse | null;
   fiscalError: Record<string, unknown> | null;
   estado: DocumentoEstado;
+  /** SPEC_NOTA_CREDITO_TRABADA_v0.1, RN-08: una nota trabada no se agenda para verificacion. */
+  trabada?: boolean;
 }
 
 export interface PendingFiscalEmission {
@@ -378,6 +390,9 @@ export interface FacturaRepository {
   findByIdempotencyKey(input: { facturadorId: string; idempotencyKey: string }): Promise<DocumentoResponse | null>;
   findById(input: { facturadorId: string; documentoId: string }): Promise<DocumentoResponse | null>;
   findNotaCreditoByOriginal(input: { facturadorId: string; documentoId: string }): Promise<DocumentoResponse | null>;
+  /** Todas las notas de la factura, incluidas las rechazadas, por fecha de creacion (SPEC_NOTA_CREDITO_TRABADA_v0.1, RN-02). */
+  findNotasCreditoByOriginal(input: { facturadorId: string; documentoId: string }): Promise<DocumentoResponse[]>;
+  updateNotaCreditoTrasReintento(input: NotaCreditoReintentoInput): Promise<DocumentoResponse | null>;
   list(input: { facturadorId: string; filters: DocumentoListFilters }): Promise<DocumentoListResponse>;
   updateFiscalStatus(input: {
     facturadorId: string;

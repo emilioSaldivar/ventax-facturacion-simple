@@ -2,7 +2,8 @@ import crypto from "node:crypto";
 import { calculateDocumentTotals, type TaxInputLine } from "@facturacion-simple/shared";
 import { HttpError } from "../../shared/errors/http-error";
 import { logger } from "../../shared/logging/logger";
-import { deriveAccion, puedeReintentarEmision } from "./facturas.accion";
+import { deriveAccion, esNotaTrabada, puedeReintentarEmision } from "./facturas.accion";
+import { clasificarRespuestaNotaCredito, type ClasificacionNotaCredito } from "./nota-credito.clasificacion";
 import { notifyAccionRequerida } from "./facturas.notificaciones";
 import type { ClienteRepository, ClienteResponse } from "../clientes/clientes.types";
 import type { OperationalContextRepository, OperationalContextResponse } from "../context/context.types";
@@ -167,7 +168,11 @@ export async function listNotaCreditoCandidates(
     }
   });
   const creditedFacturaIds = new Set(
-    relatedResult.items.map((item) => item.documento_relacionado_id).filter((id): id is string => Boolean(id))
+    relatedResult.items
+      // SPEC_NOTA_CREDITO_TRABADA_v0.1, RN-02: una nota rechazada no impide emitir otra.
+      .filter((item) => item.estado !== "RECHAZADA")
+      .map((item) => item.documento_relacionado_id)
+      .filter((id): id is string => Boolean(id))
   );
 
   return {
@@ -222,6 +227,12 @@ export async function refreshDocumentoStatus(
   repository: FacturaRepository,
   gateway: FiscalGateway
 ): Promise<DocumentoResponse> {
+  // SPEC_NOTA_CREDITO_TRABADA_v0.1, RN-05: consultar una nota trabada pisaria su marca y FE no la mueve sola;
+  // verificarla es reintentar con la misma clave, que es idempotente.
+  const actual = await repository.findById({ facturadorId: context.facturador.id, documentoId });
+  if (actual && esNotaTrabada(actual)) {
+    return reintentarNotaCredito(context, actual, repository, gateway);
+  }
   const updated = await refreshFiscalStatusForDocumento(context.facturador.id, documentoId, repository, gateway);
   return withAccion(updated);
 }
@@ -1148,25 +1159,12 @@ export async function emitNotaCreditoTotal(
   input: { motivo: string },
   repository: FacturaRepository,
   gateway: FiscalGateway,
-  options: { idempotencyKey?: string } = {}
-): Promise<DocumentoResponse> {
+  // SPEC_NOTA_CREDITO_TRABADA_v0.1, RN-01: la clave del navegador se acepta y se ignora; la deriva el servidor.
+  _options: { idempotencyKey?: string } = {}
+): Promise<{ documento: DocumentoResponse; reintento: boolean }> {
   const motivo = input.motivo.trim();
   if (!motivo) {
     throw new HttpError(400, "VALIDATION_ERROR", "Motivo de nota de credito requerido.");
-  }
-
-  if (options.idempotencyKey) {
-    const existing = await repository.findByIdempotencyKey({
-      facturadorId: context.facturador.id,
-      idempotencyKey: options.idempotencyKey
-    });
-
-    if (existing) {
-      if (existing.estado === "PENDIENTE_SIFEN") {
-        return withAccion(await tryRefreshSilently(context, existing, repository, gateway));
-      }
-      return withAccion(existing);
-    }
   }
 
   const original = await getDocumentoById(context, facturaId, repository);
@@ -1174,44 +1172,20 @@ export async function emitNotaCreditoTotal(
     throw new HttpError(409, "CONFLICT", "Factura no elegible para nota de credito.");
   }
 
-  const existingByOriginal = await repository.findNotaCreditoByOriginal({
-    facturadorId: context.facturador.id,
-    documentoId: facturaId
-  });
-  if (existingByOriginal) {
+  // RN-02: a lo sumo una nota viva por factura. Una trabada se reintenta; las rechazadas abren otro intento.
+  const notas = await repository.findNotasCreditoByOriginal({ facturadorId: context.facturador.id, documentoId: facturaId });
+  const viva = notas.find((nota) => nota.estado !== "RECHAZADA");
+  if (viva) {
+    if (esNotaTrabada(viva)) {
+      return { documento: await reintentarNotaCredito(context, viva, repository, gateway, original), reintento: true };
+    }
     throw new HttpError(409, "CONFLICT", "La factura ya tiene una nota de credito total.");
   }
 
-  const externalRef = buildNotaCreditoExternalRef(context, facturaId, options.idempotencyKey);
+  const intento = notas.length + 1;
+  const externalRef = buildNotaCreditoExternalRef(context, facturaId, intento);
   const fiscalRequest = buildFiscalNotaCreditoRequest(context, original, motivo, externalRef);
-  let fiscalResponse: FiscalEmitNotaCreditoResponse | null = null;
-  let fiscalError: Record<string, unknown> | null = null;
-  let estado: DocumentoEstado = "EMITIENDO";
-
-  try {
-    fiscalResponse = await gateway.emitNotaCredito(fiscalRequest);
-    estado = fiscalResponse.estado;
-  } catch (error) {
-    if (error instanceof FiscalGatewayError) {
-      if (error.code !== "TIMEOUT") {
-        throw new HttpError(502, "INTERNAL_ERROR", "Backend fiscal rechazo la nota de credito.", {
-          gateway_code: error.code,
-          details: error.details ?? null
-        });
-      }
-
-      estado = "PENDIENTE_SIFEN";
-      fiscalError = {
-        code: error.code,
-        message: error.message,
-        details: error.details ?? null,
-        recoverable: true,
-        suggested_action: "REFRESH_OR_CONTACT_SUPPORT"
-      };
-    } else {
-      throw error;
-    }
-  }
+  const clasificacion = await llamarNotaCredito(gateway, fiscalRequest);
 
   const created = await repository.createNotaCreditoFromFactura({
     tenantId: context.tenant.id,
@@ -1220,13 +1194,67 @@ export async function emitNotaCreditoTotal(
     original,
     motivo,
     externalRef,
-    idempotencyKey: options.idempotencyKey,
+    idempotencyKey: externalRef,
     fiscalRequest,
-    fiscalResponse,
-    fiscalError,
-    estado
+    fiscalResponse: clasificacion.fiscalResponse,
+    fiscalError: clasificacion.fiscalError,
+    estado: clasificacion.estado,
+    trabada: clasificacion.trabada
   });
-  return withAccion(created);
+  return { documento: withAccion(created), reintento: false };
+}
+
+/**
+ * SPEC_NOTA_CREDITO_TRABADA_v0.1, RN-05: vuelve a llamar a FE con la MISMA clave y los mismos datos.
+ * Con `segel-rc4` FE completa la nota con el mismo numero; sin el, responde el mismo estado (RN-11).
+ */
+export async function reintentarNotaCredito(
+  context: OperationalContextResponse,
+  nota: DocumentoResponse,
+  repository: FacturaRepository,
+  gateway: FiscalGateway,
+  originalCargada?: DocumentoResponse
+): Promise<DocumentoResponse> {
+  if (!esNotaTrabada(nota) || !nota.documento_relacionado_id || !nota.external_ref) {
+    throw new HttpError(409, "CONFLICT", "La nota de credito no esta pendiente de reintento.");
+  }
+  const original = originalCargada ?? (await getDocumentoById(context, nota.documento_relacionado_id, repository));
+  const fiscalRequest = buildFiscalNotaCreditoRequest(context, original, nota.nce_motivo ?? "", nota.external_ref);
+  const clasificacion = await llamarNotaCredito(gateway, fiscalRequest);
+  const actualizada = await repository.updateNotaCreditoTrasReintento({
+    facturadorId: context.facturador.id,
+    documentoId: nota.id,
+    estado: clasificacion.estado,
+    fiscalResponse: clasificacion.fiscalResponse,
+    fiscalError: clasificacion.fiscalError,
+    trabada: clasificacion.trabada
+  });
+  if (!actualizada) {
+    throw new HttpError(404, "NOT_FOUND", "Nota de credito no encontrada.");
+  }
+  logger.info({ documentoId: nota.id, estado: actualizada.estado, trabada: clasificacion.trabada }, "nota de credito: reintento con la misma clave");
+  return withAccion(actualizada);
+}
+
+export async function reintentarNotaCreditoPorId(
+  context: OperationalContextResponse,
+  notaId: string,
+  repository: FacturaRepository,
+  gateway: FiscalGateway
+): Promise<DocumentoResponse> {
+  const nota = await getDocumentoById(context, notaId, repository);
+  return reintentarNotaCredito(context, nota, repository, gateway);
+}
+
+async function llamarNotaCredito(gateway: FiscalGateway, request: FiscalEmitNotaCreditoRequest): Promise<ClasificacionNotaCredito> {
+  try {
+    return clasificarRespuestaNotaCredito(await gateway.emitNotaCredito(request));
+  } catch (error) {
+    if (error instanceof FiscalGatewayError) {
+      return clasificarRespuestaNotaCredito(error);
+    }
+    throw error;
+  }
 }
 
 export async function emitFacturaAgainstFiscalGateway(
@@ -1530,10 +1558,9 @@ function buildExternalRef(context: OperationalContextResponse, idempotencyKey?: 
     : `fac_${crypto.randomUUID()}`;
 }
 
-function buildNotaCreditoExternalRef(context: OperationalContextResponse, facturaId: string, idempotencyKey?: string): string {
-  return idempotencyKey
-    ? `nce_${crypto.createHash("sha256").update(`${context.facturador.id}:${idempotencyKey}`).digest("hex").slice(0, 32)}`
-    : `nce_${crypto.createHash("sha256").update(`${context.facturador.id}:${facturaId}:${crypto.randomUUID()}`).digest("hex").slice(0, 32)}`;
+/** SPEC_NOTA_CREDITO_TRABADA_v0.1, RN-01: misma factura y mismo intento dan siempre la misma clave. */
+export function buildNotaCreditoExternalRef(context: OperationalContextResponse, facturaId: string, intento: number): string {
+  return `nce_${crypto.createHash("sha256").update(`${context.facturador.id}:${facturaId}:${intento}`).digest("hex").slice(0, 32)}`;
 }
 
 /** Superficie interna expuesta solo para tests. */

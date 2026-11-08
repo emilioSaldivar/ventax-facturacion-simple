@@ -250,7 +250,9 @@ interface DocumentoAccionSoportePayload {
 interface DocumentoAccionDetalle {
   titulo: string;
   descripcion: string;
-  acciones_sugeridas: Array<"REINTENTAR" | "CORREGIR_REEMITIR" | "CREAR_NCE" | "CONTACTAR_SOPORTE">;
+  acciones_sugeridas: Array<
+    "REINTENTAR" | "CORREGIR_REEMITIR" | "CREAR_NCE" | "CONTACTAR_SOPORTE" | "REINTENTAR_NOTA_CREDITO" | "NUEVA_NOTA_CREDITO"
+  >;
   soporte_payload: DocumentoAccionSoportePayload | null;
 }
 
@@ -2022,9 +2024,6 @@ function DocumentsView({
       } else if (reasonModal.action === "CREDIT_NOTE_DETAIL") {
         const notaCredito = await api.request<DocumentoResponse>(`/facturas/${reasonModal.documentoId}/nota-credito`, {
           method: "POST",
-          headers: {
-            "Idempotency-Key": notaCreditoIdempotencyKey(reasonModal.documentoId)
-          },
           body: JSON.stringify({ motivo })
         });
         setSelected(notaCredito);
@@ -2036,9 +2035,6 @@ function DocumentsView({
       } else if (reasonModal.action === "CREDIT_NOTE_LIST") {
         const notaCredito = await api.request<DocumentoResponse>(`/facturas/${reasonModal.documentoId}/nota-credito`, {
           method: "POST",
-          headers: {
-            "Idempotency-Key": notaCreditoIdempotencyKey(reasonModal.documentoId)
-          },
           body: JSON.stringify({ motivo })
         });
         setSelected(notaCredito);
@@ -2123,6 +2119,27 @@ function DocumentsView({
     } finally {
       setActionLoading(false);
     }
+  }
+
+  async function retryNotaCredito(nota: DocumentoResponse) {
+    setActionLoading(true);
+    setMessage(null);
+    try {
+      const updated = await api.post<DocumentoResponse>(`/facturas/${nota.id}/nota-credito/reintentar`, {});
+      setSelected((current) => (current && current.id === updated.id ? updated : current));
+      setDocuments((current) => current.map((item) => (item.id === updated.id ? updated : item)));
+      setNotaCreditoPopup((current) => (current && current.id === updated.id ? updated : current));
+      setMessage(mensajeNotaCredito(updated));
+      if (updated.estado === "EMITIDA") await loadDeliveryFor(updated);
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "No se pudo reintentar la nota de credito.");
+    } finally {
+      setActionLoading(false);
+    }
+  }
+
+  function openNuevaNotaCredito(nota: DocumentoResponse) {
+    if (nota.documento_relacionado_id) openReasonModal("CREDIT_NOTE_DETAIL", nota.documento_relacionado_id);
   }
 
   async function cancelSelectedDocumento() {
@@ -2528,7 +2545,12 @@ function DocumentsView({
                         <button onClick={() => void openQuickShare(documento, "whatsapp")} role="menuitem" type="button">WhatsApp</button>
                       </>
                     ) : null}
-                    <button onClick={() => void emitNotaCreditoFromList(documento.id)} role="menuitem" type="button">Nota de credito</button>
+                    {documento.accion_detalle?.acciones_sugeridas.includes("REINTENTAR_NOTA_CREDITO") ? (
+                      <button onClick={() => { setQuickMenuDocId(null); void retryNotaCredito(documento); }} role="menuitem" type="button">Reintentar nota de crédito</button>
+                    ) : null}
+                    {documento.tipo === "FACTURA" ? (
+                      <button onClick={() => void emitNotaCreditoFromList(documento.id)} role="menuitem" type="button">Nota de credito</button>
+                    ) : null}
                     <button className="destructive-item" onClick={() => void cancelDocumentoFromList(documento.id, documento.tipo)} role="menuitem" type="button">Anular</button>
                   </div>
                 ) : null}
@@ -2566,11 +2588,11 @@ function DocumentsView({
               <div className="receipt-heading">
                 <div>
                   <p className="eyebrow">Documento</p>
-                  <h3>{formatDocumentoEstadoSimple(selected.estado, selected.tipo)}</h3>
+                  <h3>{formatEstadoDocumento(selected)}</h3>
                   <p className="muted">{formatDocumentoTipo(selected.tipo)} · Numero {selected.numero_fiscal ?? "pendiente"}</p>
                 </div>
                 <span className={selected.estado === "EMITIDA" ? "status-pill ready" : "status-pill blocked"}>
-                  {formatDocumentoEstadoSimple(selected.estado, selected.tipo)}
+                  {formatEstadoDocumento(selected)}
                 </span>
               </div>
               <button
@@ -2651,6 +2673,16 @@ function DocumentsView({
                           type="button"
                         >
                           Corregir y emitir de nuevo
+                        </button>
+                      ) : null}
+                      {selected.accion_detalle.acciones_sugeridas.includes("REINTENTAR_NOTA_CREDITO") ? (
+                        <button className="secondary-action" data-testid="reintentar-nota-credito" disabled={actionLoading} onClick={() => void retryNotaCredito(selected)} type="button">
+                          Reintentar nota de crédito
+                        </button>
+                      ) : null}
+                      {selected.accion_detalle.acciones_sugeridas.includes("NUEVA_NOTA_CREDITO") ? (
+                        <button className="secondary-action" data-testid="nueva-nota-credito" disabled={actionLoading} onClick={() => openNuevaNotaCredito(selected)} type="button">
+                          Emitir nueva nota de crédito
                         </button>
                       ) : null}
                       {selected.accion_detalle.acciones_sugeridas.includes("CREAR_NCE") ? (
@@ -2891,16 +2923,27 @@ function DocumentsView({
           <section className="modal-panel" aria-labelledby="nc-success-title" role="dialog" aria-modal="true">
             <header>
               <p className="eyebrow">Nota de credito</p>
-              <h3 id="nc-success-title">{getSimpleDocumentoEstado(notaCreditoPopup.estado, notaCreditoPopup.tipo)}</h3>
+              <h3 id="nc-success-title">
+                {notaCreditoPopup.accion_detalle?.acciones_sugeridas.includes("REINTENTAR_NOTA_CREDITO")
+                  ? notaCreditoPopup.accion_detalle.titulo
+                  : getSimpleDocumentoEstado(notaCreditoPopup.estado, notaCreditoPopup.tipo)}
+              </h3>
               <p className="muted">
                 {notaCreditoPopup.numero_fiscal ? `Numero ${notaCreditoPopup.numero_fiscal}` : "Numero pendiente"}
                 {" · "}{notaCreditoPopup.cliente.razon_social}
               </p>
             </header>
             <p className={notaCreditoPopup.estado === "EMITIDA" ? "editor-alert ready" : "editor-alert blocked"}>
-              {getNotaCreditoSuccessMessage(notaCreditoPopup.estado)}
+              {notaCreditoPopup.accion_detalle?.acciones_sugeridas.includes("REINTENTAR_NOTA_CREDITO")
+                ? notaCreditoPopup.accion_detalle.descripcion
+                : getNotaCreditoSuccessMessage(notaCreditoPopup.estado)}
             </p>
             <div className="result-actions">
+              {notaCreditoPopup.accion_detalle?.acciones_sugeridas.includes("REINTENTAR_NOTA_CREDITO") ? (
+                <button className="secondary-action" data-testid="popup-reintentar-nota-credito" disabled={actionLoading} onClick={() => void retryNotaCredito(notaCreditoPopup)} type="button">
+                  Reintentar nota de crédito
+                </button>
+              ) : null}
               <button className="primary-action" onClick={() => setNotaCreditoPopup(null)} type="button">
                 Ver nota de credito
               </button>
@@ -3426,15 +3469,14 @@ function CreditNoteView({
     try {
       const notaCredito = await api.request<DocumentoResponse>(`/facturas/${selected.documento.id}/nota-credito`, {
         method: "POST",
-        headers: {
-          "Idempotency-Key": notaCreditoIdempotencyKey(selected.documento.id)
-        },
         body: JSON.stringify({ motivo: motivo.trim() })
       });
       setResult(notaCredito);
-      const link = await api.post<DeliveryLinkResponse>(`/facturas/${notaCredito.id}/delivery-link`, { regenerate: false });
-      setDeliveryLink(link);
-      setMessage("Nota de credito emitida.");
+      setMessage(mensajeNotaCredito(notaCredito));
+      if (notaCredito.estado === "EMITIDA") {
+        const link = await api.post<DeliveryLinkResponse>(`/facturas/${notaCredito.id}/delivery-link`, { regenerate: false });
+        setDeliveryLink(link);
+      }
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "No se pudo emitir la nota de credito.");
     } finally {
@@ -5407,18 +5449,8 @@ function createIdempotencyKey(): string {
   return `ui-${Date.now()}-${crypto.randomUUID()}`;
 }
 
-// Un corte de red no dice si FE creo la nota: reenviar con otra clave podria duplicarla.
-// La clave se conserva por factura hasta tener respuesta (SPEC_CONTRATO_FE_SOBRECARGA RN-05).
-const clavesNotaCredito = new Map<string, string>();
-
-function notaCreditoIdempotencyKey(documentoId: string): string {
-  let clave = clavesNotaCredito.get(documentoId);
-  if (!clave) {
-    clave = createIdempotencyKey();
-    clavesNotaCredito.set(documentoId, clave);
-  }
-  return clave;
-}
+// SPEC_NOTA_CREDITO_TRABADA_v0.1, RN-01: la clave de la nota de credito la deriva el servidor a partir de la
+// factura y el intento. Reemplaza la clave por factura en memoria de la pagina (SPEC_CONTRATO_FE_SOBRECARGA RN-05).
 
 function getNextFiscalNumber(current: string | undefined): string {
   if (!current) {
@@ -5544,6 +5576,8 @@ function formatShortDate(value: string | null): string {
 
 /** RN-08: con identidad fiscal y aun sin respuesta de SIFEN, el operador puede adelantarse al worker. */
 function puedeVerificarAhora(documento: DocumentoResponse): boolean {
+  // Una nota de credito trabada se destraba con "Reintentar nota de credito" (SPEC_NOTA_CREDITO_TRABADA_v0.1).
+  if (documento.accion_detalle?.acciones_sugeridas.includes("REINTENTAR_NOTA_CREDITO")) return false;
   return (documento.estado === "EMITIENDO" || documento.estado === "PENDIENTE_SIFEN") && Boolean(documento.document_uuid || documento.cdc);
 }
 
@@ -5759,6 +5793,15 @@ function getReasonModalPlaceholder(
   return "Ej: error en datos del comprobante o anulacion solicitada por cliente.";
 }
 
+function mensajeNotaCredito(nota: DocumentoResponse): string {
+  if (nota.estado === "EMITIDA") return "Nota de credito emitida.";
+  if (nota.estado === "RECHAZADA") return "SIFEN rechazo la nota de credito.";
+  if (nota.accion_detalle?.acciones_sugeridas.includes("REINTENTAR_NOTA_CREDITO")) {
+    return "La nota de credito sigue sin confirmarse. Puede reintentar mas tarde, sin riesgo de duplicarla.";
+  }
+  return "La nota de credito esta pendiente de confirmacion SIFEN.";
+}
+
 function getNotaCreditoSuccessMessage(estado: DocumentoEstado): string {
   if (estado === "EMITIDA") {
     return "La nota de credito fue aceptada por SIFEN. El PDF ya esta disponible para compartir.";
@@ -5821,7 +5864,10 @@ function canEmitNotaCredito(documento: DocumentoResponse, documents: DocumentoRe
     return false;
   }
 
-  return !documents.some((item) => item.tipo === "NOTA_CREDITO" && item.documento_relacionado_id === documento.id);
+  // SPEC_NOTA_CREDITO_TRABADA_v0.1, RN-02: una nota rechazada no impide emitir otra.
+  return !documents.some(
+    (item) => item.tipo === "NOTA_CREDITO" && item.documento_relacionado_id === documento.id && item.estado !== "RECHAZADA"
+  );
 }
 
 function formatEmailStatus(value: string): string {
@@ -5923,11 +5969,11 @@ function EstadoDocumentoPill({ documento }: { documento: DocumentoResponse }) {
   const clase =
     documento.estado === "EMITIDA" ? "ready"
     : documento.estado === "ANULADA" ? "anulada"
-    : documento.estado === "RECHAZADA" || documento.estado === "ERROR_OPERATIVO" ? "rechazado"
+    : documento.estado === "RECHAZADA" || documento.estado === "ERROR_OPERATIVO" || esNotaSinConfirmar(documento) ? "rechazado"
     : "pending";
   return (
     <small className={`status-pill estado-documento ${clase}`} data-estado={documento.estado}>
-      {formatDocumentoEstadoSimple(documento.estado, documento.tipo)}
+      {formatEstadoDocumento(documento)}
     </small>
   );
 }
@@ -6078,6 +6124,16 @@ async function readApiError(response: Response): Promise<string> {
   } catch {
     return "No se pudo completar la solicitud.";
   }
+}
+
+/** SPEC_NOTA_CREDITO_TRABADA_v0.1, RN-06: una nota trabada nunca se muestra como "en proceso". */
+function esNotaSinConfirmar(documento: DocumentoResponse): boolean {
+  return Boolean(documento.accion_detalle?.acciones_sugeridas.includes("REINTENTAR_NOTA_CREDITO"));
+}
+
+function formatEstadoDocumento(documento: DocumentoResponse): string {
+  if (esNotaSinConfirmar(documento)) return "🟠 Nota credito sin confirmar";
+  return formatDocumentoEstadoSimple(documento.estado, documento.tipo);
 }
 
 function formatDocumentoEstadoSimple(value: DocumentoEstado, tipo?: DocumentoResponse["tipo"]): string {

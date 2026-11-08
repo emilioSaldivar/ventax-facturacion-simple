@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { MockFiscalGateway, llamadasMockNotaCreditoPorClave } from "../src/modules/fiscal-gateway/fiscal-gateway.client";
+import { reintentarNotaCreditoPorId } from "../src/modules/facturas/facturas.service";
 import {
   FiscalGatewayError,
   type FiscalByCdcResponse,
@@ -58,6 +60,7 @@ import type {
   FacturaRepository,
   DocumentoResponse,
   NotaCreditoPersistInput,
+  NotaCreditoReintentoInput,
   PendingFiscalEmission,
   PendingVerificacion
 } from "../src/modules/facturas/facturas.types";
@@ -152,6 +155,28 @@ class FakeFacturaRepository implements FacturaRepository {
   async findNotaCreditoByOriginal(input: { facturadorId: string; documentoId: string }): Promise<DocumentoResponse | null> {
     this.lastFindNceByOriginalInput = input;
     return this.existingNceByOriginal;
+  }
+
+  public notasByOriginal: DocumentoResponse[] = [];
+  public lastReintentoInput: NotaCreditoReintentoInput | null = null;
+
+  async findNotasCreditoByOriginal(input: { facturadorId: string; documentoId: string }): Promise<DocumentoResponse[]> {
+    this.lastFindNceByOriginalInput = input;
+    return this.existingNceByOriginal ? [this.existingNceByOriginal, ...this.notasByOriginal] : this.notasByOriginal;
+  }
+
+  async updateNotaCreditoTrasReintento(input: NotaCreditoReintentoInput): Promise<DocumentoResponse | null> {
+    this.lastReintentoInput = input;
+    const base = this.existingNceByOriginal ?? this.notasByOriginal.find((n) => n.id === input.documentoId) ?? null;
+    if (!base) return null;
+    return {
+      ...base,
+      estado: input.estado,
+      cdc: input.fiscalResponse?.cdc ?? base.cdc,
+      document_uuid: input.fiscalResponse?.document_uuid ?? base.document_uuid,
+      numero_fiscal: input.fiscalResponse?.numero_fiscal ?? base.numero_fiscal,
+      fiscal_status: input.fiscalResponse?.raw ?? input.fiscalError
+    };
   }
 
   async list(input: { facturadorId: string; filters: Parameters<FacturaRepository["list"]>[0]["filters"] }) {
@@ -1280,7 +1305,7 @@ describe("facturas service", () => {
     });
     const gateway = new FakeFiscalGateway(new FiscalGatewayError("UPSTREAM_ERROR", "Should not emit"));
 
-    const result = await emitNotaCreditoTotal(
+    const { documento: result } = await emitNotaCreditoTotal(
       context,
       "66666666-6666-4666-8666-666666666666",
       { motivo: "Devolucion total" },
@@ -1308,9 +1333,11 @@ describe("facturas service", () => {
       facturadorId: context.facturador.id,
       userId: context.user.id,
       motivo: "Devolucion total",
-      idempotencyKey: "nce-idem-1",
+      // SPEC_NOTA_CREDITO_TRABADA_v0.1, RN-01: la clave del navegador se ignora; la deriva el servidor.
+      idempotencyKey: expect.stringMatching(/^nce_[0-9a-f]{32}$/),
       estado: "EMITIDA"
     });
+    expect(repo.lastNotaCreditoInput?.idempotencyKey).toBe(repo.lastNotaCreditoInput?.externalRef);
   });
 
   it("rejects credit note when invoice is not eligible or already credited", async () => {
@@ -1350,28 +1377,18 @@ describe("facturas service", () => {
     });
   });
 
-  it("returns existing credit note by idempotency key before creating another NCE", async () => {
+  it("same invoice and attempt always derive the same key (RN-01)", async () => {
     const repo = new FakeFacturaRepository();
-    repo.existing = buildDocumento({
-      id: "88888888-8888-4888-8888-888888888888",
-      tipo: "NOTA_CREDITO",
-      documento_relacionado_id: "66666666-6666-4666-8666-666666666666",
-      estado: "EMITIDA"
-    });
+    repo.findByIdResponse = buildDocumento({ estado: "EMITIDA", cdc: "A".repeat(44) });
     const gateway = new FakeFiscalGateway(new FiscalGatewayError("UPSTREAM_ERROR", "Should not emit"));
 
-    const result = await emitNotaCreditoTotal(
-      context,
-      "66666666-6666-4666-8666-666666666666",
-      { motivo: "Devolucion total" },
-      repo,
-      gateway,
-      { idempotencyKey: "nce-idem-1" }
-    );
+    await emitNotaCreditoTotal(context, "66666666-6666-4666-8666-666666666666", { motivo: "x" }, repo, gateway, { idempotencyKey: "a" });
+    const primera = repo.lastNotaCreditoInput?.externalRef;
+    await emitNotaCreditoTotal(context, "66666666-6666-4666-8666-666666666666", { motivo: "x" }, repo, gateway, { idempotencyKey: "b" });
 
-    expect(result.id).toBe("88888888-8888-4888-8888-888888888888");
-    expect(repo.lastFindByIdInput).toBeNull();
-    expect(gateway.lastNotaCreditoRequest).toBeNull();
+    expect(primera).toMatch(/^nce_/);
+    expect(repo.lastNotaCreditoInput?.externalRef).toBe(primera);
+    expect(gateway.lastNotaCreditoRequest?.external_ref).toBe(primera);
   });
 
   it("stores recoverable fiscal errors when credit note emission times out", async () => {
@@ -1394,7 +1411,7 @@ describe("facturas service", () => {
       new FiscalGatewayError("TIMEOUT", "Timeout fiscal")
     );
 
-    const result = await emitNotaCreditoTotal(
+    const { documento: result } = await emitNotaCreditoTotal(
       context,
       "66666666-6666-4666-8666-666666666666",
       { motivo: "Devolucion total" },
@@ -1405,10 +1422,13 @@ describe("facturas service", () => {
 
     expect(result.estado).toBe("PENDIENTE_SIFEN");
     expect(repo.lastNotaCreditoInput?.fiscalError).toMatchObject({
-      code: "TIMEOUT",
+      code: "TRANSMISSION_FAILED",
       recoverable: true,
-      suggested_action: "REFRESH_OR_CONTACT_SUPPORT"
+      suggested_action: "RETRY"
     });
+    expect(repo.lastNotaCreditoInput?.trabada).toBe(true);
+    expect(result.accion).toBe("REQUIERE_ACCION");
+    expect(result.accion_detalle?.acciones_sugeridas).toEqual(["REINTENTAR_NOTA_CREDITO"]);
   });
 
   it("does not persist credit notes rejected by the fiscal backend", async () => {
@@ -2515,5 +2535,160 @@ describe("facturas service", () => {
 
     expect(result.items).toHaveLength(1);
     expect(result.next).toBe(20);
+  });
+});
+
+/** SPEC_NOTA_CREDITO_TRABADA_v0.1, CA-01 a CA-05, con el mock de FE de FS (PLAN, seccion 6). */
+describe("nota de credito trabada (FS-38)", () => {
+  const FACTURA_ID = "66666666-6666-4666-8666-666666666666";
+
+  class RepoConNotas extends FakeFacturaRepository {
+    private seq = 0;
+    async createNotaCreditoFromFactura(input: NotaCreditoPersistInput): Promise<DocumentoResponse> {
+      const base = await super.createNotaCreditoFromFactura(input);
+      if (this.notasByOriginal.some((n) => n.external_ref === input.externalRef && n.estado !== "RECHAZADA")) {
+        throw new Error("violacion del indice unico");
+      }
+      this.seq += 1;
+      const nota = {
+        ...base,
+        id: `nota-${this.seq}`,
+        external_ref: input.externalRef,
+        document_uuid: input.fiscalResponse?.document_uuid ?? null,
+        numero_fiscal: input.fiscalResponse?.numero_fiscal ?? null,
+        nce_motivo: input.motivo,
+        fiscal_status: input.fiscalResponse?.raw ?? input.fiscalError,
+        created_at: new Date().toISOString()
+      };
+      this.notasByOriginal.push(nota);
+      return nota;
+    }
+    async updateNotaCreditoTrasReintento(input: NotaCreditoReintentoInput) {
+      const actual = await super.updateNotaCreditoTrasReintento(input);
+      if (actual) this.notasByOriginal = this.notasByOriginal.map((n) => (n.id === input.documentoId ? actual : n));
+      return actual;
+    }
+    async findById(input: { facturadorId: string; documentoId: string }): Promise<DocumentoResponse | null> {
+      return this.notasByOriginal.find((n) => n.id === input.documentoId) ?? (await super.findById(input));
+    }
+  }
+
+  class GatewayConMock extends FakeFiscalGateway {
+    readonly mock = new MockFiscalGateway({ mode: "mock", baseUrl: "http://mock", timeoutMs: 1000, environment: "test" });
+    public claves: string[] = [];
+    constructor() {
+      super(new FiscalGatewayError("UPSTREAM_ERROR", "no se usa"));
+    }
+    async emitNotaCredito(request: FiscalEmitNotaCreditoRequest): Promise<FiscalEmitNotaCreditoResponse> {
+      this.claves.push(request.external_ref);
+      return this.mock.emitNotaCredito(request);
+    }
+  }
+
+  function preparar() {
+    const repo = new RepoConNotas();
+    repo.findByIdResponse = buildDocumento({ id: FACTURA_ID, estado: "EMITIDA", cdc: "A".repeat(44) });
+    return { repo, gateway: new GatewayConMock() };
+  }
+
+  for (const marcador of ["[FE-502]", "[FE-504]", "[FE-500]", "[FE-DRAFT]"]) {
+    it(`${marcador}: queda trabada y el reintento con la misma clave la deja emitida (CA-01, CA-02)`, async () => {
+      // Facturador propio por caso: el mock cuenta llamadas por clave a nivel de modulo.
+      const ctx = { ...context, facturador: { ...context.facturador, id: `fac-${marcador}` } };
+      const { repo, gateway } = preparar();
+
+      const { documento: trabada, reintento } = await emitNotaCreditoTotal(ctx, FACTURA_ID, { motivo: `${marcador} devolucion` }, repo, gateway);
+      expect(reintento).toBe(false);
+      expect(trabada.estado).toBe("PENDIENTE_SIFEN");
+      expect(trabada.accion).toBe("REQUIERE_ACCION");
+      expect(trabada.accion_detalle?.titulo).toBe("Nota de crédito sin confirmar");
+      expect(trabada.accion_detalle?.acciones_sugeridas).toEqual(["REINTENTAR_NOTA_CREDITO"]);
+      expect(trabada.puede_reintentar_emision).toBe(false);
+      expect(repo.lastNotaCreditoInput?.trabada).toBe(true);
+
+      const emitida = await reintentarNotaCreditoPorId(ctx, trabada.id, repo, gateway);
+      expect(emitida.estado).toBe("EMITIDA");
+      expect(emitida.document_uuid).toBeTruthy();
+      expect(emitida.numero_fiscal).toBeTruthy();
+      expect(gateway.claves).toHaveLength(2);
+      expect(gateway.claves[1]).toBe(gateway.claves[0]);
+      expect(llamadasMockNotaCreditoPorClave(gateway.claves[0]!)).toBe(2);
+    });
+  }
+
+  it("un nuevo pedido sobre la misma factura reintenta la trabada en vez de crear otra (RN-02, CA-04)", async () => {
+    const ctx = { ...context, facturador: { ...context.facturador, id: "fac-recarga" } };
+    const { repo, gateway } = preparar();
+    await emitNotaCreditoTotal(ctx, FACTURA_ID, { motivo: "[FE-502] devolucion" }, repo, gateway, { idempotencyKey: "pagina-1" });
+    // El operador recarga la pagina: el navegador manda otra clave, que se ignora.
+    const { documento, reintento } = await emitNotaCreditoTotal(ctx, FACTURA_ID, { motivo: "[FE-502] devolucion" }, repo, gateway, {
+      idempotencyKey: "pagina-2"
+    });
+    expect(reintento).toBe(true);
+    expect(documento.estado).toBe("EMITIDA");
+    expect(repo.notasByOriginal).toHaveLength(1);
+    expect(new Set(gateway.claves).size).toBe(1);
+  });
+
+  it("409 idempotent TRANSMISSION_FAILED sigue trabada hasta que FE la completa (RN-04, RN-11)", async () => {
+    const ctx = { ...context, facturador: { ...context.facturador, id: "fac-tf409" } };
+    const { repo, gateway } = preparar();
+    const { documento } = await emitNotaCreditoTotal(ctx, FACTURA_ID, { motivo: "[FE-TF-409] devolucion" }, repo, gateway);
+    expect(documento.accion_detalle?.acciones_sugeridas).toEqual(["REINTENTAR_NOTA_CREDITO"]);
+    const segunda = await reintentarNotaCreditoPorId(ctx, documento.id, repo, gateway);
+    expect(segunda.estado).toBe("PENDIENTE_SIFEN");
+    expect(segunda.accion).toBe("REQUIERE_ACCION");
+    const tercera = await reintentarNotaCreditoPorId(ctx, documento.id, repo, gateway);
+    expect(tercera.estado).toBe("EMITIDA");
+  });
+
+  it("una nota rechazada permite emitir otra con el intento siguiente y otra clave (RN-02, RN-07, CA-05)", async () => {
+    const ctx = { ...context, facturador: { ...context.facturador, id: "fac-rechazo" } };
+    const { repo, gateway } = preparar();
+    const { documento: rechazada } = await emitNotaCreditoTotal(ctx, FACTURA_ID, { motivo: "[FE-REJECTED] devolucion" }, repo, gateway);
+    expect(rechazada.estado).toBe("RECHAZADA");
+    expect(rechazada.accion_detalle?.acciones_sugeridas[0]).toBe("NUEVA_NOTA_CREDITO");
+    expect(rechazada.accion_detalle?.acciones_sugeridas).not.toContain("CORREGIR_REEMITIR");
+
+    const { documento: segunda } = await emitNotaCreditoTotal(ctx, FACTURA_ID, { motivo: "devolucion corregida" }, repo, gateway);
+    expect(segunda.estado).toBe("EMITIDA");
+    expect(gateway.claves[1]).not.toBe(gateway.claves[0]);
+  });
+
+  it("con una nota emitida, otra responde 409 y no llama a FE", async () => {
+    const ctx = { ...context, facturador: { ...context.facturador, id: "fac-emitida" } };
+    const { repo, gateway } = preparar();
+    await emitNotaCreditoTotal(ctx, FACTURA_ID, { motivo: "devolucion" }, repo, gateway);
+    await expect(emitNotaCreditoTotal(ctx, FACTURA_ID, { motivo: "otra" }, repo, gateway)).rejects.toMatchObject({ statusCode: 409 });
+    expect(gateway.claves).toHaveLength(1);
+  });
+
+  it("CREDIT_NOTE_TOTAL_EXCEEDED no persiste y pide soporte (RN-10)", async () => {
+    const ctx = { ...context, facturador: { ...context.facturador, id: "fac-total" } };
+    const { repo, gateway } = preparar();
+    await expect(emitNotaCreditoTotal(ctx, FACTURA_ID, { motivo: "[FE-TOTAL] x" }, repo, gateway)).rejects.toMatchObject({
+      statusCode: 409,
+      message: expect.stringContaining("Requiere soporte")
+    });
+    expect(repo.notasByOriginal).toHaveLength(0);
+  });
+
+  it("reintentar una nota que no esta trabada responde 409", async () => {
+    const ctx = { ...context, facturador: { ...context.facturador, id: "fac-no-trabada" } };
+    const { repo, gateway } = preparar();
+    const { documento } = await emitNotaCreditoTotal(ctx, FACTURA_ID, { motivo: "devolucion" }, repo, gateway);
+    await expect(reintentarNotaCreditoPorId(ctx, documento.id, repo, gateway)).rejects.toMatchObject({ statusCode: 409 });
+  });
+
+  it("dos pedidos simultaneos producen una sola nota (RN-09, CA-03)", async () => {
+    const ctx = { ...context, facturador: { ...context.facturador, id: "fac-doble" } };
+    const { repo, gateway } = preparar();
+    const resultados = await Promise.allSettled([
+      emitNotaCreditoTotal(ctx, FACTURA_ID, { motivo: "devolucion" }, repo, gateway),
+      emitNotaCreditoTotal(ctx, FACTURA_ID, { motivo: "devolucion" }, repo, gateway)
+    ]);
+    expect(repo.notasByOriginal).toHaveLength(1);
+    expect(new Set(gateway.claves).size).toBe(1);
+    expect(resultados.filter((r) => r.status === "fulfilled").length).toBeGreaterThanOrEqual(1);
   });
 });

@@ -54,6 +54,72 @@ export function createFiscalGateway(config: FiscalGatewayConfig): FiscalGateway 
   return config.mode === "mock" ? new MockFiscalGateway(config) : new RealFiscalGateway(config);
 }
 
+/**
+ * SPEC_NOTA_CREDITO_TRABADA_v0.1, PLAN seccion 6: escenarios de FE para la nota de credito, elegidos por un
+ * marcador al inicio del motivo. Cuenta las llamadas por clave: el reintento con la misma clave completa la nota,
+ * como FE `segel-rc4` (guia 33.3). Sin marcador no cambia nada.
+ */
+const llamadasMockNotaCredito = new Map<string, number>();
+
+export function llamadasMockNotaCreditoPorClave(clave: string): number {
+  return llamadasMockNotaCredito.get(clave) ?? 0;
+}
+
+function escenarioMockNotaCredito(request: FiscalEmitNotaCreditoRequest): FiscalEmitNotaCreditoResponse | null {
+  const marcador = /^\[(FE-[A-Z0-9-]+)\]/.exec(request.motivo.trim())?.[1];
+  if (!marcador) return null;
+  const clave = request.external_ref;
+  const llamada = (llamadasMockNotaCredito.get(clave) ?? 0) + 1;
+  llamadasMockNotaCredito.set(clave, llamada);
+  const digest = crypto.createHash("sha256").update(clave).digest("hex").toLowerCase();
+  const document_uuid = `${digest.slice(0, 8)}-${digest.slice(8, 12)}-4${digest.slice(13, 16)}-${digest.slice(16, 20)}-${digest.slice(20, 32)}`;
+  const enCurso = (status: string): FiscalEmitNotaCreditoResponse => ({
+    fiscal_document_id: `mock-${clave}`,
+    document_uuid,
+    cdc: status === "DRAFT" ? null : digest.toUpperCase().padEnd(44, "0").slice(0, 44),
+    numero_fiscal: null,
+    estado: "PENDIENTE_SIFEN",
+    status_raw: status,
+    result_code: null,
+    result_message: null,
+    idempotent: true,
+    batch: null,
+    email_status: "UNKNOWN",
+    raw: { mode: "mock", document_id: `mock-${clave}`, document_uuid, status, idempotent: true }
+  });
+  switch (marcador) {
+    case "FE-502":
+      if (llamada === 1) throw new FiscalGatewayError("UPSTREAM_ERROR", "Backend fiscal rechazo la nota de credito.", { status: 502, body: { error: "TRANSMISSION_FAILED" } });
+      return null;
+    case "FE-504":
+      if (llamada === 1) throw new FiscalGatewayError("TIMEOUT", "Backend fiscal rechazo la nota de credito.", { status: 504, body: { error: "TRANSMISSION_FAILED" } });
+      return null;
+    case "FE-500":
+      if (llamada === 1) throw new FiscalGatewayError("UPSTREAM_ERROR", "Backend fiscal rechazo la nota de credito.", { status: 500, body: { error: "ISSUE_NCE_FAILED" } });
+      return null;
+    case "FE-DRAFT":
+      return llamada === 1 ? enCurso("DRAFT") : null;
+    case "FE-TF-409":
+      return llamada < 3 ? enCurso("TRANSMISSION_FAILED") : null;
+    case "FE-REJECTED":
+      return {
+        ...enCurso("REJECTED"),
+        estado: "RECHAZADA",
+        idempotent: false,
+        result_code: "1306",
+        result_message: "RUC del receptor inexistente",
+        raw: { mode: "mock", document_uuid, status: "REJECTED", dCodRes: "1306" }
+      };
+    case "FE-TOTAL":
+      throw new FiscalGatewayError("UPSTREAM_ERROR", "Backend fiscal rechazo la nota de credito.", {
+        status: 409,
+        body: { error: "CREDIT_NOTE_TOTAL_EXCEEDED", message: "La suma de notas supera la factura." }
+      });
+    default:
+      return null;
+  }
+}
+
 export class MockFiscalGateway implements FiscalGateway {
   private readonly recibos = new Map<string, FiscalReciboResult>();
 
@@ -100,6 +166,12 @@ export class MockFiscalGateway implements FiscalGateway {
   }
 
   async emitNotaCredito(request: FiscalEmitNotaCreditoRequest): Promise<FiscalEmitNotaCreditoResponse> {
+    const escenario = escenarioMockNotaCredito(request);
+    if (escenario) return escenario;
+    return this.notaCreditoAprobada(request);
+  }
+
+  private notaCreditoAprobada(request: FiscalEmitNotaCreditoRequest): FiscalEmitNotaCreditoResponse {
     const digest = crypto.createHash("sha256").update(request.external_ref).digest("hex").toUpperCase();
     const digestLower = digest.toLowerCase();
     const numeric = String(Number.parseInt(digest.slice(0, 8), 16) % 10_000_000).padStart(7, "0");

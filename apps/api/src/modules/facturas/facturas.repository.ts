@@ -7,6 +7,7 @@ import type {
   FacturaItemPreview,
   FacturaPersistInput,
   NotaCreditoPersistInput,
+  NotaCreditoReintentoInput,
   PendingFiscalEmission,
   PendingVerificacion,
   FacturaRepository,
@@ -186,6 +187,83 @@ export class PgFacturaRepository implements FacturaRepository {
     }
 
     return this.toResponse(factura, await this.findItems(factura.id));
+  }
+
+  async findNotasCreditoByOriginal(input: { facturadorId: string; documentoId: string }): Promise<DocumentoResponse[]> {
+    const result = await pool.query<FacturaRow>(
+      `
+        select
+          ${COLUMNAS_DOCUMENTO}
+        from facturas_operativas
+        where facturador_id = $1
+          and documento_relacionado_id = $2
+          and tipo = 'NOTA_CREDITO'
+          and deleted_at is null
+        order by created_at asc
+      `,
+      [input.facturadorId, input.documentoId]
+    );
+    const notas: DocumentoResponse[] = [];
+    for (const row of result.rows) {
+      notas.push(await this.toResponse(row, await this.findItems(row.id)));
+    }
+    return notas;
+  }
+
+  /**
+   * SPEC_NOTA_CREDITO_TRABADA_v0.1, RN-05; PLAN, seccion 2. Resultado de reintentar una nota trabada con la
+   * misma clave. La identidad fiscal nunca se pisa con null.
+   */
+  async updateNotaCreditoTrasReintento(input: NotaCreditoReintentoInput): Promise<DocumentoResponse | null> {
+    const r = input.fiscalResponse;
+    const result = await pool.query<FacturaRow>(
+      `
+        update facturas_operativas
+        set
+          estado = $3,
+          fiscal_response_snapshot = $4::jsonb,
+          fiscal_document_id = coalesce($5, fiscal_document_id),
+          document_uuid = coalesce($6, document_uuid),
+          cdc = coalesce($7, cdc),
+          numero_fiscal = coalesce($8, numero_fiscal),
+          email_estado = coalesce($9, email_estado),
+          fiscal_status_raw = coalesce($10, fiscal_status_raw),
+          sifen_result_code = coalesce($11, sifen_result_code),
+          sifen_result_message = coalesce($12, sifen_result_message),
+          sifen_last_checked_at = case when $10::text is not null then now() else sifen_last_checked_at end,
+          verificacion_next_at = case
+            when $13::boolean then null
+            when $3 in ('PENDIENTE_SIFEN', 'EMITIENDO') and coalesce($6, document_uuid) is not null
+              then now() + interval '5 minutes'
+            else null
+          end,
+          updated_at = now()
+        where facturador_id = $1
+          and id = $2
+          and tipo = 'NOTA_CREDITO'
+          and deleted_at is null
+        returning
+          ${COLUMNAS_DOCUMENTO}
+      `,
+      [
+        input.facturadorId,
+        input.documentoId,
+        input.estado,
+        JSON.stringify(r?.raw ?? input.fiscalError ?? {}),
+        r?.fiscal_document_id ?? null,
+        r?.document_uuid ?? null,
+        r?.cdc ?? null,
+        r?.numero_fiscal ?? null,
+        !r || r.email_status === "NOT_APPLICABLE" || r.email_status === "UNKNOWN" ? null : r.email_status,
+        r?.status_raw ?? null,
+        r?.result_code ?? null,
+        r?.result_message ?? null,
+        input.trabada
+      ]
+    );
+    const row = result.rows[0];
+    if (!row) return null;
+    return this.toResponse(row, await this.findItems(row.id));
   }
 
   async findNotaCreditoByOriginal(input: { facturadorId: string; documentoId: string }): Promise<DocumentoResponse | null> {
@@ -641,7 +719,7 @@ export class PgFacturaRepository implements FacturaRepository {
             $1, $2, $3, 'NOTA_CREDITO', $4, $5, $6, $7, $8, $9, $10::jsonb, $11::jsonb, $12::jsonb,
             $13::jsonb, $14, $15, $16, $17, $18, $19, $20, $21,
             case when $19::text is not null then now() end,
-            case when $5 in ('PENDIENTE_SIFEN', 'EMITIENDO') and $15::text is not null then now() + interval '5 minutes' end,
+            case when $22::boolean then null when $5 in ('PENDIENTE_SIFEN', 'EMITIENDO') and $15::text is not null then now() + interval '5 minutes' end,
             now()
           )
           returning
@@ -668,7 +746,8 @@ export class PgFacturaRepository implements FacturaRepository {
           input.fiscalResponse?.email_status === "NOT_APPLICABLE" ? null : input.fiscalResponse?.email_status ?? null,
           input.fiscalResponse?.status_raw ?? null,
           input.fiscalResponse?.result_code ?? null,
-          input.fiscalResponse?.result_message ?? null
+          input.fiscalResponse?.result_message ?? null,
+          input.trabada ?? false
         ]
       );
 
@@ -756,10 +835,12 @@ export class PgFacturaRepository implements FacturaRepository {
           return existingByIdempotency;
         }
 
-        const existingByOriginal = await this.findNotaCreditoByOriginal({
+        // SPEC_NOTA_CREDITO_TRABADA_v0.1, RN-02: el indice por factura excluye las rechazadas; se devuelve la viva.
+        const notas = await this.findNotasCreditoByOriginal({
           facturadorId: input.facturadorId,
           documentoId: input.original.id
         });
+        const existingByOriginal = notas.find((nota) => nota.estado !== "RECHAZADA");
 
         if (existingByOriginal) {
           return existingByOriginal;

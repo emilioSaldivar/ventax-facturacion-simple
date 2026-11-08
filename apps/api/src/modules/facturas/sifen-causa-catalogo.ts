@@ -7,7 +7,14 @@
  * Sin match -> SOPORTE (RN-V4 del SPEC: el usuario nunca queda sin salida).
  */
 
-export type AccionSugerida = "REINTENTAR" | "CORREGIR_REEMITIR" | "CREAR_NCE" | "CONTACTAR_SOPORTE";
+export type AccionSugerida =
+  | "REINTENTAR"
+  | "CORREGIR_REEMITIR"
+  | "CREAR_NCE"
+  | "CONTACTAR_SOPORTE"
+  // SPEC_NOTA_CREDITO_TRABADA_v0.1, RN-05 y RN-07.
+  | "REINTENTAR_NOTA_CREDITO"
+  | "NUEVA_NOTA_CREDITO";
 
 export interface CausaSifen {
   categoria: "USUARIO" | "SOPORTE";
