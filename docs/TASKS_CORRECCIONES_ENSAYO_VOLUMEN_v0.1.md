@@ -46,3 +46,13 @@ FS `ed52650`, FE `d0d9fe0` (`rc4.1` mas el `email_status` de la nota y los topes
 - **CEV-1 (CA-02):** al finalizar, FS tenia 19 correos en `PENDING` y agendo la carga para las 19:20:30. FE envio los 20 hasta las 19:16:24. En la pasada de las 19:21:30, FS paso las 20 a `SENT` y saco la carga de la agenda, sin intervencion.
 - **CEV-3 (CA-05):** nota de credito desde el panel sobre la 1010403 a las 19:15:42, NCE 1010004. FE respondio `email_status: PENDING` y FS lo guardo. FE envio el correo y, al abrir el detalle de la nota, FS lo paso a `SENT`.
 - **Recursos:** suma de picos 644 MiB, incluido el Postgres de FS con el padron cargado (199 MiB); `worker-correo` 157 MiB de 384. Sin reinicios.
+
+### E-4. Prueba de FE con 2 CPU en el worker de correo (2026-11-08, 20:19 UTC)
+
+Pedida por el usuario a FE, pensando en la VPS nueva de `segel-fs`: 4 vCPU y 8 GB al arrancar, y despues 8 vCPU. FE dejo `CORREO_WORKER_CPUS=2`, concurrencia 2, tope de 25 por minuto, y fijo los 11 contenedores a los nucleos 0 a 3. FS corrio desde el panel una carga de 60 a `emilio.saldivar97@gmail.com`.
+
+- La carga se confirmo a las 20:19:41 y finalizo a las 20:21:43, con 60 aprobadas.
+- Los correos salieron de 20:21:17 a 20:23:36: 25, 25 y 10 por minuto, todos `SENT` y ninguno `FAILED`. **Se alcanza el tope de 25 por minuto**; con 1 CPU eran unos 18.
+- Pico de `worker-correo` 153 MiB de 384 y 198 % de CPU. Suma de picos de los 11 contenedores: 596 MiB.
+- FS paso solo las 60 a `SENT` a las 20:26:34 y saco la carga de la agenda (FS-40).
+- Medicion en `test-results/medicion/cpu2-20261108/`. El valor de `CORREO_WORKER_CPUS` para produccion lo decide el usuario con FE.
