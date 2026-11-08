@@ -23,6 +23,7 @@
 | CFF-013 | FS-28 | Precarga del editor desde la factura rechazada, con aviso de correccion | CA-28.1 y CA-28.2 por Playwright en 390 y 1280 px | DONE (2026-11-08), E-2 |
 | CFF-014 | FS-29 | Texto de `1306` valido en los dos ambientes, en el catalogo y en la ficha | Prueba en `facturas.accion.test.ts`; CA-29.1 por Playwright | DONE (2026-11-08), E-2 |
 | CFF-015 | FS-30 | Aviso al facturador con destinatario y estado del correo del cliente | Prueba en `facturas.notificaciones.test.ts` | DONE (2026-11-08), E-2: prueba unitaria |
+| CFF-016 | FS-31 | Sin entrega para documentos sin validez, en API y en pantalla | CA-31.1 y CA-31.2 | TODO |
 | CFF-011 | Todos | Cierre: repasar SPEC, PLAN, TASKS y `docs/BACKLOG.md` | Documentos alineados con lo desplegado | TODO |
 
 ## Notas de FE

@@ -14,6 +14,9 @@ import type {
   PublicDocumentResponse
 } from "./entrega.types";
 
+/** FS-31, RN-31.1: estados sin validez fiscal. Su KuDE no se entrega al cliente. */
+export const ESTADOS_SIN_VALIDEZ = new Set(["RECHAZADA", "ERROR_OPERATIVO", "ERROR_TEMPORAL", "CANCELADO_LOCAL"]);
+
 export async function createOrGetDeliveryLink(
   context: OperationalContextResponse,
   documentoId: string,
@@ -23,7 +26,13 @@ export async function createOrGetDeliveryLink(
     deliveryLinks: DeliveryLinkRepository;
   }
 ): Promise<DeliveryLinkResponse> {
-  await getDocumentoById(context, documentoId, repositories.facturas);
+  const documento = await getDocumentoById(context, documentoId, repositories.facturas);
+  if (ESTADOS_SIN_VALIDEZ.has(documento.estado)) {
+    throw new HttpError(409, "CONFLICT", "La factura no tiene validez fiscal: no se puede compartir con el cliente.", {
+      reason: "DOCUMENTO_SIN_VALIDEZ",
+      estado: documento.estado
+    });
+  }
 
   if (!options.regenerate) {
     const existing = await repositories.deliveryLinks.findActiveByDocumento({
@@ -97,7 +106,8 @@ export async function getPublicDocument(token: string, repository: DeliveryLinkR
     cliente: record.documento.cliente,
     totals: record.documento.totals,
     email_status: record.documento.email_status,
-    artifacts: buildPublicArtifacts(record.token, record.documento.cdc)
+    // FS-31: la pagina publica de un documento sin validez no ofrece KuDE ni XML.
+    artifacts: buildPublicArtifacts(record.token, ESTADOS_SIN_VALIDEZ.has(record.documento.estado) ? null : record.documento.cdc)
   };
 }
 
@@ -116,6 +126,11 @@ export async function getPublicArtifact(
 
   if (!record) {
     throw new HttpError(404, "NOT_FOUND", "Artefacto publico no disponible.");
+  }
+
+  // FS-31: un enlace creado antes del rechazo no entrega el KuDE ni el XML.
+  if (ESTADOS_SIN_VALIDEZ.has(record.documento.estado)) {
+    throw new HttpError(404, "NOT_FOUND", "Artefacto publico no disponible: la factura no tiene validez fiscal.");
   }
 
   let documentUuid = record.documento.document_uuid;

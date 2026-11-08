@@ -2061,6 +2061,16 @@ function DocumentsView({
   }
 
   async function loadDeliveryFor(documento: DocumentoResponse, regenerate = false) {
+    // FS-31: sin validez no hay enlace; el estado del correo si se consulta.
+    if (sinValidezFiscal(documento)) {
+      setDeliveryLink(null);
+      try {
+        setEmailStatus(await api.get<EmailStatusResponse>(`/facturas/${documento.id}/email-status`));
+      } catch {
+        // El estado del correo es informativo.
+      }
+      return;
+    }
     try {
       const [link, email] = await Promise.all([
         api.post<DeliveryLinkResponse>(`/facturas/${documento.id}/delivery-link`, { regenerate }),
@@ -2508,8 +2518,12 @@ function DocumentsView({
                 {quickMenuDocId === documento.id ? (
                   <div className="client-row-menu" role="menu" aria-label="Acciones del documento">
                     <button onClick={() => void openDetail(documento.id)} role="menuitem" type="button">Ver detalle</button>
-                    <button onClick={() => void openQuickShare(documento, "public")} role="menuitem" type="button">Compartir</button>
-                    <button onClick={() => void openQuickShare(documento, "whatsapp")} role="menuitem" type="button">WhatsApp</button>
+                    {!sinValidezFiscal(documento) ? (
+                      <>
+                        <button onClick={() => void openQuickShare(documento, "public")} role="menuitem" type="button">Compartir</button>
+                        <button onClick={() => void openQuickShare(documento, "whatsapp")} role="menuitem" type="button">WhatsApp</button>
+                      </>
+                    ) : null}
                     <button onClick={() => void emitNotaCreditoFromList(documento.id)} role="menuitem" type="button">Nota de credito</button>
                     <button className="destructive-item" onClick={() => void cancelDocumentoFromList(documento.id, documento.tipo)} role="menuitem" type="button">Anular</button>
                   </div>
@@ -2645,6 +2659,11 @@ function DocumentsView({
               )}
               {emailStatus?.message ? <p className="editor-alert ready">{emailStatus.message}</p> : null}
 
+              {sinValidezFiscal(selected) ? (
+                <p className="editor-alert blocked" data-testid="sin-validez">
+                  Esta {getDocumentoNombreLower(selected.tipo)} no tiene validez fiscal: no se puede ver ni compartir con el cliente.
+                </p>
+              ) : (
               <div className="delivery-actions">
                 <div className="action-group action-group-primary">
                   <h4 className="group-title">Acciones frecuentes</h4>
@@ -2662,6 +2681,7 @@ function DocumentsView({
                   </button>
                 </div>
               </div>
+              )}
 
               <div className="action-group action-group-secondary">
                 <h4 className="group-title">Acciones sobre esta {getDocumentoNombreLower(selected.tipo)}</h4>
@@ -5877,6 +5897,11 @@ function formatSifenSummary(summary: SifenSummary | null): string {
     return `${status}${summary.code}`;
   }
   return summary.status ?? "Sin respuesta fiscal resumida";
+}
+
+/** FS-31, RN-31.1: estados sin validez fiscal. Mismo criterio que el servicio de entrega. */
+function sinValidezFiscal(documento: Pick<DocumentoResponse, "estado">): boolean {
+  return ["RECHAZADA", "ERROR_OPERATIVO", "ERROR_TEMPORAL", "CANCELADO_LOCAL"].includes(documento.estado);
 }
 
 /** FS-28: la factura nueva parte de los datos de la rechazada; la rechazada no cambia. */

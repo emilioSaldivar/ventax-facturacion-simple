@@ -324,7 +324,7 @@ describe("entrega service", () => {
     expect(result.content_type).toBe("application/xml");
   });
 
-  it("keeps public artifacts available for rejected documents when CDC exists", async () => {
+  it("FS-31: un documento rechazado no ofrece ni entrega KuDE ni XML por el enlace publico", async () => {
     const deliveryLinks = new FakeDeliveryLinkRepository();
     deliveryLinks.publicDocument = {
       ...buildPublicDocument(),
@@ -336,19 +336,22 @@ describe("entrega service", () => {
     const gateway = new FakeFiscalGateway();
 
     const publicDocument = await getPublicDocument("A".repeat(43), deliveryLinks);
-    const artifact = await getPublicArtifact("A".repeat(43), "kude_pdf", deliveryLinks, new FakeFacturaRepository(), gateway);
-
     expect(publicDocument.estado).toBe("RECHAZADA");
-    expect(publicDocument.artifacts.kude_pdf).toEqual({
-      available: true,
-      url: `https://app.factura.segel.com.py/public/d/${"A".repeat(43)}/kude.pdf`
+    expect(publicDocument.artifacts.kude_pdf.available).toBe(false);
+    expect(publicDocument.artifacts.xml.available).toBe(false);
+    await expect(getPublicArtifact("A".repeat(43), "kude_pdf", deliveryLinks, new FakeFacturaRepository(), gateway)).rejects.toMatchObject({ statusCode: 404 });
+    expect(gateway.lastPdfUuid ?? null).toBeNull();
+  });
+
+  it.each(["RECHAZADA", "ERROR_OPERATIVO", "ERROR_TEMPORAL", "CANCELADO_LOCAL"] as const)("FS-31: no crea enlace publico para un documento %s", async (estado) => {
+    const facturas = new FakeFacturaRepository();
+    facturas.documento = { ...buildDocumento(), estado };
+    const deliveryLinks = new FakeDeliveryLinkRepository();
+    await expect(createOrGetDeliveryLink(context, "66666666-6666-4666-8666-666666666666", {}, { facturas, deliveryLinks })).rejects.toMatchObject({
+      statusCode: 409,
+      details: { reason: "DOCUMENTO_SIN_VALIDEZ" }
     });
-    expect(publicDocument.artifacts.xml).toEqual({
-      available: true,
-      url: `https://app.factura.segel.com.py/public/d/${"A".repeat(43)}/xml`
-    });
-    expect(gateway.lastPdfUuid).toBe("aaaaaaaa-aaaa-4aaa-baaa-aaaaaaaaaaaa");
-    expect(artifact.content_type).toBe("application/pdf");
+    expect(deliveryLinks.lastCreateInput).toBeNull();
   });
 
   it("returns delegated email status message from document detail", async () => {

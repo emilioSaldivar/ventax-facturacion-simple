@@ -18,6 +18,7 @@ Seis errores de FS que aparecieron o cambiaron con los fixes de FE-02, H09, FE-0
 | FS-28 | "Corregir y emitir de nuevo" abre el editor vacio | Alta | Codigo en la segunda entrega (seccion 7c) |
 | FS-29 | El mensaje de `1306` solo sirve en pruebas | Alta | Igual |
 | FS-30 | El aviso al facturador no dice que es para el ni que el cliente no recibio correo | Media | Igual |
+| FS-31 | Una factura rechazada se puede compartir con el cliente | Alta | Codigo en la segunda entrega (seccion 7d) |
 | FS-22 | Retirar la proteccion de FS-11 | Baja | Se cierra sin cambio (seccion 7) |
 
 **No entra:** los demas hallazgos abiertos del backlog (seccion 9), la carga masiva y cualquier cambio en FE.
@@ -132,6 +133,16 @@ Vistos por el usuario en el ensayo local del 2026-11-07, sobre la factura rechaz
 - **FS-30.** **RN-30.1:** el aviso "requiere accion" dice que es para el equipo de facturacion y que el cliente no recibio la factura por correo. Solo se manda por documentos no aprobados, asi que la frase es cierta en todos los casos con el correo retenido hasta la aprobacion.
 
 Criterios: **CA-28.1** el editor abre con cliente e items de la rechazada y el aviso de correccion; **CA-28.2** emitir crea una factura nueva y la rechazada no cambia; **CA-29.1** ni la ficha ni el banner de un `1306` mencionan "pruebas" ni "Marangatu test"; **CA-30.1** el aviso incluye las dos frases de RN-30.1. Validacion: pruebas unitarias y Playwright en 390 y 1280 px sobre el ensayo local.
+
+## 7d. FS-31: un documento sin validez no se entrega
+
+Visto en el ensayo local del 2026-11-08: la ficha de la factura rechazada 1010001 ofrecia "Ver factura PDF", "Enviar por WhatsApp", "Compartir factura" y "Copiar enlace", y el menu rapido de la lista, "Compartir" y "WhatsApp". El operador podia mandarle al cliente el KuDE de una factura sin validez fiscal. Decision del usuario: corregirlo antes del despliegue.
+
+- **RN-31.1.** Sin validez fiscal: `RECHAZADA`, `ERROR_OPERATIVO`, `ERROR_TEMPORAL` y `CANCELADO_LOCAL`. Para esos estados FS no crea enlace publico (`POST /facturas/:id/delivery-link` responde `409` con `details.reason = DOCUMENTO_SIN_VALIDEZ`) y un enlace que ya existiera no entrega KuDE ni XML (`404`).
+- **RN-31.2.** La ficha no muestra las acciones de entrega para esos estados: en su lugar dice que la factura no tiene validez fiscal y no se comparte. El menu rapido de la lista no ofrece "Compartir" ni "WhatsApp".
+- **RN-31.3.** `EMITIDA`, `ANULADA`, `PENDIENTE_SIFEN` y `EMITIENDO` no cambian. Compartir una factura todavia en lote queda como hoy; el correo al cliente ya espera la aprobacion (`EMAIL_TRAS_APROBACION`).
+
+Criterios: **CA-31.1** pruebas del servicio de entrega para el `409` y el `404`; **CA-31.2** Playwright en 390 y 1280 px sobre la 1010001: sin acciones de entrega y con el aviso; una factura emitida las sigue mostrando.
 
 ## 7. FS-22: se cierra sin cambio
 

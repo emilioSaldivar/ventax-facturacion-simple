@@ -49,6 +49,9 @@ function check(vp, nombre, ok, detalle = "") {
       const ficha = await page.locator(".documents-view").innerText();
       check(vp.nombre, "CA-29.1: la ficha del 1306 no habla de pruebas ni de Marangatu test", !/ambiente de pruebas|Marangatu test|homologacion/i.test(ficha), ficha);
       check(vp.nombre, "FS-29: indica revisar el RUC y el digito verificador", /digito verificador/i.test(ficha), ficha);
+      // FS-31: un documento sin validez no se entrega.
+      check(vp.nombre, "CA-31.2: aviso de factura sin validez", await page.getByTestId("sin-validez").isVisible(), ficha);
+      check(vp.nombre, "CA-31.2: sin Ver PDF, WhatsApp, Compartir ni Copiar enlace", !/Ver factura PDF|Enviar por WhatsApp|Compartir factura|Copiar enlace/.test(await page.locator(".documents-view").innerText()), ficha);
       await page.screenshot({ path: path.join(outDir, `${vp.nombre}-1-ficha-rechazada.png`), fullPage: true });
 
       await page.getByRole("button", { name: "Corregir y emitir de nuevo" }).click();
@@ -66,6 +69,17 @@ function check(vp, nombre, ok, detalle = "") {
       check(vp.nombre, "CA-28.1: item precargado", hayItem || todo.includes("Servicio de ensayo"), editor.slice(-400));
       check(vp.nombre, "sin desplazamiento horizontal", await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1));
       await page.screenshot({ path: path.join(outDir, `${vp.nombre}-2-editor-precargado.png`), fullPage: true });
+      if (process.env.E2E_EMITIDA) {
+        await page.goto(baseUrl, { waitUntil: "domcontentloaded" });
+        await page.getByRole("button", { name: "Abrir menu" }).first().click();
+        await page.locator('button:has-text("Documentos")').first().click();
+        await page.getByPlaceholder("Buscar factura...").fill(process.env.E2E_EMITIDA);
+        await page.getByRole("button", { name: "Buscar", exact: true }).click();
+        await page.locator(`text=${process.env.E2E_EMITIDA}`).first().click();
+        await page.getByText("Enviar por WhatsApp").first().waitFor();
+        check(vp.nombre, "CA-31.2: una factura emitida conserva las acciones de entrega", (await page.getByTestId("sin-validez").count()) === 0);
+        await page.screenshot({ path: path.join(outDir, `${vp.nombre}-3-ficha-emitida.png`), fullPage: true });
+      }
     } catch (error) {
       check(vp.nombre, "flujo completo", false, error.message.split("\n")[0]);
     }
