@@ -125,6 +125,9 @@ const FILTROS: Array<{ valor: string; etiqueta: string; query: string }> = [
 
 const POR_PAGINA = 50;
 
+/** FS-35: comprobantes que pueden necesitar ayuda de soporte. */
+const CON_AYUDA: EstadoComprobante[] = ["INVALIDO", "RECHAZADO", "ERROR"];
+
 function claseEstado(estado: EstadoCarga | EstadoComprobante): string {
   if (["FINALIZADA", "APROBADO", "APROBADO_CON_OBS", "VALIDADA"].includes(estado)) return "ready";
   if (["RECHAZADA", "RECHAZADO", "INVALIDO", "ERROR"].includes(estado)) return "rechazado";
@@ -202,7 +205,7 @@ export function CargaMasivaView({
   esInterno: boolean;
   contexto: CargaContexto;
   cargaInicialId?: string | null;
-  onVerDocumento: (documentoId: string) => void;
+  onVerDocumento: (documentoId: string, cargaId: string) => void;
 }) {
   const [vista, setVista] = useState<"LISTADO" | "NUEVA" | "DETALLE">(cargaInicialId ? "DETALLE" : "LISTADO");
   const [cargaId, setCargaId] = useState<string | null>(cargaInicialId ?? null);
@@ -585,7 +588,7 @@ function DetalleCarga({
   cargaId: string;
   esInterno: boolean;
   onVolver: () => void;
-  onVerDocumento: (documentoId: string) => void;
+  onVerDocumento: (documentoId: string, cargaId: string) => void;
   onDescargarResultado: (carga: Carga) => void;
   onError: (causa: unknown) => void;
   onLimpiarError: () => void;
@@ -665,6 +668,31 @@ function DetalleCarga({
       }
     } finally {
       setOcupado(false);
+    }
+  }
+
+  /** FS-35: mismo criterio que "Contactar soporte" en la ficha de una factura. */
+  async function copiarParaSoporte(comprobante: Comprobante) {
+    const problemas = [...comprobante.errores, ...comprobante.advertencias]
+      .map((problema) => `- ${problema.codigo}: ${problema.mensaje}${ubicacion(problema) ? ` (${ubicacion(problema)})` : ""}`);
+    const texto = [
+      `Carga: ${carga?.nombre_archivo ?? "-"} (${cargaId})`,
+      `Comprobante: orden ${comprobante.orden}, filas ${comprobante.filas.join("-")}`,
+      `Numero del archivo: ${comprobante.numero_archivo ?? "-"}`,
+      `Numero asignado: ${comprobante.numero_asignado ?? "-"}`,
+      `Referencia: ${comprobante.referencia_venta ?? "-"}`,
+      `Estado: ${ETIQUETA_COMPROBANTE[comprobante.estado]} (${comprobante.estado})`,
+      ...(problemas.length ? ["Problemas:", ...problemas] : []),
+      `Codigo SIFEN: ${comprobante.sifen?.codigo ?? "-"}`,
+      `Mensaje SIFEN: ${comprobante.sifen?.mensaje ?? "-"}`,
+      `document_uuid: ${comprobante.document_uuid ?? "-"}`,
+      `CDC: ${comprobante.cdc ?? "-"}`
+    ].join("\n");
+    try {
+      await navigator.clipboard.writeText(texto);
+      setInformacion("Datos copiados. Puede pegarlos al contactar a soporte.");
+    } catch {
+      setInformacion(texto);
     }
   }
 
@@ -857,12 +885,17 @@ function DetalleCarga({
                         <ListaProblemas clase="aviso" problemas={comprobante.advertencias} />
                         {comprobante.sifen ? <span><strong>{comprobante.sifen.codigo}</strong> {comprobante.sifen.mensaje}</span> : null}
                         {comprobante.cdc ? <small className="carga-cdc" title={comprobante.cdc}>CDC {comprobante.cdc}</small> : null}
+                        {CON_AYUDA.includes(comprobante.estado) ? (
+                          <button className="carga-enlace carga-soporte" onClick={() => void copiarParaSoporte(comprobante)} type="button">
+                            Copiar datos para soporte
+                          </button>
+                        ) : null}
                       </div>
                     </td>
                     <td data-label="Correo">{comprobante.correo ? ETIQUETA_CORREO[comprobante.correo] : "-"}</td>
                     <td data-label="Documento">
                       {comprobante.documento_id ? (
-                        <button className="carga-enlace" onClick={() => onVerDocumento(comprobante.documento_id!)} type="button">Ver factura</button>
+                        <button className="carga-enlace" onClick={() => onVerDocumento(comprobante.documento_id!, cargaId)} type="button">Ver factura</button>
                       ) : "-"}
                     </td>
                   </tr>

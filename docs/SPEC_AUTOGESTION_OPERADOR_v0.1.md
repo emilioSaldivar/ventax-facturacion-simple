@@ -97,3 +97,31 @@ Orden sugerido por FE: 1 y 2, luego 3, luego 4 y 5.
 - Notas de credito y recibos.
 - Deteccion de rebotes de correo.
 - Cualquier cambio en `segel-fs`.
+
+## 9. Segunda etapa: lo planteado por el usuario el 2026-11-08
+
+Visto en el ensayo local. Nada de esto se implementa en la segunda entrega; se refina con el usuario y con FE antes de su cadena SDD.
+
+### 9.1 Corregir errores de una carga sin perder el hilo
+
+- Un comprobante con error en una carga (por ejemplo `TOTAL_NO_COINCIDE` o `PAGOS_NO_COINCIDEN`) se corrige desde la misma pantalla de la carga, no editando el archivo.
+- Flujo esperado por el usuario: entrar a la planilla con errores, corregir el problema 1 de 4 (nombre, RUC u otro dato del receptor), volver a la planilla y seguir con el 2 de 4, hasta terminar. La correccion no saca al usuario del listado de esa carga.
+- Si el error no es de datos del receptor, un boton "Solicitar ayuda a soporte" que envie el caso por correo a la casilla de soporte parametrizada por instancia (en `segel-fs`, la de Segel). En la segunda entrega solo existe "Copiar datos para soporte" (FS-35).
+- Depende de FE: hoy un comprobante `INVALIDO` no se corrige por API; habria que corregir el archivo y subirlo de nuevo. Pedir a FE si su autogestion (3.11 de su hoja de ruta) cubrira comprobantes de una carga o solo documentos emitidos.
+
+### 9.2 Rechazo: inutilizar y emitir de nuevo desde FS
+
+- Hoy "Corregir y emitir de nuevo" crea una factura nueva y la rechazada queda sin atender: su numero queda salteado hasta que soporte de FE lo inutilice (D-11 de la segunda entrega). FS lo avisa (FS-36).
+- Minimo pedido por el usuario para despues del despliegue: que un usuario de FS pueda inutilizar el numero de la rechazada y luego emitir la factura nueva, si no puede corregirla. FE expone `POST /v1/evento/inutilizacionnumfactura` con la clave compartida.
+- Despues, la autogestion completa de la seccion 0: corregir con el mismo numero dentro del plazo.
+
+### 9.3 Interfaz de escritorio
+
+- Pasar de mobile primero a una version mas empresarial, para uso en PC: listado de documentos en tabla con fecha, numero, cliente, RUC o CI, condicion, estado con color, CDC, moneda, total, saldo y un menu de acciones por fila; filtros por fecha, busqueda y estado; pestanas por tipo de documento, incluida la carga masiva. Referencia: captura entregada por el usuario el 2026-11-08 de otro sistema de facturacion, no versionada porque muestra datos reales de clientes; el diseño queda descrito en esta seccion.
+- Si es posible, detectar el dispositivo y mostrar la vista que corresponda; si no, responsive con prioridad de escritorio.
+- Registrado tambien como FS-37 en `docs/BACKLOG.md`.
+
+### 9.4 Forma de numerar en la carga
+
+- La pantalla de nueva carga dice "La asigna el servicio" porque el contexto operativo numera por `SERVICIO`. Se cambia a "La trae el archivo" desde el backoffice de FS (contextos operativos, solo roles internos), y debe coincidir con el numerador de FE, que se configura en su backoffice; si no coinciden, FE rechaza la carga. El operador no la cambia (`SPEC_CARGA_MASIVA_FACTURAS_v0.1`, RN-21). Si el usuario quiere que el facturador la elija, es decision aparte.
+

@@ -1783,6 +1783,8 @@ function DocumentsView({
   const [estadoFilter, setEstadoFilter] = useState<DocumentoEstado | "">("");
   const [docKindTab, setDocKindTab] = useState<"FACTURAS" | "NOTAS_CREDITO" | "CARGA_MASIVA">("FACTURAS");
   const [cargaAbiertaId, setCargaAbiertaId] = useState<string | null>(null);
+  // FS-33: carga desde la que se abrio la ficha, para volver a ella.
+  const [volverACargaId, setVolverACargaId] = useState<string | null>(null);
   const [tipoOperativoFilter, setTipoOperativoFilter] = useState<"TODOS" | "CONTADO" | "CREDITO">("TODOS");
   const [query, setQuery] = useState("");
   const [desde, setDesde] = useState(last7DaysYmd);
@@ -2309,8 +2311,9 @@ function DocumentsView({
           }}
           esInterno={isInternalSupport}
           key={cargaAbiertaId ?? "cargas"}
-          onVerDocumento={(documentoId) => {
+          onVerDocumento={(documentoId, cargaId) => {
             void api.get<DocumentoResponse>(`/facturas/${documentoId}`).then((documento) => {
+              setVolverACargaId(cargaId);
               setSelected(documento);
               setDocKindTab("FACTURAS");
             }, (causa: unknown) => setError(causa instanceof Error ? causa.message : "No se pudo abrir la factura."));
@@ -2510,6 +2513,7 @@ function DocumentsView({
                 </span>
                 <span>
                   <strong>{formatGuaranies(documento.totals.total)}</strong>
+                  <EstadoDocumentoPill documento={documento} />
                   <small>{formatShortDate(documento.created_at)}</small>
                 </span>
               </button>
@@ -2546,6 +2550,7 @@ function DocumentsView({
               </span>
               <span>
                 <strong>{formatGuaranies(documento.totals.total)}</strong>
+                <EstadoDocumentoPill documento={documento} />
                 <small>{formatShortDate(documento.created_at)}</small>
               </span>
             </button>
@@ -2568,8 +2573,19 @@ function DocumentsView({
                   {formatDocumentoEstadoSimple(selected.estado, selected.tipo)}
                 </span>
               </div>
-              <button className="ghost-action" onClick={() => setSelected(null)} type="button">
-                ← Volver a resultados
+              <button
+                className="ghost-action"
+                onClick={() => {
+                  setSelected(null);
+                  if (volverACargaId) {
+                    setCargaAbiertaId(volverACargaId);
+                    setVolverACargaId(null);
+                    setDocKindTab("CARGA_MASIVA");
+                  }
+                }}
+                type="button"
+              >
+                {volverACargaId ? "← Volver a la carga" : "← Volver a resultados"}
               </button>
 
               <div className="receipt-summary">
@@ -4723,7 +4739,7 @@ function InvoiceEditor({
       {initialDraft?.corrige_numero !== undefined ? (
         <p className="editor-alert ready" role="status">
           Corrigiendo la factura rechazada {initialDraft.corrige_numero ?? "sin numero"}. Revise los datos del cliente:
-          la factura se emite con numero nuevo y la rechazada queda como esta.
+          la factura se emite con numero nuevo, la rechazada queda como esta y soporte inutiliza su numero.
         </p>
       ) : null}
 
@@ -5587,6 +5603,8 @@ function getDocumentoStatusIcon(value: DocumentoEstado): string {
 // que tiene que hacer el usuario, no el estado tecnico. Si el backend todavia no manda
 // `accion` (deploy parcial), cae al semaforo por estado de siempre.
 function getDocumentoAccionIcon(documento: DocumentoResponse): string {
+  // FS-34: deriveAccion da OK a una anulada; no debe verse igual que una emitida.
+  if (documento.estado === "ANULADA") return "⚫";
   switch (documento.accion) {
     case "OK":
       return "🟢";
@@ -5899,6 +5917,20 @@ function formatSifenSummary(summary: SifenSummary | null): string {
   return summary.status ?? "Sin respuesta fiscal resumida";
 }
 
+/** FS-34: estado del documento a primera vista en el listado. */
+function EstadoDocumentoPill({ documento }: { documento: DocumentoResponse }) {
+  const clase =
+    documento.estado === "EMITIDA" ? "ready"
+    : documento.estado === "ANULADA" ? "anulada"
+    : documento.estado === "RECHAZADA" || documento.estado === "ERROR_OPERATIVO" ? "rechazado"
+    : "pending";
+  return (
+    <small className={`status-pill estado-documento ${clase}`} data-estado={documento.estado}>
+      {formatDocumentoEstadoSimple(documento.estado, documento.tipo)}
+    </small>
+  );
+}
+
 /** FS-31, RN-31.1: estados sin validez fiscal. Mismo criterio que el servicio de entrega. */
 function sinValidezFiscal(documento: Pick<DocumentoResponse, "estado">): boolean {
   return ["RECHAZADA", "ERROR_OPERATIVO", "ERROR_TEMPORAL", "CANCELADO_LOCAL"].includes(documento.estado);
@@ -5921,12 +5953,15 @@ function borradorDeCorreccion(documento: DocumentoResponse): InvoiceInitialDraft
   };
 }
 
+/** FS-36: en esta etapa la inutilizacion la hace soporte (SPEC_DESPLIEGUE_SEGEL_FS_v0.2, D-11). */
+const AVISO_INUTILIZACION = "El numero de esta factura queda pendiente de inutilizar: lo gestiona soporte.";
+
 function getRejectedSifenMessage(summary: SifenSummary | null): string {
   const base = `Documento rechazado por SIFEN: ${formatSifenSummary(summary)}.`;
   if (summary?.code === "1306") {
-    return `${base} SIFEN no encontro el RUC del cliente: revise el numero y el digito verificador, o emita con la cedula si no tiene RUC.`;
+    return `${base} SIFEN no encontro el RUC del cliente: revise el numero y el digito verificador, o emita con la cedula si no tiene RUC. ${AVISO_INUTILIZACION}`;
   }
-  return `${base} Revise los datos del receptor y el detalle fiscal antes de reintentar.`;
+  return `${base} Revise los datos del receptor y el detalle fiscal antes de reintentar. ${AVISO_INUTILIZACION}`;
 }
 
 function getRecoverableMessage(documento: DocumentoResponse): string | null {

@@ -2777,3 +2777,23 @@ dd {
     flex: 1 1 100%;
   }
 }
+
+/* FS-34: estado del documento en el listado. */
+.status-pill.estado-documento {
+  display: inline-block;
+  margin: 2px 0;
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
+.status-pill.anulada {
+  background: #e5e7eb;
+  color: #374151;
+  text-decoration: line-through;
+}
+
+.carga-soporte {
+  display: block;
+  margin-top: 4px;
+  font-size: 0.8125rem;
+}

@@ -19,6 +19,10 @@ Seis errores de FS que aparecieron o cambiaron con los fixes de FE-02, H09, FE-0
 | FS-29 | El mensaje de `1306` solo sirve en pruebas | Alta | Igual |
 | FS-30 | El aviso al facturador no dice que es para el ni que el cliente no recibio correo | Media | Igual |
 | FS-31 | Una factura rechazada se puede compartir con el cliente | Alta | Codigo en la segunda entrega (seccion 7d) |
+| FS-33 | Desde una factura abierta en una carga no se vuelve a la carga | Media | Codigo en la segunda entrega (seccion 7e) |
+| FS-34 | Una factura anulada se ve igual que una emitida en el listado | Alta | Igual |
+| FS-35 | Un comprobante con error en una carga no tiene ayuda a soporte | Media | Igual |
+| FS-36 | La rechazada no dice que su numero queda pendiente de inutilizar | Media | Igual |
 | FS-22 | Retirar la proteccion de FS-11 | Baja | Se cierra sin cambio (seccion 7) |
 
 **No entra:** los demas hallazgos abiertos del backlog (seccion 9), la carga masiva y cualquier cambio en FE.
@@ -143,6 +147,17 @@ Visto en el ensayo local del 2026-11-08: la ficha de la factura rechazada 101000
 - **RN-31.3.** `EMITIDA`, `ANULADA`, `PENDIENTE_SIFEN` y `EMITIENDO` no cambian. Compartir una factura todavia en lote queda como hoy; el correo al cliente ya espera la aprobacion (`EMAIL_TRAS_APROBACION`).
 
 Criterios: **CA-31.1** pruebas del servicio de entrega para el `409` y el `404`; **CA-31.2** Playwright en 390 y 1280 px sobre la 1010001: sin acciones de entrega y con el aviso; una factura emitida las sigue mostrando.
+
+## 7e. FS-33 a FS-36: lo visto por el usuario el 2026-11-08
+
+Decision del usuario: estos cuatro antes del despliegue; el resto de lo planteado, en la segunda etapa (`SPEC_AUTOGESTION_OPERADOR_v0.1`, seccion 9, y `docs/BACKLOG.md`).
+
+- **FS-33.** "Ver factura" desde el resultado de una carga abria la ficha en Facturas, y "Volver a resultados" llevaba al listado de Facturas. **RN-33.1:** si la ficha se abrio desde una carga, el boton dice "Volver a la carga" y vuelve al detalle de esa carga.
+- **FS-34.** `deriveAccion` da `OK` a una factura anulada, y el listado la pinta con el mismo icono verde que una emitida. **RN-34.1:** el listado muestra el estado de cada documento con su etiqueta, y una anulada tiene icono y color propios, distintos de emitida.
+- **FS-35.** **RN-35.1:** un comprobante `INVALIDO`, `RECHAZADO` o `ERROR` de una carga tiene "Copiar datos para soporte", con el mismo criterio que la ficha de una factura: carga, archivo, orden, filas, numeros, referencia, estado, errores con fila y columna, codigo de SIFEN, `document_uuid` y CDC. El envio por correo a una casilla parametrizada queda para la segunda etapa.
+- **FS-36.** **RN-36.1:** la ficha de una factura rechazada y el aviso de correccion dicen que su numero queda pendiente de inutilizar y que lo gestiona soporte. Decision del usuario: en esta etapa la inutilizacion la hace FE (`SPEC_DESPLIEGUE_SEGEL_FS_v0.2`, D-11).
+
+Criterios: **CA-33.1** desde una carga, ver una factura y volver deja el detalle de la misma carga; **CA-34.1** la anulada 1010014 del ensayo se distingue en el listado sin abrirla; **CA-35.1** el comprobante invalido de la carga del ensayo copia sus datos; **CA-36.1** la ficha de la 1010001 menciona la inutilizacion pendiente. Playwright en 390 y 1280 px sobre el ensayo local.
 
 ## 7. FS-22: se cierra sin cambio
 

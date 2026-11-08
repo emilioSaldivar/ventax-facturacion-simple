@@ -24,6 +24,7 @@
 | CFF-014 | FS-29 | Texto de `1306` valido en los dos ambientes, en el catalogo y en la ficha | Prueba en `facturas.accion.test.ts`; CA-29.1 por Playwright | DONE (2026-11-08), E-2 |
 | CFF-015 | FS-30 | Aviso al facturador con destinatario y estado del correo del cliente | Prueba en `facturas.notificaciones.test.ts` | DONE (2026-11-08), E-2: prueba unitaria |
 | CFF-016 | FS-31 | Sin entrega para documentos sin validez, en API y en pantalla | CA-31.1 y CA-31.2 | DONE (2026-11-08), E-3 |
+| CFF-017 | FS-33 a FS-36 | Volver a la carga, estado en el listado, ayuda a soporte en la carga, aviso de inutilizacion | CA-33.1 a CA-36.1 por Playwright | TODO |
 | CFF-011 | Todos | Cierre: repasar SPEC, PLAN, TASKS y `docs/BACKLOG.md` | Documentos alineados con lo desplegado | TODO |
 
 ## Notas de FE
