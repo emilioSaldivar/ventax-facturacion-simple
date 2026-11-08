@@ -17,7 +17,7 @@
 | CFF-006 | FS-25 | Retirar interfaz, rutas, metodos del gateway y contrato | CA-25.1 a CA-25.3; `spec/openapi.yaml` sin las 6 rutas | FUERA: idem CFF-005 |
 | CFF-007 | FS-20, FS-23, FS-25 | Playwright en 390 px y 1280 px: rechazo con su causa, mensaje de `0100`, detalle sin las 6 acciones | Capturas y resultado en la evidencia | TODO |
 | CFF-008 | FS-20, FS-24 | Plantillas, `FE_REF` y runbook | PLAN, seccion 5 | Absorbida por `TASKS_DESPLIEGUE_SEGEL_FS_v0.2` (SF2-004, SF2-006, SF2-008). `RECONCILE_DEFERRED_ENABLED` y `VERIFICACION_LOTE_SIN_REFRESH` quedan en `false` por decision del usuario (2026-11-07) |
-| CFF-009 | FS-20, FS-21, FS-23 | Validacion en stack local con el tag de FE y SIFEN test | PLAN, seccion 6 | Es el paso 7 del guion de SF2-011; FS-24 incluido, con la bandera apagada |
+| CFF-009 | FS-20, FS-21, FS-23 | Validacion en stack local con el tag de FE y SIFEN test | PLAN, seccion 6 | DONE (2026-11-08): FS-20, FS-23 y FS-24 observados en el ensayo local; FS-21 sin caso que lo dispare |
 | CFF-010 | FS-20, FS-21, FS-23 | Despliegue en `segel-fs` | Versiones desplegadas y banderas registradas | Viaja con la segunda entrega (SF2-014 a SF2-016) |
 | CFF-012 | FS-27 | `updateEmailEstadoPendiente` guarda nulo para `NOT_APPLICABLE`; mensaje de factura rechazada | Pruebas CA-27.1 y CA-27.2 en `contrato-fe-sobrecarga.test.ts` | DONE (2026-11-07), con pruebas unitarias; se observa en el ensayo local |
 | CFF-013 | FS-28 | Precarga del editor desde la factura rechazada, con aviso de correccion | CA-28.1 y CA-28.2 por Playwright en 390 y 1280 px | DONE (2026-11-08), E-2 |
