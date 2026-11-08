@@ -7,7 +7,7 @@
 
 ## Enfoque
 
-Todo el cambio vive en el modulo `facturas` de la API, en el mock del gateway fiscal, en el contrato OpenAPI y en la pantalla de documentos. No hay migracion: las columnas `idempotency_key`, `external_ref`, `documento_relacionado_id`, `fiscal_status` y `fiscal_error` ya existen en `facturas_operativas` (`db/migrations/0007_facturacion_operativa.sql`), y el indice unico parcial `(facturador_id, idempotency_key)` tambien. El orden de implementacion es: servicio y repositorio, mock, ruta y contrato, acciones, pantalla, pruebas.
+Todo el cambio vive en el modulo `facturas` de la API, en el mock del gateway fiscal, en el contrato OpenAPI y en la pantalla de documentos. Las columnas ya existen en `facturas_operativas`. **Correccion al implementar:** si hace falta una migracion, `0038_nota_credito_reintento.sql`. El indice unico `facturas_operativas_nce_total_uidx` (`0011`) admitia una sola nota por factura para siempre, y la segunda nota tras un rechazo lo violaba. `0038` lo recrea excluyendo `estado = 'RECHAZADA'`. Ante una violacion de ese indice, el repositorio devuelve la nota viva, no la primera que encuentra. El orden de implementacion es: servicio y repositorio, mock, ruta y contrato, acciones, pantalla, pruebas.
 
 ## 1. Servicio: `emitNotaCreditoTotal`
 
@@ -106,6 +106,14 @@ Archivo: `apps/web-operacion/src/main.tsx`.
 Archivo: `apps/api/src/modules/facturas/verificacion.worker.ts`.
 
 Confirmar como selecciona los documentos a verificar. Si toma `PENDIENTE_SIFEN` sin exigir `document_uuid` o `cdc`, excluir las filas sin identidad (la nota trabada sin `uuid` no tiene nada que consultar) para que no gasten intentos ni llenen el log (RN-08). Si ya las excluye, dejar la evidencia y no tocar nada.
+
+## 8b. Ajustes descubiertos al implementar
+
+- `refreshDocumentoStatus` reintenta cuando el documento es una nota trabada (SPEC, RN-13); la pantalla oculta "Verificar estado fiscal" en ese caso y muestra "Nota credito sin confirmar" en el encabezado y en la etiqueta de la lista.
+- La nota trabada se inserta sin `verificacion_next_at` (campo `trabada` de `NotaCreditoPersistInput`), asi el worker no la toma aunque tenga `document_uuid`.
+- La marca de una nota trabada por `409 idempotent` se guarda en el `raw` de la respuesta (`code`, `suggested_action`), porque `fiscal_response_snapshot` guarda la respuesta y no el error.
+- La pantalla "Nueva nota de credito" muestra el mensaje segun el estado real, no siempre "emitida".
+- En Playwright, la lista separa "Facturas" y "Notas de credito" en pestanas, y una recarga pide ingresar de nuevo.
 
 ## 9. Pruebas
 

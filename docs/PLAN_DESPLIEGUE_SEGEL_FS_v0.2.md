@@ -95,8 +95,8 @@ Datos definidos por el usuario el 2026-11-08 (SPEC, D-12, D-17 y D-18):
 | Punto | Valor |
 |---|---|
 | Total | 334.400 guaranies: 304 facturas de 1.100. Comprador 1: 100 (110.000). Compradores 2 y 3: 102 cada uno (112.200) |
-| Compradores | 1) RUC 4732402-3, correo `gracielita076@gmail.com`. 2) RUC 1160463-8, correo `matiassaldiv@gmail.com`. 3) CI 5057036, MARIA CRISTINA SALDIVAR CAPUTO, correo `emiliomatsc@fpuna.edu.py`, a confirmar contra `emiliomatasc@fpuna.edu.py` (SPEC, D-17) |
-| Columnas del comprador | RUC: `receptor_tipo_documento=RUC`, documento con guion y digito, naturaleza `FISICA` salvo que el padron diga otra cosa, nombre segun el padron DNIT, confirmado por el usuario. CI: `CI`, `5057036`, `FISICA`, `MARIA CRISTINA SALDIVAR CAPUTO`. FE acepta `CI` en la plantilla (su SPEC de carga masiva, columna `receptor_tipo_documento`) |
+| Compradores | 1) RUC 4732402-3, AREVALOS NARVAEZ, GRACIELA LUCIA, correo `emilio.saldivar97@gmail.com` (D-24; antes `gracielita076@gmail.com`). 2) RUC 1160463-8, AREVALO, ANIBAL RAMON, correo `matiassaldiv@gmail.com`. 3) CI 5057036, MARIA CRISTINA SALDIVAR CAPUTO, correo `emiliomatasc@fpuna.edu.py`, a confirmar por el usuario (SPEC, D-17 y D-23) |
+| Columnas del comprador | RUC: `receptor_tipo_documento=RUC`, documento con guion y digito, naturaleza `FISICA`, nombre segun el padron DNIT (SPEC, D-23), confirmado por el usuario al revisar los archivos. CI: `CI`, `5057036`, `FISICA`, `MARIA CRISTINA SALDIVAR CAPUTO`. FE acepta `CI` en la plantilla (su SPEC de carga masiva, columna `receptor_tipo_documento`) |
 | Item | "Consultoria en tecnologia de la informacion", cantidad 1, precio 1.100 con IVA 10 % incluido (base 1.000, IVA 100) |
 | Condicion | Contado, efectivo |
 | Reparto | Una carga por comprador. Carga A (comprador 1): 100 facturas, dos lotes llenos de 50; va sola, como sonda. Cargas B y C (compradores 2 y 3): 102 cada una, dos lotes llenos y uno de 2 que espera la agenda del lote incompleto (1 minuto, D-9); se suben seguidas, para medir dos cargas a la vez, el estado `EN_COLA` y el lote que no se llena |
@@ -111,7 +111,7 @@ Datos definidos por el usuario el 2026-11-08 (SPEC, D-12, D-17 y D-18):
 
 El objetivo es saber como se comporta la instancia con 300 facturas antes de que pase en produccion, y tener un criterio claro para frenar.
 
-**Ensayo de volumen en la estacion, antes del despliegue.** Sobre `segel-rc4` (D-16), la misma tanda: cargas de 100, 102 y 102, la primera sola sobre el stack local del ensayo, en SIFEN test, con el bloque de numeros reservado (seccion 2.2). Los correos van todos a `esaldivar.segel@gmail.com`, nunca a los compradores reales. Con el mismo instrumental que se usara en la VPS. El resultado es la referencia contra la que se compara la prueba real. Lo ejecuta el usuario con su confirmacion, como el ensayo local (D-6).
+**Ensayo de volumen en la estacion, antes del despliegue. Hecho el 2026-11-08 (TASKS, E-2).** Sobre `segel-rc4` (D-16), la misma tanda: cargas de 100, 102 y 102, la primera sola sobre el stack local del ensayo, en SIFEN test, con el bloque de numeros reservado (seccion 2.2). Los correos iban a ir todos a `esaldivar.segel@gmail.com`; por pedido del usuario fueron a los compradores reales (SPEC, D-23). Con el mismo instrumental que se usara en la VPS. El resultado es la referencia contra la que se compara la prueba real. Lo ejecuta el usuario con su confirmacion, como el ensayo local (D-6).
 
 **Que se mide, en el ensayo y en produccion:**
 

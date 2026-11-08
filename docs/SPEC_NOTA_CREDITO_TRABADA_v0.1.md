@@ -1,6 +1,6 @@
 # SPEC Nota De Credito Trabada v0.1
 
-**Fecha:** 2026-11-08 · **Rama:** `feat/identidad-segel` · **Estado:** documentacion aprobada por el usuario para implementar antes del despliegue de la segunda entrega en `segel-fs`. Lo implementa otra sesion; esta solo documenta.
+**Fecha:** 2026-11-08 · **Rama:** `feat/identidad-segel` · **Estado:** implementado y validado el 2026-11-08 (`a680ee2`), antes del despliegue de la segunda entrega en `segel-fs`.
 
 ## Alineacion
 
@@ -54,6 +54,8 @@ Que trae `segel-rc4` (guia 33.3): un reintento **con la misma clave** completa l
 - **RN-09. Doble envio.** Dos pedidos simultaneos para la misma factura producen una sola nota: la clave derivada es la misma y el indice unico de `(facturador_id, idempotency_key)` lo garantiza. Ante violacion del indice, FS relee la nota y la devuelve.
 - **RN-10. `CREDIT_NOTE_TOTAL_EXCEEDED`.** Si FE lo responde, es que tiene una nota por esta factura que FS no conoce. FS no persiste nada y responde `409 CONFLICT` con mensaje "FE ya registra una nota de credito por esta factura. Requiere soporte." Es un caso residual, previo a esta regla.
 - **RN-11. Compatibilidad con FE sin `rc4`.** Con una FE que no complete la nota al reintentar, el reintento responde `409 idempotent` con el mismo `status`: la nota sigue trabada y el operador ve lo mismo. No se rompe nada; solo no se destraba hasta `rc4`.
+- **RN-13. Verificar es reintentar.** "Verificar estado fiscal" sobre una nota trabada no consulta el estado (pisaria la marca y FE no la mueve sola): reintenta con la misma clave. La pantalla no ofrece ese boton en una nota trabada, y el encabezado y la etiqueta de la lista dicen "Nota credito sin confirmar" (RN-06). Agregada al implementar.
+- **RN-14. Alcance real con envio por lote.** FS manda la nota de credito siempre por lote (D-2 de despliegue v0.2), y con lote FE no responde `502`/`504`: en `segel-fs` los casos reales son el `500` (`DRAFT`) y el corte de red o el tiempo de espera de FS. La clave derivada protege todos. Dato de FE, 2026-11-08.
 - **RN-12. Limite de dominio.** FS no decide numeracion, no inutiliza numeros ni consulta SIFEN por su cuenta para una nota: todo pasa por el reintento a FE. `AGENTS.md` sigue vigente.
 
 ## Fuera De Alcance
