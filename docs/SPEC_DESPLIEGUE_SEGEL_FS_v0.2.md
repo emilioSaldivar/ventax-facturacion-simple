@@ -1,6 +1,6 @@
 # SPEC Despliegue Segel en VPS propia v0.2: segunda entrega, volumen y carga masiva
 
-**Fecha:** 2026-11-07 · **Rama:** `feat/identidad-segel` · **Estado:** documentacion en refinamiento, sin implementar ni desplegar (decision del usuario, 2026-11-07).
+**Fecha:** 2026-11-07 · **Rama:** `feat/identidad-segel` · **Estado:** documentacion en refinamiento, sin implementar ni desplegar (decision del usuario, 2026-11-07). Ensayo local cerrado el 2026-11-08; el despliegue espera los pendientes de FE y FS (D-14).
 
 ## Alineacion
 
@@ -36,6 +36,10 @@ Llevar a `segel-fs` las mejoras de volumen de FE (tag `segel-rc3`) y la carga ma
 | D-9 | Espera de lotes incompletos | 1 minuto en lugar de 15, por configuracion en la base de FE, sin codigo. Decidida por el usuario el 2026-11-08 en la sesion de FE |
 | D-10 | Autogestion de rechazos por API de FE | Despues de este despliegue: hoy no existe para consumidores (`SPEC_AUTOGESTION_OPERADOR_v0.1`, seccion 0). Informado por FE el 2026-11-08 como decision del usuario |
 | D-11 | Numeros rechazados | Los inutiliza FE con lo que ya existe, en esta primera etapa. La autogestion de rechazos se libera en una segunda etapa. Decidida por el usuario el 2026-11-08 |
+| D-12 | Prueba en produccion, datos (2026-11-08) | Reemplaza la interpretacion de D-4. **Tres compradores, 110.000 guaranies cada uno, en facturas de 1.100: 300 facturas por 330.000 guaranies en total.** Item: "Consultoria en tecnologia de la informacion". Compradores y correos, en este orden: RUC 4732402-3 a `gracielita076@gmail.com`; RUC 1160463-8 a `matiassaldiv@gmail.com`; CI 5057036, MARIA CRISTINA SALDIVAR CAPUTO, a `emilio.saldivar@segel.com.py`. Los digitos verificadores de los dos RUC se comprobaron con el algoritmo de la DNIT. El objetivo es procesar un volumen importante de una vez |
+| D-13 | Respaldo manual (2026-11-08) | **No se hace en esta ocasion.** Motivo del usuario: la base tiene solo dos documentos, una factura y un recibo, y no ve riesgo en las migraciones. Vale solo para este despliegue; los backups siguen pendientes |
+| D-14 | Momento del despliegue (2026-11-08) | **En espera.** Primero se cierra todo lo pendiente de esta etapa en FE y en FS, segun lo documentado; despues se despliega con confirmacion directa del usuario |
+| D-15 | Mediciones y mapeo del comportamiento (2026-11-08) | El usuario pide medir y mapear el comportamiento de la carga para anticipar fallas: PLAN, seccion 4.1 |
 | D-8 | Cuando | Hoy solo se refina la documentacion; la implementacion de los cambios de scripts y el resto se ejecutan despues, por indicacion del usuario |
 
 ## Reglas
@@ -61,13 +65,14 @@ Llevar a `segel-fs` las mejoras de volumen de FE (tag `segel-rc3`) y la carga ma
 ## Bloqueos y pendientes
 
 - **B-1. Tag.** `segel-rc3` no esta publicado. FE avisa cuando el usuario autorice el push.
+- **B-9. Pendientes de FE para esta etapa (2026-11-08).** El despliegue espera a que FE cierre sus tareas en curso y quede alineado lo que necesita el despliegue (D-14): tag `segel-rc3` publicado, su documento de despliegue al dia y lo que FE informe como pendiente.
 - **B-2. Facturador de produccion.** Sin VPN no se pudo leer que facturador y cuantos usuarios hay hoy en `segel-fs`; el TASKS v0.1 lo deja pendiente al pasar a produccion. Se confirma antes de la prueba de D-4: emisor, certificado y CSC de produccion cargados, numeradores reales, consumidor propio.
-- **B-3. Datos de la prueba en produccion.** Cliente, correo del comprador, descripcion del item y reparto en cargas: los define el usuario (RN-07).
+- **B-3. Datos de la prueba en produccion.** Cliente, correo del comprador, descripcion del item y reparto en cargas: los define el usuario (RN-07). **Resuelto (2026-11-08) por D-12.** Quedan dos puntos para la revision de los archivos (SF2-019): el nombre de los dos RUC, que FS toma del padron DNIT y el usuario confirma, y el reparto en cargas que propone el PLAN, seccion 4.
 - **B-4. Correo real en el ensayo local.** La casilla `no-reply-facturacion@segel.com.py` debe poder usarse desde la estacion: salida a `smtp.office365.com:587` y contrasena cargada por el usuario en los `.env` locales. Las credenciales SMTP de staging de FE no sirven (FE, V125).
 - **B-5. Emisor de test para el ensayo local.** Hace falta un emisor con certificado y CSC de SIFEN test. Propuesta: 5057016-1 exportado desde `fe-test` con `--sumar-numerador`, como en la primera entrega; el certificado y el CSC los carga el usuario en el admin del FE local.
 - **B-7. FS-24 antes del despliegue.** FE pide (2026-11-07) ajustar FS-24 antes de esta entrega, con cualquier valor de las banderas de D-5: con 5 lotes por ciclo habra hasta 250 documentos por emisor en `SENT_BATCH` a la vez, y el worker de verificacion de FS gasta un intento por cada consulta en ese estado. Propuesta de FE: `SENT_BATCH` y `QUEUED_BATCH` se esperan; el fallo real es `REJECTED` o mas de 48 h en `SENT_BATCH`. El diseno de FS-24 en `PLAN_CORRECCIONES_TRAS_FIXES_FE_v0.1` ya es ese, pero estaba atado a `RECONCILE_DEFERRED_ENABLED`; con D-5 esa atadura deja de tener sentido. **Resuelto (2026-11-07):** entra en esta entrega, como FS recomendo y el usuario no objeto al indicar que se implemente lo que falta. Se parte en dos: la espera vale siempre; omitir el `refresh` queda con su bandera apagada en esta entrega. FE aclaro despues que el `refresh` no destraba nada, solo adelanta lo que FS ve (RN-24.6).
 - **B-8. Correo antes de la aprobacion (hallazgo de FE, 2026-11-07).** Con envio `BATCH`, el correo de una factura emitida desde la app sale antes de que SIFEN apruebe, con asunto "pendiente de aceptacion SIFEN" y el KuDE adjunto: 4 de 4 en la prueba de FE. Con `BATCH` para todos (D-2), es toda factura de la app, y una rechazada ya tendria correo. La carga por archivo no lo sufre. **Resuelto (2026-11-07):** el usuario decidio retener el correo hasta la aprobacion: `EMAIL_TRAS_APROBACION=true` en FE, y FE movio el tag local `segel-rc3` a `4f6e04a`. Ratificado por el usuario en esta sesion, el mismo dia. Un rechazado no genera correo y queda `NOT_APPLICABLE`, que en FS destapo FS-27, corregido en esta entrega.
-- **B-6. Backups.** Siguen pospuestos (D-7 de v0.1). Esta entrega emite 100 facturas reales y aplica dos migraciones: se pide al usuario autorizar un respaldo manual de las dos bases antes del despliegue (PLAN, seccion 4).
+- **B-6. Backups.** Siguen pospuestos (D-7 de v0.1). Esta entrega emite 100 facturas reales y aplica dos migraciones: se pide al usuario autorizar un respaldo manual de las dos bases antes del despliegue (PLAN, seccion 4). **Resuelto (2026-11-08) por D-13:** sin respaldo en esta ocasion.
 
 ## Fuera de alcance
 
@@ -82,7 +87,8 @@ Llevar a `segel-fs` las mejoras de volumen de FE (tag `segel-rc3`) y la carga ma
 - **CA-01. Ensayo local.** Con las imagenes que iran a la VPS: `GET /v1/health` de FE con `java.kude.ok` y `java.firma.ok` en `true`; una factura desde la app aprobada en SIFEN test con `email_status` `PENDING` y luego `SENT`; una carga por archivo `FINALIZADA` con sus facturas aprobadas, visibles en Documentos, con KuDE; correos de FE y de FS recibidos en `esaldivar.segel@gmail.com` con remitente Segel; cancelacion y nota de credito sobre una factura de carga; FS-20, FS-21 y FS-23 observados contra FE real.
 - **CA-02. VPS.** Once imagenes cargadas; `worker-cargas` y `worker-correo` arriba sin reinicios en bucle; `java.*.ok` en `true`; FS llega a FE por la red interna; solo `8092` y `8100` publicados en `10.100.0.145`.
 - **CA-03. Primera factura en produccion.** Emitida por el usuario desde la app: aprobada, KuDE descargado, `email_status` `PENDING` en la respuesta y `SENT` al consultar, correo recibido si lleva.
-- **CA-04. Prueba de carga masiva en produccion.** Todas las cargas `FINALIZADA`; 100 facturas aprobadas por 110.000 guaranies en total, sin numeros salteados; cada una con KuDE, visible en Documentos de FS y con su correo `SENT`; totales de FS iguales a los de FE.
+- **CA-04. Prueba de carga masiva en produccion.** Todas las cargas `FINALIZADA`; 300 facturas aprobadas, 100 por comprador, por 110.000 guaranies cada comprador y 330.000 en total, sin numeros salteados; cada una con KuDE, visible en Documentos de FS y con su correo `SENT` a la casilla de su comprador; totales de FS iguales a los de FE.
+- **CA-08. Mapa del comportamiento.** Linea de tiempo de cada carga por etapa, ritmo de aprobacion y de correo, picos de recursos y fallas observadas, registrados en E-3 y comparados con la referencia del ensayo de volumen (PLAN, seccion 4.1).
 - **CA-05. Recursos.** Durante la prueba, FE, FS y Postgres por debajo de 3 GiB y `/var` con espacio libre; sin contenedores reiniciando.
 - **CA-06. Vuelta atras.** Apagar `CARGAS_ENABLED` y `CARGA_MASIVA_ENABLED` en el ensayo local deja la instancia operando igual que antes, sin perder facturas ya incorporadas.
 - **CA-07. Documentacion.** `OPERACION_DESPLIEGUE_SEGEL_FS` refleja la entrega: version de FE, variables, carpeta nueva, orden y verificaciones.

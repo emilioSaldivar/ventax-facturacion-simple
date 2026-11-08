@@ -7,14 +7,14 @@
 
 ## Estado
 
-**Paso 1 implementado (2026-11-07), por indicacion del usuario.** El ensayo local espera el tag `segel-rc3` (B-1). El despliegue y la prueba en produccion piden su propia confirmacion directa.
+**Ensayo local cerrado (2026-11-08). Despliegue en espera (D-14):** primero se cierran los pendientes de FE (SF2-013b) y de FS (SF2-018a y SF2-018b). Sin respaldo manual en esta ocasion (D-13). **Paso 1 implementado (2026-11-07), por indicacion del usuario.** El ensayo local espera el tag `segel-rc3` (B-1). El despliegue y la prueba en produccion piden su propia confirmacion directa.
 
 ## Matriz
 
 | ID | Paso | Tarea | Hecho cuando | Quien | Estado |
 |---|---|---|---|---|---|
 | SF2-001 | — | SPEC, PLAN y TASKS v0.2 | Decisiones D-1 a D-8 registradas; documentos en `AGENTS.md` | FS | DONE (2026-11-07) |
-| SF2-002 | — | Confirmaciones pendientes del usuario: interpretacion de D-4 (100 facturas de 1.100, en 3 cargas), correo del comprador, cliente e item (B-3), respaldo manual (B-6), FS-24 dentro o fuera de la entrega (B-7) | Respuestas anotadas en el SPEC | Usuario | TODO |
+| SF2-002 | — | Confirmaciones pendientes del usuario: interpretacion de D-4 (100 facturas de 1.100, en 3 cargas), correo del comprador, cliente e item (B-3), respaldo manual (B-6), FS-24 dentro o fuera de la entrega (B-7) | Respuestas anotadas en el SPEC | Usuario | DONE (2026-11-08): D-12 a D-15 en el SPEC. Tres compradores con 100 facturas cada uno, sin respaldo, despliegue en espera, mediciones pedidas |
 | SF2-003 | — | Tag `segel-rc3` publicado por FE | FE avisa; `git -C facturacion-electronica rev-parse segel-rc3` resuelve | FE, con autorizacion del usuario | PARTIAL (2026-11-08): tag `segel-rc3` local en `4f6e04a`, sin publicar en origin. Alcanza para construir en la estacion |
 | SF2-004 | 1 | `build-images.sh` y `deploy.sh`: `FE_REF=segel-rc3`, imagenes `fe-segel-worker-cargas` y `fe-segel-worker-correo` | `bash -n`; `deploy.sh bundle` en un directorio temporal lista once imagenes | FS | DONE (2026-11-07), E-0 |
 | SF2-005 | 1 | `up.sh`: crea `fe-runtime/runtime/kude-cache` antes del `chown`; `--force-recreate` de API y workers de FE tras el `up -d` | Ensayo local: la carpeta queda con dueno 1000 y FE escribe en ella; un cambio de bandera en `.env.segel` se ve en `docker exec ... printenv` tras `up.sh` | FS | DONE (2026-11-07), E-1 |
@@ -25,15 +25,18 @@
 | SF2-010 | 2 | Secretos, emisor de test, certificado y CSC en el stack local (B-4, B-5) | Readiness de FE sin faltantes; correo de prueba desde FS recibido | Usuario | DONE (2026-11-07), E-1 |
 | SF2-011 | 2 | Ensayo local: guion del PLAN, seccion 2.3, pasos 1 a 9 | CA-01 y CA-06; resultados en E-1 | Usuario ejecuta, FS registra | DONE (2026-11-08), E-1: pasos 1 a 9; en el paso 8 se probo la bandera de FS, la de FE (`CARGAS_ENABLED`) la opera FE |
 | SF2-012 | 2 | Cierre de la carga masiva contra FE real: CMF-018 y CMF-020, supuesto de `actualizado_en` con `correo` | Anotado en `TASKS_CARGA_MASIVA_FACTURAS_v0.1`; desvios del contrato corregidos y reensayados | FS | DONE (2026-11-08), E-1: carga masiva contra FE real cerrada; numero fiscal de carga verificado (`c38621a`) |
-| SF2-013 | 3 | Respaldo manual de las dos bases en la VPS | Dos dumps en `~/segel/backups`, con tamano y `df` registrados | FS, con autorizacion del usuario | BLOCKED: espera SF2-002 y confirmacion directa |
-| SF2-014 | 3 | Construccion y transferencia (`build-images.sh`, `deploy.sh files`, `deploy.sh images`) | `docker images` en la VPS con las once imagenes | FS | BLOCKED: espera SF2-011 y confirmacion directa |
+| SF2-013 | 3 | Respaldo manual de las dos bases en la VPS | Dos dumps en `~/segel/backups`, con tamano y `df` registrados | FS, con autorizacion del usuario | NO APLICA (2026-11-08): el usuario decide no hacerlo en esta ocasion (SPEC, D-13) |
+| SF2-013b | 3 | Pendientes de FE para esta etapa: tag `segel-rc3` en origin (SF2-003) y lo que FE informe como pendiente (SPEC, B-9) | FE avisa que esta alineado; el usuario lo confirma | FE | TODO |
+| SF2-014 | 3 | Construccion y transferencia (`build-images.sh`, `deploy.sh files`, `deploy.sh images`) | `docker images` en la VPS con las once imagenes | FS | BLOCKED: espera SF2-013b, SF2-018b y confirmacion directa (D-14) |
 | SF2-015 | 3 | Variables en `fe/.env.segel` y `fs/.env.segel` de la VPS, a mano | Valores de RN-03 presentes; sin `JAVA_TOOL_OPTIONS` | FS | BLOCKED: espera SF2-014 |
 | SF2-016 | 3 | `up.sh` y verificacion CA-02 | Salud, workers sin bucle, `java.*.ok` en `true`, puertos publicados correctos | FS | BLOCKED: espera SF2-015 |
 | SF2-016b | 3 | Espera de lotes incompletos a 1 minuto en la base de FE (PLAN, seccion 3, paso 4b) | `batch_dispatch_defaults.interval_minutes` en 1; una factura sola entra en lote en menos de 2 minutos | FS, con autorizacion directa del usuario | BLOCKED: espera SF2-016 |
 | SF2-017 | 3 | Consumidor del facturador: permiso `CARGA_MASIVA` y cuota en el backoffice de FE; contexto en `SERVICIO` en FS; `forma_numeracion` del numerador de FE nula o `SERVICIO`, nunca `CLIENTE`; numerador de nota de credito (tipo 5) en el mismo establecimiento y punto del contexto, porque sin el FE rechaza la nota de credito (visto en el ensayo local) | `GET /v1/cargas/plantilla` con la clave del consumidor responde `200` | FS, por los backoffices | BLOCKED: espera SF2-016 y B-2 |
 | SF2-018 | 3 | Primera factura en produccion y medicion de recursos | CA-03 y CA-05 | Usuario emite, FS mide | BLOCKED: espera SF2-017 |
-| SF2-019 | 4 | Archivos de la prueba en produccion, generados con los datos del usuario y revisados por el | Tres archivos con 20, 30 y 50 filas, que suman 110.000 | FS genera, usuario revisa | BLOCKED: espera SF2-002 y SF2-018 |
-| SF2-020 | 4 | Prueba en produccion: subida, confirmacion, seguimiento y medicion | CA-04 y CA-05; resultados en E-3 | Usuario sube y confirma, FS mide | BLOCKED: espera SF2-019 y confirmacion directa |
+| SF2-018a | 2 | Script de medicion de FS (PLAN, seccion 4.1): linea base, muestreo y resumen, solo lectura | `bash -n`; corrida corta en el stack local que deja el resumen | FS | TODO: se implementa con indicacion del usuario |
+| SF2-018b | 2 | Ensayo de volumen en la estacion: tres cargas de 100, la primera sola, correos a la casilla Segel (PLAN, seccion 4.1) | Las 300 aprobadas sin saltos; ninguna condicion de freno; mapa en E-2 | Usuario ejecuta, FS mide | TODO: espera SF2-018a y confirmacion del usuario |
+| SF2-019 | 4 | Archivos de la prueba en produccion, generados con los datos de D-12 y revisados por el usuario | Tres archivos de 100 filas, uno por comprador, 110.000 cada uno; nombres de los RUC confirmados; correo del operador distinto de los de los compradores | FS genera, usuario revisa | BLOCKED: espera SF2-018 |
+| SF2-020 | 4 | Prueba en produccion: subida, confirmacion, seguimiento y medicion | CA-04, CA-05 y CA-08; resultados en E-3 | Usuario sube y confirma, FS mide | BLOCKED: espera SF2-019 y confirmacion directa |
 | SF2-021 | — | Cierre: SPEC, PLAN, TASKS v0.2, runbook, cadenas de carga masiva y correcciones, `BACKLOG` | Documentos alineados con lo desplegado; CA-07 | FS | TODO |
 
 ## Pedido de FE: estimacion de infraestructura

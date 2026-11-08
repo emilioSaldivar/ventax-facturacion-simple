@@ -68,7 +68,7 @@ Tambien se verifica aqui el supuesto pendiente de la carga masiva: que FE mueva 
 
 Solo tras el ensayo local en verde y la confirmacion directa del usuario (RN-06). Requiere VPN.
 
-1. **Respaldo manual** de las dos bases con `pg_dump` desde los contenedores a `~/segel/backups/{fs,fe}`, antes de tocar nada (B-6; pide autorizacion del usuario porque escribe en `/home`, hoy con unos 3,7 G). Medir `df` antes y despues.
+1. ~~**Respaldo manual**~~ No se hace en esta ocasion (SPEC, D-13). Se mide `df` antes de empezar. Texto original: respaldo manual de las dos bases con `pg_dump` desde los contenedores a `~/segel/backups/{fs,fe}`, antes de tocar nada (B-6; pide autorizacion del usuario porque escribe en `/home`, hoy con unos 3,7 G). Medir `df` antes y despues.
 2. En la estacion: `build-images.sh` (once imagenes, `FS_REF` y `FE_REF` fijos), `deploy.sh files`, `deploy.sh images`.
 3. En la VPS: agregar a mano en `fe/.env.segel` las variables de la seccion 1 y en `fs/.env.segel` las de FS. Comprobar que no haya `JAVA_TOOL_OPTIONS`.
 4. `up.sh`: crea `kude-cache`, aplica `045` en FE y `0037` en FS, levanta todo, recrea `api`, `worker-batch`, `worker-status-sync`, `worker-cargas` y `worker-correo` de FE con `--force-recreate` para que tomen las banderas nuevas, y reinicia el frontend de FS. `docker compose restart` no sirve para eso: no relee `env_file`.
@@ -80,23 +80,55 @@ Solo tras el ensayo local en verde y la confirmacion directa del usuario (RN-06)
 
 Vuelta atras: por bandera (RN-09) o entera con `FE_REF=segel-rc2` y la imagen anterior de FS, que sigue en la VPS. Se ensaya la vuelta por bandera en local (paso 8 del guion), no en la VPS.
 
-## 4. Prueba de carga masiva en produccion (D-4)
+## 4. Prueba de carga masiva en produccion (D-4, D-12)
 
-Facturas reales: antes de armar los archivos, el usuario define cliente, descripcion del item y correo del comprador (RN-07, B-3). Propuesta de FS, a confirmar:
+Datos definidos por el usuario el 2026-11-08 (SPEC, D-12):
 
-| Punto | Propuesta |
+| Punto | Valor |
 |---|---|
-| Total | 110.000 guaranies: 100 facturas de 1.100 |
-| Item | Un item, cantidad 1, precio 1.100 con IVA 10 % incluido (base 1.000, IVA 100). La descripcion la da el usuario |
+| Total | 330.000 guaranies: 300 facturas de 1.100, 100 por comprador |
+| Compradores | 1) RUC 4732402-3, correo `gracielita076@gmail.com`. 2) RUC 1160463-8, correo `matiassaldiv@gmail.com`. 3) CI 5057036, MARIA CRISTINA SALDIVAR CAPUTO, correo `emilio.saldivar@segel.com.py` |
+| Columnas del comprador | RUC: `receptor_tipo_documento=RUC`, documento con guion y digito, naturaleza `FISICA` salvo que el padron diga otra cosa, nombre segun el padron DNIT, confirmado por el usuario. CI: `CI`, `5057036`, `FISICA`, `MARIA CRISTINA SALDIVAR CAPUTO`. FE acepta `CI` en la plantilla (su SPEC de carga masiva, columna `receptor_tipo_documento`) |
+| Item | "Consultoria en tecnologia de la informacion", cantidad 1, precio 1.100 con IVA 10 % incluido (base 1.000, IVA 100) |
 | Condicion | Contado, efectivo |
-| Reparto | Tres cargas: 20, 30 y 50 facturas. La de 50 llena un lote exacto; subir la segunda mientras la primera prepara muestra `EN_COLA` |
-| Correo del comprador | A definir: el correo real del cliente recibe un correo por factura, 100 en total; la alternativa es `esaldivar.segel@gmail.com` o ninguno |
+| Reparto, propuesta de FS | Una carga por comprador, de 100 facturas: son dos lotes llenos de 50, asi que ninguna espera la agenda del lote incompleto. La primera carga va sola, como sonda; las otras dos se suben seguidas, para medir dos cargas a la vez y el estado `EN_COLA` |
+| Cuota | 300 facturas entran en la cuota diaria de 500 del consumidor; las tres cargas se hacen el mismo dia |
+| Correo | Cada comprador recibe 100 correos. Antes de subir, se confirma que `emilio.saldivar@segel.com.py` no sea el correo del operador del facturador en produccion: si lo es, el aviso al facturador y el correo al comprador no se distinguen |
 | Numeracion | La del servicio: FE asigna los numeros, continuos |
-| Archivos | Los genera FS con un script desde la plantilla de FE y los datos del usuario, y el usuario los revisa antes de subirlos |
+| Archivos | Los genera FS con un script desde la plantilla de FE y los datos de arriba, con `referencia_venta` propia por fila; el usuario los revisa antes de subirlos |
 | Quien sube y confirma | El usuario, desde la app, con el operador del facturador |
-| Despues | Las facturas quedan emitidas (D-4). No se cancelan ni se anulan salvo que el usuario lo decida |
+| Despues | Las facturas quedan emitidas. No se cancelan ni se anulan salvo que el usuario lo decida |
 
-Durante la prueba se mide: tiempos de cada estado de la carga, `docker stats`, logs de `worker-cargas` y `worker-correo`, lotes en el backoffice de FE, totales de FS contra FE, y correos `SENT`. Se registra en `TASKS` (E-3).
+### 4.1 Mediciones y mapeo del comportamiento (D-15)
+
+El objetivo es saber como se comporta la instancia con 300 facturas antes de que pase en produccion, y tener un criterio claro para frenar.
+
+**Ensayo de volumen en la estacion, antes del despliegue.** El mismo reparto (tres cargas de 100, la primera sola) sobre el stack local del ensayo, en SIFEN test, con el bloque de numeros reservado (seccion 2.2). Los correos van todos a `esaldivar.segel@gmail.com`, nunca a los compradores reales. Con el mismo instrumental que se usara en la VPS. El resultado es la referencia contra la que se compara la prueba real. Lo ejecuta el usuario con su confirmacion, como el ensayo local (D-6).
+
+**Que se mide, en el ensayo y en produccion:**
+
+| Que | Como | Para que |
+|---|---|---|
+| Linea base | Antes de subir: `docker stats --no-stream`, `df -h /var /home`, conteo de documentos por estado en FS y FE, siguiente numero del numerador del facturador en FE, lotes abiertos | Saber de donde se parte |
+| Recursos | `docker stats` cada 5 s a un archivo, todo el tiempo de la prueba; `RestartCount` de cada contenedor al final | Picos de memoria y CPU por contenedor; reinicios |
+| Linea de tiempo de cada carga | Estado de la carga con marca de tiempo cada 10 s: subida, `VALIDADA`, confirmacion, `EN_COLA`, `EN_PREPARACION`, `EN_SIFEN`, `FINALIZADA` | Duracion de cada etapa |
+| Comprobantes | Conteo por estado fiscal y por estado de correo cada 30 s | Ritmo de aprobacion y de correo por minuto |
+| Lotes | Lotes de la carga en FE: cuando se envian, cuantas consultas hasta su respuesta | Ver si algun lote se acerca al tope de 40 consultas |
+| FS | Cuanto tarda una factura aprobada en verse en Documentos; intentos del worker de verificacion | Retraso de la sincronizacion |
+| Errores | Logs de `worker-cargas`, `worker-correo`, `worker-batch` y de la API de FS filtrados por error o advertencia | Fallas que no se ven en la pantalla |
+| Disco | `du` de `kude-cache` y tamano de las dos bases, antes y despues | Crecimiento por documento |
+| Cierre | Totales por comprador en FS y en FE; numeros sin saltos | CA-04 |
+
+**Criterios para frenar.** Si pasa algo de esto, no se sube la carga siguiente y se avisa al usuario y a FE:
+
+- un rechazo de SIFEN en la carga sonda;
+- un contenedor reiniciando;
+- FE, FS y Postgres sobre 3 GiB juntos (RN-08);
+- un correo `FAILED`;
+- un lote con mas de 20 consultas sin respuesta;
+- un salto de numero.
+
+**Instrumental.** Un script de FS que toma la linea base, muestrea mientras dura la prueba y deja un resumen en un archivo fuera de git, que luego se pasa a `TASKS` (E-2 para el ensayo de volumen, E-3 para produccion). Solo lee: no escribe en las bases ni cambia banderas. Se implementa con indicacion del usuario.
 
 ## 5. Riesgos
 
@@ -104,8 +136,9 @@ Durante la prueba se mide: tiempos de cada estado de la carga, `docker stats`, l
 |---|---|
 | Memoria de la VPS con dos workers mas y una JVM por firma o KuDE | `cpus: 1` en cada worker nuevo, `CARGA_FIRMAS_SIMULTANEAS=1`, medir en el ensayo local y en cada paso de la VPS; umbral de 3 GiB (RN-08) |
 | El tag trae algo distinto de lo ensayado | Ensayo local con las mismas imagenes que van a la VPS; `FE_REF` y `FS_REF` fijos |
-| Correos reales a un cliente durante la prueba | Decision previa del usuario sobre el correo del comprador (seccion 4) |
+| Correos reales a un cliente durante la prueba | Correos definidos por el usuario (SPEC, D-12); en el ensayo de volumen van solo a la casilla Segel |
+| Una falla aparece recien con 300 facturas | Ensayo de volumen en la estacion y criterios para frenar (seccion 4.1); la primera carga en produccion va sola |
 | Un `java.*.ok` en `false` en la VPS | Vuelta atras del paso Java por bandera antes de emitir |
 | Subida del archivo lenta frente al nginx | Los archivos de la prueba pesan unos KB; el caso del tope se mide en el ensayo local |
 | Mas documentos en `SENT_BATCH` para el worker de verificacion de FS | No afecta a las facturas de carga; para las de la app, FS-24 queda en su cadena |
-| Sin backups automaticos | Respaldo manual antes del despliegue (seccion 3, paso 1); recordatorio al usuario de que siguen pendientes |
+| Sin backups automaticos | En esta ocasion sin respaldo manual, por decision del usuario (SPEC, D-13); los backups siguen pendientes |
