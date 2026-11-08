@@ -1,7 +1,21 @@
 # SPEC Autogestion del operador v0.1
 
-**Fecha:** 2026-11-06. **Estado:** borrador en refinamiento. Sin PLAN ni TASKS; no se implementa.
+**Fecha:** 2026-11-06, refinado el 2026-11-08. **Estado:** borrador con la decision del usuario sobre rechazos (seccion 0). Sin PLAN ni TASKS; no se implementa hasta que FE publique las rutas.
 **Origen:** decision del usuario sobre FS-25 (`SPEC_CORRECCIONES_TRAS_FIXES_FE_v0.1`, D-1) y opinion de `facturacion-electronica` (FE) del 2026-11-06. FE no tiene nada de esto implementado ni en su orden de trabajo.
+
+## 0. Decision del usuario sobre rechazos (2026-11-08)
+
+1. Una factura rechazada por SIFEN se corrige **dentro del plazo**, con el **mismo numero y la misma idempotencia**, usando la autogestion de FE. Solo se cambian datos del receptor: RUC o CI, razon social, naturaleza y contacto. FE responde si se reutiliza el CDC o hace falta uno nuevo.
+2. Si nadie actua dentro del plazo, se **inutiliza** la numeracion.
+3. Recien despues, si hay que reprocesar, va una **factura nueva**.
+
+**Estado en FE, verificado por FE en el codigo de `segel-rc3` (2026-11-08):** esa autogestion **no existe** para consumidores.
+- Las rutas de correccion (`PATCH .../body`, `resend`, `validate-cdc-impact`, `retry-same-cdc`, `create-derived`) son solo de su backoffice, con un usuario de FE (`admin.route.ts`). No aceptan clave de consumidor ni compartida (FS-25).
+- La inutilizacion existe: `POST /v1/evento/inutilizacionnumfactura`, con la **clave compartida**, y acepta numeros de facturas rechazadas (guia v0.12, 8.2 y 8.4). FE no inutiliza sola al vencer un plazo.
+- Hay un borrador de FE sin aprobar ni codigo: `SPEC_AUTOGESTION_RECHAZOS_CONSUMIDOR_v0.1` (2026-11-01, worktree `fe-autogestion-rechazos`). Propone rutas de rechazados, regularizacion, reintento y correccion del receptor, plazos de 120 h (720 h extemporaneo) e inutilizacion en los 15 primeros dias del mes siguiente. **No es contrato:** FS no lo documenta como existente ni lo implementa.
+- Dato tecnico de FE: el CDC no incluye datos del receptor (MT150), asi que corregir solo el receptor sin cambiar la fecha permite conservar CDC y `document_uuid`.
+
+**Hasta que FE lo publique:** "Corregir y emitir de nuevo" crea una factura nueva con numero nuevo, precargada con los datos de la rechazada (FS-28). El numero rechazado queda sin inutilizar (D-3). Que la autogestion de FE entre antes o despues del despliegue en `segel-fs` lo decide el usuario con FE.
 
 ## 1. Objetivo
 
@@ -73,7 +87,7 @@ Orden sugerido por FE: 1 y 2, luego 3, luego 4 y 5.
 |---|---|---|---|
 | D-1 | Prioridad y orden frente a la carga masiva | Orden de FE, empezando por el correo. FS depende de que FE publique las rutas | Usuario |
 | D-2 | ¿Corregir la factura corrige tambien al cliente en la agenda? | Ofrecerlo como opcion al corregir, solo sobre el cliente del propio facturador | Usuario |
-| D-3 | Numeros rechazados que hoy quedan sin inutilizar | Tema aparte: medir cuantos hay y definir quien los inutiliza | Usuario |
+| D-3 | Numeros rechazados que hoy quedan sin inutilizar | Decidido (seccion 0): se inutilizan si vence el plazo sin correccion. Falta definir quien la dispara: FS por `/v1/evento/inutilizacionnumfactura` con la clave compartida, o FE | Usuario, con FE |
 | D-4 | Que pasa con el bloque interno de seis acciones | Retirarlo cuando A-1 y A-2 esten disponibles; hasta entonces no se toca | Usuario |
 | D-5 | Alcance: solo Segel, o tambien Ventax | Nace en la rama Segel. Ventax se decide aparte | Usuario |
 
