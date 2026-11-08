@@ -23,7 +23,7 @@
 | CFF-013 | FS-28 | Precarga del editor desde la factura rechazada, con aviso de correccion | CA-28.1 y CA-28.2 por Playwright en 390 y 1280 px | DONE (2026-11-08), E-2 |
 | CFF-014 | FS-29 | Texto de `1306` valido en los dos ambientes, en el catalogo y en la ficha | Prueba en `facturas.accion.test.ts`; CA-29.1 por Playwright | DONE (2026-11-08), E-2 |
 | CFF-015 | FS-30 | Aviso al facturador con destinatario y estado del correo del cliente | Prueba en `facturas.notificaciones.test.ts` | DONE (2026-11-08), E-2: prueba unitaria |
-| CFF-016 | FS-31 | Sin entrega para documentos sin validez, en API y en pantalla | CA-31.1 y CA-31.2 | TODO |
+| CFF-016 | FS-31 | Sin entrega para documentos sin validez, en API y en pantalla | CA-31.1 y CA-31.2 | DONE (2026-11-08), E-3 |
 | CFF-011 | Todos | Cierre: repasar SPEC, PLAN, TASKS y `docs/BACKLOG.md` | Documentos alineados con lo desplegado | TODO |
 
 ## Notas de FE
@@ -43,4 +43,8 @@ Commit `2b1eed9`. `npm run test` de la API: 480 pasan, 0 fallan, 28 omitidas. `n
 Commit `8d3fd83`. API: pruebas de `facturas.accion` y `facturas.notificaciones` en verde; suite completa sin fallas. Playwright `scripts/playwright-correccion-rechazo.cjs` contra el ensayo local de la segunda entrega (FS `8d3fd83`, FE `segel-rc3`), sobre la factura 1010001 rechazada por SIFEN test con `1306`, en 390x844 y 1280x800: 12 de 12. La ficha no menciona pruebas ni Marangatu test; el editor abre con el aviso de correccion, el cliente y el item de la rechazada; sin desplazamiento horizontal. No se emitio la factura corregida desde Playwright. El texto de FS-30 se valido solo con la prueba unitaria: el aviso real se vera con el proximo rechazo.
 
 La captura de la ficha mostro FS-31 y FS-32, previos a esta correccion, registrados en `docs/BACKLOG.md`.
+
+### E-3. FS-31 (2026-11-08)
+
+Commit `6518c72`. API: 601 pruebas pasan, 0 fallan; nuevas en `entrega.service.test.ts` para el `409 DOCUMENTO_SIN_VALIDEZ` en los cuatro estados y el `404` del KuDE de un enlace anterior. Se reemplazo la prueba que mantenia el KuDE publico de un rechazado, por decision del usuario. Playwright `playwright-correccion-rechazo.cjs` en el ensayo local (FS `6518c72`), 390x844 y 1280x800: 18 de 18. La rechazada 1010001 muestra el aviso y no ofrece ver ni compartir; la emitida 1010000 conserva las acciones. FS-28 y FS-29 siguen en verde con la imagen nueva.
 
