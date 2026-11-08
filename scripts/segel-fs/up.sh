@@ -22,9 +22,10 @@ docker run --rm --user 0 --network none --entrypoint chown -v "$runtime:/d" fe-s
   export FE_ENV_FILE=.env.segel
   docker compose --env-file .env.segel -f docker-compose.prod.yml up -d --no-build
   # El entorno de un contenedor queda fijo al crearlo: restart no relee el env_file, y una bandera
-  # nueva solo entra al recrear. --no-deps: no repite migrate ni toca Postgres.
+  # nueva solo entra al recrear. --no-deps: no repite migrate ni toca Postgres. El frontend
+  # tambien: con segel-rc4 toma su tope de memoria al crearse.
   docker compose --env-file .env.segel -f docker-compose.prod.yml up -d --no-build --no-deps --force-recreate \
-    api worker-batch worker-status-sync worker-cargas worker-correo
+    api worker-batch worker-status-sync worker-cargas worker-correo frontend
 )
 
 (
