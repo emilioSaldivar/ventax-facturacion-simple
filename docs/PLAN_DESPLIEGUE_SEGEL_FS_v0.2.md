@@ -82,30 +82,32 @@ Vuelta atras: por bandera (RN-09) o entera con `FE_REF=segel-rc2` y la imagen an
 
 ## 4. Prueba de carga masiva en produccion (D-4, D-12)
 
-Datos definidos por el usuario el 2026-11-08 (SPEC, D-12):
+Datos definidos por el usuario el 2026-11-08 (SPEC, D-12, D-17 y D-18):
 
 | Punto | Valor |
 |---|---|
-| Total | 330.000 guaranies: 300 facturas de 1.100, 100 por comprador |
-| Compradores | 1) RUC 4732402-3, correo `gracielita076@gmail.com`. 2) RUC 1160463-8, correo `matiassaldiv@gmail.com`. 3) CI 5057036, MARIA CRISTINA SALDIVAR CAPUTO, correo `emilio.saldivar@segel.com.py` |
+| Total | 334.400 guaranies: 304 facturas de 1.100. Comprador 1: 100 (110.000). Compradores 2 y 3: 102 cada uno (112.200) |
+| Compradores | 1) RUC 4732402-3, correo `gracielita076@gmail.com`. 2) RUC 1160463-8, correo `matiassaldiv@gmail.com`. 3) CI 5057036, MARIA CRISTINA SALDIVAR CAPUTO, correo `emiliomatsc@fpuna.edu.py`, a confirmar contra `emiliomatasc@fpuna.edu.py` (SPEC, D-17) |
 | Columnas del comprador | RUC: `receptor_tipo_documento=RUC`, documento con guion y digito, naturaleza `FISICA` salvo que el padron diga otra cosa, nombre segun el padron DNIT, confirmado por el usuario. CI: `CI`, `5057036`, `FISICA`, `MARIA CRISTINA SALDIVAR CAPUTO`. FE acepta `CI` en la plantilla (su SPEC de carga masiva, columna `receptor_tipo_documento`) |
 | Item | "Consultoria en tecnologia de la informacion", cantidad 1, precio 1.100 con IVA 10 % incluido (base 1.000, IVA 100) |
 | Condicion | Contado, efectivo |
-| Reparto, propuesta de FS | Una carga por comprador, de 100 facturas: son dos lotes llenos de 50, asi que ninguna espera la agenda del lote incompleto. La primera carga va sola, como sonda; las otras dos se suben seguidas, para medir dos cargas a la vez y el estado `EN_COLA` |
-| Cuota | 300 facturas entran en la cuota diaria de 500 del consumidor; las tres cargas se hacen el mismo dia |
-| Correo | Cada comprador recibe 100 correos. Antes de subir, se confirma que `emilio.saldivar@segel.com.py` no sea el correo del operador del facturador en produccion: si lo es, el aviso al facturador y el correo al comprador no se distinguen |
+| Reparto | Una carga por comprador. Carga A (comprador 1): 100 facturas, dos lotes llenos de 50; va sola, como sonda. Cargas B y C (compradores 2 y 3): 102 cada una, dos lotes llenos y uno de 2 que espera la agenda del lote incompleto (1 minuto, D-9); se suben seguidas, para medir dos cargas a la vez, el estado `EN_COLA` y el lote que no se llena |
+| Cuota | 304 facturas entran en la cuota diaria de 500 del consumidor; las tres cargas se hacen el mismo dia |
+| Correo | Un correo por factura a la casilla de su comprador. El tercer comprador ya no usa `emilio.saldivar@segel.com.py`, que puede ser la del operador (D-17) |
 | Numeracion | La del servicio: FE asigna los numeros, continuos |
-| Archivos | Los genera FS con un script desde la plantilla de FE y los datos de arriba, con `referencia_venta` propia por fila; el usuario los revisa antes de subirlos |
-| Quien sube y confirma | El usuario, desde la app, con el operador del facturador |
+| Archivos | Los genera FS con `scripts/segel-fs/generar-carga.py`, uno por carga, con `referencia_venta` propia por fila y fuera del repositorio; el usuario los revisa antes de subirlos |
+| Quien sube y confirma | El usuario, desde la pestana Carga masiva del panel, con el operador del facturador, siguiendo la seccion 4.2 |
 | Despues | Las facturas quedan emitidas. No se cancelan ni se anulan salvo que el usuario lo decida |
 
 ### 4.1 Mediciones y mapeo del comportamiento (D-15)
 
 El objetivo es saber como se comporta la instancia con 300 facturas antes de que pase en produccion, y tener un criterio claro para frenar.
 
-**Ensayo de volumen en la estacion, antes del despliegue.** El mismo reparto (tres cargas de 100, la primera sola) sobre el stack local del ensayo, en SIFEN test, con el bloque de numeros reservado (seccion 2.2). Los correos van todos a `esaldivar.segel@gmail.com`, nunca a los compradores reales. Con el mismo instrumental que se usara en la VPS. El resultado es la referencia contra la que se compara la prueba real. Lo ejecuta el usuario con su confirmacion, como el ensayo local (D-6).
+**Ensayo de volumen en la estacion, antes del despliegue.** Sobre `segel-rc4` (D-16), la misma tanda: cargas de 100, 102 y 102, la primera sola sobre el stack local del ensayo, en SIFEN test, con el bloque de numeros reservado (seccion 2.2). Los correos van todos a `esaldivar.segel@gmail.com`, nunca a los compradores reales. Con el mismo instrumental que se usara en la VPS. El resultado es la referencia contra la que se compara la prueba real. Lo ejecuta el usuario con su confirmacion, como el ensayo local (D-6).
 
 **Que se mide, en el ensayo y en produccion:**
+
+Ademas de lo de la tabla, en las cargas B y C se anota cuanto tarda en salir el lote de 2 despues del ultimo lote lleno.
 
 | Que | Como | Para que |
 |---|---|---|
@@ -129,6 +131,23 @@ El objetivo es saber como se comporta la instancia con 300 facturas antes de que
 - un salto de numero.
 
 **Instrumental.** Un script de FS que toma la linea base, muestrea mientras dura la prueba y deja un resumen en un archivo fuera de git, que luego se pasa a `TASKS` (E-2 para el ensayo de volumen, E-3 para produccion). Solo lee: no escribe en las bases ni cambia banderas. Se implementa con indicacion del usuario.
+
+### 4.2 Indicaciones para subir las cargas desde el panel
+
+FS entrega los tres archivos y esta lista. El usuario la sigue y FS mide en paralelo.
+
+1. FS toma la linea base y arranca el muestreo. Avisa cuando esta listo.
+2. En el panel, con el operador del facturador: pestana **Carga masiva**, **Nueva carga**.
+3. Arrastrar el archivo de la carga A. Esperar a que termine "Validando el archivo".
+4. Revisar el informe: 100 filas validas, ninguna con problemas, y el total esperado. Si aparece cualquier error, no confirmar y avisar a FS.
+5. **Confirmar y emitir.** La carga pasa por "En proceso", "En SIFEN" y "Finalizada".
+6. Esperar a que la carga A quede "Finalizada" y FS confirme que no hubo ninguna condicion para frenar (seccion 4.1).
+7. Subir la carga B y confirmarla. Enseguida, subir la carga C y confirmarla: debe mostrar "En espera de otra carga" mientras B avanza.
+8. Esperar a que B y C queden "Finalizada". Al final de cada una, el lote de 2 sale solo.
+9. En **Documentos**, revisar algunas facturas de cada comprador: KuDE descargable y correo enviado.
+10. FS cierra el muestreo, compara totales de FS y FE y registra el resultado en `TASKS` (E-3).
+
+Si algo se ve raro en cualquier paso, no se sube la carga siguiente: se usa "Copiar datos para soporte" en la carga y se avisa a FS.
 
 ## 5. Riesgos
 
