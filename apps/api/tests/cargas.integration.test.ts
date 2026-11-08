@@ -150,7 +150,7 @@ describeDb("carga masiva, con base", () => {
     await incorporar("PREPARADO");
     const filas = await documento();
     expect(filas).toHaveLength(1);
-    expect(filas[0]).toMatchObject({ estado: "PENDIENTE_SIFEN", email_estado: "PENDING", carga_masiva_id: cargaId, carga_numero_archivo: "001-002-0000099", numero_fiscal: "001-002-0000007", verificacion_next_at: null });
+    expect(filas[0]).toMatchObject({ estado: "PENDIENTE_SIFEN", email_estado: "PENDING", carga_masiva_id: cargaId, carga_numero_archivo: "001-002-0000099", numero_fiscal: "0000007", verificacion_next_at: null });
     const items = await pool.query<{ cantidad: string; subtotal: number }>("select cantidad, subtotal from factura_items_snapshot where factura_operativa_id = $1", [filas[0]!.id]);
     expect(items.rows).toHaveLength(1);
     expect(Number(items.rows[0]!.cantidad)).toBe(1.5);

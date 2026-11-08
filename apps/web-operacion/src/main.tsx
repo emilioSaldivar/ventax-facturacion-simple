@@ -2492,7 +2492,7 @@ function DocumentsView({
                       >
                         Carga
                       </button>
-                      {documento.carga.numero_archivo && documento.carga.numero_archivo !== documento.numero_fiscal ? ` · Archivo ${documento.carga.numero_archivo}` : null}
+                      {documento.carga.numero_archivo && !documento.carga.numero_archivo.endsWith(documento.numero_fiscal ?? "\u0000") ? ` · Archivo ${documento.carga.numero_archivo}` : null}
                     </span>
                   ) : null}
                   <small>{documento.cliente.razon_social}</small>

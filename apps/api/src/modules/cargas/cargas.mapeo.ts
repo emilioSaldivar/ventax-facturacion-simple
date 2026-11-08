@@ -9,6 +9,17 @@ import type { CargaMasivaRecord, FacturaDeCarga } from "./cargas.types";
 const MINUTO = 60_000;
 const SIN_TERMINAR_MS = 72 * 60 * MINUTO;
 
+/**
+ * Las facturas emitidas desde la app guardan el numero tal como lo devuelve FE (`1010000`); la carga
+ * lo informa con establecimiento y punto (`001-001-1010000`). Se guarda igual que las demas, para que
+ * la busqueda por numero de Documentos las encuentre (visto en el ensayo local, 2026-11-08).
+ */
+export function numeroSinPunto(numero: string | null): string | null {
+  if (!numero) return null;
+  const partes = /^\d{3}-\d{3}-(\d+)$/.exec(numero);
+  return partes ? partes[1]! : numero;
+}
+
 export function externalRefDeCarga(feCargaId: string, orden: number): string {
   return `carga:${feCargaId}:${orden}`;
 }
@@ -132,7 +143,7 @@ export function comprobanteAFactura(carga: Pick<CargaMasivaRecord, "fe_carga_id"
     sifenCodigo: comprobante.sifen?.codigo ?? null,
     sifenMensaje: comprobante.sifen?.mensaje ?? null,
     cdc: comprobante.cdc,
-    numeroFiscal: comprobante.numero_asignado,
+    numeroFiscal: numeroSinPunto(comprobante.numero_asignado),
     numeroArchivo: comprobante.numero_archivo,
     emailEstado: comprobante.correo,
     aprobadoEn: comprobante.aprobado_en,

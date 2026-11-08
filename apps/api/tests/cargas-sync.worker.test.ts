@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { sincronizarCarga } from "../src/modules/cargas/cargas-sync.worker";
-import { comprobanteAFactura, proximaSincronizacionMs, resolverEstadoFactura } from "../src/modules/cargas/cargas.mapeo";
+import { comprobanteAFactura, numeroSinPunto, proximaSincronizacionMs, resolverEstadoFactura } from "../src/modules/cargas/cargas.mapeo";
 import { accionSobreCarga, obtenerCarga, subirCarga } from "../src/modules/cargas/cargas.service";
 import { MockFiscalGateway } from "../src/modules/fiscal-gateway/fiscal-gateway.client";
 import { mockCargas } from "../src/modules/fiscal-gateway/fiscal-gateway.mock-cargas";
@@ -51,7 +51,7 @@ describe("mapeo de comprobantes", () => {
       estado: "EMITIDA",
       estadoVigente: false,
       fiscalStatusRaw: "APPROVED",
-      numeroFiscal: "001-002-0000007",
+      numeroFiscal: "0000007",
       numeroArchivo: "001-002-0000099",
       emailEstado: "SENT",
       condicionVenta: "CREDITO",
@@ -70,6 +70,12 @@ describe("mapeo de comprobantes", () => {
 
   it.each(["INVALIDO", "CANCELADO", "PENDIENTE", "ERROR", "DUPLICADO"] as const)("RN-13: %s no crea documento", (estado) => {
     expect(comprobanteAFactura(carga, comprobante({ estado }))).toBeNull();
+  });
+
+  it("guarda el numero sin establecimiento ni punto, como las facturas de la app", () => {
+    expect(numeroSinPunto("001-001-1010014")).toBe("1010014");
+    expect(numeroSinPunto("1010014")).toBe("1010014");
+    expect(numeroSinPunto(null)).toBeNull();
   });
 
   it("sin document_uuid o sin detalle no crea documento", () => {
