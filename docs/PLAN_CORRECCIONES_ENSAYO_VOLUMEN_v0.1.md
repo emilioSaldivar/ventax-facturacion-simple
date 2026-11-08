@@ -49,6 +49,12 @@
 
 1. CEV-1 con pruebas; 2. CEV-2 en compose y plantillas; 3. CEV-4; 4. CEV-3 cuando FE responda; 5. `bash scripts/deploy.sh` (fs-cm, mock) y suites; 6. reconstruir FS del ensayo y `up.sh` con topes; 7. carga de 20 con correo a `emilio.saldivar97@gmail.com` y nota de credito desde el panel (CA-02, CA-05); 8. importacion DNIT (CA-04); 9. runbook y cierre.
 
+## 6b. Ajustes al implementar
+
+- CEV-1: `contarCorreosPendientes` recibe la carga (`id`, `facturador_id`, `fe_carga_id`) y filtra por `facturador_id` y `carga_masiva_id`. La fecha de cierre sale de `finalizada_en` o `cancelada_en` de `FeCarga`.
+- CEV-2: Compose acepta `0` (sin `mem_limit`, `memswap_limit` ni `cpus`) y `-1` en `pids_limit`; validado con `docker compose config`. FE no puede usar `-1` ni vacio en `max-size` de logs: usa 100g por defecto.
+- CEV-3: la normalizacion vive en el servicio (`normalizarCorreoNotaCredito`, `facturas.service.ts`), sobre la respuesta clasificada; el repositorio no cambia.
+
 ## 7. Riesgos
 
 | Riesgo | Mitigacion |

@@ -7,7 +7,7 @@
 
 ## Estado
 
-**Ensayo local y ensayo de volumen cerrados (2026-11-08). FS-38, runbook y medicion hechos (SF2-013e, SF2-013f, SF2-018a, SF2-018b). Queda el despliegue en `segel-fs` (SF2-014 en adelante), que pide confirmacion directa del usuario, y decidir si FS-40 entra antes.** Historial: Lo que queda, en el orden de D-22 y para otra sesion: SF2-013f (FS-38, `TASKS_NOTA_CREDITO_TRABADA_v0.1`), SF2-013e (runbook), SF2-018a (medicion); despues el ensayo de volumen SF2-018b junto con FE; al final el despliegue y la prueba desde el panel (D-19). Sin respaldo manual en esta ocasion (D-13). **Paso 1 implementado (2026-11-07), por indicacion del usuario.** El ensayo local espera el tag `segel-rc3` (B-1). El despliegue y la prueba en produccion piden su propia confirmacion directa.
+**Ensayo local y ensayo de volumen cerrados (2026-11-08). FS-38, runbook y medicion hechos (SF2-013e, SF2-013f, SF2-018a, SF2-018b). Queda el despliegue en `segel-fs` (SF2-014 en adelante), que pide confirmacion directa del usuario, FS-40 ya esta corregido (`TASKS_CORRECCIONES_ENSAYO_VOLUMEN_v0.1`).** Historial: Lo que queda, en el orden de D-22 y para otra sesion: SF2-013f (FS-38, `TASKS_NOTA_CREDITO_TRABADA_v0.1`), SF2-013e (runbook), SF2-018a (medicion); despues el ensayo de volumen SF2-018b junto con FE; al final el despliegue y la prueba desde el panel (D-19). Sin respaldo manual en esta ocasion (D-13). **Paso 1 implementado (2026-11-07), por indicacion del usuario.** El ensayo local espera el tag `segel-rc3` (B-1). El despliegue y la prueba en produccion piden su propia confirmacion directa.
 
 ## Matriz
 
@@ -27,7 +27,7 @@
 | SF2-012 | 2 | Cierre de la carga masiva contra FE real: CMF-018 y CMF-020, supuesto de `actualizado_en` con `correo` | Anotado en `TASKS_CARGA_MASIVA_FACTURAS_v0.1`; desvios del contrato corregidos y reensayados | FS | DONE (2026-11-08), E-1: carga masiva contra FE real cerrada; numero fiscal de carga verificado (`c38621a`) |
 | SF2-013 | 3 | Respaldo manual de las dos bases en la VPS | Dos dumps en `~/segel/backups`, con tamano y `df` registrados | FS, con autorizacion del usuario | NO APLICA (2026-11-08): el usuario decide no hacerlo en esta ocasion (SPEC, D-13) |
 | SF2-013b | 3 | Pendientes de FE para esta etapa: tag `segel-rc4` en origin (D-16) y lo que FE informe como pendiente (SPEC, B-9) | FE avisa que esta alineado; el usuario lo confirma | FE | DONE (2026-11-08): FE avisa el tag publicado (`f83a83c`) y la decision de D-20; `git ls-remote` lo confirma |
-| SF2-013g | 1 | Si el usuario elige `rc4.1` (D-25): `FE_REF=segel-rc4.1` en `build-images.sh` y `deploy.sh`; `NCE_EMAIL_ENABLED=true`, `EMAIL_QUEUE_POR_MINUTO=25` y `EMAIL_QUEUE_CONCURRENCY=2` en `fe.env.example` y en el runbook; verificacion de la migracion `046` | `bash -n`; `init-env.sh test` con los valores; tag publicado por FE | FS | BLOCKED: decision del usuario y push del tag por FE |
+| SF2-013g | 1 | Si el usuario elige `rc4.1` (D-25): `FE_REF=segel-rc4.1` en `build-images.sh` y `deploy.sh`; `NCE_EMAIL_ENABLED=true`, `EMAIL_QUEUE_POR_MINUTO=25` y `EMAIL_QUEUE_CONCURRENCY=2` en `fe.env.example` y en el runbook; verificacion de la migracion `046` | `bash -n`; `init-env.sh test` con los valores; tag publicado por FE | FS | PARTIAL (2026-11-08, `539711a` y `515c2b1`): scripts, plantilla y runbook con `rc4.1`, por el pedido del usuario de aplicar los pendientes (`SPEC_CORRECCIONES_ENSAYO_VOLUMEN_v0.1`, CEV-4). Falta que FE publique el tag y que el usuario confirme la version |
 | SF2-014 | 3 | Construccion y transferencia (`build-images.sh`, `deploy.sh files`, `deploy.sh images`) | `docker images` en la VPS con las once imagenes | FS | BLOCKED: espera SF2-013b, SF2-018b y confirmacion directa (D-14) |
 | SF2-015 | 3 | Variables en `fe/.env.segel` y `fs/.env.segel` de la VPS, a mano | Valores de RN-03 presentes; sin `JAVA_TOOL_OPTIONS` | FS | BLOCKED: espera SF2-014 |
 | SF2-016 | 3 | `up.sh` y verificacion CA-02 | Salud, workers sin bucle, `java.*.ok` en `true`, puertos publicados correctos | FS | BLOCKED: espera SF2-015 |
@@ -113,5 +113,9 @@ Mismo stack, con FE `05d4811` (`rc4.1`) y FS `b20fa23`, `NCE_EMAIL_ENABLED=true`
 - **Recursos:** pico de `worker-correo` 153 MiB con concurrencia 2 (tope 512 MiB); suma de picos de los once contenedores 519 MiB; sin reinicios.
 - **FS-40 reproducido:** 51 de 60 facturas siguieron con el correo "pendiente" en FS despues del cierre de la carga.
 - **Dato de FE para produccion:** la copia oculta del correo va al correo del emisor cargado en FE. En el ensayo era `facturacion@ventax.app`; en `segel-fs` hay que revisar ese dato del emisor antes de la prueba real.
+
+### E-2c. Correcciones tras el ensayo (2026-11-08)
+
+FS-40 corregido, topes de recursos de FS y FE aplicados, correo de la nota de credito en FS y preparacion para `rc4.1`, validados de punta a punta en el ensayo: `TASKS_CORRECCIONES_ENSAYO_VOLUMEN_v0.1`, E-1 a E-3.
 
 Pendiente: E-3, prueba en produccion.

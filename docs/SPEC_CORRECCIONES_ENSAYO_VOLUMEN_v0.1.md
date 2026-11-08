@@ -1,6 +1,6 @@
 # SPEC Correcciones Tras El Ensayo De Volumen v0.1
 
-**Fecha:** 2026-11-08 · **Rama:** `feat/identidad-segel` · **Estado:** en implementacion, sin despliegue (decision del usuario, 2026-11-08).
+**Fecha:** 2026-11-08 · **Rama:** `feat/identidad-segel` · **Estado:** implementado y validado el 2026-11-08 (TASKS, E-1 a E-3), sin despliegue (decision del usuario).
 
 ## Alineacion
 
@@ -49,16 +49,16 @@ Corregir lo que el ensayo de volumen mostro del lado de FS y dejar a FS y FE con
 | `dnit-ruc-loader-cron` | sin medir con importacion completa | 384m | 1.0 | 128 |
 | `migrate` (corre y termina) | — | 256m | 1.0 | 128 |
 
-- **RN-07.** El tope del cargador DNIT se valida con una importacion completa del padron en el stack del ensayo (dos millones de filas): si supera el 80 % del tope, se sube y se registra. Un reinicio del contenedor por memoria durante la importacion es un fallo de esta tarea.
-- **RN-08.** Rotacion de logs: FS ya rota (`json-file`, 10 MB por 5 archivos por contenedor). FE no rota ninguno de sus contenedores: es el riesgo de disco mas grande en `/var`. Se pide a FE que lo agregue en su compose; FS no modifica el compose de FE.
-- **RN-09.** Topes de FE: los fija FE en su compose y en su runbook; FS los escribe en `fe.env.example` con los valores que FE confirme. Propuesta enviada por FS (2026-11-08): API 512m y 1.5 CPU, cargas 384m, correo 384m, batch 192m y 1 CPU, status-sync 128m, frontend 64m, Postgres de FE 512m y 1.5 CPU (hoy sin tope). Si FE no agrega topes a su Postgres, se registra como riesgo aceptado.
+- **RN-07.** **Medido (E-2): 46 MiB de 384; Postgres 194 MiB de 384; la base crece a 670 MB.** El tope del cargador DNIT se valida con una importacion completa del padron en el stack del ensayo (dos millones de filas): si supera el 80 % del tope, se sube y se registra. Un reinicio del contenedor por memoria durante la importacion es un fallo de esta tarea.
+- **RN-08.** **Resuelto por FE (2026-11-08, `1fcb1bf`): todos sus servicios rotan por `DOCKER_LOG_MAX_SIZE` y `DOCKER_LOG_MAX_FILE` (10 MB por 5 en `segel-fs`).** Rotacion de logs: FS ya rota (`json-file`, 10 MB por 5 archivos por contenedor). FE no rota ninguno de sus contenedores: es el riesgo de disco mas grande en `/var`. Se pide a FE que lo agregue en su compose; FS no modifica el compose de FE.
+- **RN-09.** Topes de FE: los fija FE en su compose y en su runbook; FS los escribe en `fe.env.example` con los valores que FE confirme. Propuesta enviada por FS (2026-11-08): API 512m y 1.5 CPU, cargas 384m, correo 384m, batch 192m y 1 CPU, status-sync 128m, frontend 64m, Postgres de FE 512m y 1.5 CPU (hoy sin tope). **Resuelto por FE (2026-11-08, `1fcb1bf` y `a0fe918`):** acepto los valores; agrego CPU a status-sync y frontend (0,5), procesos (256 en api, cargas, correo y Postgres; 128 el resto) y `memswap_limit` igual al tope a pedido de FS.
 - **RN-10.** Verificacion: `docker inspect` muestra los topes en cada contenedor; el ensayo de una carga y el DNIT no producen reinicios ni `OOMKilled`; el runbook explica como leer los topes y que hacer ante un `OOMKilled`.
 
 ## CEV-3. Correo de la nota de credito en FS
 
 **Hallazgo.** Con `rc4.1` la nota de credito sale por correo (E-2b), pero FS la muestra con correo `UNKNOWN` para siempre: al crearla guarda lo que responde FE y `updateEmailEstadoPendiente` solo actualiza los `PENDING`.
 
-- **RN-11.** El estado del correo de una nota de credito se trata igual que el de una factura: si FE responde `PENDING`, FS guarda `PENDING` y lo actualiza al consultar. El valor que FE devuelve en `POST /v1/nota-credito` con `rc4.1` lo confirma FE antes de implementar (pregunta enviada el 2026-11-08). Si FE no devuelve `email_status`, FS guarda nulo en lugar de `UNKNOWN` y lo completa con la consulta de estado que ya existe para facturas.
+- **RN-11.** **Implementado (`ed52650`); FE devuelve `email_status` en la nota desde `1fcb1bf` (`PENDING` en lote si hay correo).** El estado del correo de una nota de credito se trata igual que el de una factura: si FE responde `PENDING`, FS guarda `PENDING` y lo actualiza al consultar. El valor que FE devuelve en `POST /v1/nota-credito` con `rc4.1` lo confirma FE antes de implementar (pregunta enviada el 2026-11-08). Si FE no devuelve `email_status`, FS guarda nulo en lugar de `UNKNOWN` y lo completa con la consulta de estado que ya existe para facturas.
 
 ## CEV-4. FS con FE `segel-rc4.1`
 
