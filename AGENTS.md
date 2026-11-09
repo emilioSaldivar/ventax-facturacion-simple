@@ -110,6 +110,7 @@ La fuente de verdad de este proyecto es:
 - `docs/SPEC_CARGA_ATENCION_COMPROBANTES_v0.1.md`
 - `docs/PLAN_CARGA_ATENCION_COMPROBANTES_v0.1.md`
 - `docs/TASKS_CARGA_ATENCION_COMPROBANTES_v0.1.md`
+- `docs/SPEC_TOTALES_FE_EN_CARGA_v0.1.md`
 - `spec/openapi.yaml`
 
 Los documentos bajo `contexto_facturacion_electronica/` y `contexto_pos_graciela/` son antecedentes. No son la especificacion final del nuevo producto.
