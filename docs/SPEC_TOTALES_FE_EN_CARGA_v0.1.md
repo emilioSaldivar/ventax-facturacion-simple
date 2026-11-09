@@ -20,12 +20,13 @@ Ademas, el `detalle.total` de FE (`detalleDe` en `presentar-carga.ts`, `segel-rc
 
 ## Dependencia
 
-FE agrega `detalle.totales`, tomado del documento generado (bloque de totales del DE), presente desde que el documento existe. Forma propuesta por FS el 2026-11-09, **provisoria hasta que FE confirme los nombres**:
+FE agrega `detalle.totales`, tomado del documento generado (bloque de totales del DE), presente desde que el documento existe. Forma propuesta por FS y **confirmada por FE el 2026-11-09**, mas `anticipo` (FE `rc4.11`). `detalle.total` no cambia de significado (suma bruta):
 
 | Campo | Significado |
 |---|---|
 | `bruto` | Suma de cantidad por precio, antes de descuentos |
 | `descuento` | Descuentos por articulo y global |
+| `anticipo` | Anticipos aplicados |
 | `total` | Total de la operacion, el de la factura y el KUDE |
 | `redondeo` | Redondeo de la operacion, si lo hay |
 | `gravada_10`, `gravada_5` | Base imponible por tasa |
@@ -34,7 +35,7 @@ FE agrega `detalle.totales`, tomado del documento generado (bloque de totales de
 
 ### Nota de credito total de una factura cargada
 
-La nota de credito total se arma con las lineas y totales de la factura de FS (`facturas.service.ts`: `items: original.items`, `totals: original.totals`). Con una factura cargada con descuentos, la nota sumaria cantidad por precio, **mas que la factura**: FE la rechazaria (`CREDIT_NOTE_TOTAL_EXCEEDED`) o quedaria mal. Con articulos exonerados o gravados parciales, el IVA de la nota no coincidiria con el de la factura. Opciones planteadas a FE el 2026-11-09, a decidir con su respuesta:
+La nota de credito total se arma con las lineas y totales de la factura de FS (`facturas.service.ts`: `items: original.items`, `totals: original.totals`). Con una factura cargada con descuentos, la nota sumaria cantidad por precio, **mas que la factura**: FE la rechazaria (`CREDIT_NOTE_TOTAL_EXCEEDED`) o quedaria mal. Con articulos exonerados o gravados parciales, el IVA de la nota no coincidiria con el de la factura. Opciones planteadas a FE el 2026-11-09; **FE eligio la 1** (nota total por referencia), en una entrega posterior:
 
 1. FE acepta una nota de credito total por referencia (el CDC de la factura), sin lineas, y arma las lineas del documento original. FS no calcula nada.
 2. FE informa en `detalle.items` el precio neto, el descuento y la afectacion de cada linea, y FS los reenvia tal cual en la nota.
