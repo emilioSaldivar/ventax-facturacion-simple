@@ -25,6 +25,10 @@ export interface TaxTotals {
   iva_10: PygAmount;
   total_iva: PygAmount;
   total: PygAmount;
+  /** SPEC_TOTALES_FE_EN_CARGA_v0.1: solo en facturas de carga, con los montos de FE. No entra en el calculo propio. */
+  descuento?: PygAmount;
+  /** SPEC_TOTALES_FE_EN_CARGA_v0.1, RN-07: con descuento, anticipo o IVA exonerado, la nota de credito va por referencia en FE. */
+  nota_credito_por_referencia?: boolean;
 }
 
 export interface TaxCalculationResult {

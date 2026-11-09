@@ -142,8 +142,22 @@ function itemsYTotales(detalle: NonNullable<FeCargaComprobante["detalle"]>): Pic
  * Nulo si el comprobante no crea documento (RN-13) o si FE no trae su detalle. D-11: si el total
  * calculado difiere del de FE, manda FE, que es el que esta en el XML: se registra y se conserva.
  */
+/** SPEC_TOTALES_FE_EN_CARGA_v0.1, RN-07: lo que FS no puede reproducir en una nota de credito con sus lineas. */
+function requiereNotaCreditoPorReferencia(detalle: NonNullable<FeCargaComprobante["detalle"]>): boolean {
+  const t = detalle.totales;
+  if (t && (t.descuento > 0 || t.anticipo > 0 || t.exonerada > 0)) return true;
+  return detalle.items.some(
+    (item) => (item.descuento ?? 0) > 0 || item.afectacionIva === "EXONERADO" || item.afectacionIva === "GRAVADO_PARCIAL"
+  );
+}
+
 export function comprobanteAFactura(carga: Pick<CargaMasivaRecord, "fe_carga_id">, comprobante: FeCargaComprobante): FacturaDeCarga | null {
   if (!comprobante.document_uuid || !ESTADOS_CON_DOCUMENTO.has(comprobante.estado)) return null;
+  // RN-05: la nota de remision y los demas tipos no son facturas de FS.
+  if (comprobante.tipo_documento && comprobante.tipo_documento !== "FACTURA") {
+    logger.warn({ fe_carga_id: carga.fe_carga_id, orden: comprobante.orden, tipo_documento: comprobante.tipo_documento }, "carga masiva: comprobante que no es factura, no se incorpora");
+    return null;
+  }
 
   const { detalle } = comprobante;
   if (!detalle || !detalle.receptor || detalle.items.length === 0) {
@@ -153,11 +167,26 @@ export function comprobanteAFactura(carga: Pick<CargaMasivaRecord, "fe_carga_id"
 
   const desdeEmision = estadoDesdeComprobante(comprobante);
   const vigente = mapDocumentStatusCanonico(comprobante.documento_estado);
-  const { items, totals } = itemsYTotales(detalle);
+  const calculado = itemsYTotales(detalle);
+  const { items } = calculado;
   const { detalle: _detalle, ...sinDetalle } = comprobante;
   const responseSnapshot: Record<string, unknown> = { ...sinDetalle };
+  const t = detalle.totales;
+  // RN-01: con los totales de FE no hay calculo propio. RN-02: sin ellos, como hasta ahora.
+  const totals: FacturaDeCarga["totals"] = t
+    ? {
+        subtotal: t.bruto,
+        total_sin_iva: t.total - t.iva_total,
+        iva_5: t.iva_5,
+        iva_10: t.iva_10,
+        total_iva: t.iva_total,
+        total: t.total,
+        descuento: t.descuento
+      }
+    : { ...calculado.totals };
+  if (requiereNotaCreditoPorReferencia(detalle)) totals.nota_credito_por_referencia = true;
 
-  if (totals.total !== detalle.total) {
+  if (!t && totals.total !== detalle.total) {
     logger.warn(
       { fe_carga_id: carga.fe_carga_id, orden: comprobante.orden, total_fs: totals.total, total_fe: detalle.total },
       "carga masiva: el total calculado difiere del de FE"

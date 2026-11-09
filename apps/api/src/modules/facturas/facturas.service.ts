@@ -201,8 +201,15 @@ function getNotaCreditoIneligibility(documento: DocumentoResponse, creditedFactu
   if (creditedFacturaIds.has(documento.id)) {
     return "La factura ya tiene una nota de credito total.";
   }
+  if (documento.totals?.nota_credito_por_referencia) {
+    return MENSAJE_NOTA_CREDITO_POR_REFERENCIA;
+  }
   return null;
 }
+
+/** SPEC_TOTALES_FE_EN_CARGA_v0.1, RN-07: hasta que FE ofrezca la nota de credito total por referencia. */
+export const MENSAJE_NOTA_CREDITO_POR_REFERENCIA =
+  "Esta factura tiene descuentos, anticipos o IVA exonerado: la nota de credito se gestiona con soporte.";
 
 export async function getDocumentoById(
   context: OperationalContextResponse,
@@ -1170,6 +1177,10 @@ export async function emitNotaCreditoTotal(
   const original = await getDocumentoById(context, facturaId, repository);
   if (original.tipo !== "FACTURA" || original.estado !== "EMITIDA" || !original.cdc) {
     throw new HttpError(409, "CONFLICT", "Factura no elegible para nota de credito.");
+  }
+  if (original.totals?.nota_credito_por_referencia) {
+    // RN-07: sus lineas no reproducen la factura (descuentos, anticipos o IVA exonerado). FE no se llama.
+    throw new HttpError(409, "CONFLICT", MENSAJE_NOTA_CREDITO_POR_REFERENCIA, { reason: "NOTA_CREDITO_REQUIERE_REFERENCIA" });
   }
 
   // RN-02: a lo sumo una nota viva por factura. Una trabada se reintenta; las rechazadas abren otro intento.

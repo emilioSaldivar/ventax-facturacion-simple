@@ -8,6 +8,8 @@
  * Del archivo solo lee los titulos, `numero_comprobante`, `referencia_venta` y `receptor_email`.
  * Los marcadores van al inicio de `referencia_venta`: INVALIDO, AVISO, RECHAZO, ERROR, DUP.
  * `INUT-RECHAZO` en cualquier parte de la referencia: SIFEN rechaza la inutilizacion de su numero.
+ * Totales (SPEC_TOTALES_FE_EN_CARGA_v0.1): `DESC` en la referencia, item con descuento; `EXON`, item exonerado;
+ * `SINTOT`, detalle sin `totales` (FE anterior).
  *
  * Atencion (SPEC_CARGA_ATENCION_COMPROBANTES_v0.1): con numeracion del cliente, un INVALIDO o
  * CANCELADO deja su numero sin usar; un RECHAZADO deja su numero rechazado con cualquier numeracion.
@@ -336,14 +338,37 @@ function accionNoAdmitida(mock: MockCarga): FiscalGatewayError {
   });
 }
 
-function detalleMock(): NonNullable<FeCargaComprobante["detalle"]> {
-  return {
+const SIN_MONTOS = { anticipo: 0, redondeo: 0, gravada_5: 0, exenta: 0, exonerada: 0, iva_5: 0 };
+
+function detalleMock(referencia: string | null): NonNullable<FeCargaComprobante["detalle"]> {
+  const base = {
     fecha: new Date().toISOString().slice(0, 19),
     tipoTransaccion: 1,
     receptor: { tipoDocumento: "RUC", docNro: "80000000", dv: "1", razonSocial: "Cliente de carga", naturaleza: "JURIDICA" },
     condicionOperacion: { tipo: "CONTADO" },
-    items: [{ codigo: "ITEM-1", descripcion: "Item de carga", cantidad: 1, precioUnitario: 100000, ivaTipo: "IVA10" }],
     total: 100000
+  };
+  const ref = referencia ?? "";
+  if (ref.includes("DESC")) {
+    return {
+      ...base,
+      items: [{ codigo: "ITEM-1", descripcion: "Item con descuento", cantidad: 1, precioUnitario: 100000, ivaTipo: "IVA10", descuento: 10000 }],
+      totales: { ...SIN_MONTOS, bruto: 100000, descuento: 10000, total: 90000, gravada_10: 81818, iva_10: 8182, iva_total: 8182 }
+    };
+  }
+  if (ref.includes("EXON")) {
+    return {
+      ...base,
+      items: [{ codigo: "ITEM-1", descripcion: "Item exonerado", cantidad: 1, precioUnitario: 100000, ivaTipo: "EXENTO", afectacionIva: "EXONERADO" }],
+      totales: { ...SIN_MONTOS, bruto: 100000, descuento: 0, total: 100000, gravada_10: 0, exonerada: 100000, iva_10: 0, iva_total: 0 }
+    };
+  }
+  const items = [{ codigo: "ITEM-1", descripcion: "Item de carga", cantidad: 1, precioUnitario: 100000, ivaTipo: "IVA10" }];
+  if (ref.includes("SINTOT")) return { ...base, items };
+  return {
+    ...base,
+    items,
+    totales: { ...SIN_MONTOS, bruto: 100000, descuento: 0, total: 100000, gravada_10: 90909, iva_10: 9091, iva_total: 9091 }
   };
 }
 
@@ -430,7 +455,7 @@ export const mockCargas = {
     const limit = filtros.limit ?? 50;
     const items = filtrados.slice((page - 1) * limit, page * limit).map((comprobante) => {
       const publico = presentarComprobante(mock, comprobante);
-      return filtros.detalle ? { ...publico, detalle: comprobante.document_uuid ? detalleMock() : null } : publico;
+      return filtros.detalle ? { ...publico, detalle: comprobante.document_uuid ? detalleMock(comprobante.referencia_venta) : null } : publico;
     });
     return { carga_id: cargaId, estado: mock.carga.estado, items, page, limit, total: filtrados.length };
   },

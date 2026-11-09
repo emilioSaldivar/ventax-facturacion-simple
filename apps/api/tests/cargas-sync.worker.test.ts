@@ -45,6 +45,58 @@ function comprobante(overrides: Partial<FeCargaComprobante> = {}): FeCargaCompro
 const carga = { fe_carga_id: "carga-fe" };
 
 describe("mapeo de comprobantes", () => {
+  describe("totales de FE (SPEC_TOTALES_FE_EN_CARGA_v0.1)", () => {
+    const totales = { bruto: 100000, descuento: 10000, anticipo: 0, total: 90000, redondeo: 0, gravada_10: 81818, gravada_5: 0, exenta: 0, exonerada: 0, iva_10: 8182, iva_5: 0, iva_total: 8182 };
+    const conDetalle = (extra: Partial<NonNullable<FeCargaComprobante["detalle"]>>) =>
+      comprobante({ detalle: { ...comprobante().detalle!, ...extra } });
+
+    it("CA-01: con totales de FE guarda los montos de FE, sin calcular, y marca la nota de credito", () => {
+      const factura = comprobanteAFactura(carga, conDetalle({
+        items: [{ codigo: "A", descripcion: "Uno", cantidad: 1, precioUnitario: 100000, ivaTipo: "IVA10", descuento: 10000 }],
+        total: 100000,
+        totales
+      }))!;
+      expect(factura.totals).toEqual({
+        subtotal: 100000, total_sin_iva: 81818, iva_5: 0, iva_10: 8182, total_iva: 8182, total: 90000, descuento: 10000, nota_credito_por_referencia: true
+      });
+      expect(factura.responseSnapshot.total_fe).toBeUndefined();
+    });
+
+    it("CA-02: con un articulo exonerado toma el IVA de FE", () => {
+      const factura = comprobanteAFactura(carga, conDetalle({
+        items: [{ codigo: "A", descripcion: "Uno", cantidad: 1, precioUnitario: 100000, ivaTipo: "EXENTO", afectacionIva: "EXONERADO" }],
+        total: 100000,
+        totales: { ...totales, descuento: 0, total: 100000, gravada_10: 0, exonerada: 100000, iva_10: 0, iva_total: 0 }
+      }))!;
+      expect(factura.totals).toMatchObject({ total: 100000, total_iva: 0, nota_credito_por_referencia: true });
+    });
+
+    it("sin descuento ni afectacion, toma los montos de FE y no marca la nota de credito", () => {
+      const factura = comprobanteAFactura(carga, conDetalle({
+        items: [{ codigo: "A", descripcion: "Uno", cantidad: 1, precioUnitario: 110000, ivaTipo: "IVA10" }],
+        total: 110000,
+        totales: { ...totales, bruto: 110000, descuento: 0, total: 110000, gravada_10: 100000, iva_10: 10000, iva_total: 10000 }
+      }))!;
+      expect(factura.totals).toMatchObject({ total: 110000, iva_10: 10000, total_sin_iva: 100000 });
+      expect(factura.totals.nota_credito_por_referencia).toBeUndefined();
+    });
+
+    it("CA-03: sin totales calcula como antes; una linea con descuento igual marca la nota de credito", () => {
+      const sinTotales = comprobanteAFactura(carga, comprobante())!;
+      expect(sinTotales.totals.nota_credito_por_referencia).toBeUndefined();
+      expect(sinTotales.totals.total).toBe(comprobante().detalle!.total);
+      const conDescuento = comprobanteAFactura(carga, conDetalle({
+        items: [{ codigo: "A", descripcion: "Uno", cantidad: 1, precioUnitario: 100000, ivaTipo: "IVA10", descuento: 5000 }],
+        total: 100000
+      }))!;
+      expect(conDescuento.totals).toMatchObject({ total: 100000, nota_credito_por_referencia: true });
+    });
+
+    it("CA-04: un comprobante que no es factura no crea factura", () => {
+      expect(comprobanteAFactura(carga, comprobante({ tipo_documento: "NOTA_REMISION" }))).toBeNull();
+    });
+  });
+
   it("arma external_ref estable, estado y campos del documento", () => {
     expect(comprobanteAFactura(carga, comprobante())).toMatchObject({
       externalRef: "carga:carga-fe:3",

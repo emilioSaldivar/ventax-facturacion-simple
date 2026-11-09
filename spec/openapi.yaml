@@ -3006,6 +3006,12 @@ components:
           type: integer
         total:
           type: integer
+        descuento:
+          type: integer
+          description: 'Solo en facturas de carga con los totales del backend fiscal (SPEC_TOTALES_FE_EN_CARGA_v0.1). Descuentos por articulo y global.'
+        nota_credito_por_referencia:
+          type: boolean
+          description: 'Factura de carga con descuentos, anticipos o IVA exonerado: no admite nota de credito total desde FS hasta que el backend fiscal ofrezca la nota por referencia (`409` con `reason: NOTA_CREDITO_REQUIERE_REFERENCIA`).'
 
     DocumentoResponse:
       type: object

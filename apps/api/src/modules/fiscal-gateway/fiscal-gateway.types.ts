@@ -568,8 +568,32 @@ export interface FeCargaComprobanteDetalle {
     cantidad?: number;
     precioUnitario?: number;
     ivaTipo?: string;
+    /** FE `rc4.7`: descuento por unidad. */
+    descuento?: number;
+    /** FE `rc4.9`: `GRAVADO`, `EXONERADO`, `EXENTO` o `GRAVADO_PARCIAL`. */
+    afectacionIva?: string;
+    proporcionGravada?: number;
   }>;
+  /** Suma bruta de las lineas (cantidad por precio): FE no le cambia el significado. */
   total: number;
+  /** SPEC_TOTALES_FE_EN_CARGA_v0.1: montos del DE generado. Ausente con FE anterior; null antes de PREPARADO. */
+  totales?: FeDetalleTotales | null;
+}
+
+export interface FeDetalleTotales {
+  bruto: number;
+  descuento: number;
+  anticipo: number;
+  /** Total de la operacion: el de la factura y el KUDE. */
+  total: number;
+  redondeo: number;
+  gravada_10: number;
+  gravada_5: number;
+  exenta: number;
+  exonerada: number;
+  iva_10: number;
+  iva_5: number;
+  iva_total: number;
 }
 
 export interface FeCargaComprobante {

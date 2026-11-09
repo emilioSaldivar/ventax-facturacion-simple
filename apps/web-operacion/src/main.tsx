@@ -231,6 +231,9 @@ interface FacturaPreviewResponse {
     iva_10: number;
     total_iva: number;
     total: number;
+    /** SPEC_TOTALES_FE_EN_CARGA_v0.1: facturas de carga con descuentos, anticipos o IVA exonerado. */
+    descuento?: number;
+    nota_credito_por_referencia?: boolean;
   };
 }
 
@@ -2756,6 +2759,7 @@ function DocumentsView({
                 <button className="secondary-action" disabled={actionLoading || !canEmitNotaCredito(selected, documents)} onClick={() => void emitSelectedNotaCredito()} type="button">
                   ↩ Crear nota de credito
                 </button>
+                {selected.totals?.nota_credito_por_referencia ? <small className="muted">{AVISO_NOTA_CREDITO_POR_REFERENCIA}</small> : null}
                 <button className="secondary-action" disabled={actionLoading || !canCancelDocumento(selected)} onClick={() => void cancelSelectedDocumento()} type="button">
                   ⚠ Anular {getDocumentoNombreLower(selected.tipo)}
                 </button>
@@ -5859,8 +5863,14 @@ function canCancelDocumento(documento: DocumentoResponse): boolean {
   return documento.tipo === "FACTURA" && documento.estado === "EMITIDA" && Boolean(documento.cdc);
 }
 
+/** SPEC_TOTALES_FE_EN_CARGA_v0.1, RN-07. */
+const AVISO_NOTA_CREDITO_POR_REFERENCIA = "Esta factura tiene descuentos, anticipos o IVA exonerado: la nota de crédito se gestiona con soporte.";
+
 function canEmitNotaCredito(documento: DocumentoResponse, documents: DocumentoResponse[]): boolean {
   if (documento.tipo !== "FACTURA" || documento.estado !== "EMITIDA" || !documento.cdc) {
+    return false;
+  }
+  if (documento.totals?.nota_credito_por_referencia) {
     return false;
   }
 

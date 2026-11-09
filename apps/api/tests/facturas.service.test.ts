@@ -41,6 +41,7 @@ import {
   getDocumentoEventos,
   getReconciliacionFiscal,
   listNotaCreditoCandidates,
+  MENSAJE_NOTA_CREDITO_POR_REFERENCIA,
   listDocumentos,
   previewFactura,
   refreshDocumentoStatus
@@ -1375,6 +1376,21 @@ describe("facturas service", () => {
       statusCode: 409,
       code: "CONFLICT"
     });
+  });
+
+  it("SPEC_TOTALES_FE_EN_CARGA_v0.1 RN-07: factura de carga con descuento no emite nota de credito ni llama a FE", async () => {
+    const repo = new FakeFacturaRepository();
+    const base = buildDocumento({ estado: "EMITIDA", cdc: "A".repeat(44) });
+    repo.findByIdResponse = { ...base, totals: { ...base.totals, descuento: 10000, nota_credito_por_referencia: true } };
+    const gateway = new FakeFiscalGateway(new FiscalGatewayError("UPSTREAM_ERROR", "Should not emit"));
+    await expect(
+      emitNotaCreditoTotal(context, "66666666-6666-4666-8666-666666666666", { motivo: "Error" }, repo, gateway, { idempotencyKey: "x" })
+    ).rejects.toMatchObject({ statusCode: 409, details: { reason: "NOTA_CREDITO_REQUIERE_REFERENCIA" } });
+    expect(gateway.lastNotaCreditoRequest).toBeNull();
+
+    repo.list = async () => ({ total: 1, items: [repo.findByIdResponse!] });
+    const candidates = await listNotaCreditoCandidates(context, { limit: 30, offset: 0 }, repo);
+    expect(candidates.items[0]).toMatchObject({ elegible: false, motivo_no_elegible: MENSAJE_NOTA_CREDITO_POR_REFERENCIA });
   });
 
   it("same invoice and attempt always derive the same key (RN-01)", async () => {
