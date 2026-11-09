@@ -136,3 +136,16 @@ Hecho por FE desde su sesion, por pedido del usuario ("opcion 2"), con FE `segel
 - **Archivos de la prueba:** se generaron con fecha 2026-11-08; si la prueba es otro dia se regeneran (SF2-019).
 
 Pendiente: E-3, prueba en produccion.
+
+### E-5. Despliegue en `segel-fs` de FE `segel-rc4.6.1` y FS-47 (2026-11-09, noche)
+
+Autorizado por el usuario directamente en la sesion de FS. Hecho desde la estacion de FS por SSH (esta vez el acceso no estuvo bloqueado).
+
+- **Fase 0, respaldo** (`fe-local-data/segel-fs/backup-segel-fs.sh`): `backups/20261109T223206Z`, FE 531 KB y FS 261 KB sin padron, mas `.env`, certificados y secretos, fuera de git con permiso 700. Restaurado en un Postgres descartable: FE 305 documentos, FS 305 facturas y 39 migraciones.
+- **Estado previo:** `/var` 250 GB con 240 GB libres y RAM 7,5 GiB (infraestructura ya entrego los 8 GB). FE `segel-rc4.3` y FS `97f7164`, todo sano.
+- **Fase 1:** `FS_REF=HEAD` (`725274e`; el codigo de la API y la pantalla es el mismo de `102783e`, probado en E-4 de `TASKS_CARGA_ATENCION_COMPROBANTES_v0.1`) y `FE_REF=segel-rc4.6.1` (tag `7fa962b`, commit `97d89b6`, el mismo probado). Sin migraciones nuevas de FE (sigue en 046) ni de FS (sigue en 0039). Antes de transferir, las once imagenes de la VPS quedaron con la etiqueta `:antes-rc4.6.1`. `deploy.sh images` copio tambien las etiquetas locales `:antes-cac`: se quitaron en la VPS. IDs de las imagenes `latest` iguales en la estacion y en la VPS.
+- **Fase 2:** `bin/up.sh` sin errores; FS llega a FE con `status ok`, `java.kude` y `java.firma` en `true`. Todos los servicios con su tope de memoria, `log=10m`, sin OOM ni reinicios. Banderas de FE como en `rc4.1`: `SIFEN_ENV=prod`, `RECONCILE_DEFERRED_ENABLED`, `NCE_IDEMPOTENCY_ENABLED`, `NCE_EMAIL_ENABLED`, `EMAIL_QUEUE_POR_MINUTO=25`, `EMAIL_QUEUE_CONCURRENCY=2`. Puertos: `8092` y `8100` en `10.100.0.145`; `8091`, `9989` y `5434` en `127.0.0.1`. `worker-correo` arranco; la API de FS sin errores.
+- **Verificacion de la entrega:** la API de FE trae la ruta `/inutilizar` de cargas; la pantalla de FS trae "Inutilizar número" y "Edición no disponible todavía"; la API de FS registra `CARGA_COMPROBANTE_INUTILIZADO`. App de FS `200`, salud de FE `200`.
+- `FE_REF` por defecto pasa a `segel-rc4.6.1`.
+- **Pendiente:** los topes siguen en los valores de 3,6 GiB; con los 8 GB entregados, pasarlos a los de 8 GB (fase 2 del runbook) es decision del usuario. Las imagenes `:antes-rc4.6.1` quedan para volver atras.
+

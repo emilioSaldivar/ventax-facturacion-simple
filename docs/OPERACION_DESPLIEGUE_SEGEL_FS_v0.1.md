@@ -37,6 +37,8 @@ FE queda fijado en `segel-rc4.1` (CEV-4 de `SPEC_CORRECCIONES_ENSAYO_VOLUMEN_v0.
 
 **Al 2026-11-09** `segel-fs` corre FE `segel-rc4.3` (`4bd734b`), desplegado por FE a pedido del usuario: `rc4.2` (`51f93e9`, solo estilos del frontend) mas el merge de `main` v0.2.1 con `GET /v1/parametrizaciones`, catalogos de la carga masiva y guia v0.18. Sin migracion, sin variables nuevas y sin cambios en el compose. Los enums de factura, nota de credito y recibo aceptan los mismos valores que antes. `FE_REF` por defecto es `segel-rc4.3`. Vuelta atras de FE: imagenes `fe-segel-*:antes-rc4.3` en la VPS.
 
+**Al 2026-11-09 (noche)** `segel-fs` corre FE `segel-rc4.6.1` (commit `97d89b6`: `rc4.6` mas comprobantes que requieren atencion) y FS `725274e` (FS-47, inutilizar desde la carga). Sin migraciones. `FE_REF` por defecto es `segel-rc4.6.1`. Vuelta atras: imagenes `*:antes-rc4.6.1` en la VPS (FE y FS) y `bin/up.sh`.
+
 **Verificar:** `docker images` en la VPS muestra las once imagenes `segel-fs-*` y `fe-segel-*`.
 
 ## Fase 2. Stacks (en la VPS)
