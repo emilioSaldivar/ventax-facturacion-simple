@@ -24,7 +24,7 @@
 
 ## 4. Servicio y ruta (`cargas.service.ts`, `cargas.routes.ts`)
 
-- `inutilizarComprobante(context, id, orden, motivo, deps)`: `cargaVisible` (RN-08), gateway del facturador, llamada a FE, `traducirErrorFe` para los errores (RN-04). `traducirErrorFe` suma el caso `409`: `HttpError(409, "CONFLICT", mensaje, { reason: fe_code, ... })`, para que la pantalla reciba el codigo de FE (hoy un `409` de FE cae en `FE_NO_DISPONIBLE`). `404` de FE con `COMPROBANTE_NOT_FOUND` responde `404 NOT_FOUND`, no "carga no habilitada".
+- `inutilizarComprobante(context, id, orden, motivo, deps)`: `cargaVisible` (RN-08), gateway del facturador, llamada a FE, `traducirErrorFe` para los errores (RN-04). Solo en esta funcion, un `409` de FE se devuelve como `HttpError(409, "CONFLICT", mensaje, { reason: fe_code, ... })`, para que la pantalla reciba el codigo de FE, y un `404 COMPROBANTE_NOT_FOUND` como `404 NOT_FOUND`. `traducirErrorFe` no cambia: en el resto de las acciones un `409` de FE sigue como hoy.
 - Registra `CARGA_COMPROBANTE_INUTILIZADO` (RN-05) con `orden`, `numero`, `motivo`, `evento_estado` y `evento_id`. Agrega el tipo a `CargaEventoTipo`.
 - Agenda la carga para sincronizar enseguida (`syncNextAt: new Date()` via `actualizarDesdeFe` con la carga leida de FE), para que el cierre se vea pronto.
 - Ruta `POST /cargas/:id/comprobantes/:orden/inutilizar`, con `idSchema`, `orden` entero positivo y cuerpo `{ motivo: string trim 5..150 }`. `express.json()` ya esta en la app (verificar en implementacion). Devuelve `{ evento, comprobante }`, con `documento_id` resuelto como en `listarComprobantes`.
