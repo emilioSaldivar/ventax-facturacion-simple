@@ -18,10 +18,14 @@ Nombres de FE confirmados el 2026-11-09: `detalle.totales = { bruto, descuento, 
   - `nota_credito_por_referencia = true` si `totales.descuento > 0`, `totales.anticipo > 0`, `totales.exonerada > 0`, o alguna linea trae `afectacionIva` `EXONERADO` o `GRAVADO_PARCIAL` o `descuento > 0`.
   - **RN-02:** sin `detalle.totales`, como hoy. Si las lineas traen descuento o afectacion (FE intermedia sin totales), igual marca `nota_credito_por_referencia`.
 
-## 3. Nota de credito (RN-07)
+## 3. Nota de credito (RN-07 y RN-08)
 
-- `facturas.service.ts`: `getNotaCreditoIneligibility` devuelve "Esta factura tiene descuentos, anticipos o IVA exonerado: la nota de crédito se gestiona con soporte." si `totals.nota_credito_por_referencia`. `emitNotaCreditoTotal` responde `409` con `reason: NOTA_CREDITO_REQUIERE_REFERENCIA` antes de llamar a FE.
-- `main.tsx`: `canEmitNotaCredito` devuelve `false` con esa marca; donde se dibuja "Crear nota de credito" se muestra el texto en lugar de un boton deshabilitado sin explicacion.
+- Mapeo: `totals.anticipo` con `totales.anticipo` cuando es mayor que cero.
+- `FiscalEmitNotaCreditoRequest.por_referencia?: boolean`. El armado del pedido desde la factura original (el mismo que usa el reintento) lo pone en `true` con `totals.nota_credito_por_referencia`.
+- `RealFiscalGateway.emitNotaCredito`: con `por_referencia`, `POST {base}/nota-credito/total` con el mismo cuerpo sin `receptor` ni `items`; misma lectura de la respuesta y del `409` idempotente. Los errores siguen por `clasificarRespuestaNotaCredito`.
+- `facturas.service.ts`: con `totals.anticipo > 0`, `getNotaCreditoIneligibility` devuelve "Esta factura tiene anticipo: la nota de credito se gestiona con soporte." y `emitNotaCreditoTotal` responde `409` con `reason: NOTA_CREDITO_CON_ANTICIPO` antes de llamar a FE.
+- `main.tsx`: `canEmitNotaCredito` en `false` solo con anticipo, con el aviso junto al boton.
+- Implementacion previa a `rc4.13` (commit `beffd18`): bloqueaba toda factura marcada; se reemplaza.
 
 ## 4. Contrato propio
 

@@ -41,7 +41,7 @@ import {
   getDocumentoEventos,
   getReconciliacionFiscal,
   listNotaCreditoCandidates,
-  MENSAJE_NOTA_CREDITO_POR_REFERENCIA,
+  MENSAJE_NOTA_CREDITO_CON_ANTICIPO,
   listDocumentos,
   previewFactura,
   refreshDocumentoStatus
@@ -1378,19 +1378,40 @@ describe("facturas service", () => {
     });
   });
 
-  it("SPEC_TOTALES_FE_EN_CARGA_v0.1 RN-07: factura de carga con descuento no emite nota de credito ni llama a FE", async () => {
+  it("SPEC_TOTALES_FE_EN_CARGA_v0.1 RN-07: factura de carga con descuento emite la nota por referencia", async () => {
     const repo = new FakeFacturaRepository();
     const base = buildDocumento({ estado: "EMITIDA", cdc: "A".repeat(44) });
     repo.findByIdResponse = { ...base, totals: { ...base.totals, descuento: 10000, nota_credito_por_referencia: true } };
     const gateway = new FakeFiscalGateway(new FiscalGatewayError("UPSTREAM_ERROR", "Should not emit"));
+    await emitNotaCreditoTotal(context, "66666666-6666-4666-8666-666666666666", { motivo: "Error" }, repo, gateway, { idempotencyKey: "x" });
+    expect(gateway.lastNotaCreditoRequest?.por_referencia).toBe(true);
+
+    repo.list = async () => ({ total: 1, items: [repo.findByIdResponse!] });
+    const candidates = await listNotaCreditoCandidates(context, { limit: 30, offset: 0 }, repo);
+    expect(candidates.items[0]).toMatchObject({ elegible: true });
+  });
+
+  it("SPEC_TOTALES_FE_EN_CARGA_v0.1 RN-08: factura de carga con anticipo no emite nota de credito ni llama a FE", async () => {
+    const repo = new FakeFacturaRepository();
+    const base = buildDocumento({ estado: "EMITIDA", cdc: "A".repeat(44) });
+    repo.findByIdResponse = { ...base, totals: { ...base.totals, anticipo: 50000, nota_credito_por_referencia: true } };
+    const gateway = new FakeFiscalGateway(new FiscalGatewayError("UPSTREAM_ERROR", "Should not emit"));
     await expect(
       emitNotaCreditoTotal(context, "66666666-6666-4666-8666-666666666666", { motivo: "Error" }, repo, gateway, { idempotencyKey: "x" })
-    ).rejects.toMatchObject({ statusCode: 409, details: { reason: "NOTA_CREDITO_REQUIERE_REFERENCIA" } });
+    ).rejects.toMatchObject({ statusCode: 409, details: { reason: "NOTA_CREDITO_CON_ANTICIPO" } });
     expect(gateway.lastNotaCreditoRequest).toBeNull();
 
     repo.list = async () => ({ total: 1, items: [repo.findByIdResponse!] });
     const candidates = await listNotaCreditoCandidates(context, { limit: 30, offset: 0 }, repo);
-    expect(candidates.items[0]).toMatchObject({ elegible: false, motivo_no_elegible: MENSAJE_NOTA_CREDITO_POR_REFERENCIA });
+    expect(candidates.items[0]).toMatchObject({ elegible: false, motivo_no_elegible: MENSAJE_NOTA_CREDITO_CON_ANTICIPO });
+  });
+
+  it("sin marca, la nota de credito va con lineas como siempre", async () => {
+    const repo = new FakeFacturaRepository();
+    repo.findByIdResponse = buildDocumento({ estado: "EMITIDA", cdc: "A".repeat(44) });
+    const gateway = new FakeFiscalGateway(new FiscalGatewayError("UPSTREAM_ERROR", "Should not emit"));
+    await emitNotaCreditoTotal(context, "66666666-6666-4666-8666-666666666666", { motivo: "Error" }, repo, gateway, { idempotencyKey: "x" });
+    expect(gateway.lastNotaCreditoRequest?.por_referencia).toBeUndefined();
   });
 
   it("same invoice and attempt always derive the same key (RN-01)", async () => {

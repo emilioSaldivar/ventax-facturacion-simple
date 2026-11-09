@@ -759,8 +759,13 @@ export class RealFiscalGateway implements FiscalGateway {
 
   async emitNotaCredito(request: FiscalEmitNotaCreditoRequest): Promise<FiscalEmitNotaCreditoResponse> {
     const payload = this.buildEmitirNotaCreditoPayload(request);
+    // SPEC_TOTALES_FE_EN_CARGA_v0.1, RN-07: FE arma receptor y lineas desde la factura original.
+    if (request.por_referencia) {
+      delete payload.receptor;
+      delete payload.items;
+    }
 
-    const response = await this.fetchWithTimeout(`${this.config.baseUrl}/nota-credito`, {
+    const response = await this.fetchWithTimeout(`${this.config.baseUrl}/nota-credito${request.por_referencia ? "/total" : ""}`, {
       method: "POST",
       headers: {
         ...this.buildHeaders(),

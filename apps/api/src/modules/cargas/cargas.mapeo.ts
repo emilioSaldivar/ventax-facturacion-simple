@@ -181,7 +181,8 @@ export function comprobanteAFactura(carga: Pick<CargaMasivaRecord, "fe_carga_id"
         iva_10: t.iva_10,
         total_iva: t.iva_total,
         total: t.total,
-        descuento: t.descuento
+        descuento: t.descuento,
+        ...(t.anticipo > 0 ? { anticipo: t.anticipo } : {})
       }
     : { ...calculado.totals };
   if (requiereNotaCreditoPorReferencia(detalle)) totals.nota_credito_por_referencia = true;

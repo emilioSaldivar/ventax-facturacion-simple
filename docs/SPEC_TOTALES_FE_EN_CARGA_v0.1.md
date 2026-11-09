@@ -42,6 +42,8 @@ La nota de credito total se arma con las lineas y totales de la factura de FS (`
 
 Hasta resolverlo, una factura de carga con descuento o afectacion distinta de la tasa no ofrece "Nota de credito" en FS (RN-07).
 
+**Resuelto en FE `segel-rc4.13` (2026-11-09):** `POST /v1/nota-credito/total` con `referencia.cdc` y sin receptor ni items; FE arma las lineas del DE original con descuentos y afectacion. Misma respuesta e idempotencia que `POST /v1/nota-credito`. Errores antes de numerar: `404 REFERENCED_DOCUMENT_NOT_FOUND`, `409 CREDIT_NOTE_TOTAL_EXCEEDED`, `422 UNIDENTIFIED_REFERENCED_RECEIVER`, `422 TOTAL_CREDIT_NOTE_WITH_ANTICIPO` (una factura con anticipo va con lineas), `422 REFERENCED_DOCUMENT_WITHOUT_DATA`.
+
 ## Reglas
 
 - **RN-01.** Con `detalle.totales`, FS guarda en la factura de la carga los montos de FE: `total`, `iva_5`, `iva_10`, `total_iva` y `total_sin_iva = total - iva_total`; `subtotal` es `bruto`. No los recalcula.
@@ -50,7 +52,8 @@ Hasta resolverlo, una factura de carga con descuento o afectacion distinta de la
 - **RN-04.** Si FS recalcula (RN-02) y su total difiere de `detalle.total`, sigue el aviso de hoy (D-11). Con RN-01 no hay aviso: no hay calculo propio.
 - **RN-05.** Solo `tipo_documento = FACTURA` se incorpora como factura. Otro tipo se registra en el log y no crea factura (FS-45 (b); la nota de remision va por otro modelo).
 - **RN-06.** La pantalla de la factura muestra el total guardado (hoy la ficha solo muestra el total).
-- **RN-07.** Mientras no este resuelta la nota de credito por referencia o con lineas de FE, una factura de carga con `totales.descuento > 0` o con articulos exonerados o gravados parciales no ofrece "Nota de credito"; el motivo se muestra al operador ("Esta factura tiene descuentos: la nota de credito se gestiona con soporte").
+- **RN-07.** Una factura de carga marcada `nota_credito_por_referencia` (descuento, anticipo, exonerado o gravado parcial) emite su nota de credito total por `POST /v1/nota-credito/total`, sin lineas; el reintento de una nota trabada usa la misma ruta y la misma clave.
+- **RN-08.** Con anticipo (`totales.anticipo > 0`) FE no admite la nota total por referencia y FS no puede reproducir sus lineas: no se ofrece "Nota de credito" y se muestra "Esta factura tiene anticipo: la nota de crédito se gestiona con soporte."
 
 ## Criterios de aceptacion
 
@@ -58,5 +61,5 @@ Hasta resolverlo, una factura de carga con descuento o afectacion distinta de la
 - **CA-02.** Un comprobante con un articulo exonerado y otro gravado parcial queda con el IVA de FE.
 - **CA-03.** Sin `detalle.totales`, la factura queda como hoy.
 - **CA-04.** Un comprobante que no es `FACTURA` no crea factura.
-- **CA-06.** Una factura de carga con descuento no ofrece nota de credito hasta resolver la dependencia; sin descuento, si.
+- **CA-06.** Una factura de carga con descuento emite su nota de credito por referencia y queda con el total de la factura; con anticipo no se ofrece.
 - **CA-05.** Prueba conjunta con FE en SIFEN test: los totales de FS coinciden con los de la factura de FE para los ejemplos de descuentos y afectacion del IVA.

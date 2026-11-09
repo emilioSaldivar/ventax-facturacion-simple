@@ -92,6 +92,15 @@ describe("mapeo de comprobantes", () => {
       expect(conDescuento.totals).toMatchObject({ total: 100000, nota_credito_por_referencia: true });
     });
 
+    it("RN-08: con anticipo guarda el anticipo, que bloquea la nota de credito", () => {
+      const factura = comprobanteAFactura(carga, conDetalle({
+        items: [{ codigo: "A", descripcion: "Uno", cantidad: 1, precioUnitario: 100000, ivaTipo: "IVA10" }],
+        total: 100000,
+        totales: { ...totales, descuento: 0, anticipo: 40000, total: 60000, gravada_10: 54545, iva_10: 5455, iva_total: 5455 }
+      }))!;
+      expect(factura.totals).toMatchObject({ total: 60000, anticipo: 40000, nota_credito_por_referencia: true });
+    });
+
     it("CA-04: un comprobante que no es factura no crea factura", () => {
       expect(comprobanteAFactura(carga, comprobante({ tipo_documento: "NOTA_REMISION" }))).toBeNull();
     });

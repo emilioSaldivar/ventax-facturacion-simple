@@ -145,6 +145,25 @@ describe("contrato FE: nota de credito", () => {
     expect(r).toMatchObject({ document_uuid: "u", numero_fiscal: "0001009", idempotent: true });
   });
 
+  it("SPEC_TOTALES_FE_EN_CARGA_v0.1 RN-07: por referencia va a /nota-credito/total sin receptor ni items", async () => {
+    const fetchMock = vi.fn(async () => respuesta(200, { document_id: "1", document_uuid: "u", cdc: "c", nro_documento: "0001010", status: "QUEUED_BATCH" }));
+    vi.stubGlobal("fetch", fetchMock);
+    const r = await gatewayReal().emitNotaCredito({ ...(solicitudNc as object), por_referencia: true } as never);
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(new URL(url).pathname).toBe("/v1/nota-credito/total");
+    const cuerpo = JSON.parse(String(init.body));
+    expect(cuerpo.receptor).toBeUndefined();
+    expect(cuerpo.items).toBeUndefined();
+    expect(cuerpo.referencia).toEqual({ tipo: "ELECTRONICO", cdc: "0".repeat(44) });
+    expect(cuerpo.client_reference.idempotency_key).toBeDefined();
+    expect(r).toMatchObject({ document_uuid: "u", numero_fiscal: "0001010" });
+
+    fetchMock.mockClear();
+    await gatewayReal().emitNotaCredito(solicitudNc);
+    const [urlNormal] = fetchMock.mock.calls[0] as unknown as [string];
+    expect(new URL(urlNormal).pathname).toBe("/v1/nota-credito");
+  });
+
   it("otro 409 sigue siendo un error", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => respuesta(409, { error: "CREDIT_NOTE_TOTAL_EXCEEDED" })));
     await expect(gatewayReal().emitNotaCredito(solicitudNc)).rejects.toMatchObject({ code: "UPSTREAM_ERROR" });

@@ -60,6 +60,8 @@ export interface FiscalEmitNotaCreditoRequest {
     cdc: string;
     numero_fiscal: string | null;
   };
+  /** SPEC_TOTALES_FE_EN_CARGA_v0.1, RN-07: `POST /v1/nota-credito/total`, sin receptor ni items (FE `rc4.13`). */
+  por_referencia?: boolean;
 }
 
 export interface FiscalEmitFacturaResponse {

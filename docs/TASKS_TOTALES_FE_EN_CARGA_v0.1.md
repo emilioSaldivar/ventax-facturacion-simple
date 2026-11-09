@@ -19,6 +19,7 @@ En implementacion desde el 2026-11-09, autorizada por el usuario. La prueba conj
 | TFC-004 | 2 | Nota de credito no elegible (PLAN 3, servicio) | `facturas.service.test.ts` | TODO |
 | TFC-005 | 2 | Pantalla (PLAN 3) y `spec/openapi.yaml` (PLAN 4) | `typecheck` y `build` de `web-operacion`; YAML valido | TODO |
 | TFC-006 | 3 | Prueba conjunta con FE en SIFEN test (CA-05) | Playwright y totales FS = FE | BLOQUEADA: espera el tag de FE |
+| TFC-008 | 2 | Nota de credito por referencia con FE `rc4.13` (PLAN 3, RN-07 y RN-08) | Pruebas del gateway real y del servicio; E2E en SIFEN test | TODO |
 | TFC-007 | 4 | Repaso de SPEC, PLAN, TASKS y BACKLOG FS-45 | Lectura cruzada | TODO |
 
 ## Evidencia
