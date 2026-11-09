@@ -57,3 +57,19 @@ Numeracion despues: el `1010554` quedo rechazado e inutilizado en SIFEN test; la
 ### E-3. Repaso
 
 SPEC y PLAN reflejan lo implementado. Ajustes descubiertos: (1) PLAN 4 traduce los `409` y el `404` del comprobante solo en la inutilizacion, para no cambiar el resto de las acciones; (2) PLAN 6 deja sin filtro nuevo "Requieren atención"; (3) la prueba del caso `NUMERO_SIN_USAR` contra FE real queda para cuando haya un contexto con numeracion del cliente.
+
+### E-4. Repeticion con FE combinada y ejemplos de `segel-rc4.6` (2026-11-09)
+
+Stack local reconstruido con FS `102783e` y FE `97d89b6` (rama de FE `test/fs-rc4.6-atencion`: `segel-rc4.6` mas `5da7707`, solo para pruebas). SIFEN test.
+
+- `playwright-atencion-comprobantes.cjs`: **19/19** de nuevo. `1010556` rechazado con `1306` e inutilizado (`Aceptada`).
+- `scripts/segel-fs/playwright-ejemplos-planilla.cjs` con cuatro ejemplos del paquete de FE, sin correos, fecha del dia, RUC ficticio `80000000-5` cambiado por `80026570-0` (SEGEL SA) y numero al punto `001-001` (los ejemplos traen `001-003`; un primer intento sin cambiarlo dio `PUNTO_DISTINTO`, bien informado por FE y por FS). Resultado **8/8**, todos aprobados (`0260`):
+
+| Ejemplo | Factura | Total FS | Total FE | Nota |
+|---|---|---|---|---|
+| `ESTADO_B2G_COMPRAS_PUBLICAS` | 1010557 | 17010000 | 17010000 | Credito a plazo de 60 dias, 2 items con lote |
+| `EMPRESA_B2B_DOMICILIO` | 1010558 | 3300000 | 3300000 | Contado |
+| `RASTREO_LOTE_VENCIMIENTO` | 1010559 | 650000 | 650000 | IVA 5 y 10; FS la vio emitida en la pasada siguiente (unos 4,5 min tras la aprobacion) |
+| `CREDITO_CUOTAS_DETALLE` | 1010560 | 2500000 | 2500000 | 3 cuotas guardadas en el pedido fiscal de FS |
+
+Ningun aviso "el total calculado difiere" en el log de FS. FS no muestra en pantalla tipo de operacion, compras publicas ni lote y vencimiento: quedan en el pedido fiscal guardado. Numeracion despues: siguiente factura `1010561`.
