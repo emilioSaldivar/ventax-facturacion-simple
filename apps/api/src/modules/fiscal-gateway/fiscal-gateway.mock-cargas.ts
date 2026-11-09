@@ -7,12 +7,18 @@
  *
  * Del archivo solo lee los titulos, `numero_comprobante`, `referencia_venta` y `receptor_email`.
  * Los marcadores van al inicio de `referencia_venta`: INVALIDO, AVISO, RECHAZO, ERROR, DUP.
+ * `INUT-RECHAZO` en cualquier parte de la referencia: SIFEN rechaza la inutilizacion de su numero.
+ *
+ * Atencion (SPEC_CARGA_ATENCION_COMPROBANTES_v0.1): con numeracion del cliente, un INVALIDO o
+ * CANCELADO deja su numero sin usar; un RECHAZADO deja su numero rechazado con cualquier numeracion.
+ * La carga no termina mientras alguno siga sin inutilizar.
  */
 import crypto from "node:crypto";
 import {
   FiscalGatewayError,
   type FeCarga,
   type FeCargaAcciones,
+  type FeCargaAtencion,
   type FeCargaComprobante,
   type FeCargaComprobanteFiltros,
   type FeCargaComprobanteLista,
@@ -23,6 +29,7 @@ import {
   type FeCargaTotales,
   type FeCrearCargaInput,
   type FeCrearCargaResult,
+  type FeInutilizarComprobanteResult,
   type FiscalArtifactResponse
 } from "./fiscal-gateway.types";
 
@@ -35,6 +42,7 @@ type Marcador = "RECHAZO" | "ERROR" | null;
 interface MockComprobante extends FeCargaComprobante {
   marcador: Marcador;
   con_correo: boolean;
+  rechaza_inutilizacion: boolean;
 }
 
 interface MockCarga {
@@ -109,7 +117,8 @@ function armarComprobante(orden: number, fila: number, numero: string, referenci
     aprobado_en: null,
     actualizado_en: instante(),
     marcador: referencia.startsWith("RECHAZO") ? "RECHAZO" : referencia.startsWith("ERROR") ? "ERROR" : null,
-    con_correo: conCorreo
+    con_correo: conCorreo,
+    rechaza_inutilizacion: referencia.includes("INUT-RECHAZO")
   };
 
   if (referencia.startsWith("INVALIDO")) {
@@ -132,6 +141,33 @@ function armarComprobante(orden: number, fila: number, numero: string, referenci
     }];
   }
   return base;
+}
+
+/** Misma regla que FE (seccion 11 del pedido MT150). */
+function atencionDe(mock: MockCarga, comprobante: MockComprobante): FeCargaAtencion | null {
+  if (comprobante.inutilizacion?.estado === "ACCEPTED" || comprobante.inutilizacion?.estado === "PENDING") return null;
+  const numero = comprobante.numero_asignado ?? comprobante.numero_archivo;
+  if (!numero) return null;
+  if (comprobante.estado === "RECHAZADO") return { motivo: "RECHAZADO_POR_SIFEN", numero };
+  if (mock.carga.numeracion === "CLIENTE" && (comprobante.estado === "INVALIDO" || comprobante.estado === "CANCELADO")) {
+    return { motivo: "NUMERO_SIN_USAR", numero };
+  }
+  return null;
+}
+
+function requierenAtencion(mock: MockCarga): number {
+  return mock.comprobantes.filter((comprobante) => atencionDe(mock, comprobante) !== null).length;
+}
+
+function presentarComprobante(mock: MockCarga, comprobante: MockComprobante): FeCargaComprobante {
+  const { marcador: _marcador, con_correo: _conCorreo, rechaza_inutilizacion: _rechaza, ...publico } = comprobante;
+  const atencion = atencionDe(mock, comprobante);
+  return {
+    ...publico,
+    atencion,
+    inutilizacion: comprobante.inutilizacion ?? null,
+    acciones: { puede_inutilizar: atencion !== null, puede_editar: false }
+  };
 }
 
 function contar(mock: MockCarga, estado: FeCargaComprobante["estado"]): number {
@@ -157,6 +193,7 @@ function totalesDe(mock: MockCarga): FeCargaTotales {
     cancelados: contar(mock, "CANCELADO"),
     con_advertencias: mock.comprobantes.filter((comprobante) => comprobante.advertencias.length > 0).length,
     numeros_salteados: 0,
+    requieren_atencion: requierenAtencion(mock),
     lotes_enviados: Math.ceil((enviados + concluidos) / COMPROBANTES_POR_LOTE),
     lotes_en_proceso: Math.ceil(enviados / COMPROBANTES_POR_LOTE),
     lotes_concluidos: Math.floor(concluidos / COMPROBANTES_POR_LOTE)
@@ -253,6 +290,13 @@ function avanzar(mock: MockCarga): void {
         carga.estado = "VALIDADA";
       }
       break;
+    case "VALIDADA":
+      // Sin nada que preparar, FE la cierra sola cuando no queda atencion.
+      if (contar(mock, "PENDIENTE") === 0 && requierenAtencion(mock) === 0) {
+        carga.estado = "FINALIZADA";
+        carga.finalizada_en = instante();
+      }
+      break;
     case "EN_COLA":
       if (!hayOtraActiva(mock)) iniciarPreparacion(mock);
       break;
@@ -272,7 +316,7 @@ function avanzar(mock: MockCarga): void {
         if (comprobante.estado === "ENVIADO") concluir(comprobante);
         if (comprobante.estado === "PENDIENTE") preparar(mock, comprobante);
       }
-      if (contar(mock, "ERROR") + contar(mock, "PREPARADO") === 0) {
+      if (contar(mock, "ERROR") + contar(mock, "PREPARADO") === 0 && requierenAtencion(mock) === 0) {
         carga.estado = "FINALIZADA";
         carga.finalizada_en = instante();
       } else if (contar(mock, "PREPARADO") > 0) {
@@ -385,7 +429,7 @@ export const mockCargas = {
     const page = filtros.page ?? 1;
     const limit = filtros.limit ?? 50;
     const items = filtrados.slice((page - 1) * limit, page * limit).map((comprobante) => {
-      const { marcador: _marcador, con_correo: _conCorreo, ...publico } = comprobante;
+      const publico = presentarComprobante(mock, comprobante);
       return filtros.detalle ? { ...publico, detalle: comprobante.document_uuid ? detalleMock() : null } : publico;
     });
     return { carga_id: cargaId, estado: mock.carga.estado, items, page, limit, total: filtrados.length };
@@ -468,6 +512,31 @@ export const mockCargas = {
           concluido_en: concluido ? mock.carga.finalizada_en : null
         };
       })
+    };
+  },
+
+  inutilizar(cargaId: string, orden: number, motivo: string): FeInutilizarComprobanteResult {
+    const mock = buscar(cargaId);
+    const comprobante = mock.comprobantes.find((item) => item.orden === orden);
+    if (!comprobante) throw errorFe(404, "COMPROBANTE_NOT_FOUND", "Comprobante no encontrado en la carga.");
+    const texto = motivo.trim();
+    if (texto.length < 5 || texto.length > 150) {
+      throw errorFe(422, "VALIDATION_ERROR", "El motivo debe tener entre 5 y 150 caracteres.");
+    }
+    const atencion = atencionDe(mock, comprobante);
+    if (!atencion) throw errorFe(409, "COMPROBANTE_SIN_ATENCION", "El comprobante no tiene un numero sin resolver.");
+    const estado = comprobante.rechaza_inutilizacion ? "REJECTED" : "ACCEPTED";
+    const evento_id = crypto.randomUUID();
+    comprobante.inutilizacion = { evento_id, estado, numero: atencion.numero };
+    comprobante.actualizado_en = instante();
+    return {
+      evento: {
+        event_id: evento_id,
+        status: estado,
+        sifen_code: estado === "ACCEPTED" ? "0600" : "4002",
+        sifen_message: estado === "ACCEPTED" ? "Evento registrado correctamente" : "Rango ya utilizado"
+      },
+      comprobante: presentarComprobante(mock, comprobante)
     };
   },
 

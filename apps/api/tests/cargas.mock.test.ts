@@ -68,14 +68,78 @@ describe("mock de carga masiva", () => {
     expect(confirmada.estado).toBe("EN_PREPARACION");
     expect(confirmada.totales.preparados).toBe(1);
     expect((await gateway.getCarga(carga.carga_id)).estado).toBe("EN_SIFEN");
-    const final = await gateway.getCarga(carga.carga_id);
-    expect(final.estado).toBe("FINALIZADA");
-    expect(final.totales).toMatchObject({ aprobados: 1, rechazados: 1 });
+    // SPEC_CARGA_ATENCION_COMPROBANTES_v0.1: el rechazado deja su numero sin resolver y la carga sigue abierta.
+    const abierta = await gateway.getCarga(carga.carga_id);
+    expect(abierta.estado).toBe("EN_SIFEN");
+    expect(abierta.totales).toMatchObject({ aprobados: 1, rechazados: 1, requieren_atencion: 1 });
     const { items } = await gateway.listCargaComprobantes(carga.carga_id, { detalle: true });
-    expect(items[0]).toMatchObject({ estado: "APROBADO", correo: "SENT", documento_estado: "APPROVED" });
+    expect(items[0]).toMatchObject({ estado: "APROBADO", correo: "SENT", documento_estado: "APPROVED", atencion: null });
     expect(items[0]!.numero_asignado).toBe("001-002-0000001");
     expect(items[0]!.detalle?.receptor?.docNro).toBe("80000000");
-    expect(items[1]).toMatchObject({ estado: "RECHAZADO", sifen: { codigo: "1306" }, correo: null });
+    expect(items[1]).toMatchObject({
+      estado: "RECHAZADO",
+      sifen: { codigo: "1306" },
+      correo: null,
+      atencion: { motivo: "RECHAZADO_POR_SIFEN", numero: "001-002-0000002" },
+      acciones: { puede_inutilizar: true, puede_editar: false }
+    });
+    await gateway.inutilizarComprobanteCarga(carga.carga_id, 2, "Numero rechazado por SIFEN");
+    const final = await gateway.getCarga(carga.carga_id);
+    expect(final.estado).toBe("FINALIZADA");
+    expect(final.totales.requieren_atencion).toBe(0);
+  });
+
+  describe("comprobantes que requieren atencion", () => {
+    it("con numeracion del cliente, un invalido requiere atencion y la VALIDADA sin pendientes cierra al inutilizar", async () => {
+      const gateway = nuevoGateway();
+      const { carga } = await gateway.crearCarga(pedido(csv("001-002-0000007;INVALIDO-1;;A"), { numeracion: "CLIENTE" }));
+      const validada = await gateway.getCarga(carga.carga_id);
+      expect(validada).toMatchObject({ estado: "VALIDADA", acciones: { puede_confirmar: false }, totales: { requieren_atencion: 1 } });
+      expect((await gateway.getCarga(carga.carga_id)).estado).toBe("VALIDADA");
+      const { items } = await gateway.listCargaComprobantes(carga.carga_id, {});
+      expect(items[0]).toMatchObject({ atencion: { motivo: "NUMERO_SIN_USAR", numero: "001-002-0000007" }, inutilizacion: null });
+
+      const antes = items[0]!.actualizado_en;
+      const { comprobante, evento } = await gateway.inutilizarComprobanteCarga(carga.carga_id, 1, "Factura invalida en la carga");
+      expect(evento).toMatchObject({ status: "ACCEPTED", sifen_code: "0600" });
+      expect(comprobante).toMatchObject({
+        atencion: null,
+        inutilizacion: { estado: "ACCEPTED", numero: "001-002-0000007" },
+        acciones: { puede_inutilizar: false, puede_editar: false }
+      });
+      expect(comprobante.actualizado_en > antes).toBe(true);
+      const final = await gateway.getCarga(carga.carga_id);
+      expect(final).toMatchObject({ estado: "FINALIZADA", totales: { requieren_atencion: 0 } });
+      expect(final.finalizada_en).not.toBeNull();
+    });
+
+    it("con numeracion del servicio un invalido no requiere atencion y la VALIDADA sin pendientes cierra sola", async () => {
+      const gateway = nuevoGateway();
+      const { carga } = await gateway.crearCarga(pedido(csv("001-002-0000001;INVALIDO-1;;A")));
+      expect((await gateway.getCarga(carga.carga_id)).totales.requieren_atencion).toBe(0);
+      const { items } = await gateway.listCargaComprobantes(carga.carga_id, {});
+      expect(items[0]).toMatchObject({ atencion: null, acciones: { puede_inutilizar: false } });
+      expect((await gateway.getCarga(carga.carga_id)).estado).toBe("FINALIZADA");
+    });
+
+    it("una inutilizacion rechazada deja el comprobante con atencion", async () => {
+      const gateway = nuevoGateway();
+      const { carga } = await gateway.crearCarga(pedido(csv("001-002-0000007;INVALIDO-INUT-RECHAZO;;A"), { numeracion: "CLIENTE" }));
+      await gateway.getCarga(carga.carga_id);
+      const { comprobante, evento } = await gateway.inutilizarComprobanteCarga(carga.carga_id, 1, "Factura invalida en la carga");
+      expect(evento.status).toBe("REJECTED");
+      expect(comprobante).toMatchObject({ inutilizacion: { estado: "REJECTED" }, atencion: { motivo: "NUMERO_SIN_USAR" } });
+      expect((await gateway.getCarga(carga.carga_id)).estado).toBe("VALIDADA");
+    });
+
+    it("errores: 404 sin comprobante, 422 motivo corto, 409 sin atencion", async () => {
+      const gateway = nuevoGateway();
+      const { carga } = await gateway.crearCarga(pedido(csv("001-002-0000001;PED-1;;A"), { numeracion: "CLIENTE" }));
+      await gateway.getCarga(carga.carga_id);
+      expect(await error(gateway.inutilizarComprobanteCarga(carga.carga_id, 9, "Motivo valido"))).toMatchObject({ status: 404, fe_code: "COMPROBANTE_NOT_FOUND" });
+      expect(await error(gateway.inutilizarComprobanteCarga(carga.carga_id, 1, "abc"))).toMatchObject({ status: 422, fe_code: "VALIDATION_ERROR" });
+      expect(await error(gateway.inutilizarComprobanteCarga(carga.carga_id, 1, "Motivo valido"))).toMatchObject({ status: 409, fe_code: "COMPROBANTE_SIN_ATENCION" });
+    });
   });
 
   it("un comprobante en ERROR deja la carga abierta hasta reintentar", async () => {

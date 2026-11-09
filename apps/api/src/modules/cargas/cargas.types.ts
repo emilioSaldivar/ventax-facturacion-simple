@@ -80,6 +80,12 @@ export type CargaComprobanteResponse = Omit<FeCargaComprobante, "detalle"> & {
   documento_id: string | null;
 };
 
+/** SPEC_CARGA_ATENCION_COMPROBANTES_v0.1: resultado de inutilizar el numero de un comprobante. */
+export interface CargaInutilizacionResponse {
+  evento: Record<string, unknown>;
+  comprobante: CargaComprobanteResponse;
+}
+
 export interface CargaComprobantesResponse {
   carga_id: string;
   estado: FeCargaEstado;
@@ -134,7 +140,7 @@ export interface FacturaDeCarga {
   responseSnapshot: Record<string, unknown>;
 }
 
-export type CargaEventoTipo = "CARGA_SUBIDA" | "CARGA_CONFIRMADA" | "CARGA_CANCELADA" | "CARGA_REINTENTADA";
+export type CargaEventoTipo = "CARGA_SUBIDA" | "CARGA_CONFIRMADA" | "CARGA_CANCELADA" | "CARGA_REINTENTADA" | "CARGA_COMPROBANTE_INUTILIZADO";
 
 export interface CargaRepository {
   findById(id: string, facturadorId: string): Promise<CargaMasivaRecord | null>;

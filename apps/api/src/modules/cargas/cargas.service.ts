@@ -13,6 +13,7 @@ import {
 import { proximaSincronizacionMs } from "./cargas.mapeo";
 import type {
   CargaComprobantesResponse,
+  CargaInutilizacionResponse,
   CargaListFilters,
   CargaMasivaListResponse,
   CargaMasivaRecord,
@@ -128,8 +129,10 @@ function yaSubidaEnOtroContexto(): HttpError {
   );
 }
 
-function primerSync(estado: FeCarga["estado"], confirmadaEn: string | null | undefined): Date | null {
-  return proximaSincronizacionMs(estado, confirmadaEn) === null ? null : new Date(Date.now() + 5000);
+function primerSync(feCarga: Pick<FeCarga, "estado" | "confirmada_en" | "acciones">): Date | null {
+  return proximaSincronizacionMs(feCarga.estado, feCarga.confirmada_en, Date.now(), feCarga.acciones) === null
+    ? null
+    : new Date(Date.now() + 5000);
 }
 
 export interface SubirCargaInput {
@@ -199,7 +202,7 @@ export async function subirCarga(context: OperationalContextResponse, input: Sub
       tamanoBytes: input.contenido.length,
       sha256,
       subidaPor: context.user.id,
-      syncNextAt: primerSync(feCarga.estado, feCarga.confirmada_en)
+      syncNextAt: primerSync(feCarga)
     }));
 
   await repository.registrarEvento(fila, context.user.id, "CARGA_SUBIDA", {
@@ -231,7 +234,8 @@ export async function obtenerCarga(context: OperationalContextResponse, id: stri
     const gateway = await deps.gatewayFor(context.facturador.id);
     const feCarga = await gateway.getCarga(carga.fe_carga_id);
     // Una carga confirmada fuera de esta pantalla vuelve a la agenda del worker.
-    const volverAAgenda = carga.sync_next_at === null && proximaSincronizacionMs(feCarga.estado, feCarga.confirmada_en) !== null;
+    const volverAAgenda =
+      carga.sync_next_at === null && proximaSincronizacionMs(feCarga.estado, feCarga.confirmada_en, Date.now(), feCarga.acciones) !== null;
     await deps.repository.actualizarDesdeFe(carga.id, feCarga, volverAAgenda ? { syncNextAt: new Date() } : {});
   } catch (error) {
     const mensaje = error instanceof Error ? error.message : "Backend fiscal no disponible.";
@@ -312,6 +316,68 @@ export async function accionSobreCarga(
   const tipo = accion === "confirmar" ? "CARGA_CONFIRMADA" : accion === "cancelar" ? "CARGA_CANCELADA" : "CARGA_REINTENTADA";
   await deps.repository.registrarEvento(carga, context.user.id, tipo, { fe_carga_id: carga.fe_carga_id, estado: feCarga.estado });
   return toCargaResponse((await deps.repository.findById(id, context.facturador.id))!);
+}
+
+/**
+ * SPEC_CARGA_ATENCION_COMPROBANTES_v0.1. Inutiliza el numero de un comprobante con atencion. La regla
+ * (que comprobante puede, que numero) la decide FE (RN-01). No exige contexto listo: no emite (RN-08).
+ */
+export async function inutilizarComprobante(
+  context: OperationalContextResponse,
+  id: string,
+  orden: number,
+  motivo: string,
+  deps: CargasDeps
+): Promise<CargaInutilizacionResponse> {
+  const carga = await cargaVisible(context, id, deps.repository);
+  const gateway = await deps.gatewayFor(context.facturador.id);
+
+  let resultado;
+  try {
+    resultado = await gateway.inutilizarComprobanteCarga(carga.fe_carga_id, orden, motivo);
+  } catch (error) {
+    const fe = error instanceof FiscalGatewayError ? detallesFe(error) : null;
+    // RN-04: los 409 y el 404 del comprobante traen el codigo de FE; la pantalla los muestra tal cual.
+    if (fe?.status === 409) {
+      throw new HttpError(409, "CONFLICT", fe.message ?? "No se pudo inutilizar el numero.", {
+        reason: fe.fe_code ?? "CONFLICT",
+        ...(fe.details ?? {})
+      });
+    }
+    if (fe?.status === 404 && fe.fe_code === "COMPROBANTE_NOT_FOUND") {
+      throw new HttpError(404, "NOT_FOUND", "Comprobante no encontrado en la carga.");
+    }
+    throw traducirErrorFe(error);
+  }
+
+  const { comprobante, evento } = resultado;
+  await deps.repository.registrarEvento(carga, context.user.id, "CARGA_COMPROBANTE_INUTILIZADO", {
+    fe_carga_id: carga.fe_carga_id,
+    orden,
+    numero: comprobante.inutilizacion?.numero ?? comprobante.atencion?.numero ?? null,
+    motivo,
+    evento_id: comprobante.inutilizacion?.evento_id ?? (typeof evento.event_id === "string" ? evento.event_id : null),
+    evento_estado: comprobante.inutilizacion?.estado ?? (typeof evento.status === "string" ? evento.status : null)
+  });
+
+  // La carga puede cerrarse al resolverse el numero: se sincroniza enseguida para mostrarlo.
+  try {
+    const feCarga = await gateway.getCarga(carga.fe_carga_id);
+    await deps.repository.actualizarDesdeFe(carga.id, feCarga, { syncNextAt: new Date() });
+  } catch (error) {
+    await deps.repository.marcarSyncError(carga.id, error instanceof Error ? error.message : "Backend fiscal no disponible.");
+  }
+
+  const documentos = comprobante.document_uuid
+    ? await deps.repository.documentosPorUuid(context.facturador.id, [comprobante.document_uuid])
+    : new Map<string, string>();
+  return {
+    evento,
+    comprobante: {
+      ...comprobante,
+      documento_id: comprobante.document_uuid ? documentos.get(comprobante.document_uuid) ?? null : null
+    }
+  };
 }
 
 export async function descargarPlantilla(context: OperationalContextResponse, deps: CargasDeps): Promise<FiscalArtifactResponse> {

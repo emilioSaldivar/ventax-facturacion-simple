@@ -145,6 +145,25 @@ describe("RealFiscalGateway: carga masiva", () => {
     expect(resultado.body.toString()).toBe("x;y\n");
   });
 
+  it("inutilizar hace POST a la ruta del comprobante con el motivo en JSON (SPEC_CARGA_ATENCION_COMPROBANTES_v0.1)", async () => {
+    fetchMock.mockResolvedValue(respuesta(200, { evento: { status: "ACCEPTED" }, comprobante: { orden: 3 } }));
+    const resultado = await gateway.inutilizarComprobanteCarga("c1", 3, "Numero sin usar");
+    const { url, init, headers } = llamada();
+    expect(url.pathname).toBe("/v1/cargas/c1/comprobantes/3/inutilizar");
+    expect(init.method).toBe("POST");
+    expect(headers["content-type"]).toBe("application/json");
+    expect(headers["x-api-key"]).toBe("clave-sintetica");
+    expect(JSON.parse(String(init.body))).toEqual({ motivo: "Numero sin usar" });
+    expect(resultado.evento).toEqual({ status: "ACCEPTED" });
+  });
+
+  it("un 409 de inutilizar trae el codigo de FE", async () => {
+    fetchMock.mockResolvedValue(respuesta(409, { error: "EVENT_IN_PROGRESS", message: "Hay una inutilizacion en curso", details: null }));
+    const capturado = await gateway.inutilizarComprobanteCarga("c1", 3, "Numero sin usar").catch((e: unknown) => e);
+    expect(capturado).toBeInstanceOf(FiscalGatewayError);
+    expect((capturado as FiscalGatewayError).details).toMatchObject({ status: 409, fe_code: "EVENT_IN_PROGRESS" });
+  });
+
   it("los lotes consultan su ruta", async () => {
     fetchMock.mockResolvedValue(respuesta(200, { carga_id: "c1", items: [] }));
     await gateway.getCargaLotes("c1");

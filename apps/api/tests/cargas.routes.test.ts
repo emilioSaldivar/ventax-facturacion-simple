@@ -168,6 +168,30 @@ describe("rutas de cargas", () => {
     expect((await fetch(`${base}/cargas/${creada.id}/comprobantes?limit=200`)).status).toBe(200);
   });
 
+  it("inutilizar valida orden y motivo, y no exige contexto listo (SPEC_CARGA_ATENCION_COMPROBANTES_v0.1)", async () => {
+    // Se sube con el contexto listo; despues se inutiliza con el contexto no listo (RN-08).
+    await levantar({ getContext: async () => contexto({}, "CLIENTE") });
+    const creada = (await (await subir(csv("001-002-0000007;INVALIDO-1;;A"))).json()) as { id: string };
+    await fetch(`${base}/cargas/${creada.id}`);
+    await new Promise((resolve) => server.close(resolve));
+    await levantar({
+      getContext: async () => contexto({}, "CLIENTE"),
+      getReadiness: async () => ({ ready: false, checks: [{ code: "x", ok: false, message: "falta" }] })
+    });
+    const ruta = (orden: string) => `${base}/cargas/${creada.id}/comprobantes/${orden}/inutilizar`;
+    const pedir = (orden: string, cuerpo: unknown) =>
+      fetch(ruta(orden), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(cuerpo) });
+    expect((await pedir("0", { motivo: "Motivo valido" })).status).toBe(400);
+    expect((await pedir("1", { motivo: "abc" })).status).toBe(400);
+    expect((await pedir("1", {})).status).toBe(400);
+    const ok = await pedir("1", { motivo: "  Factura invalida en la carga  " });
+    expect(ok.status).toBe(200);
+    expect(await ok.json()).toMatchObject({ evento: { status: "ACCEPTED" }, comprobante: { orden: 1, atencion: null } });
+    const otra = await pedir("1", { motivo: "Factura invalida en la carga" });
+    expect(otra.status).toBe(409);
+    expect(await otra.json()).toMatchObject({ error: { details: { reason: "COMPROBANTE_SIN_ATENCION" } } });
+  });
+
   it("los lotes responden 403 a un operador", async () => {
     await levantar();
     const creada = (await (await subir(csv("001-002-0000001;PED-1;;A"))).json()) as { id: string };

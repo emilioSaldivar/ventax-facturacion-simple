@@ -3,7 +3,7 @@ import { logger } from "../../shared/logging/logger";
 import { documentoIdentidadTipos, type DocumentoIdentidadTipo } from "../clientes/clientes.types";
 import type { DocumentoEstado, FacturaClienteInput, FacturaItemPreview } from "../facturas/facturas.types";
 import { mapDocumentStatusCanonico } from "../fiscal-gateway/fiscal-gateway.client";
-import type { FeCargaComprobante, FeCargaEstado } from "../fiscal-gateway/fiscal-gateway.types";
+import type { FeCargaAcciones, FeCargaComprobante, FeCargaEstado } from "../fiscal-gateway/fiscal-gateway.types";
 import type { CargaMasivaRecord, FacturaDeCarga } from "./cargas.types";
 
 const MINUTO = 60_000;
@@ -54,8 +54,17 @@ export function agendaPorCorreo(input: {
   return { esperaMs: 5 * MINUTO, vencida: false };
 }
 
-export function proximaSincronizacionMs(estado: FeCargaEstado, confirmadaEn: string | null | undefined, ahora = Date.now()): number | null {
+export function proximaSincronizacionMs(
+  estado: FeCargaEstado,
+  confirmadaEn: string | null | undefined,
+  ahora = Date.now(),
+  acciones?: Pick<FeCargaAcciones, "puede_confirmar">
+): number | null {
   switch (estado) {
+    case "VALIDADA":
+      // SPEC_CARGA_ATENCION_COMPROBANTES_v0.1, RN-06: sin nada que confirmar, FE la cierra sola
+      // (en segundos, o al inutilizarse los numeros pendientes). Confirmable: espera al operador.
+      return acciones && !acciones.puede_confirmar ? 15 * MINUTO : null;
     case "RECIBIDA":
     case "VALIDANDO":
     case "EN_PREPARACION":

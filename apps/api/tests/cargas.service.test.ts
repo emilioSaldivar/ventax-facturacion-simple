@@ -7,6 +7,7 @@ import {
   accionSobreCarga,
   descargarPlantilla,
   descargarResultado,
+  inutilizarComprobante,
   listarCargas,
   listarComprobantes,
   obtenerCarga,
@@ -220,6 +221,49 @@ describe("servicio de cargas", () => {
         details: { reason: "CARGA_ACCION_NO_ADMITIDA", estado: "RECIBIDA" }
       });
       expect(repository.filas.get(carga.id)!.acciones).toMatchObject({ puede_confirmar: false });
+    });
+  });
+
+  describe("inutilizar el numero de un comprobante (SPEC_CARGA_ATENCION_COMPROBANTES_v0.1)", () => {
+    const invalido = () => ({ ...archivo(), contenido: csv("001-002-0000007;INVALIDO-1;;A") });
+
+    it("CA-02: llama a FE, audita, agenda la carga y devuelve el comprobante sin atencion", async () => {
+      const carga = await subirCarga(contexto({}, "CLIENTE"), invalido(), deps);
+      await obtenerCarga(contexto({}, "CLIENTE"), carga.id, deps);
+      const espia = vi.spyOn(gateway, "inutilizarComprobanteCarga");
+      const resultado = await inutilizarComprobante(contexto({}, "CLIENTE"), carga.id, 1, "Factura invalida en la carga", deps);
+      expect(espia).toHaveBeenCalledWith(carga.fe_carga_id, 1, "Factura invalida en la carga");
+      expect(resultado.comprobante).toMatchObject({ atencion: null, inutilizacion: { estado: "ACCEPTED" }, documento_id: null });
+      expect(repository.eventos.at(-1)).toMatchObject({
+        tipo: "CARGA_COMPROBANTE_INUTILIZADO",
+        usuarioId: contexto().user.id,
+        metadata: { orden: 1, numero: "001-002-0000007", motivo: "Factura invalida en la carga", evento_estado: "ACCEPTED" }
+      });
+      expect(repository.filas.get(carga.id)!.estado).toBe("FINALIZADA");
+    });
+
+    it("RN-04: un 409 de FE llega con su codigo; el 404 del comprobante es 404", async () => {
+      const carga = await subirCarga(contexto({}, "CLIENTE"), archivo(), deps);
+      await obtenerCarga(contexto({}, "CLIENTE"), carga.id, deps);
+      await expect(inutilizarComprobante(contexto({}, "CLIENTE"), carga.id, 1, "Motivo valido", deps)).rejects.toMatchObject({
+        statusCode: 409,
+        details: { reason: "COMPROBANTE_SIN_ATENCION" }
+      });
+      await expect(inutilizarComprobante(contexto({}, "CLIENTE"), carga.id, 9, "Motivo valido", deps)).rejects.toMatchObject({ statusCode: 404 });
+      vi.spyOn(gateway, "inutilizarComprobanteCarga").mockRejectedValueOnce(errorDeFe(409, "EVENT_IN_PROGRESS"));
+      await expect(inutilizarComprobante(contexto({}, "CLIENTE"), carga.id, 1, "Motivo valido", deps)).rejects.toMatchObject({
+        statusCode: 409,
+        details: { reason: "EVENT_IN_PROGRESS" }
+      });
+    });
+
+    it("RN-08: otro perfil recibe 404 y no llega a FE", async () => {
+      const carga = await subirCarga(contexto({}, "CLIENTE"), invalido(), deps);
+      const espia = vi.spyOn(gateway, "inutilizarComprobanteCarga");
+      await expect(
+        inutilizarComprobante(contexto({ actividad_punto_perfil_id: PERFIL_B }, "CLIENTE"), carga.id, 1, "Motivo valido", deps)
+      ).rejects.toMatchObject({ statusCode: 404 });
+      expect(espia).not.toHaveBeenCalled();
     });
   });
 

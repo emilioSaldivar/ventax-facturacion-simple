@@ -166,6 +166,13 @@ describe("frecuencia", () => {
     const ahora = Date.now();
     expect(proximaSincronizacionMs("EN_SIFEN", new Date(ahora - 73 * 3_600_000).toISOString(), ahora)).toBe(30 * MIN);
   });
+
+  it("RN-06: VALIDADA sin nada que confirmar se consulta cada 15 min; confirmable espera al operador", () => {
+    expect(proximaSincronizacionMs("VALIDADA", null, Date.now(), { puede_confirmar: false })).toBe(15 * MIN);
+    expect(proximaSincronizacionMs("VALIDADA", null, Date.now(), { puede_confirmar: true })).toBeNull();
+    expect(proximaSincronizacionMs("VALIDADA", null)).toBeNull();
+  });
+
 });
 
 describe("agenda por correo pendiente tras el cierre (CEV-1, FS-40)", () => {
@@ -216,6 +223,11 @@ describe("worker de sincronizacion", () => {
     expect(repository.filas.get(fila.id)!.estado).toBe("EN_SIFEN");
     expect(repository.filas.get(fila.id)!.sync_next_at).not.toBeNull();
     await sincronizarCarga(repository.filas.get(fila.id)!, gateway, repository);
+    // SPEC_CARGA_ATENCION_COMPROBANTES_v0.1: el rechazado deja la carga abierta y agendada hasta inutilizarlo.
+    expect(repository.filas.get(fila.id)!.estado).toBe("EN_SIFEN");
+    expect(repository.filas.get(fila.id)!.sync_next_at).not.toBeNull();
+    await gateway.inutilizarComprobanteCarga(fila.fe_carga_id, 3, "Numero rechazado por SIFEN");
+    await sincronizarCarga(repository.filas.get(fila.id)!, gateway, repository);
     const final = repository.filas.get(fila.id)!;
     expect(final.estado).toBe("FINALIZADA");
     expect(final.sync_next_at).toBeNull();
@@ -241,6 +253,19 @@ describe("worker de sincronizacion", () => {
     await sincronizarCarga(repository.filas.get(fila.id)!, gateway, repository);
     expect(repository.facturas.get(`carga:${fila.fe_carga_id}:1`)!.emailEstado).toBe("SENT");
     expect(repository.filas.get(fila.id)!.sync_next_at).toBeNull();
+  });
+
+  it("RN-06: una VALIDADA con numeros sin resolver queda agendada y se ve FINALIZADA al inutilizarlos", async () => {
+    const subida = await subirCarga(contexto({}, "CLIENTE"), { contenido: csv("001-002-0000007;INVALIDO-1;;A"), contentType: "text/csv" }, deps);
+    await sincronizarCarga(repository.filas.get(subida.id)!, gateway, repository);
+    const abierta = repository.filas.get(subida.id)!;
+    expect(abierta.estado).toBe("VALIDADA");
+    expect(abierta.sync_next_at!.getTime() - Date.now()).toBeGreaterThan(14 * 60_000);
+    await gateway.inutilizarComprobanteCarga(abierta.fe_carga_id, 1, "Factura invalida en la carga");
+    await sincronizarCarga(repository.filas.get(subida.id)!, gateway, repository);
+    const cerrada = repository.filas.get(subida.id)!;
+    expect(cerrada.estado).toBe("FINALIZADA");
+    expect(cerrada.sync_next_at).toBeNull();
   });
 
   it("no pide comprobantes antes de confirmar", async () => {

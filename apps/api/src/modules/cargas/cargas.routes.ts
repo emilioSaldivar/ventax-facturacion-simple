@@ -15,6 +15,7 @@ import {
   accionSobreCarga,
   descargarPlantilla,
   descargarResultado,
+  inutilizarComprobante,
   listarCargas,
   listarComprobantes,
   obtenerCarga,
@@ -48,6 +49,8 @@ export async function gatewayDeCargas(facturadorId: string, repository = cargaRe
 }
 
 const idSchema = z.object({ id: z.string().uuid() });
+const comprobanteParamsSchema = z.object({ id: z.string().uuid(), orden: z.coerce.number().int().min(1) });
+const inutilizarBodySchema = z.object({ motivo: z.string().trim().min(5).max(150) });
 
 const listQuerySchema = z.object({
   estado: z.string().trim().max(200).optional(),
@@ -214,6 +217,26 @@ export function createCargasRouter(deps: CargasRouterDeps): Router {
       }
     });
   }
+
+  router.post(
+    "/cargas/:id/comprobantes/:orden/inutilizar",
+    validateRequest("params", comprobanteParamsSchema),
+    validateRequest("body", inutilizarBodySchema),
+    async (req, res, next) => {
+      try {
+        const { motivo } = req.body as z.infer<typeof inutilizarBodySchema>;
+        res.json(await inutilizarComprobante(
+          await deps.getContext(req.user!.id),
+          String(req.params.id),
+          Number(req.params.orden),
+          motivo,
+          deps
+        ));
+      } catch (error) {
+        fallar(res, next, error);
+      }
+    }
+  );
 
   router.get("/cargas/:id/resultado", validateRequest("params", idSchema), async (req, res, next) => {
     try {

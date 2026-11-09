@@ -40,7 +40,7 @@ export async function sincronizarCarga(carga: CargaMasivaRecord, gateway: Fiscal
     }
   }
 
-  let esperaMs = proximaSincronizacionMs(feCarga.estado, feCarga.confirmada_en);
+  let esperaMs = proximaSincronizacionMs(feCarga.estado, feCarga.confirmada_en, Date.now(), feCarga.acciones);
   if (esperaMs === null) {
     // CEV-1 (FS-40): los correos de una carga cerrada siguen saliendo; se sigue mientras haya pendientes.
     const pendientes = await repository.contarCorreosPendientes(carga);

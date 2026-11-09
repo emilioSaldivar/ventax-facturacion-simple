@@ -47,7 +47,8 @@ import {
   type FeCargaErrorDetails,
   type FeCargaLoteLista,
   type FeCrearCargaInput,
-  type FeCrearCargaResult
+  type FeCrearCargaResult,
+  type FeInutilizarComprobanteResult
 } from "./fiscal-gateway.types";
 
 export function createFiscalGateway(config: FiscalGatewayConfig): FiscalGateway {
@@ -681,6 +682,10 @@ export class MockFiscalGateway implements FiscalGateway {
 
   async getCargaLotes(cargaId: string): Promise<FeCargaLoteLista> {
     return mockCargas.lotes(cargaId);
+  }
+
+  async inutilizarComprobanteCarga(cargaId: string, orden: number, motivo: string): Promise<FeInutilizarComprobanteResult> {
+    return mockCargas.inutilizar(cargaId, orden, motivo);
   }
 
   private getMockRecibo(id: string): FiscalReciboResult {
@@ -1387,8 +1392,19 @@ export class RealFiscalGateway implements FiscalGateway {
     return this.pedirCarga<FeCargaLoteLista>(`/cargas/${encodeURIComponent(cargaId)}/lotes`, "GET");
   }
 
-  private async pedirCarga<T>(path: string, method: "GET" | "POST"): Promise<T> {
-    const response = await this.fetchWithTimeout(`${this.config.baseUrl}${path}`, { method, headers: this.buildHeaders() });
+  async inutilizarComprobanteCarga(cargaId: string, orden: number, motivo: string): Promise<FeInutilizarComprobanteResult> {
+    return this.pedirCarga<FeInutilizarComprobanteResult>(
+      `/cargas/${encodeURIComponent(cargaId)}/comprobantes/${encodeURIComponent(String(orden))}/inutilizar`,
+      "POST",
+      { motivo }
+    );
+  }
+
+  private async pedirCarga<T>(path: string, method: "GET" | "POST", cuerpo?: Record<string, unknown>): Promise<T> {
+    const init: RequestInit = cuerpo
+      ? { method, headers: { ...this.buildHeaders(), "content-type": "application/json" }, body: JSON.stringify(cuerpo) }
+      : { method, headers: this.buildHeaders() };
+    const response = await this.fetchWithTimeout(`${this.config.baseUrl}${path}`, init);
     return this.leerCarga<T>(response);
   }
 

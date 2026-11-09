@@ -476,6 +476,8 @@ export interface FiscalGateway {
   reintentarCarga(cargaId: string): Promise<FeCarga>;
   getCargaResultado(cargaId: string): Promise<FiscalArtifactResponse>;
   getCargaLotes(cargaId: string): Promise<FeCargaLoteLista>;
+  /** SPEC_CARGA_ATENCION_COMPROBANTES_v0.1: inutiliza el numero de un comprobante con `atencion`. */
+  inutilizarComprobanteCarga(cargaId: string, orden: number, motivo: string): Promise<FeInutilizarComprobanteResult>;
 }
 
 // ─── Carga masiva: formas de tecnica/openapi.yaml de FE, paquete v0.14 ───────
@@ -513,6 +515,8 @@ export interface FeCargaTotales {
   cancelados: number;
   con_advertencias: number;
   numeros_salteados: number;
+  /** SPEC_CARGA_ATENCION_COMPROBANTES_v0.1. Ausente con FE sin esa version. */
+  requieren_atencion?: number;
   lotes_enviados: number;
   lotes_en_proceso: number;
   lotes_concluidos: number;
@@ -586,7 +590,34 @@ export interface FeCargaComprobante {
   correo: "PENDING" | "SENT" | "FAILED" | null;
   aprobado_en: string | null;
   actualizado_en: string;
+  /** SPEC_CARGA_ATENCION_COMPROBANTES_v0.1: los tres ausentes con FE sin esa version. */
+  atencion?: FeCargaAtencion | null;
+  inutilizacion?: FeCargaInutilizacion | null;
+  acciones?: FeCargaComprobanteAcciones;
   detalle?: FeCargaComprobanteDetalle | null;
+}
+
+export interface FeCargaAtencion {
+  motivo: "NUMERO_SIN_USAR" | "RECHAZADO_POR_SIFEN";
+  numero: string;
+}
+
+export interface FeCargaInutilizacion {
+  evento_id: string;
+  /** `PENDING`, `ACCEPTED`, `REJECTED` o `FAILED`. */
+  estado: string;
+  numero: string;
+}
+
+export interface FeCargaComprobanteAcciones {
+  puede_inutilizar: boolean;
+  /** Reservado: hoy siempre `false`. */
+  puede_editar: boolean;
+}
+
+export interface FeInutilizarComprobanteResult {
+  evento: Record<string, unknown>;
+  comprobante: FeCargaComprobante;
 }
 
 export interface FeCargaComprobanteLista {
