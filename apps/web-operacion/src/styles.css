@@ -2797,3 +2797,31 @@ dd {
   margin-top: 4px;
   font-size: 0.8125rem;
 }
+
+/* SPEC_CARGA_ATENCION_COMPROBANTES_v0.1: comprobantes que requieren atencion. */
+.carga-atencion,
+.carga-inutilizacion {
+  display: block;
+  margin-top: 4px;
+  overflow-wrap: anywhere;
+}
+
+.carga-acciones-comprobante {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.carga-confirmacion label {
+  display: grid;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.carga-confirmacion textarea {
+  width: 100%;
+  box-sizing: border-box;
+  font: inherit;
+}

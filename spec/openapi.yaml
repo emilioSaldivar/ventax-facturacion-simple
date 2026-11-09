@@ -1940,6 +1940,37 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/CargaMasivaResponse' }
         '409': { description: '`details.reason`: `CARGA_ACCION_NO_ADMITIDA`, con `estado` y `acciones`.' }
+  /cargas/{cargaId}/comprobantes/{orden}/inutilizar:
+    parameters:
+      - { name: cargaId, in: path, required: true, schema: { type: string, format: uuid } }
+      - { name: orden, in: path, required: true, schema: { type: integer, minimum: 1 } }
+    post:
+      tags: [Cargas]
+      summary: Inutiliza en SIFEN el numero de un comprobante que requiere atencion
+      description: 'SPEC_CARGA_ATENCION_COMPROBANTES_v0.1. No exige contexto listo para emitir. Queda en auditoria como `CARGA_COMPROBANTE_INUTILIZADO`. No se puede deshacer.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [motivo]
+              properties:
+                motivo: { type: string, minLength: 5, maxLength: 150 }
+      responses:
+        '200':
+          description: Evento enviado y comprobante actualizado
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [evento, comprobante]
+                properties:
+                  evento: { type: object, description: 'Resultado del evento de inutilizacion, tal como lo devuelve el backend fiscal.' }
+                  comprobante: { $ref: '#/components/schemas/CargaMasivaComprobante' }
+        '400': { description: 'Orden o motivo invalidos.' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: '`details.reason`: `COMPROBANTE_SIN_ATENCION`, `EVENT_IN_PROGRESS`, `EVENT_ALREADY_EXISTS`, `RANGE_ALREADY_USED` o `RANGE_POSSIBLY_CONSUMED`, el codigo del backend fiscal.' }
   /cargas/{cargaId}/resultado:
     parameters:
       - { name: cargaId, in: path, required: true, schema: { type: string, format: uuid } }
@@ -3086,6 +3117,9 @@ components:
         cancelados: { type: integer }
         con_advertencias: { type: integer }
         numeros_salteados: { type: integer }
+        requieren_atencion:
+          type: integer
+          description: 'Comprobantes con un numero sin resolver (SPEC_CARGA_ATENCION_COMPROBANTES_v0.1). La carga no termina mientras haya alguno. Ausente si el backend fiscal no lo informa.'
         lotes_enviados: { type: integer }
         lotes_en_proceso: { type: integer }
         lotes_concluidos: { type: integer }
@@ -3186,6 +3220,26 @@ components:
         correo: { type: string, nullable: true, enum: [PENDING, SENT, FAILED, null] }
         aprobado_en: { type: string, format: date-time, nullable: true }
         actualizado_en: { type: string, format: date-time }
+        atencion:
+          type: object
+          nullable: true
+          description: 'Numero sin resolver: invalido o cancelado con numeracion del cliente, o rechazado por SIFEN, sin inutilizar. Lo decide el backend fiscal.'
+          properties:
+            motivo: { type: string, enum: [NUMERO_SIN_USAR, RECHAZADO_POR_SIFEN] }
+            numero: { type: string, example: '001-001-0000007' }
+        inutilizacion:
+          type: object
+          nullable: true
+          description: Ultima inutilizacion que cubre el numero del comprobante.
+          properties:
+            evento_id: { type: string }
+            estado: { type: string, description: '`PENDING`, `ACCEPTED`, `REJECTED` o `FAILED`.' }
+            numero: { type: string }
+        acciones:
+          type: object
+          properties:
+            puede_inutilizar: { type: boolean }
+            puede_editar: { type: boolean, description: 'Reservado: hoy siempre `false`.' }
         detalle: { type: object, nullable: true, description: 'Solo con `detalle=true`.' }
         documento_id: { type: string, format: uuid, nullable: true, description: 'Documento de FS con ese `document_uuid`.' }
     CargaMasivaComprobantesResponse:

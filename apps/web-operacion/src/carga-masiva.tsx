@@ -28,6 +28,8 @@ interface Totales {
   cancelados: number;
   con_advertencias: number;
   numeros_salteados: number;
+  /** SPEC_CARGA_ATENCION_COMPROBANTES_v0.1. Ausente si FE no lo informa. */
+  requieren_atencion?: number;
 }
 
 interface Carga {
@@ -61,6 +63,10 @@ interface Comprobante {
   sifen: { codigo: string; mensaje: string | null } | null;
   correo: "PENDING" | "SENT" | "FAILED" | null;
   documento_id: string | null;
+  /** SPEC_CARGA_ATENCION_COMPROBANTES_v0.1: ausentes si FE no los informa (RN-09). */
+  atencion?: { motivo: "NUMERO_SIN_USAR" | "RECHAZADO_POR_SIFEN"; numero: string } | null;
+  inutilizacion?: { evento_id: string; estado: string; numero: string } | null;
+  acciones?: { puede_inutilizar: boolean; puede_editar: boolean };
 }
 
 interface Lote {
@@ -111,6 +117,13 @@ const ETIQUETA_COMPROBANTE: Record<EstadoComprobante, string> = {
 };
 
 const ETIQUETA_CORREO: Record<string, string> = { PENDING: "Pendiente", SENT: "Enviado", FAILED: "No se pudo enviar" };
+
+const ETIQUETA_ATENCION: Record<string, string> = { NUMERO_SIN_USAR: "sin usar", RECHAZADO_POR_SIFEN: "rechazado por SIFEN" };
+
+const ETIQUETA_INUTILIZACION: Record<string, string> = { PENDING: "En curso", ACCEPTED: "Aceptada", REJECTED: "Rechazada", FAILED: "Falló" };
+
+const MOTIVO_MIN = 5;
+const MOTIVO_MAX = 150;
 
 const ESTADOS_ACTIVOS: EstadoCarga[] = ["RECIBIDA", "VALIDANDO", "EN_COLA", "EN_PREPARACION", "EN_SIFEN"];
 
@@ -558,7 +571,8 @@ function Totales({ carga }: { carga: Carga }) {
     ["Aprobados", (t.aprobados ?? 0) + (t.aprobados_con_obs ?? 0)],
     ["Rechazados", t.rechazados],
     ["Fallas del servicio", t.con_error],
-    ["Cancelados", t.cancelados]
+    ["Cancelados", t.cancelados],
+    ["Requieren atención", t.requieren_atencion]
   ];
   return (
     <dl className="carga-totales">
@@ -602,6 +616,7 @@ function DetalleCarga({
   const [ocupado, setOcupado] = useState(false);
   const [informacion, setInformacion] = useState<string | null>(null);
   const [lotes, setLotes] = useState<Lote[] | null>(null);
+  const [inutilizando, setInutilizando] = useState<{ orden: number; numero: string; motivo: string } | null>(null);
   const filtroRef = useRef({ filtro, pagina });
   filtroRef.current = { filtro, pagina };
 
@@ -637,7 +652,10 @@ function DetalleCarga({
   }, [filtro, pagina]);
 
   const estado = carga?.estado;
-  const activa = estado ? ESTADOS_ACTIVOS.includes(estado) : false;
+  // RN-06: una VALIDADA sin nada que confirmar la cierra FE sola; se sigue mirando hasta verla cerrada.
+  const activa = estado
+    ? ESTADOS_ACTIVOS.includes(estado) || (estado === "VALIDADA" && carga?.acciones.puede_confirmar === false)
+    : false;
 
   // Validar tarda segundos; el resto puede tardar horas. Se detiene con la pestana del navegador oculta.
   useEffect(() => {
@@ -696,6 +714,37 @@ function DetalleCarga({
     }
   }
 
+  /** SPEC_CARGA_ATENCION_COMPROBANTES_v0.1, RN-02 y RN-04. */
+  async function inutilizar() {
+    if (!inutilizando) return;
+    const motivo = inutilizando.motivo.trim();
+    if (motivo.length < MOTIVO_MIN || motivo.length > MOTIVO_MAX) return;
+    setOcupado(true);
+    setInformacion(null);
+    onLimpiarError();
+    try {
+      const resultado = await api.request<{ comprobante: Comprobante }>(
+        `/cargas/${cargaId}/comprobantes/${inutilizando.orden}/inutilizar`,
+        { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ motivo }) }
+      );
+      const estadoEvento = resultado.comprobante.inutilizacion?.estado;
+      setInformacion(`Inutilización del número ${inutilizando.numero} enviada: ${estadoEvento ? ETIQUETA_INUTILIZACION[estadoEvento] ?? estadoEvento : "sin respuesta"}.`);
+      setInutilizando(null);
+      await cargar();
+    } catch (causa) {
+      const reason = detallesDe(causa).reason;
+      if (typeof reason === "string" && reason !== "FE_NO_DISPONIBLE") {
+        setInformacion(`No se inutilizó el número ${inutilizando.numero}: ${(causa as Error).message}`);
+        setInutilizando(null);
+        await cargar().catch(onError);
+      } else {
+        onError(causa);
+      }
+    } finally {
+      setOcupado(false);
+    }
+  }
+
   async function verLotes() {
     try {
       setLotes((await api.get<{ items: Lote[] }>(`/cargas/${cargaId}/lotes`)).items);
@@ -713,6 +762,8 @@ function DetalleCarga({
   const conResultado = (t.comprobantes ?? 0) - invalidos - (t.duplicados ?? 0);
   const avance = conResultado > 0 ? Math.min(100, Math.round((procesados / conResultado) * 100)) : 0;
   const errorInterno = carga.motivos.some((motivo) => motivo.codigo === "ERROR_INTERNO");
+  const conAtencion = t.requieren_atencion ?? 0;
+  const informaAtencion = t.requieren_atencion !== undefined;
 
   return (
     <>
@@ -766,6 +817,12 @@ function DetalleCarga({
         </div>
       ) : null}
 
+      {conAtencion > 0 ? (
+        <p className="carga-aviso advertencia" role="status">
+          {conAtencion} comprobante(s) dejaron un número sin usar o rechazado por SIFEN. La carga no termina hasta inutilizarlos desde la tabla.
+        </p>
+      ) : null}
+
       {(t.con_error ?? 0) > 0 ? (
         <p className="carga-aviso advertencia">
           {t.con_error} comprobante(s) con falla del servicio: no son un rechazo de SIFEN. La carga no termina hasta reintentarlos o cancelarlos.
@@ -776,7 +833,10 @@ function DetalleCarga({
         <div className="carga-confirmacion" role="dialog" aria-label="Confirmar emisión">
           <p><strong>Se emitirán {aEmitir} facturas reales.</strong> {invalidos > 0 ? `${invalidos} comprobante(s) con errores quedan afuera.` : null}</p>
           {invalidos > 0 && carga.numeracion === "CLIENTE" ? (
-            <p>Los números de los {invalidos} comprobantes inválidos quedarán salteados. Inutilizarlos es responsabilidad del cliente.</p>
+            <p>
+              Los números de los {invalidos} comprobantes inválidos quedarán sin usar.{" "}
+              {informaAtencion ? "Podrás inutilizarlos desde esta pantalla." : "Inutilizarlos es responsabilidad del cliente."}
+            </p>
           ) : null}
           <div className="carga-acciones">
             <button className="secondary-action" onClick={() => setConfirmando(null)} type="button">Volver</button>
@@ -885,6 +945,68 @@ function DetalleCarga({
                         <ListaProblemas clase="aviso" problemas={comprobante.advertencias} />
                         {comprobante.sifen ? <span><strong>{comprobante.sifen.codigo}</strong> {comprobante.sifen.mensaje}</span> : null}
                         {comprobante.cdc ? <small className="carga-cdc" title={comprobante.cdc}>CDC {comprobante.cdc}</small> : null}
+                        {comprobante.atencion ? (
+                          <span className="carga-atencion">
+                            <strong>Número sin resolver:</strong> {comprobante.atencion.numero} ({ETIQUETA_ATENCION[comprobante.atencion.motivo] ?? comprobante.atencion.motivo})
+                          </span>
+                        ) : null}
+                        {comprobante.inutilizacion ? (
+                          <span className="carga-inutilizacion">
+                            <strong>Inutilización:</strong> {ETIQUETA_INUTILIZACION[comprobante.inutilizacion.estado] ?? comprobante.inutilizacion.estado} ({comprobante.inutilizacion.numero})
+                          </span>
+                        ) : null}
+                        {comprobante.atencion ? (
+                          <span className="carga-acciones-comprobante">
+                            {comprobante.acciones?.puede_inutilizar ? (
+                              <button
+                                className="secondary-action"
+                                disabled={ocupado}
+                                onClick={() => setInutilizando({ orden: comprobante.orden, numero: comprobante.atencion!.numero, motivo: "" })}
+                                type="button"
+                              >
+                                Inutilizar número
+                              </button>
+                            ) : null}
+                            <button
+                              className="secondary-action"
+                              disabled={!comprobante.acciones?.puede_editar}
+                              title="Edición no disponible todavía"
+                              type="button"
+                            >
+                              Editar
+                            </button>
+                            {!comprobante.acciones?.puede_editar ? <small className="muted">Edición no disponible todavía</small> : null}
+                          </span>
+                        ) : null}
+                        {inutilizando?.orden === comprobante.orden ? (
+                          <div className="carga-confirmacion" role="dialog" aria-label={`Inutilizar número ${inutilizando.numero}`}>
+                            <p><strong>¿Inutilizar el número {inutilizando.numero}?</strong> SIFEN lo registra como inutilizado. No se puede deshacer.</p>
+                            <label>
+                              Motivo
+                              <textarea
+                                maxLength={MOTIVO_MAX}
+                                onChange={(event) => setInutilizando({ ...inutilizando, motivo: event.target.value })}
+                                placeholder="Ej.: factura con errores en la carga, no se emitió"
+                                rows={2}
+                                value={inutilizando.motivo}
+                              />
+                            </label>
+                            <small className="muted">
+                              {inutilizando.motivo.trim().length} de {MOTIVO_MAX} caracteres. Mínimo {MOTIVO_MIN}.
+                            </small>
+                            <div className="carga-acciones">
+                              <button className="secondary-action" disabled={ocupado} onClick={() => setInutilizando(null)} type="button">Volver</button>
+                              <button
+                                className="primary-action"
+                                disabled={ocupado || inutilizando.motivo.trim().length < MOTIVO_MIN}
+                                onClick={() => void inutilizar()}
+                                type="button"
+                              >
+                                Sí, inutilizar
+                              </button>
+                            </div>
+                          </div>
+                        ) : null}
                         {CON_AYUDA.includes(comprobante.estado) ? (
                           <button className="carga-enlace carga-soporte" onClick={() => void copiarParaSoporte(comprobante)} type="button">
                             Copiar datos para soporte
