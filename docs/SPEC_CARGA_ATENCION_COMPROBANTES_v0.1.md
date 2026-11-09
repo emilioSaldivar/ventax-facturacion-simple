@@ -1,6 +1,6 @@
 # SPEC Carga: Comprobantes Que Requieren Atencion v0.1
 
-**Fecha:** 2026-11-09 · **Rama:** `feat/identidad-segel` · **Estado:** en implementacion, autorizada por el usuario el 2026-11-09 para el stack local de Segel (SIFEN test). Sin despliegue.
+**Fecha:** 2026-11-09 · **Rama:** `feat/identidad-segel` · **Estado:** implementada y validada el 2026-11-09 en el stack local de Segel (SIFEN test), FS `145e318` con FE `5da7707`. Sin despliegue.
 
 ## Alineacion
 
