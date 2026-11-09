@@ -83,7 +83,7 @@ El resultado de SIFEN llega en minutos o en horas: la persona sube, se va y vuel
 | Nueva carga | Facturador, punto y perfil que se usaran; forma de numerar; seleccion del archivo (`.csv` o `.zip`, hasta 20 MB y 100.000 lineas, los topes de FE). Un aviso fijo: "Confirmar emite facturas reales" |
 | Informe | Validos, con error y con aviso. Por comprobante: numero, filas, referencia de venta, codigo y mensaje por error o aviso, con la columna. Filtros `estado` y `con_advertencias`. Confirmar o cancelar |
 | Avance | Totales de la carga, ultima actualizacion, y que se puede cerrar la pantalla. En `EN_COLA`: "En espera de otra carga". En `EN_SIFEN` dice que sigue esperando a SIFEN y que puede tardar horas: no es un error. Tiempos normales medidos por FE con 5.000 comprobantes: validacion en 11 s, unos 100 comprobantes por minuto al preparar, envio de unas dos horas por carga de 5.000. El ultimo lote, el de menos de 50, puede esperar hasta 15 min: una carga chica queda "en SIFEN" ese rato sin anomalia. La pantalla no promete hora de fin |
-| Resultado | Por comprobante: numero asignado, numero del archivo, referencia de venta, estado, CDC, codigo y mensaje de SIFEN, correo y enlace al documento en FS. Filtros y descarga del CSV de resultado |
+| Resultado | Por comprobante: numero asignado, numero del archivo, referencia de venta, estado, CDC, codigo y mensaje de SIFEN, correo y enlace al documento en FS. El enlace abre el mismo detalle que el listado de documentos, con sus acciones frecuentes (PDF, XML, WhatsApp, enlace publico, correo) segun el estado del documento, y un boton para volver a la carga (FS-48). Filtros y descarga del CSV de resultado |
 
 Mensajes propios de FS, en lenguaje simple:
 

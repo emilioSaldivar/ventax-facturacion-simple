@@ -2332,11 +2332,11 @@ function DocumentsView({
           esInterno={isInternalSupport}
           key={cargaAbiertaId ?? "cargas"}
           onVerDocumento={(documentoId, cargaId) => {
-            void api.get<DocumentoResponse>(`/facturas/${documentoId}`).then((documento) => {
-              setVolverACargaId(cargaId);
-              setSelected(documento);
-              setDocKindTab("FACTURAS");
-            }, (causa: unknown) => setError(causa instanceof Error ? causa.message : "No se pudo abrir la factura."));
+            // FS-48: openDetail carga el enlace de entrega y el estado del correo;
+            // sin eso el detalle queda sin acciones frecuentes.
+            setVolverACargaId(cargaId);
+            setDocKindTab("FACTURAS");
+            void openDetail(documentoId);
           }}
         />
       </section>
