@@ -35,6 +35,8 @@ bash scripts/segel-fs/deploy.sh images
 
 FE queda fijado en `segel-rc4.1` (CEV-4 de `SPEC_CORRECCIONES_ENSAYO_VOLUMEN_v0.1`; tag local `3681a84` al 2026-11-08, el push lo pide el usuario en la sesion de FE). Sin el tag publicado no se construye para la VPS. Volver a `segel-rc4` (`f83a83c`) es `FE_REF=segel-rc4` y quitar `NCE_EMAIL_ENABLED`, `EMAIL_QUEUE_POR_MINUTO` y poner `EMAIL_QUEUE_CONCURRENCY=1`. Para otra version: `FE_REF=<tag>`, solo cuando FE lo anuncie. La version de FE se comprueba por este tag: FE no expone `X-App-Version`.
 
+**Al 2026-11-09** `segel-fs` corre FE `segel-rc4.3` (`4bd734b`), desplegado por FE a pedido del usuario: `rc4.2` (`51f93e9`, solo estilos del frontend) mas el merge de `main` v0.2.1 con `GET /v1/parametrizaciones`, catalogos de la carga masiva y guia v0.18. Sin migracion, sin variables nuevas y sin cambios en el compose. Los enums de factura, nota de credito y recibo aceptan los mismos valores que antes. `FE_REF` por defecto es `segel-rc4.3`. Vuelta atras de FE: imagenes `fe-segel-*:antes-rc4.3` en la VPS.
+
 **Verificar:** `docker images` en la VPS muestra las once imagenes `segel-fs-*` y `fe-segel-*`.
 
 ## Fase 2. Stacks (en la VPS)

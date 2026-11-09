@@ -131,4 +131,8 @@ Hecho por FE desde su sesion, por pedido del usuario ("opcion 2"), con FE `segel
 - Hallazgo: `up.sh` creaba `kude-cache` con el usuario de deploy, y en la VPS `fe-runtime/runtime` es de otro usuario con permiso 755. FE la creo desde un contenedor. **Corregido en FS:** `up.sh` crea todas las carpetas de `fe-runtime` desde el contenedor, junto con el `chown`; probado con la carpeta en 555.
 - Pendientes: las imagenes viejas siguen en la VPS sin etiqueta, para volver atras; FE las borra despues de la prueba del usuario. SF2-017 (permiso `CARGA_MASIVA`, cuota y numeradores) consultado a FE.
 
+- **2026-11-08:** FE desplego el frontend `segel-rc4.2` (`51f93e9`, solo `styles.css`). `FE_REF` por defecto en `b1d5fea`.
+- **2026-11-09:** FE desplego `segel-rc4.3` (`4bd734b`) a pedido del usuario, con respaldo previo restaurado y solo la api y los cuatro workers de FE recreados; FS no se toco. FS reviso el diff contra `rc4.2`: los esquemas de factura, nota de credito y recibo aceptan los mismos valores; lo nuevo es `GET /v1/parametrizaciones` y documentacion. `FE_REF` por defecto `segel-rc4.3`. FE aviso que la tabla de motivos de NC de su guia estaba mal hasta la v0.12: FS manda siempre `motivo.codigo` 1 (BACKLOG FS-44, decision fiscal del usuario).
+- **Archivos de la prueba:** se generaron con fecha 2026-11-08; si la prueba es otro dia se regeneran (SF2-019).
+
 Pendiente: E-3, prueba en produccion.
