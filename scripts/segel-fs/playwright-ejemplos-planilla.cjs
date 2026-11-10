@@ -9,6 +9,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const { chromium } = require(path.join(__dirname, "../../node_modules/playwright"));
+const { abrirVista, esperarSesion } = require(path.join(__dirname, "../lib/navegacion.cjs"));
 
 const base = process.env.SEGEL_APP_URL ?? "http://127.0.0.1:18492/app/";
 const usuario = process.env.ENSAYO_USER ?? "operador-ensayo";
@@ -28,12 +29,11 @@ async function login(page) {
   await page.locator('input[name="username"]').fill(usuario);
   await page.locator('input[name="password"]').fill(clave);
   await page.getByRole("button", { name: "Ingresar" }).click();
-  await page.getByRole("button", { name: "Abrir menu" }).first().waitFor({ timeout: 20000 });
+  await esperarSesion(page);
 }
 
 async function irACargas(page) {
-  await page.getByRole("button", { name: "Abrir menu" }).first().click();
-  await page.locator('button:has-text("Documentos")').first().click();
+  await abrirVista(page, "Documentos");
   await page.getByRole("heading", { name: "Facturas y notas" }).waitFor({ timeout: 20000 });
   await page.getByRole("button", { name: "Carga masiva" }).click();
   await page.getByRole("heading", { name: "Cargas de facturas" }).waitFor({ timeout: 20000 });

@@ -1377,6 +1377,7 @@ function OperationHome({
   const numeracionDelCliente = context?.fiscal_context.numeracion_facturas === "CLIENTE";
   const [operationView, setOperationView] = useState<OperationView>(() => (canEmit ? "invoice" : "status"));
   const [menuOpen, setMenuOpen] = useState(false);
+  const esEscritorio = useEsEscritorio();
   const updatePending = useUpdatePending();
   const [invoiceClientePrefill, setInvoiceClientePrefill] = useState<InvoiceClientePrefillRequest | null>(null);
   const invoiceClientePrefillSeqRef = useRef(0);
@@ -1516,6 +1517,8 @@ function OperationHome({
   return (
     <main className="operation-shell">
       <header className="topbar">
+        {/* SPEC_DOCUMENTOS_ESCRITORIO_v0.1: en escritorio el menu esta siempre a la vista, al costado. */}
+        {esEscritorio ? <span className="topbar-espacio" aria-hidden="true" /> : (
         <button
           aria-expanded={menuOpen}
           aria-label="Abrir menu"
@@ -1527,6 +1530,7 @@ function OperationHome({
           <span />
           <span />
         </button>
+        )}
         <div className="topbar-title">
           <strong>{context?.facturador.nombre_fantasia?.trim() || getOperationalTitle(context)}</strong>
           <BrandMark compact />
@@ -1536,7 +1540,7 @@ function OperationHome({
         </button>
       </header>
 
-      {menuOpen ? (
+      {menuOpen && !esEscritorio ? (
         <div className="menu-scrim" onClick={() => setMenuOpen(false)} role="presentation">
           <nav className="mobile-menu" aria-label="Navegacion principal" onClick={(event) => event.stopPropagation()}>
             <div>
@@ -1577,6 +1581,31 @@ function OperationHome({
         </div>
       ) : null}
 
+      <div className="operation-cuerpo">
+      {esEscritorio ? (
+        <nav className="side-nav" aria-label="Navegacion principal">
+          {menuSections.map((section) => (
+            <div className="side-nav-grupo" key={section.key}>
+              <p className="side-nav-titulo">{section.title}</p>
+              {menuItems.filter((item) => item.group === section.key).map((item) => (
+                <button
+                  aria-current={operationView === item.view ? "page" : undefined}
+                  className={["side-nav-item", operationView === item.view ? "active" : "", item.featured ? "side-nav-destacado" : ""].filter(Boolean).join(" ")}
+                  disabled={item.disabled}
+                  key={item.view}
+                  onClick={() => goTo(item.view)}
+                  title={item.view === "invoice" && numeracionDelCliente ? "Este punto emite por carga masiva" : getOperationViewHint(item.view)}
+                  type="button"
+                >
+                  <span aria-hidden="true">{item.icon}</span>
+                  <span>{item.label}</span>
+                </button>
+              ))}
+            </div>
+          ))}
+        </nav>
+      ) : null}
+      <div className="operation-content">
       {updatePending ? (
         <section className="update-banner" aria-live="assertive">
           <div>
@@ -1668,6 +1697,8 @@ function OperationHome({
           onGoTo={goTo}
         />
       )}
+      </div>
+      </div>
     </main>
   );
 }
@@ -1760,6 +1791,24 @@ function StatusView({
   );
 }
 
+const POR_PAGINA_DOCUMENTOS = 30;
+const TIPOS_PROXIMAMENTE = ["Notas de debito", "Notas de remision", "Autofacturas"] as const;
+
+/** SPEC_DOCUMENTOS_ESCRITORIO_v0.1, RN-01: 1024 px separa escritorio (menu lateral, tablas) de celular. */
+const MEDIA_ESCRITORIO = "(min-width: 1024px)";
+
+function useEsEscritorio(): boolean {
+  const [esEscritorio, setEsEscritorio] = useState(() => typeof window !== "undefined" && window.matchMedia(MEDIA_ESCRITORIO).matches);
+  useEffect(() => {
+    const consulta = window.matchMedia(MEDIA_ESCRITORIO);
+    const alCambiar = () => setEsEscritorio(consulta.matches);
+    alCambiar();
+    consulta.addEventListener("change", alCambiar);
+    return () => consulta.removeEventListener("change", alCambiar);
+  }, []);
+  return esEscritorio;
+}
+
 function DocumentsView({
   accessToken,
   setAccessToken,
@@ -1797,6 +1846,10 @@ function DocumentsView({
   const [hasta, setHasta] = useState(todayYmd);
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [quickMenuDocId, setQuickMenuDocId] = useState<string | null>(null);
+  // SPEC_DOCUMENTOS_ESCRITORIO_v0.1: tabla en escritorio y paginacion en las dos vistas.
+  const esEscritorio = useEsEscritorio();
+  const [pagina, setPagina] = useState(1);
+  const [totalDocumentos, setTotalDocumentos] = useState(0);
   const [loading, setLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -1826,14 +1879,15 @@ function DocumentsView({
 
   useEffect(() => {
     if (docKindTab === "CARGA_MASIVA") return;
-    void loadDocuments();
+    setPagina(1);
+    void loadDocuments(query, 1);
   }, [estadoFilter, tipoOperativoFilter, desde, hasta, docKindTab]);
 
-  async function loadDocuments(nextQuery = query) {
+  async function loadDocuments(nextQuery = query, paginaPedida = pagina) {
     setLoading(true);
     setError(null);
 
-    const params = new URLSearchParams({ limit: "30", offset: "0" });
+    const params = new URLSearchParams({ limit: String(POR_PAGINA_DOCUMENTOS), offset: String((paginaPedida - 1) * POR_PAGINA_DOCUMENTOS) });
     params.set("tipo", docKindTab === "NOTAS_CREDITO" ? "NOTA_CREDITO" : "FACTURA");
     if (estadoFilter) {
       params.set("estado", estadoFilter);
@@ -1854,6 +1908,8 @@ function DocumentsView({
     try {
       const result = await api.get<DocumentoListResponse>(`/facturas?${params.toString()}`);
       setDocuments(result.items);
+      setTotalDocumentos(result.total);
+      setPagina(paginaPedida);
       setSelected((current) => (current ? result.items.find((item) => item.id === current.id) ?? current : current));
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo cargar el listado.");
@@ -2287,6 +2343,29 @@ function DocumentsView({
     return [currentTodayDocs, currentWeekDocs];
   }, [documents]);
 
+  /** SPEC_DOCUMENTOS_ESCRITORIO_v0.1, RN-02: la tarjeta y la fila de la tabla ofrecen las mismas acciones. */
+  function menuDeFila(documento: DocumentoResponse) {
+    if (quickMenuDocId !== documento.id) return null;
+    return (
+                  <div className="client-row-menu" role="menu" aria-label="Acciones del documento">
+                    <button onClick={() => void openDetail(documento.id)} role="menuitem" type="button">Ver detalle</button>
+                    {!sinValidezFiscal(documento) ? (
+                      <>
+                        <button onClick={() => void openQuickShare(documento, "public")} role="menuitem" type="button">Compartir</button>
+                        <button onClick={() => void openQuickShare(documento, "whatsapp")} role="menuitem" type="button">WhatsApp</button>
+                      </>
+                    ) : null}
+                    {documento.accion_detalle?.acciones_sugeridas.includes("REINTENTAR_NOTA_CREDITO") ? (
+                      <button onClick={() => { setQuickMenuDocId(null); void retryNotaCredito(documento); }} role="menuitem" type="button">Reintentar nota de crédito</button>
+                    ) : null}
+                    {documento.tipo === "FACTURA" ? (
+                      <button onClick={() => void emitNotaCreditoFromList(documento.id)} role="menuitem" type="button">Nota de credito</button>
+                    ) : null}
+                    <button className="destructive-item" onClick={() => void cancelDocumentoFromList(documento.id, documento.tipo)} role="menuitem" type="button">Anular</button>
+                  </div>
+    );
+  }
+
   const pestanasDocumentos = (
     <div className="filter-tabs" role="group" aria-label="Tipo de documento">
       {(context?.carga_masiva_habilitada ? (["FACTURAS", "NOTAS_CREDITO", "CARGA_MASIVA"] as const) : (["FACTURAS", "NOTAS_CREDITO"] as const)).map((value) => (
@@ -2302,8 +2381,23 @@ function DocumentsView({
           {value === "FACTURAS" ? "Facturas" : value === "NOTAS_CREDITO" ? "Notas de credito" : "Carga masiva"}
         </button>
       ))}
+      {/* SPEC_DOCUMENTOS_ESCRITORIO_v0.1, RN-03: tipos que FS incorpora cuando FE los habilite (Fase B). */}
+      {TIPOS_PROXIMAMENTE.map((tipo) => (
+        <button className="pestana-proximamente" disabled key={tipo} title={`${tipo}: disponible proximamente`} type="button">
+          {tipo} <small>Próximamente</small>
+        </button>
+      ))}
     </div>
   );
+
+  const totalPaginas = Math.max(1, Math.ceil(totalDocumentos / POR_PAGINA_DOCUMENTOS));
+  const paginador = totalDocumentos > POR_PAGINA_DOCUMENTOS ? (
+    <div className="documents-paginas">
+      <button className="secondary-action" disabled={loading || pagina <= 1} onClick={() => void loadDocuments(query, pagina - 1)} type="button">Anterior</button>
+      <span className="muted">Página {pagina} de {totalPaginas} · {totalDocumentos} documentos</span>
+      <button className="secondary-action" disabled={loading || pagina >= totalPaginas} onClick={() => void loadDocuments(query, pagina + 1)} type="button">Siguiente</button>
+    </div>
+  ) : null;
 
   if (docKindTab === "CARGA_MASIVA" && context) {
     return (
@@ -2345,7 +2439,7 @@ function DocumentsView({
   }
 
   return (
-    <section className="documents-view" aria-labelledby="documents-title">
+    <section className={esEscritorio ? "documents-view documents-view-ancha" : "documents-view"} aria-labelledby="documents-title">
       <div className="editor-heading">
         <div>
           <p className="eyebrow">Documentos</p>
@@ -2357,7 +2451,7 @@ function DocumentsView({
       </div>
 
       {!selected ? (
-      <section className="documents-filters">
+      <section className={esEscritorio ? "documents-filters documents-filtros-escritorio" : "documents-filters"}>
         {pestanasDocumentos}
         <label>
           Buscar
@@ -2365,7 +2459,7 @@ function DocumentsView({
             onChange={(event) => setQuery(event.target.value)}
             onKeyDown={(event) => {
               if (event.key === "Enter") {
-                void loadDocuments();
+                void loadDocuments(query, 1);
               }
             }}
             placeholder="Buscar factura..."
@@ -2373,7 +2467,7 @@ function DocumentsView({
           />
         </label>
         <div className="quick-actions-row compact">
-          <button className="secondary-action" disabled={loading} onClick={() => void loadDocuments()} type="button">
+          <button className="secondary-action" disabled={loading} onClick={() => void loadDocuments(query, 1)} type="button">
             {loading ? "Cargando..." : "Buscar"}
           </button>
           <button className="secondary-action" onClick={() => setShowAdvancedFilters((current) => !current)} type="button">
@@ -2393,7 +2487,7 @@ function DocumentsView({
             </button>
           ) : null}
         </div>
-        {showAdvancedFilters ? (
+        {showAdvancedFilters || esEscritorio ? (
           <div className="documents-advanced-filters">
             <label>
               Estado
@@ -2503,7 +2597,73 @@ function DocumentsView({
       </section>
       ) : null}
 
-      {!selected ? (
+      {!selected && esEscritorio ? (
+      <section className="documents-layout documents-layout-escritorio">
+        {documents.length === 0 && !loading ? <p className="muted empty-state">Sin documentos para los filtros actuales.</p> : null}
+        {documents.length > 0 ? (
+          <div className="documents-tabla-contenedor">
+            <table className="documents-tabla">
+              <thead>
+                <tr>
+                  <th>Fecha</th>
+                  <th>Número</th>
+                  <th>Cliente</th>
+                  <th>RUC o CI</th>
+                  <th>Condición</th>
+                  <th>Estado</th>
+                  <th>CDC</th>
+                  <th>Moneda</th>
+                  <th className="numero">Total</th>
+                  <th aria-label="Acciones" />
+                </tr>
+              </thead>
+              <tbody>
+                {documents.map((documento) => (
+                  <tr className="documents-tabla-fila" key={documento.id} onClick={() => void openDetail(documento.id)}>
+                    <td>{formatShortDate(documento.created_at)}</td>
+                    <td>
+                      <strong title={documento.accion_detalle?.titulo}>{`${getDocumentoAccionIcon(documento)} ${documento.numero_fiscal ?? "pendiente"}`}</strong>
+                      {documento.carga ? (
+                        <button
+                          className="carga-enlace documents-tabla-carga"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setCargaAbiertaId(documento.carga!.id);
+                            setDocKindTab("CARGA_MASIVA");
+                          }}
+                          type="button"
+                        >
+                          Carga
+                        </button>
+                      ) : null}
+                    </td>
+                    <td>
+                      {documento.cliente.razon_social}
+                      {formatEmisor(documento) ? <small className="document-row-emisor">Emitio {formatEmisor(documento)}</small> : null}
+                    </td>
+                    <td>{documento.cliente.documento}</td>
+                    <td>{documento.condicion_venta === "CREDITO" ? "Crédito" : "Contado"}</td>
+                    <td><EstadoDocumentoPill documento={documento} /></td>
+                    <td className="documents-tabla-cdc" title={documento.cdc ?? undefined}>{documento.cdc ? `${documento.cdc.slice(0, 8)}…${documento.cdc.slice(-4)}` : "-"}</td>
+                    <td>PYG</td>
+                    <td className="numero"><strong>{formatGuaranies(documento.totals.total)}</strong></td>
+                    <td className="documents-tabla-acciones" onClick={(event) => event.stopPropagation()}>
+                      <div className="document-row-menu-wrapper">
+                        <button aria-label="Acciones" className="icon-menu-action" onClick={() => setQuickMenuDocId((current) => current === documento.id ? null : documento.id)} type="button">⋮</button>
+                        {menuDeFila(documento)}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : null}
+        {paginador}
+      </section>
+      ) : null}
+
+      {!selected && !esEscritorio ? (
       <section className="documents-layout">
         <div className="documents-list">
           {documents.length === 0 && !loading ? <p className="muted empty-state">Sin documentos para los filtros actuales.</p> : null}
@@ -2540,24 +2700,7 @@ function DocumentsView({
               </button>
               <div className="document-row-menu-wrapper">
                 <button className="icon-menu-action" onClick={() => setQuickMenuDocId((current) => current === documento.id ? null : documento.id)} type="button">⋮</button>
-                {quickMenuDocId === documento.id ? (
-                  <div className="client-row-menu" role="menu" aria-label="Acciones del documento">
-                    <button onClick={() => void openDetail(documento.id)} role="menuitem" type="button">Ver detalle</button>
-                    {!sinValidezFiscal(documento) ? (
-                      <>
-                        <button onClick={() => void openQuickShare(documento, "public")} role="menuitem" type="button">Compartir</button>
-                        <button onClick={() => void openQuickShare(documento, "whatsapp")} role="menuitem" type="button">WhatsApp</button>
-                      </>
-                    ) : null}
-                    {documento.accion_detalle?.acciones_sugeridas.includes("REINTENTAR_NOTA_CREDITO") ? (
-                      <button onClick={() => { setQuickMenuDocId(null); void retryNotaCredito(documento); }} role="menuitem" type="button">Reintentar nota de crédito</button>
-                    ) : null}
-                    {documento.tipo === "FACTURA" ? (
-                      <button onClick={() => void emitNotaCreditoFromList(documento.id)} role="menuitem" type="button">Nota de credito</button>
-                    ) : null}
-                    <button className="destructive-item" onClick={() => void cancelDocumentoFromList(documento.id, documento.tipo)} role="menuitem" type="button">Anular</button>
-                  </div>
-                ) : null}
+                {menuDeFila(documento)}
               </div>
             </article>
           ))}
@@ -2582,6 +2725,7 @@ function DocumentsView({
             </button>
           ))}
         </div>
+        {paginador}
       </section>
       ) : null}
 
