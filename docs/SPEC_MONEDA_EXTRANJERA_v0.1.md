@@ -23,8 +23,22 @@
 3. **Emision** con `moneda`, `tipoCambio` y precios y pago contado en esa moneda.
 4. **Guardado:** moneda y tipo de cambio en la factura; montos de las lineas con 2 decimales (migracion).
 5. **Pantallas:** todos los montos de un documento en su moneda ("USD 1.234,50"); la columna Moneda de Documentos con la real.
-6. **Recibos** de una factura a credito en moneda extranjera, en la misma moneda (si la pantalla de recibos lo permite sin cambios grandes; si no, bloqueado con aviso).
-7. **Nota de credito** de una factura en moneda extranjera: **bloqueada** con "La nota de crédito de una factura en moneda extranjera se gestiona con soporte" hasta que FE confirme o publique la nota en esa moneda (consulta enviada a FE el 2026-11-10).
+6. **Recibos** de una factura a credito en moneda extranjera, en la misma moneda (D-2).
+7. **Nota de credito** de una factura en moneda extranjera: **bloqueada** con "La nota de crédito de una factura en moneda extranjera se gestiona con soporte" (D-1).
+
+## Respuestas de FE (2026-11-10, codigo de `segel-rc4.25`; sin cambios en `rc4.26`)
+
+- **Nota de credito en moneda extranjera: no soportada.** `POST /v1/nota-credito` fija la moneda en PYG (`nce.mapper.ts`) y no compara la moneda de la factura antes de numerar: sobre una factura en USD saldria una NC en guaranies con los precios en dolares tomados como guaranies, consumiendo numero (SIFEN deberia rechazarla con 2438, sin probar). `POST /v1/nota-credito/total` copia receptor e items de la factura sin moneda ni tipo de cambio: mismo problema, y el tope de la NC total compara sin convertir. La nota de debito (`rc4.26`) si rechaza con 422 una factura que no es PYG. Requiere cambio en FE.
+- **Totales de un documento suelto:** no hay ruta JSON; estan en el XML (`gTotSub`: `dTotGralOpe` en la moneda, `dTotalGs` en guaranies). FE ofrece una ruta aditiva si FS la pide.
+- **Recibos:** `moneda` es texto libre (mandar el codigo ISO en mayusculas), `importe` con hasta 2 decimales, sin control contra la moneda de la factura. Defecto de FE registrado: el importe en letras del PDF pierde los centavos ("Ciento cincuenta USD" para 150,50) e imprime el codigo crudo.
+
+## Decisiones
+
+| ID | Tema | Decision |
+|---|---|---|
+| D-1 | Nota de credito en moneda extranjera | Bloqueada en FS hasta que FE la soporte; pedir a FE el cambio (decision del usuario) |
+| D-2 | Recibo en moneda extranjera | Pendiente del usuario: habilitarlo ya (el PDF pierde los centavos en letras hasta que FE lo corrija) o bloquearlo hasta la correccion |
+| D-3 | Despliegue | El cliente en dolares necesita FE `segel-rc4.25` o posterior en produccion (hoy `segel-rc4.6.1`); decision del usuario |
 
 ## Fuera de alcance
 
