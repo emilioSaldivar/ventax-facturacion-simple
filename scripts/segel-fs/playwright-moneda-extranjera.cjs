@@ -71,6 +71,8 @@ async function emitir(page, { moneda, tipoCambio, credito, precio, etiqueta }) {
   await page.waitForTimeout(2000);
   const resultado = await page.locator("main").innerText();
   await page.screenshot({ path: path.join(outDir, `${etiqueta}-emitida.png`), fullPage: true });
+  // El editor conserva la factura hasta "Crear nueva factura": se limpia para la siguiente.
+  await page.getByRole("button", { name: "Crear nueva factura" }).click();
   return { totales: totales.replace(/\s+/g, " "), resultado };
 }
 
@@ -98,6 +100,21 @@ async function emitir(page, { moneda, tipoCambio, credito, precio, etiqueta }) {
     check("CA-05 1440: la factura en guaranies sigue en PYG", filaPyg.includes("PYG"), filaPyg.replace(/\s+/g, " "));
     await page.screenshot({ path: path.join(outDir, "1440-documentos.png"), fullPage: true });
 
+    // La nota de credito pide la factura aprobada en SIFEN: se espera a que deje "Procesando" (hasta 8 min).
+    if (NC_MONEDA) {
+      const limite = Date.now() + 8 * 60 * 1000;
+      let fila = "";
+      while (Date.now() < limite) {
+        await page.reload({ waitUntil: "domcontentloaded" });
+        await esperarSesion(page);
+        await abrirVista(page, "Documentos");
+        await page.locator("table.documents-tabla").waitFor({ timeout: 20000 });
+        fila = (await page.locator("table.documents-tabla tbody tr", { hasText: "USD 300,50" }).first().innerText()).replace(/\s+/g, " ");
+        if (!fila.includes("Procesando")) break;
+        await page.waitForTimeout(20000);
+      }
+      check("1440: la factura contado USD sale de Procesando", !fila.includes("Procesando"), fila);
+    }
     // Ficha de la factura en USD: tipo de cambio y nota de credito (D-1).
     await page.locator("table.documents-tabla tbody tr", { hasText: "USD 300,50" }).first().locator("td").nth(2).click();
     await page.getByRole("button", { name: /Volver a resultados/ }).waitFor({ timeout: 20000 });
@@ -118,7 +135,9 @@ async function emitir(page, { moneda, tipoCambio, credito, precio, etiqueta }) {
       const texto = ok ? await popup.innerText() : await page.locator("body").innerText();
       check("CA-06 1440: nota de credito emitida", ok, texto.slice(0, 300).replace(/\n+/g, " | "));
       await page.screenshot({ path: path.join(outDir, "1440-nota-usd.png"), fullPage: true });
-      // La nota queda en USD en la pestaña de notas de credito.
+      // La nota queda en USD en la pestaña de notas de credito. El aviso de exito tapa el menu: se recarga.
+      await page.reload({ waitUntil: "domcontentloaded" });
+      await esperarSesion(page);
       await abrirVista(page, "Documentos");
       await page.locator('.filter-tabs button:has-text("Notas de credito")').first().click();
       await page.waitForTimeout(2500);
@@ -136,8 +155,10 @@ async function emitir(page, { moneda, tipoCambio, credito, precio, etiqueta }) {
       const tarjeta = page.locator(".nota-card", { hasText: "USD 199,98" }).first();
       check("D-2 1440: el recibo de la factura credito queda en USD", (await tarjeta.count()) > 0, (await page.locator("main").innerText()).slice(0, 300).replace(/\n+/g, " | "));
       await tarjeta.getByRole("button", { name: "Ver" }).click();
+      // "Emitir" pide confirmacion con un dialogo del navegador.
+      page.once("dialog", (dialogo) => void dialogo.accept());
       await page.getByRole("button", { name: "Emitir", exact: true }).click();
-      const emitido = await page.getByText(/EMITIDO/).first().waitFor({ timeout: 60000 }).then(() => true, () => false);
+      const emitido = await page.locator(".status-pill", { hasText: "EMITIDO" }).first().waitFor({ timeout: 60000 }).then(() => true, () => false);
       const detalle = await page.locator("main").innerText();
       check("D-2 1440: recibo en USD emitido con centavos", emitido && detalle.includes("USD 199,98"), detalle.slice(0, 300).replace(/\n+/g, " | "));
       await page.screenshot({ path: path.join(outDir, "1440-recibo-usd.png"), fullPage: true });
