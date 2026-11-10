@@ -1405,6 +1405,21 @@ describe("facturas service", () => {
       expect(result.totals).toMatchObject({ total: 300.5, iva_10: 27.32, total_sin_iva: 273.18 });
     });
 
+    it("RN-06: la vista previa acepta cantidad decimal (PYG y USD)", () => {
+      const cliente = { documento_tipo: "RUC" as const, documento: "80136968-1", razon_social: "Cliente Demo" };
+      const pyg = previewFactura(context, { condicion_venta: "CONTADO", cliente, items: [{ descripcion: "Kilos", cantidad: 2.5, precio_unitario: 10001, iva_tipo: "IVA_10" }] });
+      expect(pyg.totals.total).toBe(25003);
+      expect(pyg.items[0].cantidad).toBe(2.5);
+      const usd = previewFactura(context, {
+        condicion_venta: "CONTADO",
+        moneda: "USD",
+        tipo_cambio: 6329.77,
+        cliente,
+        items: [{ descripcion: "Horas", cantidad: 1.5, precio_unitario: 150.25, iva_tipo: "IVA_10" }]
+      });
+      expect(usd.totals).toMatchObject({ total: 225.38, iva_10: 20.49 });
+    });
+
     it("D-1: la nota de credito de una factura en USD se bloquea sin llamar a FE", async () => {
       const repo = new FakeFacturaRepository();
       repo.findByIdResponse = { ...buildDocumento({ estado: "EMITIDA", cdc: "A".repeat(44) }), moneda: "USD", tipo_cambio: 7350.5 };

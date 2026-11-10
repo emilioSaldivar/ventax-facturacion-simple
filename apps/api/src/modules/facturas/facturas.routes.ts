@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { monedasFactura, tieneDecimalesValidos } from "@facturacion-simple/shared";
+import { cantidadEscalada, monedasFactura, tieneDecimalesValidos } from "@facturacion-simple/shared";
 import { z } from "zod";
 import { requireAuth } from "../auth/auth.middleware";
 import { clienteRepository } from "../clientes/clientes.repository";
@@ -61,7 +61,8 @@ export const facturaPreviewSchema = z.object({
         catalogo_item_id: z.string().uuid().nullable().optional(),
         codigo: z.string().trim().max(60).nullable().optional(),
         descripcion: z.string().trim().min(1).max(240),
-        cantidad: z.coerce.number().int().min(1),
+        // SPEC_MONEDA_EXTRANJERA_v0.1, RN-06: mayor que cero con hasta 4 decimales (MT150 E711; se valida abajo).
+        cantidad: z.coerce.number().positive(),
         // SPEC_MONEDA_EXTRANJERA_v0.1, RN-02: decimales segun la moneda (se valida abajo).
         precio_unitario: z.coerce.number().min(0),
         iva_tipo: z.enum(ivaTipos).default("IVA_10")
@@ -79,6 +80,9 @@ export const facturaPreviewSchema = z.object({
     }
   }
   input.items.forEach((item, indice) => {
+    if (cantidadEscalada(item.cantidad) === null) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["items", indice, "cantidad"], message: "La cantidad admite hasta 4 decimales." });
+    }
     if (!tieneDecimalesValidos(item.precio_unitario, input.moneda)) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,

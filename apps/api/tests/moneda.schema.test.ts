@@ -28,4 +28,15 @@ describe("validacion de moneda (SPEC_MONEDA_EXTRANJERA_v0.1, RN-02)", () => {
     expect(facturaPreviewSchema.safeParse({ ...base, moneda: "USD", tipo_cambio: 7350.12345 }).success).toBe(false);
     expect(facturaPreviewSchema.safeParse({ ...base, moneda: "JPY", tipo_cambio: 50 }).success).toBe(false);
   });
+
+  it("RN-06: cantidad con hasta 4 decimales en cualquier moneda; 5 decimales, cero o negativa no", () => {
+    const conCantidad = (cantidad: number) => ({ ...base, moneda: "USD", tipo_cambio: 7350.5, items: [{ ...base.items[0], cantidad }] });
+    expect(facturaPreviewSchema.safeParse(conCantidad(1.5)).success).toBe(true);
+    expect(facturaPreviewSchema.safeParse(conCantidad(0.0001)).success).toBe(true);
+    expect(facturaPreviewSchema.safeParse(conCantidad(1.00005)).success).toBe(false);
+    expect(facturaPreviewSchema.safeParse(conCantidad(0)).success).toBe(false);
+    expect(facturaPreviewSchema.safeParse(conCantidad(-1)).success).toBe(false);
+    const pyg = facturaPreviewSchema.safeParse({ ...base, items: [{ ...base.items[0], cantidad: 2.5, precio_unitario: 150000 }] });
+    expect(pyg.success).toBe(true);
+  });
 });

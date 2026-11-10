@@ -3055,3 +3055,19 @@ dd {
   margin: 6px;
   font-size: 12px;
 }
+
+/* SPEC_MONEDA_EXTRANJERA_v0.1, RN-08: linea que no vale en la moneda elegida. */
+.sale-item-card.line-invalid {
+  border-color: var(--danger, #c0392b);
+}
+
+.line-invalid-hint,
+.moneda-aviso {
+  color: var(--danger, #c0392b);
+  font-weight: 600;
+}
+
+.moneda-aviso {
+  grid-column: 1 / -1;
+  margin: 4px 0 0;
+}

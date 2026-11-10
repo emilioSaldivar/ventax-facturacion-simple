@@ -3018,11 +3018,14 @@ components:
         descripcion:
           type: string
         cantidad:
-          type: integer
-          minimum: 1
+          type: number
+          exclusiveMinimum: 0
+          multipleOf: 0.0001
+          description: Mayor que cero con hasta 4 decimales (MT150 E711; SPEC_MONEDA_EXTRANJERA_v0.1 RN-06).
         precio_unitario:
-          type: integer
+          type: number
           minimum: 0
+          description: Entero en `PYG`; hasta 2 decimales en otra moneda (RN-02).
         iva_tipo:
           $ref: "#/components/schemas/IvaTipo"
 
@@ -3052,18 +3055,20 @@ components:
         descripcion:
           type: string
         cantidad:
-          type: integer
+          type: number
+          description: Hasta 4 decimales.
         precio_unitario:
-          type: integer
+          type: number
+          description: Entero en `PYG`; 2 decimales en otra moneda.
         iva_tipo:
           $ref: "#/components/schemas/IvaTipo"
         subtotal:
-          type: integer
+          type: number
         base_imponible:
-          type: integer
+          type: number
           description: Redondeado por linea.
         iva_monto:
-          type: integer
+          type: number
           description: Redondeado por linea.
 
     DocumentoTotals:

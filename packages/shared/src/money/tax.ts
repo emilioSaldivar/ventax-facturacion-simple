@@ -50,6 +50,26 @@ export function assertNonNegativeInteger(value: number, fieldName: string): void
   }
 }
 
+/** MT150 E711: cantidad mayor que cero con hasta 4 decimales (SPEC_MONEDA_EXTRANJERA_v0.1, RN-06). */
+export const DECIMALES_CANTIDAD = 4;
+const ESCALA_CANTIDAD = 10 ** DECIMALES_CANTIDAD;
+
+/** Cantidad escalada a entero (x 10.000), o null si no es positiva o tiene mas de 4 decimales. */
+export function cantidadEscalada(value: number): number | null {
+  if (!Number.isFinite(value) || value <= 0) return null;
+  const escalada = Math.round(value * ESCALA_CANTIDAD);
+  if (Math.abs(value * ESCALA_CANTIDAD - escalada) > 1e-6 || !Number.isSafeInteger(escalada) || escalada <= 0) return null;
+  return escalada;
+}
+
+export function assertCantidad(value: number, fieldName: string): number {
+  const escalada = cantidadEscalada(value);
+  if (escalada === null) {
+    throw new Error(`${fieldName} debe ser mayor que cero con hasta ${DECIMALES_CANTIDAD} decimales.`);
+  }
+  return escalada;
+}
+
 export function roundHalfUp(numerator: number, denominator = 1): number {
   assertNonNegativeInteger(numerator, "numerator");
   assertPositiveInteger(denominator, "denominator");
@@ -59,10 +79,14 @@ export function roundHalfUp(numerator: number, denominator = 1): number {
 
 export function calculateTaxLine(line: TaxInputLine, lineNo: number): TaxCalculatedLine {
   assertPositiveInteger(lineNo, "line_no");
-  assertPositiveInteger(line.cantidad, "cantidad");
+  const cantidad = assertCantidad(line.cantidad, "cantidad");
   assertNonNegativeInteger(line.precio_unitario, "precio_unitario");
 
-  const subtotal = line.cantidad * line.precio_unitario;
+  // Con cantidad decimal el subtotal se redondea al entero (guaranies o centavos), como arma FE el total.
+  // Cuenta exacta en BigInt: cantidad x 10.000 x precio, redondeo a la mitad hacia arriba.
+  const producto = BigInt(cantidad) * BigInt(line.precio_unitario);
+  const escala = BigInt(ESCALA_CANTIDAD);
+  const subtotal = Number((2n * producto + escala) / (2n * escala));
   assertNonNegativeInteger(subtotal, "subtotal");
 
   if (line.iva_tipo === "EXENTA") {

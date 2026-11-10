@@ -2838,7 +2838,7 @@ function DocumentsView({
                   {selected.items.map((item) => (
                     <article className="invoice-line-card" key={`${selected.id}-${item.line_no}`}>
                       <strong>
-                        {item.cantidad} x {item.descripcion}
+                        {formatCantidad(item.cantidad)} x {item.descripcion}
                       </strong>
                       {selected.tipo === "NOTA_REMISION" ? null : <small>{formatMonto(item.subtotal, selected.moneda)}</small>}
                     </article>
@@ -4195,6 +4195,10 @@ function InvoiceEditor({
   const [tipoCambio, setTipoCambio] = useState("");
   const enMonedaExtranjera = moneda !== "PYG";
   const tipoCambioValido = !enMonedaExtranjera || (Number(tipoCambio) > 0 && /^\d+(\.\d{1,4})?$/.test(tipoCambio));
+  function cambiarMoneda(nueva: MonedaFactura) {
+    setMoneda(nueva);
+    if (nueva === "PYG") setTipoCambio("");
+  }
   const [tipoTransaccion, setTipoTransaccion] = useState<TipoTransaccionServicio>(
     context?.fiscal_context.tipo_transaccion_default ?? 2
   );
@@ -4252,6 +4256,14 @@ function InvoiceEditor({
   const today = useMemo(() => new Date().toLocaleDateString("es-PY"), []);
   const nextFiscalNumber = useMemo(() => getNextFiscalNumber(context?.fiscal_context.documento_nro), [context?.fiscal_context.documento_nro]);
 
+  // SPEC_MONEDA_EXTRANJERA_v0.1, RN-08: cambiar la moneda no convierte montos; las lineas que dejan de ser validas
+  // se marcan y bloquean la emision hasta corregirlas (antes la vista previa las omitia en silencio).
+  const lineasInvalidasIds = new Set(
+    lines
+      .filter((line) => line.descripcion.trim() && line.precio_unitario.trim())
+      .filter((line) => !cantidadValida(Number(line.cantidad)) || !precioValido(Number(line.precio_unitario), moneda) || Number(line.precio_unitario) <= 0)
+      .map((line) => line.id)
+  );
   const request = useMemo<FacturaPreviewRequest | null>(() => {
     const items = lines
       .map((line) => ({
@@ -4265,8 +4277,7 @@ function InvoiceEditor({
       .filter(
         (line) =>
           line.descripcion &&
-          Number.isInteger(line.cantidad) &&
-          line.cantidad > 0 &&
+          cantidadValida(line.cantidad) &&
           precioValido(line.precio_unitario, moneda) &&
           line.precio_unitario > 0
       );
@@ -4926,8 +4937,7 @@ function InvoiceEditor({
     .filter(
       (line) =>
         line.descripcion.trim() &&
-        Number.isInteger(Number(line.cantidad)) &&
-        Number(line.cantidad) > 0 &&
+        cantidadValida(Number(line.cantidad)) &&
         precioValido(Number(line.precio_unitario), moneda) &&
         Number(line.precio_unitario) > 0
     )
@@ -5076,7 +5086,7 @@ function InvoiceEditor({
             </label>
             <label className="credit-term-field">
               Moneda
-              <select aria-label="Moneda" onChange={(event) => setMoneda(event.target.value as MonedaFactura)} value={moneda}>
+              <select aria-label="Moneda" onChange={(event) => cambiarMoneda(event.target.value as MonedaFactura)} value={moneda}>
                 {MONEDAS_FACTURA.map((opcion) => (
                   <option key={opcion.codigo} value={opcion.codigo}>{opcion.codigo} - {opcion.nombre}</option>
                 ))}
@@ -5094,6 +5104,11 @@ function InvoiceEditor({
                 />
                 {!tipoCambioValido ? <small className="field-hint">Obligatorio en {moneda}: mayor que cero, hasta 4 decimales.</small> : null}
               </label>
+            ) : null}
+            {lineasInvalidasIds.size > 0 ? (
+              <p className="field-hint moneda-aviso" role="alert">
+                Los montos no se convierten al cambiar la moneda: {lineasInvalidasIds.size === 1 ? "1 producto tiene" : `${lineasInvalidasIds.size} productos tienen`} un precio o una cantidad no válidos en {moneda}. Corregilos para crear la factura.
+              </p>
             ) : null}
           </div>
         </div>
@@ -5236,7 +5251,7 @@ function InvoiceEditor({
             const price = Number(line.precio_unitario) || 0;
             const subtotal = previewSubtotalsByLineId.get(line.id) ?? quantity * price;
             return (
-              <article className="sale-item-card" key={line.id}>
+              <article className={lineasInvalidasIds.has(line.id) ? "sale-item-card line-invalid" : "sale-item-card"} key={line.id}>
                 <button className="sale-item-main" onClick={() => editLine(line.id)} type="button">
                   <strong>
                     {expanded || !isLong ? description : `${description.slice(0, 58)}...`}
@@ -5260,7 +5275,12 @@ function InvoiceEditor({
                       </small>
                     ) : null}
                   </strong>
-                  <span>{quantity} x {formatMonto(price, moneda)}</span>
+                  <span>{formatCantidad(quantity)} x {formatMonto(price, moneda)}</span>
+                  {lineasInvalidasIds.has(line.id) ? (
+                    <small className="line-invalid-hint">
+                      {!precioValido(price, moneda) ? (moneda === "PYG" ? "Precio con decimales: no válido en guaraníes" : "Precio con más de 2 decimales") : "Cantidad no válida"}
+                    </small>
+                  ) : null}
                   <b>{formatMonto(subtotal, moneda)}</b>
                 </button>
                 <div className="sale-item-actions">
@@ -5326,9 +5346,10 @@ function InvoiceEditor({
                       -
                     </button>
                     <input
-                      inputMode="numeric"
-                      onChange={(event) => updateLine(activeLine.id, { cantidad: normalizeIntegerInput(event.target.value) })}
-                      value={formatIntegerInput(activeLine.cantidad)}
+                      aria-label="Cantidad"
+                      inputMode="decimal"
+                      onChange={(event) => updateLine(activeLine.id, { cantidad: normalizeDecimalInput(event.target.value, 4) })}
+                      value={activeLine.cantidad.replace(".", ",")}
                     />
                     <button
                       aria-label="Sumar cantidad"
@@ -5431,6 +5452,7 @@ function InvoiceEditor({
                     enMonedaExtranjera ||
                     catalogSaving[activeLine.id] ||
                     !activeLine.descripcion.trim() ||
+                    !cantidadValida(Number(activeLine.cantidad)) ||
                     !Number.isInteger(Number(activeLine.precio_unitario)) ||
                     Number(activeLine.precio_unitario) <= 0
                   }
@@ -5445,6 +5467,7 @@ function InvoiceEditor({
                   disabled={
                     catalogSaving[activeLine.id] ||
                     !activeLine.descripcion.trim() ||
+                    !cantidadValida(Number(activeLine.cantidad)) ||
                     !precioValido(Number(activeLine.precio_unitario), moneda) ||
                     Number(activeLine.precio_unitario) <= 0
                   }
@@ -5474,7 +5497,7 @@ function InvoiceEditor({
           </button>
           <button
             className="primary-action wide"
-            disabled={!canEmit || !preview || emitting || hasEmissionResult}
+            disabled={!canEmit || !preview || emitting || hasEmissionResult || lineasInvalidasIds.size > 0}
             onClick={() => void emitFactura()}
             type="button"
           >
@@ -5788,11 +5811,10 @@ function mapBusinessReadinessChecks(
 
 /** SPEC_MONEDA_EXTRANJERA_v0.1: monedas del editor de factura (las del paquete compartido). */
 type MonedaFactura = "PYG" | "USD" | "EUR" | "BRL";
+/** SPEC_MONEDA_EXTRANJERA_v0.1, D-4: el selector ofrece Guarani y Dolar; la API sigue aceptando EUR y BRL. */
 const MONEDAS_FACTURA: Array<{ codigo: MonedaFactura; nombre: string }> = [
   { codigo: "PYG", nombre: "Guaraní" },
-  { codigo: "USD", nombre: "Dólar estadounidense" },
-  { codigo: "EUR", nombre: "Euro" },
-  { codigo: "BRL", nombre: "Real brasileño" }
+  { codigo: "USD", nombre: "Dólar estadounidense" }
 ];
 
 /** RN-04: guaranies sin decimales; otra moneda con su codigo y 2 decimales ("USD 1.234,50"). */
@@ -5808,12 +5830,24 @@ function precioValido(valor: number, moneda: string): boolean {
   return Math.abs(valor * 100 - Math.round(valor * 100)) < 1e-6;
 }
 
-/** Precio en moneda extranjera: digitos y un separador decimal (coma o punto), hasta 2 decimales; se guarda con punto. */
-function normalizeDecimalInput(value: string): string {
+/** Digitos y un separador decimal (coma o punto), hasta `decimales`; se guarda con punto. Precio: 2; cantidad: 4. */
+function normalizeDecimalInput(value: string, decimales = 2): string {
   const limpio = value.replace(/[^\d.,]/g, "").replace(",", ".");
   const [entero, ...resto] = limpio.split(".");
   if (resto.length === 0) return entero ?? "";
-  return `${entero ?? ""}.${resto.join("").replace(/\./g, "").slice(0, 2)}`;
+  return `${entero ?? ""}.${resto.join("").replace(/\./g, "").slice(0, decimales)}`;
+}
+
+/** SPEC_MONEDA_EXTRANJERA_v0.1, RN-06 (MT150 E711): cantidad mayor que cero con hasta 4 decimales. */
+function cantidadValida(valor: number): boolean {
+  return Number.isFinite(valor) && valor > 0 && Math.abs(valor * 10000 - Math.round(valor * 10000)) < 1e-6;
+}
+
+/** Cantidad para mostrar: "2", "1,5", "0,125" (sin ceros de relleno). */
+function formatCantidad(valor: number | string): string {
+  const numero = Number(valor);
+  if (!Number.isFinite(numero)) return String(valor);
+  return new Intl.NumberFormat("es-PY", { maximumFractionDigits: 4 }).format(numero);
 }
 
 function formatGuaranies(value: number): string {
