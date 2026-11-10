@@ -91,7 +91,7 @@ Otra sesion trabaja en la misma rama (`scripts/segel-fs/playwright-correccion-in
 ## 7. Despliegue local para validar
 
 1. Commit de la implementacion (las imagenes se construyen desde commits, CA-01 de `SPEC_DESPLIEGUE_SEGEL_FS_v0.1`).
-2. Solo FS: `docker build --network host --build-arg BUILD_COMMIT_SHA=$(git rev-parse --short HEAD) -f infra/docker/frontend.Dockerfile -t segel-fs-frontend .` desde un `git archive HEAD` (como hace `scripts/segel-fs/build-images.sh`; no hace falta reconstruir FE ni la API si solo cambio `apps/web-operacion`, pero la API se reconstruye igual si el commit la toca).
+2. API y frontend **siempre desde el mismo commit** (si no, la app compara `X-App-Version`, muestra "Nueva version disponible" y cada navegacion recarga la pagina; hallazgo de UXF-009): `docker build --network host --build-arg BUILD_COMMIT_SHA=$(git rev-parse --short HEAD) -f infra/docker/frontend.Dockerfile -t segel-fs-frontend .` desde un `git archive HEAD` (como hace `scripts/segel-fs/build-images.sh`; no hace falta reconstruir FE ni la API si solo cambio `apps/web-operacion`, pero la API se reconstruye igual si el commit la toca).
 3. `bash .local/segel-ensayo/bin/up.sh` recrea el contenedor `segel-fs-frontend-1` con la imagen nueva.
 4. `curl -s http://localhost:18492/app/ | grep -o 'index-[^"]*\.js'` para confirmar el bundle nuevo.
 
