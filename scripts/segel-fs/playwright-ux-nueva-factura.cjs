@@ -16,7 +16,8 @@ const clave = fs.readFileSync(process.env.ENSAYO_PASSWORD_FILE ?? "", "utf8").tr
 const outDir = path.join(process.cwd(), "test-results", "ux-nueva-factura");
 const RUC = process.env.ENSAYO_RUC ?? "80026570-0";
 const NOMBRE = process.env.ENSAYO_NOMBRE ?? "SEGEL SA";
-const ESPERA_APROBACION_MS = Number(process.env.ESPERA_APROBACION_MS ?? 90000);
+// El punto de ensayo envia por lote: SIFEN test tarda unos 5 minutos en aprobar (corrida del 2026-11-10).
+const ESPERA_APROBACION_MS = Number(process.env.ESPERA_APROBACION_MS ?? 600000);
 fs.mkdirSync(outDir, { recursive: true });
 
 const resultados = [];
@@ -99,10 +100,10 @@ async function esperarAprobada(page, etiqueta) {
     if ((await resumen.count()) && !(await page.locator("details.mas-opciones[open]").count())) await resumen.click();
     const verificar = page.getByRole("button", { name: "Verificar estado fiscal" });
     if (await verificar.isVisible().catch(() => false)) await verificar.click();
-    await page.waitForTimeout(5000);
+    await page.waitForTimeout(15000);
   }
   const t = await texto(page);
-  const numero = (t.match(/Factura (\d{3}-\d{3}-\d{7})/) ?? [])[1] ?? null;
+  const numero = (t.match(/Factura (\d[\d-]{5,})/) ?? [])[1] ?? null;
   const aprobada = (await page.locator(".paso.hecho").count()) === 4;
   await page.screenshot({ path: path.join(outDir, `${etiqueta}-aprobada.png`), fullPage: true });
   facturas.push({ etiqueta, numero, aprobada });
