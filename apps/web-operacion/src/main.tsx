@@ -1561,50 +1561,75 @@ function OperationHome({
     }, 0);
   }
 
+  // SPEC_UX_NUEVA_FACTURA_v0.1, A.1: contexto fiscal en la barra; el operador con sus iniciales.
+  const fc = context?.fiscal_context;
+  const actividad = fc ? firstText(fc.actividad_economica_alias, fc.actividad_economica_descripcion) : null;
+  const lineaFiscal = fc
+    ? [
+        context?.facturador.ruc ? `RUC ${context.facturador.ruc}` : null,
+        `Timbrado ${fc.timbrado}`,
+        `Establecimiento ${fc.establecimiento}`,
+        `Punto ${fc.punto_expedicion}`,
+        actividad
+      ].filter(Boolean).join(" · ")
+    : "";
+  const lineaFiscalCorta = fc ? `Timbrado ${fc.timbrado} · ${fc.establecimiento}-${fc.punto_expedicion}` : "";
+  const operadorNombre = user?.display_name?.trim() || user?.username || "";
+  // SPEC_UX_NUEVA_FACTURA_v0.1, A.3: iconos SVG por nombre (PLAN 2) y grupos renombrados.
   const menuItems: Array<{
     label: string;
     view: OperationView;
     disabled?: boolean;
-    icon: string;
+    icon: NombreIcono;
     group: "primary" | "secondary" | "admin";
-    featured?: boolean;
   }> = [
-    { label: "Nueva factura", view: "invoice", disabled: !canEmit || numeracionDelCliente, icon: "🧾", group: "primary", featured: true },
-    { label: "Agenda / Clientes", view: "clients", icon: "👥", group: "primary" },
-    { label: "Documentos", view: "documents", icon: "📂", group: "primary" },
-    { label: "Notas / Presupuestos", view: "notas", icon: "📋", group: "secondary" },
-    { label: "Cobros / Recibos", view: "recibos", icon: "💵", group: "secondary" },
-    { label: "Catalogo", view: "catalog", icon: "📦", group: "secondary" },
-    { label: "Devolver factura", view: "credit-note", disabled: !canEmit, icon: "↩", group: "secondary" },
-    { label: "Informacion y estado", view: "status", icon: "🛡", group: "admin" }
+    { label: "Nueva factura", view: "invoice", disabled: !canEmit || numeracionDelCliente, icon: "factura", group: "primary" },
+    { label: "Agenda / Clientes", view: "clients", icon: "agenda", group: "primary" },
+    { label: "Documentos", view: "documents", icon: "documentos", group: "primary" },
+    { label: "Notas / Presupuestos", view: "notas", icon: "notas", group: "secondary" },
+    { label: "Cobros / Recibos", view: "recibos", icon: "recibos", group: "secondary" },
+    { label: "Catalogo", view: "catalog", icon: "catalogo", group: "secondary" },
+    { label: "Devolver factura", view: "credit-note", disabled: !canEmit, icon: "devolver", group: "secondary" },
+    { label: "Informacion y estado", view: "status", icon: "estado", group: "admin" }
   ];
   const menuSections: Array<{ title: string; key: "primary" | "secondary" | "admin" }> = [
-    { title: "Operaciones principales", key: "primary" },
-    { title: "Operaciones secundarias", key: "secondary" },
+    { title: "Operaciones", key: "primary" },
+    { title: "Secundarias", key: "secondary" },
     { title: "Administracion", key: "admin" }
   ];
 
   return (
     <main className="operation-shell">
+      {/* SPEC_UX_NUEVA_FACTURA_v0.1, A.1 y A.2: barra a lo ancho con el logo, el facturador, su linea fiscal y el operador. */}
       <header className="topbar">
         {/* SPEC_DOCUMENTOS_ESCRITORIO_v0.1: en escritorio el menu esta siempre a la vista, al costado. */}
-        {esEscritorio ? <span className="topbar-espacio" aria-hidden="true" /> : (
-        <button
-          aria-expanded={menuOpen}
-          aria-label="Abrir menu"
-          className="hamburger-action"
-          onClick={() => setMenuOpen((current) => !current)}
-          type="button"
-        >
-          <span />
-          <span />
-          <span />
-        </button>
+        {esEscritorio ? null : (
+          <button
+            aria-expanded={menuOpen}
+            aria-label="Abrir menu"
+            className="hamburger-action"
+            onClick={() => setMenuOpen((current) => !current)}
+            type="button"
+          >
+            <Icono nombre="menu" tamano={22} />
+          </button>
         )}
-        <div className="topbar-title">
-          <strong>{context?.facturador.nombre_fantasia?.trim() || getOperationalTitle(context)}</strong>
-          <BrandMark compact />
+        <img
+          alt="Segel Factura"
+          className={esEscritorio ? "topbar-logo" : "topbar-isotipo"}
+          src={esEscritorio ? "/app/brand/segel-logo-fondo-claro.svg" : "/app/brand/segel-isotipo.svg"}
+        />
+        {esEscritorio ? <span className="topbar-separador" aria-hidden="true" /> : null}
+        <div className="topbar-facturador">
+          <strong>{firstText(context?.facturador.nombre_fantasia, context?.facturador.razon_social) ?? getOperationalTitle(context)}</strong>
+          <small>{esEscritorio ? lineaFiscal : lineaFiscalCorta}</small>
         </div>
+        {esEscritorio && operadorNombre ? (
+          <div className="topbar-operador" title={operadorNombre}>
+            <span className="topbar-avatar" aria-hidden="true">{iniciales(operadorNombre)}</span>
+            <span>{operadorNombre}</span>
+          </div>
+        ) : null}
         <button className="ghost-action compact" onClick={() => void onLogout()} type="button">
           Salir
         </button>
@@ -1627,17 +1652,15 @@ function OperationHome({
                       className={[
                         "menu-item",
                         `menu-item-${item.group}`,
-                        operationView === item.view ? "active" : "",
-                        item.featured ? "menu-item-featured" : ""
+                        operationView === item.view ? "active" : ""
                       ].filter(Boolean).join(" ")}
                       disabled={item.disabled}
                       key={item.view}
                       onClick={() => goTo(item.view)}
                       type="button"
                     >
-                      <span className="menu-item-icon" aria-hidden="true">{item.icon}</span>
+                      <span className="menu-item-icon"><Icono nombre={item.icon} tamano={20} /></span>
                       <span>{item.label}</span>
-                      {item.featured ? <strong className="menu-item-badge">Recomendado</strong> : null}
                       <small>{item.view === "invoice" && numeracionDelCliente ? "Este punto emite por carga masiva" : getOperationViewHint(item.view)}</small>
                     </button>
                   ))}
@@ -1645,7 +1668,7 @@ function OperationHome({
               ))}
             </div>
             <button className="menu-exit-action wide" onClick={() => void onLogout()} type="button">
-              🚪 Salir
+              <Icono nombre="salir" /> Salir
             </button>
           </nav>
         </div>
@@ -1660,19 +1683,27 @@ function OperationHome({
               {menuItems.filter((item) => item.group === section.key).map((item) => (
                 <button
                   aria-current={operationView === item.view ? "page" : undefined}
-                  className={["side-nav-item", operationView === item.view ? "active" : "", item.featured ? "side-nav-destacado" : ""].filter(Boolean).join(" ")}
+                  className={["side-nav-item", operationView === item.view ? "active" : ""].filter(Boolean).join(" ")}
                   disabled={item.disabled}
                   key={item.view}
                   onClick={() => goTo(item.view)}
                   title={item.view === "invoice" && numeracionDelCliente ? "Este punto emite por carga masiva" : getOperationViewHint(item.view)}
                   type="button"
                 >
-                  <span aria-hidden="true">{item.icon}</span>
+                  <Icono nombre={item.icon} />
                   <span>{item.label}</span>
                 </button>
               ))}
             </div>
           ))}
+          {/* SPEC_UX_NUEVA_FACTURA_v0.1, A.3: pie de estado del menu. */}
+          <div className={readiness?.ready ? "side-nav-pie listo" : "side-nav-pie revisar"}>
+            <span className="side-nav-punto" aria-hidden="true" />
+            <span>
+              {readiness?.ready ? "Listo para facturar" : "Revisar estado"}
+              {!numeracionDelCliente && context?.fiscal_context.documento_nro ? ` · ultimo numero ${context.fiscal_context.documento_nro}` : ""}
+            </span>
+          </div>
         </nav>
       ) : null}
       <div className="operation-content">
@@ -1722,6 +1753,7 @@ function OperationHome({
           readiness={readiness}
           setAccessToken={setAccessToken}
           onBack={() => { setInvoiceInitialDraft(null); goTo("status"); }}
+          onVerDocumentos={() => { setInvoiceInitialDraft(null); goTo("documents"); }}
         />
       ) : operationView === "credit-note" ? (
         <CreditNoteView
@@ -4473,7 +4505,8 @@ function InvoiceEditor({
   context,
   readiness,
   setAccessToken,
-  onBack
+  onBack,
+  onVerDocumentos
 }: {
   accessToken: string | null;
   canEmit: boolean;
@@ -4483,6 +4516,7 @@ function InvoiceEditor({
   readiness: ReadinessResponse | null;
   setAccessToken: (token: string | null) => void;
   onBack: () => void;
+  onVerDocumentos?: () => void;
 }) {
   const [condicionVenta, setCondicionVenta] = useState<CondicionVenta>("CONTADO");
   // SPEC_MONEDA_EXTRANJERA_v0.1: moneda y tipo de cambio global de la factura.
@@ -4519,16 +4553,17 @@ function InvoiceEditor({
     guardarModoEditor(modo);
     setLineSheetOpen(false);
   }
-  const [expandedLineIds, setExpandedLineIds] = useState<Set<string>>(() => new Set());
   const [lineSheetOpen, setLineSheetOpen] = useState(false);
   const [lineCodeOpen, setLineCodeOpen] = useState(false);
-  const [headerDetailsOpen, setHeaderDetailsOpen] = useState(false);
+  // SPEC_UX_NUEVA_FACTURA_v0.1, B.3 y D-3: origen del cliente, opcionales plegados y guardado en la agenda al emitir.
+  const [clienteOrigen, setClienteOrigen] = useState<"AGENDA" | "PADRON" | null>(null);
+  const [opcionalesAbiertos, setOpcionalesAbiertos] = useState(false);
+  const [guardarEnAgenda, setGuardarEnAgenda] = useState(true);
   const [clienteSuggestions, setClienteSuggestions] = useState<ClienteSearchResult[]>([]);
   const [clienteSearching, setClienteSearching] = useState(false);
   const [clienteAutocompleting, setClienteAutocompleting] = useState(false);
   const [clienteSaving, setClienteSaving] = useState(false);
   const [clienteMessage, setClienteMessage] = useState<string | null>(null);
-  const [clienteModalOpen, setClienteModalOpen] = useState(false);
   const [catalogSuggestions, setCatalogSuggestions] = useState<Record<string, CatalogoItem[]>>({});
   const [catalogSearching, setCatalogSearching] = useState<Record<string, boolean>>({});
   const [catalogSaving, setCatalogSaving] = useState<Record<string, boolean>>({});
@@ -4552,7 +4587,6 @@ function InvoiceEditor({
   const comprobanteSectionRef = useRef<HTMLElement | null>(null);
   const clientSectionRef = useRef<HTMLElement | null>(null);
   const productsSectionRef = useRef<HTMLElement | null>(null);
-  const emissionResultRef = useRef<HTMLElement | null>(null);
   const lastAppliedClientePrefillIdRef = useRef<number | null>(null);
   const initialDraftAppliedRef = useRef(false);
   const correccionEmitidaRef = useRef(false);
@@ -4637,7 +4671,10 @@ function InvoiceEditor({
     });
     setClienteNaturalezaTouched(true);
     setClienteSuggestions([]);
-    setClienteMessage(`Cliente cargado desde agenda: ${clientePrefillRequest.cliente.razon_social}.`);
+    setClienteOrigen(clientePrefillRequest.cliente.cliente_id ? "AGENDA" : null);
+    setGuardarEnAgenda(!clientePrefillRequest.cliente.cliente_id);
+    setOpcionalesAbiertos(Boolean(clientePrefillRequest.cliente.direccion || clientePrefillRequest.cliente.telefono || clientePrefillRequest.cliente.email));
+    setClienteMessage(null);
     lastAppliedClientePrefillIdRef.current = clientePrefillRequest.request_id;
     scrollSection(clientSectionRef);
   }, [clientePrefillRequest]);
@@ -4727,22 +4764,6 @@ function InvoiceEditor({
       sheetElement.style.removeProperty("height");
     };
   }, [lineSheetOpen]);
-
-  useEffect(() => {
-    if (!emittedDocumento || !emissionResultRef.current) {
-      return;
-    }
-
-    const timeout = window.setTimeout(() => {
-      const element = emissionResultRef.current;
-      if (!element) {
-        return;
-      }
-      scrollToElement(element);
-    }, 120);
-
-    return () => window.clearTimeout(timeout);
-  }, [emittedDocumento?.id]);
 
   function getScrollableParent(element: HTMLElement): HTMLElement | null {
     let current: HTMLElement | null = element.parentElement;
@@ -4858,23 +4879,9 @@ function InvoiceEditor({
     void loadDeliveryData(emittedDocumento.id);
   }, [emittedDocumento?.id, emittedDocumento?.cdc, emittedDocumento?.estado]);
 
-  useEffect(() => {
-    if (!emittedDocumento || !lastEmittedRequestFingerprint || !requestFingerprint) {
-      return;
-    }
-
-    if (requestFingerprint === lastEmittedRequestFingerprint) {
-      return;
-    }
-
-    setEmittedDocumento(null);
-    setDeliveryLink(null);
-    setEmailStatus(null);
-    setDeliveryMessage(null);
-    setEmissionError(null);
-    setIdempotencyKey(createIdempotencyKey());
-    setLastEmittedRequestFingerprint(null);
-  }, [emittedDocumento, lastEmittedRequestFingerprint, requestFingerprint]);
+  // SPEC_UX_NUEVA_FACTURA_v0.1, D-4: con el resultado en pantalla el formulario no se edita, asi que ya no hace falta
+  // descartar el documento creado cuando cambia el pedido (ademas, guardar el cliente al emitir cambia el cliente_id).
+  // "Crear nueva factura" es el unico camino de vuelta al formulario y renueva la clave de idempotencia.
 
   async function runPreview(nextRequest = request) {
     if (!nextRequest) {
@@ -4905,6 +4912,13 @@ function InvoiceEditor({
     setEmitting(true);
     setEmissionError(null);
 
+    // SPEC_UX_NUEVA_FACTURA_v0.1, D-3: la casilla guarda o actualiza el cliente en la agenda antes de emitir;
+    // si falla, la factura sale igual y el aviso queda en la tarjeta Cliente.
+    let clienteGuardado: ClienteResponse | null = null;
+    if (guardarEnAgenda && cliente.documento.trim() && cliente.razon_social.trim()) {
+      clienteGuardado = await saveClienteRapido();
+    }
+
     try {
       // RN-A1: solo la primera emision del editor corrige; otra factura emitida despues no.
       const corrige = initialDraft?.corrige_documento_id && !correccionEmitidaRef.current ? initialDraft.corrige_documento_id : null;
@@ -4913,21 +4927,19 @@ function InvoiceEditor({
         headers: {
           "Idempotency-Key": idempotencyKey
         },
-        body: JSON.stringify(corrige ? { ...request, corrige_documento_id: corrige } : request)
+        body: JSON.stringify({
+          ...request,
+          ...(clienteGuardado ? { cliente: { ...request.cliente, cliente_id: clienteGuardado.cliente_id } } : {}),
+          ...(corrige ? { corrige_documento_id: corrige } : {})
+        })
       });
       if (corrige) correccionEmitidaRef.current = true;
       setEmittedDocumento(result);
       setLastEmittedRequestFingerprint(requestFingerprint ?? JSON.stringify(request));
       setDeliveryLink(null);
       setEmailStatus(null);
-      window.setTimeout(() => {
-        const element = emissionResultRef.current;
-        if (element) {
-          scrollToElement(element);
-          return;
-        }
-        window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
-      }, 220);
+      // SPEC_UX_NUEVA_FACTURA_v0.1, D-4: el resultado reemplaza al formulario; se vuelve arriba.
+      window.scrollTo({ top: 0 });
     } catch (error) {
       setEmissionError(error instanceof Error ? error.message : "No se pudo emitir la factura.");
     } finally {
@@ -5048,6 +5060,22 @@ function InvoiceEditor({
     }
   }
 
+  /** SPEC_UX_NUEVA_FACTURA_v0.1, B.3: editar un cliente de la agenda vuelve a marcar la casilla de actualizar. */
+  function editarCliente(patch: Partial<FacturaClienteInput>) {
+    setCliente((current) => ({ ...current, ...patch }));
+    if (cliente.cliente_id) setGuardarEnAgenda(true);
+  }
+
+  /** SPEC_UX_NUEVA_FACTURA_v0.1, B.4: "Agregar linea" enfoca la fila vacia del final (la agrega si hace falta). */
+  function agregarLinea() {
+    const ultima = lines[lines.length - 1];
+    const indice = !ultima || lineaTieneDatos(ultima) ? lines.length : lines.length - 1;
+    if (indice === lines.length) setLines((current) => [...current, createInvoiceLine()]);
+    window.setTimeout(() => {
+      document.querySelector<HTMLInputElement>(`[data-grilla-fila="${indice}"] input[data-celda="descripcion"]`)?.focus();
+    }, 0);
+  }
+
   function addLineAndEdit() {
     const nextLine = createInvoiceLine();
     setLines((current) => [...current, nextLine]);
@@ -5092,9 +5120,11 @@ function InvoiceEditor({
       naturaleza: suggestion.naturaleza
     });
     setClienteNaturalezaTouched(true);
-    setClienteMessage(suggestion.source === "AGENDA_FACTURADOR" ? "Cliente seleccionado de la agenda." : "Datos encontrados para agregar a tu agenda.");
+    setClienteOrigen(suggestion.source === "AGENDA_FACTURADOR" ? "AGENDA" : "PADRON");
+    setGuardarEnAgenda(!suggestion.cliente_id);
+    if (suggestion.direccion || suggestion.telefono || suggestion.email) setOpcionalesAbiertos(true);
+    setClienteMessage(null);
     setClienteSuggestions([]);
-    scrollSection(clientSectionRef);
   }
 
   async function tryAutocompleteDnit() {
@@ -5139,7 +5169,9 @@ function InvoiceEditor({
           ? result.cliente.naturaleza_sugerida
           : current.naturaleza
       }));
-      setClienteMessage("Nombre o razon social autocompletado.");
+      setClienteOrigen("PADRON");
+      setGuardarEnAgenda(true);
+      setClienteMessage(null);
     } catch {
       // No interrumpir el flujo operativo cuando DNIT no esta disponible.
       if (documentoTipo === "RUC" && !clienteNaturalezaTouched) {
@@ -5150,7 +5182,7 @@ function InvoiceEditor({
     }
   }
 
-  async function saveClienteRapido() {
+  async function saveClienteRapido(): Promise<ClienteResponse | null> {
     setClienteSaving(true);
     setClienteMessage(null);
 
@@ -5171,10 +5203,12 @@ function InvoiceEditor({
           })
         : await api.post<ClienteResponse>("/clientes", payload);
       applyClienteSuggestion(saved);
-      setClienteModalOpen(false);
-      setClienteMessage(cliente.cliente_id ? "Cliente actualizado." : "Cliente guardado para este facturador.");
+      setGuardarEnAgenda(false);
+      setClienteMessage(cliente.cliente_id ? "Cliente actualizado en la agenda." : "Cliente guardado en la agenda.");
+      return saved;
     } catch (error) {
-      setClienteMessage(error instanceof Error ? error.message : "No se pudo guardar el cliente.");
+      setClienteMessage(`No se pudo guardar el cliente en la agenda: ${error instanceof Error ? error.message : "error desconocido"}`);
+      return null;
     } finally {
       setClienteSaving(false);
     }
@@ -5286,9 +5320,11 @@ function InvoiceEditor({
       naturaleza: undefined
     });
     setClienteNaturalezaTouched(false);
+    setClienteOrigen(null);
+    setOpcionalesAbiertos(false);
+    setGuardarEnAgenda(true);
     setLines([]);
     setActiveLineId(null);
-    setExpandedLineIds(new Set());
     setLineSheetOpen(false);
     setLineCodeOpen(false);
     setClienteSuggestions([]);
@@ -5308,37 +5344,113 @@ function InvoiceEditor({
     scrollSection(comprobanteSectionRef);
   }
 
-  return (
-    <section className={modoCompleto ? "invoice-editor completo" : "invoice-editor"} aria-labelledby="invoice-title">
-      <div className="editor-heading">
-        <div>
-          <p className="eyebrow">Nueva factura</p>
-          <h2 id="invoice-title">Nueva factura</h2>
-        </div>
-        <div className="header-actions">
-          <button
-            aria-label={headerDetailsOpen ? "Ocultar datos del facturador" : "Mostrar datos del facturador"}
-            className="ghost-action icon-eye"
-            onClick={() => setHeaderDetailsOpen((current) => !current)}
-            type="button"
-          >
-            {headerDetailsOpen ? "🙈 Ocultar datos" : "👁 Mostrar datos"}
-          </button>
-          {esEscritorio ? (
-            <div className="modo-editor-toggle" role="group" aria-label="Modo del editor">
-              <button aria-pressed={!modoCompleto} className={!modoCompleto ? "active" : ""} onClick={() => cambiarModoEditor("simple")} type="button">
-                Modo simple
-              </button>
-              <button aria-pressed={modoCompleto} className={modoCompleto ? "active" : ""} onClick={() => cambiarModoEditor("completo")} type="button">
-                Modo completo
-              </button>
-            </div>
-          ) : null}
-          <button className="ghost-action" onClick={onBack} type="button">
-            Volver
-          </button>
-        </div>
+  // SPEC_UX_NUEVA_FACTURA_v0.1, B.1: el numero estimado va en el subtitulo; la numeracion del cliente no se estima.
+  const numeracionDelCliente = context?.fiscal_context.numeracion_facturas === "CLIENTE";
+  const numeroEstimado =
+    context && !numeracionDelCliente ? `${context.fiscal_context.establecimiento}-${context.fiscal_context.punto_expedicion}-${nextFiscalNumber}` : null;
+  const lineasConDatos = lines.filter(lineaTieneDatos);
+  const primeraInvalida = lines.findIndex((line) => lineasInvalidasIds.has(line.id));
+  const equivalenteGs = enMonedaExtranjera && tipoCambioValido && preview ? Math.round(preview.totals.total * Number(tipoCambio)) : null;
+  const crearDeshabilitado = !canEmit || !preview || emitting || hasEmissionResult || lineasInvalidasIds.size > 0;
+  // SPEC_UX_NUEVA_FACTURA_v0.1, RN-04: un unico motivo, el primero que aplica.
+  const motivoBloqueo: string | null = (() => {
+    if (hasEmissionResult || emitting) return null;
+    if (!canEmit) {
+      const falla = mapBusinessReadinessChecks(readiness?.checks ?? []).find((check) => !check.ok);
+      return `No se puede facturar: ${falla?.message ?? "revisa Informacion y estado."}`;
+    }
+    if (!cliente.documento.trim() || !cliente.razon_social.trim()) return "Falta el cliente (documento y nombre)";
+    if (!tipoCambioValido) return "Falta el tipo de cambio";
+    if (lineasConDatos.length === 0) return "Agrega al menos una linea";
+    if (primeraInvalida >= 0) return `Corregi la linea ${primeraInvalida + 1} para poder crear la factura`;
+    if (!preview) return "Calculando…";
+    return null;
+  })();
+  const textoCrear = emitting ? "Procesando..." : "Crear factura";
+  const etiquetaMoneda = moneda === "PYG" ? "Gs." : moneda;
+  const textoOrigenCliente =
+    clienteOrigen === "AGENDA"
+      ? guardarEnAgenda ? "En tu agenda: se actualiza al emitir" : "En tu agenda"
+      : clienteOrigen === "PADRON"
+        ? "Del padron de la DNIT: se guarda en tu agenda al emitir"
+        : cliente.documento.trim() && cliente.razon_social.trim()
+          ? guardarEnAgenda ? "Cliente nuevo: se guarda en tu agenda al emitir" : "Cliente nuevo"
+          : null;
+  const hayOpcionales = Boolean(cliente.direccion?.trim() || cliente.telefono?.trim() || cliente.email?.trim());
+
+  const encabezado = (
+    <div className="editor-heading">
+      <div>
+        <h2 id="invoice-title">Nueva factura</h2>
+        <p className="muted editor-subtitulo">
+          {numeroEstimado ? `Proximo numero ${numeroEstimado} · ` : ""}
+          {today}
+          {numeroEstimado && modoCompleto ? " · el numero final lo asigna el sistema al emitir" : ""}
+        </p>
       </div>
+      <div className="header-actions">
+        {esEscritorio ? (
+          <div className="modo-editor-toggle" role="group" aria-label="Modo del editor">
+            <button aria-pressed={!modoCompleto} className={!modoCompleto ? "active" : ""} onClick={() => cambiarModoEditor("simple")} type="button">
+              Modo simple
+            </button>
+            <button aria-pressed={modoCompleto} className={modoCompleto ? "active" : ""} onClick={() => cambiarModoEditor("completo")} type="button">
+              Modo completo
+            </button>
+          </div>
+        ) : null}
+        <button className="ghost-action" onClick={onBack} type="button">
+          Volver
+        </button>
+      </div>
+    </div>
+  );
+
+  const selectorTipoPersona = cliente.documento_tipo === "RUC" ? (
+    <label className="campo-inline">
+      Tipo de persona
+      <select
+        title="Sugerido segun RUC o razon social; verificar con el cliente."
+        value={cliente.naturaleza ?? "FISICA"}
+        onChange={(event) => {
+          setClienteNaturalezaTouched(true);
+          editarCliente({ naturaleza: event.target.value as ClienteNaturaleza });
+        }}
+      >
+        <option value="FISICA">Fisica</option>
+        <option value="JURIDICA">Juridica</option>
+      </select>
+    </label>
+  ) : null;
+
+  const camposOpcionales = (
+    <div className="cliente-opcionales-campos">
+      {!modoCompleto ? selectorTipoPersona : null}
+      <label>
+        Direccion
+        <input onChange={(event) => editarCliente({ direccion: event.target.value })} value={cliente.direccion ?? ""} />
+      </label>
+      <label>
+        Telefono
+        <input inputMode="tel" onChange={(event) => editarCliente({ telefono: event.target.value })} value={cliente.telefono ?? ""} />
+      </label>
+      <label>
+        Correo
+        <input inputMode="email" onChange={(event) => editarCliente({ email: event.target.value })} value={cliente.email ?? ""} />
+      </label>
+    </div>
+  );
+
+  const casillaAgenda = (
+    <label className="casilla-agenda">
+      <input checked={guardarEnAgenda} onChange={(event) => setGuardarEnAgenda(event.target.checked)} type="checkbox" />
+      {cliente.cliente_id ? "Actualizar en la agenda al emitir" : "Guardar en la agenda al emitir"}
+    </label>
+  );
+
+  const formulario = (
+    <>
+      {encabezado}
 
       {initialDraft?.corrige_numero !== undefined ? (
         <p className="editor-alert ready" role="status">
@@ -5348,135 +5460,108 @@ function InvoiceEditor({
         </p>
       ) : null}
 
-      {headerDetailsOpen ? (
-        <section className="invoice-band" ref={comprobanteSectionRef}>
-          <div>
-            <dt>Facturador</dt>
-            <dd>{context?.facturador.razon_social ?? "-"}</dd>
+      {/* SPEC_UX_NUEVA_FACTURA_v0.1, B.2 y D.2: banda Comprobante en una fila (apilada en modo simple). */}
+      <section className="form-section banda-comprobante" aria-label="Comprobante" ref={comprobanteSectionRef}>
+        <div className="banda-campo banda-condicion">
+          <span className="banda-etiqueta">Condicion de venta</span>
+          <div className="segmented-control" role="group" aria-label="Condicion de venta">
+            {(["CONTADO", "CREDITO"] as const).map((value) => (
+              <button
+                aria-pressed={condicionVenta === value}
+                className={condicionVenta === value ? "active" : ""}
+                key={value}
+                onClick={() => setCondicionVenta(value)}
+                type="button"
+              >
+                {value === "CONTADO" ? "Contado" : "Credito"}
+              </button>
+            ))}
           </div>
-          <div>
-            <dt>RUC</dt>
-            <dd>{context?.facturador.ruc ?? "-"}</dd>
-          </div>
-          <div>
-            <dt>Est./Punto</dt>
-            <dd>{context ? `${context.fiscal_context.establecimiento}-${context.fiscal_context.punto_expedicion}` : "-"}</dd>
-          </div>
-          <div>
-            <dt>Fecha</dt>
-            <dd>{today}</dd>
-          </div>
-          <div>
-            <dt>Timbrado</dt>
-            <dd>{context?.fiscal_context.timbrado ?? "-"}</dd>
-          </div>
-          <div>
-            <dt>Siguiente estimado</dt>
-            <dd>{nextFiscalNumber}</dd>
-          </div>
-        </section>
-      ) : null}
-
-      <section className="form-section comprobante-section" ref={comprobanteSectionRef}>
-        <div>
-          <p className="eyebrow">Factura</p>
-          <h3>
-            {cliente.razon_social.trim()
-              ? cliente.razon_social.trim()
-              : context?.facturador.nombre_fantasia?.trim() || context?.facturador.razon_social || "Cliente no seleccionado"}
-          </h3>
-          <p className="muted">Fecha {today} · Timbrado {context?.fiscal_context.timbrado ?? "-"}</p>
         </div>
-        <div className="invoice-options" aria-label="Opciones de factura">
-          <p className="invoice-options-title">Opciones de factura</p>
-          <div className="invoice-options-body">
-            <div className="segmented-control" role="group" aria-label="Condicion de venta">
-              {(["CONTADO", "CREDITO"] as const).map((value) => (
-                <button
-                  className={condicionVenta === value ? "active" : ""}
-                  key={value}
-                  onClick={() => setCondicionVenta(value)}
-                  type="button"
-                >
-                  {value === "CONTADO" ? "Contado" : "Credito"}
-                </button>
+        {condicionVenta === "CREDITO" || modoCompleto ? (
+          <label className="banda-campo banda-plazo">
+            <span className="banda-etiqueta">Plazo (dias)</span>
+            <select
+              aria-label="Plazo en dias"
+              disabled={condicionVenta !== "CREDITO"}
+              onChange={(event) => setCreditoPlazoDias(Number(event.target.value))}
+              value={creditoPlazoDias}
+            >
+              {[30, 60, 90].map((days) => (
+                <option key={days} value={days}>
+                  {days}
+                </option>
               ))}
-            </div>
-            {condicionVenta === "CREDITO" ? (
-              <label className="credit-term-field">
-                Plazo
-                <select onChange={(event) => setCreditoPlazoDias(Number(event.target.value))} value={creditoPlazoDias}>
-                  {[30, 60, 90].map((days) => (
-                    <option key={days} value={days}>
-                      {days} dias
-                    </option>
-                  ))}
-                </select>
-              </label>
-            ) : null}
-            <label className="credit-term-field">
-              Tipo de servicio
-              <select onChange={(event) => setTipoTransaccion(Number(event.target.value) as TipoTransaccionServicio)} value={tipoTransaccion}>
-                <option value={1}>1 - Venta de mercadería</option>
-                <option value={2}>2 - Prestación de servicios</option>
-                <option value={3}>3 - Mixto (mercadería + servicios)</option>
-              </select>
-            </label>
-            <label className="credit-term-field">
-              Moneda
-              <select aria-label="Moneda" onChange={(event) => cambiarMoneda(event.target.value as MonedaFactura)} value={moneda}>
-                {MONEDAS_FACTURA.map((opcion) => (
-                  <option key={opcion.codigo} value={opcion.codigo}>{opcion.codigo} - {opcion.nombre}</option>
-                ))}
-              </select>
-            </label>
-            {enMonedaExtranjera ? (
-              <label className="credit-term-field">
-                Tipo de cambio: guaraníes por 1 {moneda}
-                <input
-                  aria-label="Tipo de cambio"
-                  inputMode="decimal"
-                  onChange={(event) => setTipoCambio(event.target.value.replace(/[^\d.,]/g, "").replace(",", "."))}
-                  placeholder="Ej.: 7.350,50 Gs."
-                  value={tipoCambio.replace(".", ",")}
-                />
-                {/* SPEC_MONEDA_EXTRANJERA_v0.1, RN-02: el tipo de cambio va en guaranies (hasta 4 decimales, MT150 D018); los precios, en la moneda con 2. */}
-                <small className="field-hint">
-                  Cuántos guaraníes vale 1 {moneda === "USD" ? "dólar" : moneda}. {tipoCambioValido ? "" : `Obligatorio al facturar en ${moneda}. `}Puede tener hasta 4 decimales.
-                </small>
-              </label>
-            ) : null}
-            {lineasInvalidasIds.size > 0 ? (
-              <p className="field-hint moneda-aviso" role="alert">
-                {lineasInvalidasIds.size === 1 ? "1 producto tiene" : `${lineasInvalidasIds.size} productos tienen`} datos incompletos o no válidos en {moneda} (los montos no se convierten al cambiar la moneda). Corregilos para crear la factura.
-              </p>
-            ) : null}
-          </div>
-        </div>
+            </select>
+          </label>
+        ) : null}
+        <label className="banda-campo banda-servicio">
+          <span className="banda-etiqueta">Tipo de servicio</span>
+          <select onChange={(event) => setTipoTransaccion(Number(event.target.value) as TipoTransaccionServicio)} value={tipoTransaccion}>
+            <option value={1}>1 - Venta de mercadería</option>
+            <option value={2}>2 - Prestación de servicios</option>
+            <option value={3}>3 - Mixto (mercadería + servicios)</option>
+          </select>
+        </label>
+        <label className="banda-campo banda-moneda">
+          <span className="banda-etiqueta">Moneda</span>
+          <select aria-label="Moneda" onChange={(event) => cambiarMoneda(event.target.value as MonedaFactura)} value={moneda}>
+            {MONEDAS_FACTURA.map((opcion) => (
+              <option key={opcion.codigo} value={opcion.codigo}>{opcion.codigo} - {opcion.nombre}</option>
+            ))}
+          </select>
+        </label>
+        {enMonedaExtranjera ? (
+          <label className="banda-campo banda-cambio">
+            <span className="banda-etiqueta">
+              Tipo de cambio <small>Gs. por 1 {moneda}</small>
+            </span>
+            <input
+              aria-label="Tipo de cambio"
+              className="cifra"
+              inputMode="decimal"
+              onChange={(event) => setTipoCambio(event.target.value.replace(/[^\d.,]/g, "").replace(",", "."))}
+              placeholder="Ej.: 7.350,50"
+              value={tipoCambio.replace(".", ",")}
+            />
+            {/* SPEC_MONEDA_EXTRANJERA_v0.1, RN-02: el tipo de cambio va en guaranies (hasta 4 decimales, MT150 D018). */}
+            {tipoCambioValido ? null : <small className="field-hint">Obligatorio al facturar en {moneda}. Hasta 4 decimales.</small>}
+          </label>
+        ) : null}
       </section>
 
-      <section className="form-section client-section" ref={clientSectionRef}>
-        <p className="eyebrow">Cliente</p>
-        <div className="field-grid">
-          <label className="required-field">
+      {/* SPEC_UX_NUEVA_FACTURA_v0.1, B.3 y D.3: cliente compacto. */}
+      <section className="form-section client-section" aria-label="Cliente" ref={clientSectionRef}>
+        <div className="tarjeta-cabecera">
+          <h3>Cliente</h3>
+          <span className="muted">Obligatorio</span>
+          <span className="tarjeta-cabecera-espacio" />
+          {modoCompleto ? selectorTipoPersona : null}
+        </div>
+        <div className="cliente-fila">
+          <label>
             Documento
-            <div className="inline-fields">
-              <select
-                onChange={(event) => setCliente((current) => ({ ...current, documento_tipo: event.target.value as DocumentoIdentidadTipo }))}
-                value={cliente.documento_tipo}
-              >
-                <option value="RUC">RUC</option>
-                <option value="CI">CI</option>
-                <option value="PASAPORTE">Pasaporte</option>
-                <option value="CEDULA_EXTRANJERA">Cedula extranjera</option>
-                <option value="NO_ESPECIFICADO">No especificado</option>
-              </select>
+            <select
+              onChange={(event) => setCliente((current) => ({ ...current, documento_tipo: event.target.value as DocumentoIdentidadTipo }))}
+              value={cliente.documento_tipo}
+            >
+              <option value="RUC">RUC</option>
+              <option value="CI">CI</option>
+              <option value="PASAPORTE">Pasaporte</option>
+              <option value="CEDULA_EXTRANJERA">Cedula extranjera</option>
+              <option value="NO_ESPECIFICADO">No especificado</option>
+            </select>
+          </label>
+          <label className="cliente-numero">
+            Numero
+            <span className="campo-con-icono">
               <input
                 inputMode={cliente.documento_tipo === "RUC" || cliente.documento_tipo === "CI" ? "numeric" : "text"}
-                onFocus={() => scrollSection(clientSectionRef)}
                 onBlur={() => void tryAutocompleteDnit()}
                 onChange={(event) => {
                   setClienteNaturalezaTouched(false);
+                  setClienteOrigen(null);
+                  setGuardarEnAgenda(true);
                   setCliente((current) => {
                     const nextDocumento = event.target.value;
                     if (nextDocumento === current.documento) {
@@ -5503,10 +5588,8 @@ function InvoiceEditor({
                 placeholder="Ingrese numero de documento"
                 value={cliente.documento}
               />
-            </div>
-            {clienteSearching || clienteAutocompleting ? (
-              <span className="field-hint">{clienteSearching ? "Buscando cliente..." : "Autocompletando..."}</span>
-            ) : null}
+              {clienteOrigen ? <span className="campo-tilde" title={clienteOrigen === "AGENDA" ? "En tu agenda" : "Del padron de la DNIT"}><Icono nombre="tilde" tamano={16} grosor={2.5} /></span> : null}
+            </span>
             {clienteSuggestions.length > 0 ? (
               <div className="suggestion-list">
                 {clienteSuggestions.map((suggestion) => (
@@ -5523,58 +5606,53 @@ function InvoiceEditor({
               </div>
             ) : null}
           </label>
-          <label className="required-field">
+          <label className="cliente-nombre">
             Nombre o razon social
-            <input onFocus={() => scrollSection(clientSectionRef)} onChange={(event) => setCliente((current) => ({ ...current, razon_social: event.target.value }))} value={cliente.razon_social} />
-          </label>
-          {cliente.documento_tipo === "RUC" ? (
-            <label>
-              Tipo de Persona
-              <select
-                value={cliente.naturaleza ?? "FISICA"}
-                onChange={(event) => {
-                  setClienteNaturalezaTouched(true);
-                  setCliente((current) => ({ ...current, naturaleza: event.target.value as ClienteNaturaleza }));
-                }}
-              >
-                <option value="FISICA">Fisica</option>
-                <option value="JURIDICA">Juridica</option>
-              </select>
-              <small className="muted">Sugerido segun RUC/razon social, verificar con el cliente.</small>
-            </label>
-          ) : null}
-          <label>
-            Direccion <small>(opcional)</small>
-            <input onFocus={() => scrollSection(clientSectionRef)} onChange={(event) => setCliente((current) => ({ ...current, direccion: event.target.value }))} value={cliente.direccion ?? ""} />
-          </label>
-          <label>
-            Telefono <small>(opcional)</small>
-            <input inputMode="tel" onFocus={() => scrollSection(clientSectionRef)} onChange={(event) => setCliente((current) => ({ ...current, telefono: event.target.value }))} value={cliente.telefono ?? ""} />
-          </label>
-          <label>
-            Correo <small>(opcional)</small>
-            <input inputMode="email" onFocus={() => scrollSection(clientSectionRef)} onChange={(event) => setCliente((current) => ({ ...current, email: event.target.value }))} value={cliente.email ?? ""} />
+            <input onChange={(event) => editarCliente({ razon_social: event.target.value })} value={cliente.razon_social} />
           </label>
         </div>
-        <div className="quick-actions-row">
+        <div className="cliente-estado">
+          {clienteSearching || clienteAutocompleting ? (
+            <span className="muted">{clienteSearching ? "Buscando cliente..." : "Autocompletando..."}</span>
+          ) : textoOrigenCliente ? (
+            <span className={clienteOrigen ? "cliente-origen ok" : "cliente-origen"}>
+              {clienteOrigen ? <Icono nombre="tilde" tamano={14} grosor={2.5} /> : null}
+              {textoOrigenCliente}
+            </span>
+          ) : !modoCompleto ? (
+            <span className="muted">Se completa desde tu agenda o el padron de la DNIT al escribir el documento.</span>
+          ) : null}
+          {clienteMessage ? <span className={/no se pudo|error|invalid/i.test(clienteMessage) ? "cliente-mensaje error" : "cliente-mensaje"}>{clienteMessage}</span> : null}
+        </div>
+        <div className="cliente-acciones">
           <button
-            className="secondary-action"
-            disabled={!cliente.documento.trim() || !cliente.razon_social.trim()}
-            onClick={() => cliente.cliente_id ? void saveClienteRapido() : setClienteModalOpen(true)}
+            aria-expanded={opcionalesAbiertos}
+            className="link-action cliente-opcionales"
+            onClick={() => setOpcionalesAbiertos((current) => !current)}
             type="button"
           >
-            {cliente.cliente_id ? "Actualizar" : "Guardar cliente"}
+            <Icono nombre={opcionalesAbiertos ? "chevron-abajo" : "chevron-derecha"} tamano={14} />
+            {modoCompleto ? "Direccion, telefono y correo (opcionales)" : "Tipo de persona, direccion, telefono y correo"}
           </button>
-          {clienteMessage ? <p className="inline-message">{clienteMessage}</p> : null}
+          {modoCompleto ? casillaAgenda : null}
         </div>
+        {opcionalesAbiertos ? camposOpcionales : null}
+        {!modoCompleto ? casillaAgenda : null}
       </section>
 
-      <section className="form-section products-section" ref={productsSectionRef}>
-        <div className="section-title-row">
-          <div>
-            <p className="eyebrow">Productos</p>
-            <h3>Productos/Servicios</h3>
-          </div>
+      <section className="form-section products-section" aria-label="Productos y servicios" ref={productsSectionRef}>
+        <div className="tarjeta-cabecera">
+          <h3>Productos y servicios</h3>
+          <span className="muted">
+            {lineasConDatos.length === 1 ? "1 linea" : `${lineasConDatos.length} lineas`}
+            {modoCompleto ? (enMonedaExtranjera ? ` · precios en ${moneda} con hasta 2 decimales` : " · precios en guaranies") : ""}
+          </span>
+          <span className="tarjeta-cabecera-espacio" />
+          {modoCompleto ? (
+            <button className="ghost-action compact con-icono" onClick={agregarLinea} type="button">
+              <Icono nombre="buscar" tamano={14} /> Buscar en el catalogo
+            </button>
+          ) : null}
         </div>
 
         {modoCompleto ? (
@@ -5586,6 +5664,7 @@ function InvoiceEditor({
             invalidas={lineasInvalidasIds}
             lines={lines}
             moneda={moneda}
+            onAgregar={agregarLinea}
             onAplicarCatalogo={applyCatalogItem}
             onGuardarCatalogo={(line) => void saveQuickCatalogItem(line)}
             onQuitar={removeLine}
@@ -5601,53 +5680,25 @@ function InvoiceEditor({
             </button>
           ) : null}
           {visibleLines.map((line, index) => {
-            const expanded = expandedLineIds.has(line.id);
             const description = line.descripcion.trim() || line.codigo.trim() || "Producto";
-            const isLong = description.length > 58;
             const quantity = Number(line.cantidad) || 1;
             const price = Number(line.precio_unitario) || 0;
             const subtotal = previewSubtotalsByLineId.get(line.id) ?? quantity * price;
             return (
               <article className={lineasInvalidasIds.has(line.id) ? "sale-item-card line-invalid" : "sale-item-card"} key={line.id}>
                 <button className="sale-item-main" onClick={() => editLine(line.id)} type="button">
-                  <strong>
-                    {expanded || !isLong ? description : `${description.slice(0, 58)}...`}
-                    {isLong ? (
-                      <small
-                        className="sale-more"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          setExpandedLineIds((current) => {
-                            const next = new Set(current);
-                            if (next.has(line.id)) {
-                              next.delete(line.id);
-                            } else {
-                              next.add(line.id);
-                            }
-                            return next;
-                          });
-                        }}
-                      >
-                        {expanded ? " Ver menos" : " Ver +"}
-                      </small>
-                    ) : null}
-                  </strong>
-                  <span>{formatCantidad(quantity)} x {formatMonto(price, moneda)}</span>
+                  <strong title={description}>{description}</strong>
+                  <span>{formatCantidad(quantity)} x {formatMonto(price, moneda)} · {formatIva(line.iva_tipo)}</span>
                   {lineasInvalidasIds.has(line.id) ? (
                     <small className="line-invalid-hint">
                       {motivoLineaInvalida(line, moneda)}
                     </small>
                   ) : null}
-                  <b>{formatMonto(subtotal, moneda)}</b>
+                  <b className="cifra">{formatMonto(subtotal, moneda)}</b>
                 </button>
-                <div className="sale-item-actions">
-                  <button aria-label={`Editar producto ${index + 1}`} className="icon-action" onClick={() => editLine(line.id)} type="button">
-                    Lapiz
-                  </button>
-                  <button aria-label={`Eliminar producto ${index + 1}`} className="icon-action danger" onClick={() => removeLine(line.id)} type="button">
-                    Basura
-                  </button>
-                </div>
+                <button aria-label={`Editar producto ${index + 1}`} className="icon-action" onClick={() => editLine(line.id)} type="button">
+                  <Icono nombre="lapiz" />
+                </button>
               </article>
             );
           })}
@@ -5836,178 +5887,394 @@ function InvoiceEditor({
                   AGREGAR Y NO GUARDAR
                 </button>
               </div>
+              {lineaTieneDatos(activeLine) ? (
+                <button className="link-action quitar-producto" onClick={() => removeLine(activeLine.id)} type="button">
+                  <Icono nombre="papelera" tamano={14} /> Quitar producto
+                </button>
+              ) : null}
             </div>
           </section>
         </div>
       ) : null}
-      <section className="totals-section" aria-live="polite" ref={sendSectionRef}>
-        <div className="totals-grid">
-          <TotalRow label="Subtotal" moneda={moneda} value={preview?.totals.subtotal ?? 0} />
-          <TotalRow label="Total sin IVA" moneda={moneda} value={preview?.totals.total_sin_iva ?? 0} />
-          <TotalRow label="IVA 5%" moneda={moneda} value={preview?.totals.iva_5 ?? 0} />
-          <TotalRow label="IVA 10%" moneda={moneda} value={preview?.totals.iva_10 ?? 0} />
-          <TotalRow label="Total IVA" moneda={moneda} value={preview?.totals.total_iva ?? 0} />
-          <TotalRow strong label="Total a pagar" moneda={moneda} value={preview?.totals.total ?? 0} />
-        </div>
-        {previewError ? <p className="form-error">{previewError}</p> : null}
-        <div className="editor-actions">
-          {modoCompleto ? null : (
+
+      {/* SPEC_UX_NUEVA_FACTURA_v0.1, B.5 y D.5: totales; en modo completo, tarjeta fija a la derecha; en simple, pie fijo. */}
+      {modoCompleto ? (
+        <aside className="totals-section totales-fija" aria-live="polite" ref={sendSectionRef}>
+          <h3>Totales en {etiquetaMoneda === "Gs." ? "Gs." : moneda}</h3>
+          <div className="totals-grid">
+            <TotalRow label="Subtotal" moneda={moneda} value={preview?.totals.subtotal ?? 0} />
+            <TotalRow label="Total sin IVA" moneda={moneda} value={preview?.totals.total_sin_iva ?? 0} />
+            <div className="totales-iva">
+              <TotalRow label="IVA 5%" moneda={moneda} value={preview?.totals.iva_5 ?? 0} />
+              <TotalRow label="IVA 10%" moneda={moneda} value={preview?.totals.iva_10 ?? 0} />
+              <TotalRow label="Total IVA" moneda={moneda} value={preview?.totals.total_iva ?? 0} />
+            </div>
+            <TotalRow strong label="Total a pagar" moneda={moneda} value={preview?.totals.total ?? 0} />
+          </div>
+          {equivalenteGs !== null || primeraInvalida >= 0 ? (
+            <p className="muted totales-nota">
+              {equivalenteGs !== null ? `equivale a ${formatGuaranies(equivalenteGs)} al cambio de ${tipoCambio.replace(".", ",")}` : ""}
+              {equivalenteGs !== null && primeraInvalida >= 0 ? " · " : ""}
+              {primeraInvalida >= 0 ? `la linea ${primeraInvalida + 1} no se cuenta` : ""}
+            </p>
+          ) : null}
+          <button className="primary-action wide crear-factura" disabled={crearDeshabilitado} onClick={() => void emitFactura()} type="button">
+            {textoCrear}
+          </button>
+          {previewError || emissionError ? (
+            <p className="motivo-bloqueo error" role="alert"><Icono nombre="alerta" tamano={14} /><span>{previewError ?? emissionError}</span></p>
+          ) : motivoBloqueo ? (
+            <p className="motivo-bloqueo"><Icono nombre="alerta" tamano={14} /><span>{motivoBloqueo}</span></p>
+          ) : null}
+          <p className="muted totales-pie">Al crear, la factura se envia a SIFEN y se verifica sola. Vas a poder enviarla por WhatsApp o correo desde la pantalla siguiente.</p>
+        </aside>
+      ) : (
+        <>
+          <section className="totals-section" aria-live="polite" ref={sendSectionRef}>
+            <div className="totals-grid">
+              <TotalRow label="Subtotal" moneda={moneda} value={preview?.totals.subtotal ?? 0} />
+              <TotalRow label="Total sin IVA" moneda={moneda} value={preview?.totals.total_sin_iva ?? 0} />
+              <div className="totales-iva">
+                <TotalRow label="IVA 5%" moneda={moneda} value={preview?.totals.iva_5 ?? 0} />
+                <TotalRow label="IVA 10%" moneda={moneda} value={preview?.totals.iva_10 ?? 0} />
+                <TotalRow label="Total IVA" moneda={moneda} value={preview?.totals.total_iva ?? 0} />
+              </div>
+            </div>
+            {equivalenteGs !== null ? <p className="muted totales-nota">equivale a {formatGuaranies(equivalenteGs)} al cambio de {tipoCambio.replace(".", ",")}</p> : null}
+            {previewError ? <p className="form-error">{previewError}</p> : null}
             <button className="secondary-action wide" disabled={previewing} onClick={() => void runPreview()} type="button">
               {previewing ? "Calculando..." : "Calcular"}
             </button>
-          )}
-          <button
-            className="primary-action wide"
-            disabled={!canEmit || !preview || emitting || hasEmissionResult || lineasInvalidasIds.size > 0}
-            onClick={() => void emitFactura()}
-            type="button"
-          >
-            {emitting ? "Procesando..." : "Crear factura"}
+          </section>
+          <div className="pie-crear">
+            <TotalRow strong label="Total a pagar" moneda={moneda} value={preview?.totals.total ?? 0} />
+            <button className="primary-action wide crear-factura" disabled={crearDeshabilitado} onClick={() => void emitFactura()} type="button">
+              {textoCrear}
+            </button>
+            {emissionError ? (
+              <p className="motivo-bloqueo error" role="alert"><Icono nombre="alerta" tamano={14} /><span>{emissionError}</span></p>
+            ) : motivoBloqueo ? (
+              <p className="motivo-bloqueo"><Icono nombre="alerta" tamano={14} /><span>{motivoBloqueo}</span></p>
+            ) : null}
+          </div>
+        </>
+      )}
+    </>
+  );
+
+  return (
+    <section
+      className={[modoCompleto ? "invoice-editor completo" : "invoice-editor", emittedDocumento ? "con-resultado" : ""].filter(Boolean).join(" ")}
+      aria-labelledby="invoice-title"
+    >
+      {/* SPEC_UX_NUEVA_FACTURA_v0.1, C.1 y D-4: el resultado reemplaza al formulario. */}
+      {emittedDocumento ? (
+        <ResultadoEmision
+          context={context}
+          deliveryLink={deliveryLink}
+          deliveryLoading={deliveryLoading}
+          deliveryMessage={deliveryMessage}
+          documento={emittedDocumento}
+          emailStatus={emailStatus}
+          emitting={emitting}
+          onCompartir={() => void sharePublicLink()}
+          onCopiar={() => void copyPublicLink()}
+          onCrearNueva={createNuevaFactura}
+          onRegenerarEnlace={() => void loadDeliveryData(emittedDocumento.id, true)}
+          onReintentar={() => void retryEmittedDocumento()}
+          onVerDocumentos={onVerDocumentos}
+          onVerificar={() => void refreshEmittedDocumento()}
+          setWhatsappPhone={setWhatsappPhone}
+          whatsappPhone={whatsappPhone}
+        />
+      ) : (
+        formulario
+      )}
+    </section>
+  );
+}
+
+/** SPEC_UX_NUEVA_FACTURA_v0.1, RN-06: pasos del estado fiscal segun el estado del documento. */
+type ClasePaso = "hecho" | "activo" | "error" | "pendiente";
+function pasosPorEstado(estado: DocumentoEstado): Array<{ etiqueta: string; clase: ClasePaso }> {
+  const etiquetas = ["Creada", "Enviada a SIFEN", "Esperando aprobacion", "Aprobada · KUDE listo"];
+  const armar = (clases: ClasePaso[], reemplazos: Record<number, string> = {}) =>
+    etiquetas.map((etiqueta, indice) => ({ etiqueta: reemplazos[indice] ?? etiqueta, clase: clases[indice] ?? "pendiente" }));
+  switch (estado) {
+    case "EMITIDA":
+      return armar(["hecho", "hecho", "hecho", "hecho"]);
+    case "PENDIENTE_SIFEN":
+      return armar(["hecho", "hecho", "activo", "pendiente"]);
+    case "RECHAZADA":
+      return armar(["hecho", "hecho", "error", "pendiente"], { 2: "Rechazada por SIFEN" });
+    case "ERROR_TEMPORAL":
+    case "ERROR_OPERATIVO":
+      return armar(["hecho", "error", "pendiente", "pendiente"], { 1: "No se pudo enviar" });
+    case "ANULADA":
+    case "CANCELADO_LOCAL":
+      return armar(["pendiente", "pendiente", "pendiente", "pendiente"]);
+    case "EMITIENDO":
+    default:
+      return armar(["hecho", "activo", "pendiente", "pendiente"]);
+  }
+}
+
+/** Texto del estado simple sin el semaforo de emoji (SPEC_UX_NUEVA_FACTURA_v0.1, E.1). */
+function estadoSimpleTexto(documento: DocumentoResponse): string {
+  return getSimpleDocumentoEstado(documento.estado, documento.tipo).replace(/^[^\p{L}]+/u, "");
+}
+
+function iconoAccion(documento: DocumentoResponse): { nombre: NombreIcono; clase: string } {
+  if (documento.estado === "ANULADA" || documento.estado === "CANCELADO_LOCAL") return { nombre: "alerta", clase: "neutro" };
+  switch (documento.accion) {
+    case "OK":
+      return { nombre: "tilde", clase: "ok" };
+    case "EN_PROCESO":
+      return { nombre: "reloj", clase: "proceso" };
+    case "REQUIERE_ACCION":
+      return { nombre: "alerta", clase: "accion" };
+    case "REQUIERE_SOPORTE":
+      return { nombre: "alerta", clase: "soporte" };
+    default:
+      if (documento.estado === "EMITIDA") return { nombre: "tilde", clase: "ok" };
+      if (documento.estado === "RECHAZADA" || documento.estado === "ERROR_OPERATIVO" || documento.estado === "ERROR_TEMPORAL") return { nombre: "alerta", clase: "soporte" };
+      return { nombre: "reloj", clase: "proceso" };
+  }
+}
+
+function formatHora(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const fecha = new Date(iso);
+  if (Number.isNaN(fecha.getTime())) return "";
+  return fecha.toLocaleTimeString("es-PY", { hour: "2-digit", minute: "2-digit" });
+}
+
+/** SPEC_UX_NUEVA_FACTURA_v0.1, C: pantalla posterior a "Crear factura" (PLAN 5). */
+function ResultadoEmision({
+  context,
+  deliveryLink,
+  deliveryLoading,
+  deliveryMessage,
+  documento,
+  emailStatus,
+  emitting,
+  onCompartir,
+  onCopiar,
+  onCrearNueva,
+  onRegenerarEnlace,
+  onReintentar,
+  onVerDocumentos,
+  onVerificar,
+  setWhatsappPhone,
+  whatsappPhone
+}: {
+  context: OperationalContextResponse | null;
+  deliveryLink: DeliveryLinkResponse | null;
+  deliveryLoading: boolean;
+  deliveryMessage: string | null;
+  documento: DocumentoResponse;
+  emailStatus: EmailStatusResponse | null;
+  emitting: boolean;
+  onCompartir: () => void;
+  onCopiar: () => void;
+  onCrearNueva: () => void;
+  onRegenerarEnlace: () => void;
+  onReintentar: () => void;
+  onVerDocumentos?: () => void;
+  onVerificar: () => void;
+  setWhatsappPhone: (value: string) => void;
+  whatsappPhone: string;
+}) {
+  const moneda = documento.moneda ?? "PYG";
+  const total = formatMonto(documento.totals.total, moneda);
+  const operador = documento.emitido_por?.display_name?.trim() || documento.emitido_por?.username || context?.user.display_name?.trim() || context?.user.username || "";
+  const hora = formatHora(documento.created_at);
+  const pasos = pasosPorEstado(documento.estado);
+  const icono = iconoAccion(documento);
+  const titulo = documento.accion_detalle?.titulo ?? estadoSimpleTexto(documento);
+  const descripcion = documento.accion_detalle?.descripcion ?? getSimpleDocumentoHint(documento.estado, documento.tipo);
+  const estadoEmail = formatEmailStatus(emailStatus?.status ?? documento.delivery.email_status);
+  const conCorreo = Boolean(documento.cliente.email?.trim());
+  const kudeUrl = deliveryLink && documento.delivery.artifacts.kude_pdf.available ? `${deliveryLink.public_url}/kude.pdf` : null;
+  const xmlUrl = deliveryLink && documento.delivery.artifacts.xml.available ? `${deliveryLink.public_url}/xml` : null;
+  const equivalenteGs =
+    moneda !== "PYG" && documento.tipo_cambio ? formatGuaranies(documento.totals.total_guaranies ?? Math.round(documento.totals.total * documento.tipo_cambio)) : null;
+  const items = documento.items ?? [];
+  const nombreTipo = getDocumentoNombreLower(documento.tipo);
+
+  return (
+    <div className="resultado-emision" aria-live="polite">
+      <div className="editor-heading">
+        <div>
+          <h2 id="invoice-title">{documento.numero_fiscal ? `Factura ${documento.numero_fiscal}` : "Factura creada · numero pendiente"}</h2>
+          <p className="muted editor-subtitulo">
+            Creada hoy{hora ? ` ${hora}` : ""}{operador ? ` por ${operador}` : ""} · {documento.cliente.razon_social} · {total}
+          </p>
+        </div>
+        <div className="header-actions">
+          {onVerDocumentos ? (
+            <button className="ghost-action" onClick={onVerDocumentos} type="button">
+              Ver en Documentos
+            </button>
+          ) : null}
+          <button className="primary-action con-icono" onClick={onCrearNueva} type="button">
+            <Icono nombre="mas" tamano={16} grosor={2.5} /> Crear nueva factura
           </button>
         </div>
-        {emissionError ? <p className="form-error">{emissionError}</p> : null}
+      </div>
+
+      <section className={`estado-fiscal ${icono.clase}`} aria-label="Estado fiscal">
+        <div className="estado-fiscal-titulo">
+          <span className="estado-fiscal-icono" aria-hidden="true"><Icono nombre={icono.nombre} tamano={20} /></span>
+          <div>
+            <strong>{titulo}</strong>
+            <span className="muted">{descripcion}</span>
+          </div>
+        </div>
+        <ol className="pasos" aria-label="Pasos de la emision">
+          {pasos.map((paso, indice) => (
+            <li className={`paso ${paso.clase}`} key={paso.etiqueta}>
+              <span className="paso-punto" aria-hidden="true">{paso.clase === "hecho" ? <Icono nombre="tilde" tamano={14} grosor={3} /> : null}</span>
+              <span className="paso-texto">{paso.etiqueta}</span>
+              {indice < pasos.length - 1 ? <span className="paso-linea" aria-hidden="true" /> : null}
+            </li>
+          ))}
+        </ol>
+        <span className={documento.estado === "EMITIDA" ? "status-pill ready" : "status-pill blocked"}>{estadoSimpleTexto(documento)}</span>
       </section>
 
-      {emittedDocumento ? (
-        <section className="emission-result" aria-live="polite" ref={emissionResultRef}>
-          <div className="receipt-heading">
-            <div>
-              <p className="eyebrow">{formatDocumentoTipo(emittedDocumento.tipo)}</p>
-              <h3>{getSimpleDocumentoEstado(emittedDocumento.estado, emittedDocumento.tipo)}</h3>
-              <p className="muted">Numero {emittedDocumento.numero_fiscal ?? "pendiente"}</p>
-            </div>
-            <span className={emittedDocumento.estado === "EMITIDA" ? "status-pill ready" : "status-pill blocked"}>
-              {getSimpleDocumentoEstado(emittedDocumento.estado, emittedDocumento.tipo)}
-            </span>
-          </div>
-
-          <div className="receipt-summary">
+      <div className="resultado-cuerpo">
+        <section className="resultado-resumen" aria-label="Resumen de la factura">
+          <div className="resultado-datos">
             <div>
               <dt>Cliente</dt>
-              <dd>{emittedDocumento.cliente.razon_social}</dd>
+              <dd>{documento.cliente.razon_social}</dd>
+              <small>{documento.cliente.documento_tipo} {documento.cliente.documento}{documento.cliente.naturaleza ? ` · ${documento.cliente.naturaleza === "JURIDICA" ? "Juridica" : "Fisica"}` : ""}</small>
             </div>
             <div>
-              <dt>Documento</dt>
-              <dd>{emittedDocumento.cliente.documento}</dd>
+              <dt>Condicion</dt>
+              <dd>{documento.condicion_venta === "CREDITO" ? "Credito" : "Contado"}</dd>
+              <small>{context?.fiscal_context.actividad_economica_descripcion ?? ""}</small>
             </div>
             <div>
-              <dt>Total</dt>
-              <dd>{formatMonto(emittedDocumento.totals.total, emittedDocumento.moneda)}</dd>
+              <dt>Moneda</dt>
+              <dd>{moneda}</dd>
+              <small>{documento.tipo_cambio ? `Cambio ${String(documento.tipo_cambio).replace(".", ",")} Gs. por 1 ${moneda}` : "Guaranies"}</small>
             </div>
-            <div>
-              <dt>Email</dt>
-              <dd>{formatEmailStatus(emailStatus?.status ?? emittedDocumento.delivery.email_status)}</dd>
+            <div className="resultado-total">
+              <dt>Total a pagar</dt>
+              <dd className="cifra">{total}</dd>
+              {equivalenteGs ? <small className="cifra">{equivalenteGs}</small> : null}
             </div>
           </div>
-
-          {emittedDocumento.accion_detalle ? (
-            <div className={`accion-banner ${accionBannerClass(emittedDocumento.accion)}`}>
-              <p className="accion-banner-titulo">{emittedDocumento.accion_detalle.titulo}</p>
-              <p className="accion-banner-descripcion">{emittedDocumento.accion_detalle.descripcion}</p>
+          {items.length > 0 ? (
+            <div className="resultado-lineas-wrap">
+              <table className="resultado-lineas">
+                <thead>
+                  <tr>
+                    <th className="col-numero">#</th>
+                    <th>Descripcion</th>
+                    <th className="cifra">Cantidad</th>
+                    <th className="cifra">Precio</th>
+                    <th>IVA</th>
+                    <th className="cifra">Subtotal</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {items.map((item, indice) => (
+                    <tr key={`${item.line_no ?? indice}-${item.descripcion}`}>
+                      <td className="col-numero">{indice + 1}</td>
+                      <td>{item.descripcion}{item.codigo ? <small className="muted"> · {item.codigo}</small> : null}</td>
+                      <td className="cifra">{formatCantidad(item.cantidad)}</td>
+                      <td className="cifra">{formatMonto(item.precio_unitario, moneda).replace(/^(Gs\.|[A-Z]{3}) /, "")}</td>
+                      <td>{formatIva(item.iva_tipo)}</td>
+                      <td className="cifra">{formatMonto(item.subtotal, moneda).replace(/^(Gs\.|[A-Z]{3}) /, "")}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
-          ) : (
-            <p className="editor-alert blocked">{getSimpleDocumentoHint(emittedDocumento.estado, emittedDocumento.tipo)}</p>
-          )}
-          {emailStatus?.message ? <p className="editor-alert ready">{emailStatus.message}</p> : null}
+          ) : null}
+          <div className="resultado-totales">
+            <div><span>Total sin IVA</span><strong className="cifra">{formatMonto(documento.totals.total_sin_iva, moneda)}</strong></div>
+            <div><span>IVA 5%</span><strong className="cifra">{formatMonto(documento.totals.iva_5, moneda)}</strong></div>
+            <div><span>IVA 10%</span><strong className="cifra">{formatMonto(documento.totals.iva_10, moneda)}</strong></div>
+            <div><span>Total IVA</span><strong className="cifra">{formatMonto(documento.totals.total_iva, moneda)}</strong></div>
+          </div>
+          <p className="muted resultado-cdc">
+            {documento.cdc ? <span title={documento.cdc}>CDC {documento.cdc.slice(0, 8)}…{documento.cdc.slice(-4)}</span> : "CDC pendiente hasta la aprobacion"}
+            {" · el enlace publico siempre entrega la version vigente del XML y el KUDE"}
+          </p>
+        </section>
 
-          <div className="action-group">
-            <p className="group-title">Acciones mas frecuentes</p>
-            <div className="delivery-inline-form">
-              <label>
-                📱 WhatsApp
-                <input inputMode="tel" onChange={(event) => setWhatsappPhone(event.target.value)} placeholder="Ingrese numero" value={whatsappPhone} />
-              </label>
-            </div>
+        <aside className="resultado-entrega" aria-label="Entregar al cliente">
+          <section className="form-section">
+            <h3>Entregar al cliente</h3>
+            <p className="muted">
+              {conCorreo
+                ? `Correo a ${documento.cliente.email}: ${estadoEmail}.`
+                : `${documento.cliente.razon_social} no tiene correo en la agenda. Envia por WhatsApp o copia el enlace.`}
+            </p>
+            {emailStatus?.message ? <p className="editor-alert ready">{emailStatus.message}</p> : null}
+            <label className="campo-whatsapp">
+              Numero de WhatsApp
+              <span className="campo-prefijo">
+                <span>+595</span>
+                <input inputMode="tel" onChange={(event) => setWhatsappPhone(event.target.value)} placeholder="981 123 456" value={whatsappPhone} />
+              </span>
+            </label>
             <a
-              className={deliveryLink ? "primary-action wide secondary-link-as-button" : "primary-action wide secondary-link-as-button disabled"}
+              className={deliveryLink ? "primary-action wide con-icono secondary-link-as-button" : "primary-action wide con-icono secondary-link-as-button disabled"}
               href={deliveryLink ? buildWhatsAppShareUrl(deliveryLink.public_url, whatsappPhone) : "#"}
               rel="noreferrer"
               target="_blank"
             >
-              Enviar por WhatsApp
+              <Icono nombre="whatsapp" tamano={16} /> Enviar por WhatsApp
             </a>
             <div className="delivery-actions">
-              <button className="secondary-action" disabled={!deliveryLink} onClick={() => void sharePublicLink()} type="button">
-                Compartir {getDocumentoNombreLower(emittedDocumento.tipo)}
+              <button className="secondary-action con-icono" disabled={!deliveryLink} onClick={onCopiar} type="button">
+                <Icono nombre="copiar" tamano={16} /> Copiar enlace
               </button>
-              <button className="secondary-action" disabled={!deliveryLink} onClick={() => void copyPublicLink()} type="button">
-                Copiar enlace
+              <button aria-label={`Compartir ${nombreTipo}`} className="secondary-action con-icono" disabled={!deliveryLink} onClick={onCompartir} type="button">
+                <Icono nombre="compartir" tamano={16} /> Compartir
               </button>
             </div>
-          </div>
+            {kudeUrl ? (
+              <a className="secondary-link con-icono" href={kudeUrl} rel="noreferrer" target="_blank">
+                <Icono nombre="pdf" tamano={16} /> Ver KUDE en PDF
+              </a>
+            ) : (
+              <button className="secondary-action con-icono" disabled title="Disponible cuando SIFEN apruebe la factura" type="button">
+                <Icono nombre="pdf" tamano={16} /> Ver KUDE en PDF (al aprobar)
+              </button>
+            )}
+            {deliveryMessage ? <p className="inline-message">{deliveryMessage}</p> : null}
+          </section>
 
-          <div className="action-group">
-            <button className="primary-action wide" onClick={createNuevaFactura} type="button">
-              Crear nueva factura
-            </button>
-          </div>
-
-          <details className="action-group">
+          <details className="form-section mas-opciones">
             <summary className="group-title">Mas opciones</summary>
             <div className="result-actions">
-              <a
-                className={emittedXmlUrl ? "secondary-link" : "secondary-link disabled"}
-                href={emittedXmlUrl ?? "#"}
-                rel="noreferrer"
-                target="_blank"
-              >
+              <a className={xmlUrl ? "secondary-link" : "secondary-link disabled"} href={xmlUrl ?? "#"} rel="noreferrer" target="_blank">
                 Descargar documento electronico (XML)
               </a>
-              <button
-                className="secondary-action"
-                disabled={deliveryLoading}
-                onClick={() => void loadDeliveryData(emittedDocumento.id, true)}
-                type="button"
-              >
+              <button className="secondary-action" disabled={deliveryLoading} onClick={onRegenerarEnlace} type="button">
                 Regenerar enlace
               </button>
-              {(emittedDocumento.document_uuid || emittedDocumento.cdc) && !esEstadoFinalOperador(emittedDocumento.estado) ? (
-                <button className="secondary-action" disabled={emitting} onClick={() => void refreshEmittedDocumento()} type="button">
+              {(documento.document_uuid || documento.cdc) && !esEstadoFinalOperador(documento.estado) ? (
+                <button className="secondary-action" disabled={emitting} onClick={onVerificar} type="button">
                   Verificar estado fiscal
                 </button>
               ) : null}
-              {emittedDocumento.puede_reintentar_emision ? (
-                <button className="secondary-action" disabled={emitting} onClick={() => void retryEmittedDocumento()} type="button">
+              {documento.puede_reintentar_emision ? (
+                <button className="secondary-action" disabled={emitting} onClick={onReintentar} type="button">
                   Reintentar emisión
                 </button>
               ) : null}
             </div>
           </details>
-
-          {deliveryMessage ? <p className="inline-message">{deliveryMessage}</p> : null}
-        </section>
-      ) : null}
-
-      {clienteModalOpen ? (
-        <div className="modal-backdrop" role="presentation">
-          <section className="modal-panel" aria-labelledby="cliente-modal-title" role="dialog" aria-modal="true">
-            <div className="editor-heading">
-              <div>
-                <p className="eyebrow">Alta rapida</p>
-                <h2 id="cliente-modal-title">Guardar cliente</h2>
-              </div>
-              <button className="ghost-action" onClick={() => setClienteModalOpen(false)} type="button">
-                Cerrar
-              </button>
-            </div>
-            <dl className="confirm-dl">
-              <div>
-                <dt>Documento</dt>
-                <dd>{cliente.documento || "-"}</dd>
-              </div>
-              <div>
-                <dt>Razon social</dt>
-                <dd>{cliente.razon_social || "-"}</dd>
-              </div>
-            </dl>
-            {clienteMessage ? <p className="form-error">{clienteMessage}</p> : null}
-            <button className="primary-action wide" disabled={clienteSaving} onClick={() => void saveClienteRapido()} type="button">
-              {clienteSaving ? "Guardando..." : "Confirmar alta"}
-            </button>
-          </section>
-        </div>
-      ) : null}
-    </section>
+        </aside>
+      </div>
+    </div>
   );
 }
 
@@ -6041,6 +6308,59 @@ function BrandMark({ compact = false }: { compact?: boolean }) {
         src={compact ? "/app/brand/segel-isotipo.svg" : "/app/brand/segel-logo-fondo-claro.svg"}
       />
     </div>
+  );
+}
+
+/** SPEC_UX_NUEVA_FACTURA_v0.1, E.1 y PLAN 2: iconos SVG de trazo, sin emojis ni dependencias. */
+type NombreIcono =
+  | "factura" | "agenda" | "documentos" | "notas" | "recibos" | "catalogo" | "devolver" | "estado" | "menu" | "salir"
+  | "buscar" | "mas" | "papelera" | "guardar" | "lapiz" | "tilde" | "reloj" | "alerta" | "whatsapp" | "copiar"
+  | "compartir" | "pdf" | "chevron-abajo" | "chevron-derecha" | "chevron-izquierda";
+
+const TRAZOS_ICONO: Record<NombreIcono, React.ReactNode> = {
+  factura: <><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6" /><path d="M12 18v-6" /><path d="M9 15h6" /></>,
+  agenda: <><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></>,
+  documentos: <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />,
+  notas: <><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" /><rect x="8" y="2" width="8" height="4" rx="1" /></>,
+  recibos: <><rect x="2" y="6" width="20" height="12" rx="2" /><circle cx="12" cy="12" r="2" /><path d="M6 12h.01M18 12h.01" /></>,
+  catalogo: <><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" /><path d="M3.3 7 12 12l8.7-5" /><path d="M12 22V12" /></>,
+  devolver: <><path d="M9 14 4 9l5-5" /><path d="M20 20v-7a4 4 0 0 0-4-4H4" /></>,
+  estado: <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />,
+  menu: <path d="M4 6h16M4 12h16M4 18h16" />,
+  salir: <><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><path d="m16 17 5-5-5-5" /><path d="M21 12H9" /></>,
+  buscar: <><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></>,
+  mas: <><path d="M12 5v14" /><path d="M5 12h14" /></>,
+  papelera: <><path d="M3 6h18" /><path d="M8 6V4h8v2" /><path d="M19 6l-1 14H6L5 6" /></>,
+  guardar: <><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" /><path d="M17 21v-8H7v8" /><path d="M7 3v5h8" /></>,
+  lapiz: <><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" /></>,
+  tilde: <path d="M20 6 9 17l-5-5" />,
+  reloj: <><circle cx="12" cy="12" r="10" /><path d="M12 6v6l4 2" /></>,
+  alerta: <><circle cx="12" cy="12" r="10" /><path d="M12 8v4" /><path d="M12 16h.01" /></>,
+  whatsapp: <path d="M21 11.5a8.4 8.4 0 0 1-9.2 8.4 8.6 8.6 0 0 1-3.6-1L3 21l2.1-5.2A8.4 8.4 0 1 1 21 11.5z" />,
+  copiar: <><rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></>,
+  compartir: <><circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" /><path d="m8.6 13.5 6.8 4M15.4 6.5l-6.8 4" /></>,
+  pdf: <><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6" /></>,
+  "chevron-abajo": <path d="m6 9 6 6 6-6" />,
+  "chevron-derecha": <path d="m9 6 6 6-6 6" />,
+  "chevron-izquierda": <path d="m15 6-6 6 6 6" />
+};
+
+function Icono({ nombre, tamano = 18, grosor = 2 }: { nombre: NombreIcono; tamano?: number; grosor?: number }) {
+  return (
+    <svg
+      aria-hidden="true"
+      className="icono"
+      fill="none"
+      height={tamano}
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth={grosor}
+      viewBox="0 0 24 24"
+      width={tamano}
+    >
+      {TRAZOS_ICONO[nombre]}
+    </svg>
   );
 }
 
@@ -6090,6 +6410,7 @@ function GrillaLineas({
   catalogSearching,
   catalogSaving,
   catalogMessage,
+  onAgregar,
   onUpdate,
   onQuitar,
   onAplicarCatalogo,
@@ -6103,6 +6424,7 @@ function GrillaLineas({
   catalogSearching: Record<string, boolean>;
   catalogSaving: Record<string, boolean>;
   catalogMessage: Record<string, string | null>;
+  onAgregar: () => void;
   onUpdate: (lineId: string, patch: Partial<InvoiceLineDraft>) => void;
   onQuitar: (lineId: string) => void;
   onAplicarCatalogo: (lineId: string, item: CatalogoItem) => void;
@@ -6134,6 +6456,7 @@ function GrillaLineas({
       <table className="grilla-lineas" aria-label="Productos o servicios">
         <thead>
           <tr>
+            <th className="col-numero">#</th>
             <th className="col-codigo">Código</th>
             <th className="col-descripcion">Descripción</th>
             <th className="col-cantidad">Cantidad</th>
@@ -6153,8 +6476,11 @@ function GrillaLineas({
             const sugerencias = filaConFoco === line.id ? catalogSuggestions[line.id] ?? [] : [];
             const puedeGuardar =
               !enMonedaExtranjera && !line.catalogo_item_id && !line.lockedFromCatalog && conDatos && !invalida && Number.isInteger(precio);
+            const claseFila = [invalida ? "fila-invalida" : "", !conDatos ? "fila-nueva" : ""].filter(Boolean).join(" ") || undefined;
             return (
-              <tr className={invalida ? "fila-invalida" : undefined} data-grilla-fila={indice} key={line.id}>
+              <React.Fragment key={line.id}>
+              <tr className={claseFila} data-grilla-fila={indice}>
+                <td className="col-numero">{indice + 1}</td>
                 <td className="col-codigo">
                   <input
                     aria-label={`Código, línea ${indice + 1}`}
@@ -6195,12 +6521,12 @@ function GrillaLineas({
                     </ul>
                   ) : null}
                   {catalogSearching[line.id] && filaConFoco === line.id ? <small className="field-hint">Buscando…</small> : null}
-                  {invalida ? <small className="line-invalid-hint">{motivoLineaInvalida(line, moneda)}</small> : null}
                   {catalogMessage[line.id] ? <small className="field-hint">{catalogMessage[line.id]}</small> : null}
                 </td>
                 <td className="col-cantidad">
                   <input
                     aria-label={`Cantidad, línea ${indice + 1}`}
+                    className="cifra"
                     inputMode="decimal"
                     onChange={(event) => onUpdate(line.id, { cantidad: normalizeDecimalInput(event.target.value, 4) })}
                     onKeyDown={(event) => alPresionar(event, indice)}
@@ -6209,7 +6535,9 @@ function GrillaLineas({
                 </td>
                 <td className="col-precio">
                   <input
+                    aria-invalid={invalida && conDatos ? true : undefined}
                     aria-label={`Precio, línea ${indice + 1}`}
+                    className="cifra"
                     disabled={line.lockedFromCatalog}
                     inputMode={enMonedaExtranjera ? "decimal" : "numeric"}
                     onChange={(event) =>
@@ -6234,33 +6562,49 @@ function GrillaLineas({
                     <option value="EXENTA">Exenta</option>
                   </select>
                 </td>
-                <td className="col-subtotal">{conDatos && !invalida ? formatMonto(subtotal, moneda) : "—"}</td>
+                <td className="col-subtotal cifra">{conDatos && !invalida ? formatMonto(subtotal, moneda).replace(/^(Gs\.|[A-Z]{3}) /, "") : "—"}</td>
                 <td className="col-acciones">
                   {conDatos ? (
                     <div className="grilla-acciones">
                       {puedeGuardar ? (
                         <button
                           aria-label={`Guardar en catálogo, línea ${indice + 1}`}
-                          className="ghost-action compact"
+                          className="icon-action grilla-icono"
                           disabled={catalogSaving[line.id]}
                           onClick={() => onGuardarCatalogo(line)}
                           title="Guardar en catálogo"
                           type="button"
                         >
-                          {catalogSaving[line.id] ? "…" : "💾"}
+                          {catalogSaving[line.id] ? "…" : <Icono nombre="guardar" tamano={16} />}
                         </button>
                       ) : null}
-                      <button aria-label={`Quitar línea ${indice + 1}`} className="ghost-action compact" onClick={() => quitar(line)} title="Quitar" type="button">
-                        ✖
+                      <button aria-label={`Quitar línea ${indice + 1}`} className="icon-action grilla-icono" onClick={() => quitar(line)} title="Quitar" type="button">
+                        <Icono nombre="papelera" tamano={16} />
                       </button>
                     </div>
                   ) : null}
                 </td>
               </tr>
+              {invalida ? (
+                <tr className="fila-motivo" data-grilla-motivo={indice}>
+                  <td colSpan={8}>
+                    <Icono nombre="alerta" tamano={14} /> {motivoLineaInvalida(line, moneda)}
+                  </td>
+                </tr>
+              ) : null}
+              </React.Fragment>
             );
           })}
         </tbody>
       </table>
+      <div className="grilla-pie">
+        <button className="ghost-action compact con-icono" onClick={onAgregar} type="button">
+          <Icono nombre="mas" tamano={14} grosor={2.5} /> Agregar linea
+        </button>
+        <span className="muted">Enter en la ultima celda agrega una fila · Supr quita la fila</span>
+        <span className="tarjeta-cabecera-espacio" />
+        {enMonedaExtranjera ? <span className="muted">Guardar en el catalogo no disponible en {moneda}</span> : null}
+      </div>
     </div>
   );
 }
@@ -6726,6 +7070,15 @@ function formatActividadOperativa(context: OperationalContextResponse | null): s
 
   const label = firstText(context.fiscal_context.actividad_economica_alias, context.fiscal_context.actividad_economica_descripcion);
   return label ? `${context.fiscal_context.actividad_economica_codigo} · ${label}` : context.fiscal_context.actividad_economica_codigo;
+}
+
+/** Iniciales para el avatar de la barra (hasta dos letras). */
+function iniciales(nombre: string): string {
+  const partes = nombre.trim().split(/\s+/).filter(Boolean);
+  const primera = partes[0] ?? "";
+  const ultima = partes[partes.length - 1] ?? "";
+  const letras = partes.length >= 2 ? primera.slice(0, 1) + ultima.slice(0, 1) : primera.slice(0, 2);
+  return letras.toUpperCase();
 }
 
 function firstText(...values: Array<string | null | undefined>): string | null {
