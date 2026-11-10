@@ -22,6 +22,8 @@ Se implementa despues del commit de FS-51 (sesion `nuevo-repo-11`), que toca los
 - Gateway real: `moneda` y `tipoCambio` en `POST /v1/factura` solo fuera de PYG; pago contado por el total en la moneda.
 - NC (D-1, FE `segel-rc4.27`): con `moneda <> 'PYG'` el pedido va por referencia (`por_referencia`, `POST /v1/nota-credito/total`), FE toma moneda y tipo de cambio de la factura; la NC se guarda con la `moneda` y el `tipo_cambio` de su factura. Variable `FE_NC_MONEDA_EXTRANJERA` (por omision `false`): con FE anterior a `rc4.27` sigue el bloqueo (`409`, `reason: NOTA_CREDITO_MONEDA_EXTRANJERA`).
 - Recibo (D-2): el recibo creado desde una factura en moneda extranjera lleva su moneda en mayusculas.
+- `GET /me/context` expone `nc_moneda_extranjera_habilitada` (`FE_NC_MONEDA_EXTRANJERA`); la ficha habilita la NC de una factura en moneda extranjera solo con esa bandera, y sin ella muestra el aviso de soporte.
+- Pantalla de recibos: lista, ficha, formulario y verificacion publica muestran el importe con `formatMonto(importe, moneda)`; fuera de PYG el formulario admite 2 decimales y conserva la moneda al editar. `ReciboVerificacionResponse` suma `moneda`.
 
 ## 4. Pantalla (`main.tsx`)
 
