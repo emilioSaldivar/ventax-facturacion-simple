@@ -1834,6 +1834,7 @@ paths:
         y `FE_NO_DISPONIBLE` (502). Los `403`, `413`, `415`, `422` y `429` del backend fiscal conservan su mensaje y traen `details.fe_code`.
       parameters:
         - { name: nombre_archivo, in: query, schema: { type: string, maxLength: 200 } }
+        - { name: tipo_documento, in: query, schema: { type: string, enum: [FACTURA, NOTA_REMISION], default: FACTURA }, description: 'SPEC_DOCUMENTOS_ESCRITORIO_v0.1, fase B1: una carga, un tipo. Otro valor responde `400` con `reason: TIPO_NO_HABILITADO`.' }
       requestBody:
         required: true
         content:
@@ -1862,6 +1863,8 @@ paths:
     get:
       tags: [Cargas]
       summary: Descarga la plantilla del archivo
+      parameters:
+        - { name: tipo_documento, in: query, schema: { type: string, enum: [FACTURA, NOTA_REMISION], default: FACTURA } }
       responses:
         '200':
           description: Plantilla CSV
@@ -2846,7 +2849,8 @@ components:
 
     DocumentoTipo:
       type: string
-      enum: [FACTURA, NOTA_CREDITO]
+      enum: [FACTURA, NOTA_CREDITO, NOTA_REMISION]
+      description: '`NOTA_REMISION` llega por la carga masiva (SPEC_DOCUMENTOS_ESCRITORIO_v0.1, fase B1): sin montos ni condicion de venta.'
 
     DocumentoTipoOperativo:
       type: string
@@ -3034,7 +3038,22 @@ components:
         estado:
           $ref: "#/components/schemas/DocumentoEstado"
         condicion_venta:
-          $ref: "#/components/schemas/CondicionVenta"
+          allOf:
+            - $ref: "#/components/schemas/CondicionVenta"
+          nullable: true
+          description: Null en una nota de remision.
+        remision:
+          type: object
+          nullable: true
+          description: 'Solo en una nota de remision: resumen del detalle del backend fiscal.'
+          properties:
+            motivo: { type: integer, nullable: true }
+            motivo_descripcion: { type: string, nullable: true }
+            inicio_traslado: { type: string, nullable: true }
+            fin_traslado: { type: string, nullable: true }
+            kilometros: { type: number, nullable: true }
+            transportista: { type: string, nullable: true }
+            vehiculo: { type: string, nullable: true }
         numero_fiscal:
           type: string
           nullable: true
@@ -3154,6 +3173,7 @@ components:
         nombre_archivo: { type: string, nullable: true }
         tamano_bytes: { type: integer }
         numeracion: { type: string, enum: [SERVICIO, CLIENTE] }
+        tipo_documento: { type: string, enum: [FACTURA, NOTA_REMISION] }
         totales: { $ref: '#/components/schemas/CargaMasivaTotales' }
         acciones: { $ref: '#/components/schemas/CargaMasivaAcciones' }
         motivos:

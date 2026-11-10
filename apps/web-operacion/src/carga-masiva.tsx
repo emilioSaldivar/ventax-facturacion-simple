@@ -38,6 +38,8 @@ interface Carga {
   nombre_archivo: string | null;
   tamano_bytes: number;
   numeracion: "SERVICIO" | "CLIENTE";
+  /** SPEC_DOCUMENTOS_ESCRITORIO_v0.1, fase B1. */
+  tipo_documento?: TipoDeCarga;
   totales: Partial<Totales>;
   acciones: { puede_confirmar?: boolean; puede_cancelar?: boolean; puede_reintentar?: boolean };
   motivos: Problema[];
@@ -90,6 +92,24 @@ export interface CargaContexto {
   perfil: string;
   numeracion: "SERVICIO" | "CLIENTE";
 }
+
+/**
+ * SPEC_DOCUMENTOS_ESCRITORIO_v0.1, fase B1 (RN-05). Catalogo fijo `CARGA_TIPO_DOCUMENTO` de FE (`segel-rc4.21`):
+ * se fija en el codigo, como FE propone, y se actualiza cuando FE habilite otro tipo.
+ */
+type TipoDeCarga = "FACTURA" | "NOTA_REMISION";
+const TIPOS_DE_CARGA: Array<{ codigo: string; etiqueta: string; plural: string; habilitado: boolean }> = [
+  { codigo: "FACTURA", etiqueta: "Factura", plural: "facturas", habilitado: true },
+  { codigo: "NOTA_REMISION", etiqueta: "Nota de remisión", plural: "notas de remisión", habilitado: true },
+  { codigo: "NOTA_CREDITO", etiqueta: "Nota de crédito", plural: "notas de crédito", habilitado: false },
+  { codigo: "NOTA_DEBITO", etiqueta: "Nota de débito", plural: "notas de débito", habilitado: false },
+  { codigo: "AUTOFACTURA", etiqueta: "Autofactura", plural: "autofacturas", habilitado: false }
+];
+const tipoDeCarga = (codigo: string | undefined) => TIPOS_DE_CARGA.find((tipo) => tipo.codigo === (codigo ?? "FACTURA")) ?? TIPOS_DE_CARGA[0]!;
+const PLANTILLA_POR_TIPO: Record<TipoDeCarga, string> = {
+  FACTURA: "plantilla-carga-facturas.csv",
+  NOTA_REMISION: "plantilla-carga-notas-remision.csv"
+};
 
 const ETIQUETA_CARGA: Record<EstadoCarga, string> = {
   RECIBIDA: "Recibida",
@@ -305,7 +325,7 @@ export function CargaMasivaView({
           api={api}
           contexto={contexto}
           onCancelar={volver}
-          onDescargarPlantilla={() => void descargar("/cargas/plantilla", "plantilla-carga-facturas.csv")}
+          onDescargarPlantilla={(tipo) => void descargar(`/cargas/plantilla?tipo_documento=${tipo}`, PLANTILLA_POR_TIPO[tipo])}
           onError={fallar}
           onLimpiarError={() => setError(null)}
           onSubida={(carga) =>
@@ -433,6 +453,7 @@ function ListadoCargas({
           <thead>
             <tr>
               <th>Archivo</th>
+              <th>Tipo</th>
               <th>Fecha</th>
               <th>Estado</th>
               <th>Comprobantes</th>
@@ -447,6 +468,7 @@ function ListadoCargas({
                 <td data-label="Archivo">
                   <button className="carga-enlace" onClick={() => onAbrir(carga.id)} type="button">{carga.nombre_archivo ?? "Sin nombre"}</button>
                 </td>
+                <td data-label="Tipo">{tipoDeCarga(carga.tipo_documento).etiqueta}</td>
                 <td data-label="Fecha">{formatoFecha(carga.created_at)}</td>
                 <td data-label="Estado"><span className={`status-pill ${estadoVisible(carga).clase}`}>{estadoVisible(carga).etiqueta}</span></td>
                 <td data-label="Comprobantes">{carga.totales.comprobantes ?? "-"}</td>
@@ -483,10 +505,11 @@ function NuevaCarga({
   contexto: CargaContexto;
   onSubida: (carga: Carga) => void;
   onCancelar: () => void;
-  onDescargarPlantilla: () => void;
+  onDescargarPlantilla: (tipo: TipoDeCarga) => void;
   onError: (causa: unknown) => void;
   onLimpiarError: () => void;
 }) {
+  const [tipo, setTipo] = useState<TipoDeCarga>("FACTURA");
   const [archivo, setArchivo] = useState<File | null>(null);
   const [encima, setEncima] = useState(false);
   const [subiendo, setSubiendo] = useState(false);
@@ -516,7 +539,7 @@ function NuevaCarga({
     onLimpiarError();
     try {
       const esZip = /\.zip$/i.test(archivo.name);
-      const carga = await api.request<Carga>(`/cargas?nombre_archivo=${encodeURIComponent(archivo.name)}`, {
+      const carga = await api.request<Carga>(`/cargas?nombre_archivo=${encodeURIComponent(archivo.name)}&tipo_documento=${tipo}`, {
         method: "POST",
         body: archivo,
         headers: { "content-type": esZip ? "application/zip" : "text/csv" }
@@ -544,6 +567,18 @@ function NuevaCarga({
       </dl>
       <p className="muted">Todas las filas del archivo deben ser de este punto. Si una sola es de otro, se rechaza el archivo entero.</p>
 
+      <label className="carga-tipo">
+        Tipo de documento
+        <select aria-label="Tipo de documento" onChange={(event) => setTipo(event.target.value as TipoDeCarga)} value={tipo}>
+          {TIPOS_DE_CARGA.map((opcion) => (
+            <option disabled={!opcion.habilitado} key={opcion.codigo} value={opcion.codigo}>
+              {opcion.habilitado ? opcion.etiqueta : `${opcion.etiqueta} (próximamente)`}
+            </option>
+          ))}
+        </select>
+        <small className="muted">Una carga lleva un solo tipo. Cada tipo tiene su propia planilla.</small>
+      </label>
+
       <label
         className={`carga-zona${encima ? " encima" : ""}`}
         onDragLeave={() => setEncima(false)}
@@ -563,10 +598,10 @@ function NuevaCarga({
       </label>
       {problema ? <p className="form-error">{problema}</p> : null}
 
-      <p className="carga-aviso">Subir no emite nada: primero verás el resultado de la validación. Confirmar emite facturas reales.</p>
+      <p className="carga-aviso">Subir no emite nada: primero verás el resultado de la validación. Confirmar emite {tipoDeCarga(tipo).plural} reales.</p>
 
       <div className="carga-acciones">
-        <button className="secondary-action" onClick={onDescargarPlantilla} type="button">Descargar plantilla</button>
+        <button className="secondary-action" onClick={() => onDescargarPlantilla(tipo)} type="button">Descargar plantilla de {tipoDeCarga(tipo).plural}</button>
         <button className="primary-action" disabled={!archivo || subiendo} onClick={() => void subir()} type="button">
           {subiendo ? "Subiendo..." : "Subir archivo"}
         </button>
@@ -789,7 +824,7 @@ function DetalleCarga({
           <h3>{carga.nombre_archivo ?? "Carga sin nombre"}</h3>
           <p className="muted">
             <span className={`status-pill ${estadoVisible(carga).clase}`}>{estadoVisible(carga).etiqueta}</span>{" "}
-            Subida el {formatoFecha(carga.created_at)} por {carga.subida_por.display_name ?? "-"}
+            {tipoDeCarga(carga.tipo_documento).etiqueta} · Subida el {formatoFecha(carga.created_at)} por {carga.subida_por.display_name ?? "-"}
           </p>
         </div>
         <button className="ghost-action" onClick={onVolver} type="button">Volver a las cargas</button>
@@ -848,7 +883,7 @@ function DetalleCarga({
 
       {confirmando === "confirmar" ? (
         <div className="carga-confirmacion" role="dialog" aria-label="Confirmar emisión">
-          <p><strong>Se emitirán {aEmitir} facturas reales.</strong> {invalidos > 0 ? `${invalidos} comprobante(s) con errores quedan afuera.` : null}</p>
+          <p><strong>Se emitirán {aEmitir} {tipoDeCarga(carga.tipo_documento).plural} reales.</strong> {invalidos > 0 ? `${invalidos} comprobante(s) con errores quedan afuera.` : null}</p>
           {invalidos > 0 && carga.numeracion === "CLIENTE" ? (
             <p>
               Los números de los {invalidos} comprobantes inválidos quedarán sin usar.{" "}
@@ -857,7 +892,7 @@ function DetalleCarga({
           ) : null}
           <div className="carga-acciones">
             <button className="secondary-action" onClick={() => setConfirmando(null)} type="button">Volver</button>
-            <button className="primary-action" disabled={ocupado} onClick={() => void accion("confirmar")} type="button">Sí, emitir {aEmitir} facturas</button>
+            <button className="primary-action" disabled={ocupado} onClick={() => void accion("confirmar")} type="button">Sí, emitir {aEmitir} {tipoDeCarga(carga.tipo_documento).plural}</button>
           </div>
         </div>
       ) : null}

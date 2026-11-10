@@ -273,11 +273,22 @@ interface DocumentoResponse {
   id: string;
   /** La factura vino de una carga masiva. */
   carga?: { id: string; numero_archivo: string | null } | null;
-  tipo: "FACTURA" | "NOTA_CREDITO";
+  tipo: "FACTURA" | "NOTA_CREDITO" | "NOTA_REMISION";
   estado: DocumentoEstado;
   /** Resultado del ultimo intento de anulacion; null si nunca se intento. */
   cancelacion?: DocumentoCancelacion | null;
-  condicion_venta: CondicionVenta;
+  /** Null en una nota de remision. */
+  condicion_venta: CondicionVenta | null;
+  /** SPEC_DOCUMENTOS_ESCRITORIO_v0.1, fase B1: solo en una nota de remision. */
+  remision?: {
+    motivo: number | null;
+    motivo_descripcion: string | null;
+    inicio_traslado: string | null;
+    fin_traslado: string | null;
+    kilometros: number | null;
+    transportista: string | null;
+    vehiculo: string | null;
+  } | null;
   numero_fiscal: string | null;
   cdc: string | null;
   /** Identidad estable del documento en FE; el CDC puede cambiar (AGENTS.md). */
@@ -1792,7 +1803,7 @@ function StatusView({
 }
 
 const POR_PAGINA_DOCUMENTOS = 30;
-const TIPOS_PROXIMAMENTE = ["Notas de debito", "Notas de remision", "Autofacturas"] as const;
+const TIPOS_PROXIMAMENTE = ["Notas de debito", "Autofacturas"] as const;
 
 /** SPEC_DOCUMENTOS_ESCRITORIO_v0.1, RN-01: 1024 px separa escritorio (menu lateral, tablas) de celular. */
 const MEDIA_ESCRITORIO = "(min-width: 1024px)";
@@ -1836,7 +1847,8 @@ function DocumentsView({
   const [documents, setDocuments] = useState<DocumentoResponse[]>([]);
   const [selected, setSelected] = useState<DocumentoResponse | null>(null);
   const [estadoFilter, setEstadoFilter] = useState<DocumentoEstado | "">("");
-  const [docKindTab, setDocKindTab] = useState<"FACTURAS" | "NOTAS_CREDITO" | "CARGA_MASIVA">("FACTURAS");
+  const [docKindTab, setDocKindTab] = useState<"FACTURAS" | "NOTAS_CREDITO" | "NOTAS_REMISION" | "CARGA_MASIVA">("FACTURAS");
+  const esRemision = docKindTab === "NOTAS_REMISION";
   const [cargaAbiertaId, setCargaAbiertaId] = useState<string | null>(null);
   // FS-33: carga desde la que se abrio la ficha, para volver a ella.
   const [volverACargaId, setVolverACargaId] = useState<string | null>(null);
@@ -1888,7 +1900,7 @@ function DocumentsView({
     setError(null);
 
     const params = new URLSearchParams({ limit: String(POR_PAGINA_DOCUMENTOS), offset: String((paginaPedida - 1) * POR_PAGINA_DOCUMENTOS) });
-    params.set("tipo", docKindTab === "NOTAS_CREDITO" ? "NOTA_CREDITO" : "FACTURA");
+    params.set("tipo", docKindTab === "NOTAS_CREDITO" ? "NOTA_CREDITO" : docKindTab === "NOTAS_REMISION" ? "NOTA_REMISION" : "FACTURA");
     if (estadoFilter) {
       params.set("estado", estadoFilter);
     }
@@ -2361,14 +2373,16 @@ function DocumentsView({
                     {documento.tipo === "FACTURA" ? (
                       <button onClick={() => void emitNotaCreditoFromList(documento.id)} role="menuitem" type="button">Nota de credito</button>
                     ) : null}
-                    <button className="destructive-item" onClick={() => void cancelDocumentoFromList(documento.id, documento.tipo)} role="menuitem" type="button">Anular</button>
+                    {documento.tipo !== "NOTA_REMISION" ? (
+                      <button className="destructive-item" onClick={() => void cancelDocumentoFromList(documento.id, documento.tipo)} role="menuitem" type="button">Anular</button>
+                    ) : null}
                   </div>
     );
   }
 
   const pestanasDocumentos = (
     <div className="filter-tabs" role="group" aria-label="Tipo de documento">
-      {(context?.carga_masiva_habilitada ? (["FACTURAS", "NOTAS_CREDITO", "CARGA_MASIVA"] as const) : (["FACTURAS", "NOTAS_CREDITO"] as const)).map((value) => (
+      {(context?.carga_masiva_habilitada ? (["FACTURAS", "NOTAS_CREDITO", "NOTAS_REMISION", "CARGA_MASIVA"] as const) : (["FACTURAS", "NOTAS_CREDITO", "NOTAS_REMISION"] as const)).map((value) => (
         <button
           className={docKindTab === value ? "active" : ""}
           key={value}
@@ -2378,7 +2392,7 @@ function DocumentsView({
           }}
           type="button"
         >
-          {value === "FACTURAS" ? "Facturas" : value === "NOTAS_CREDITO" ? "Notas de credito" : "Carga masiva"}
+          {value === "FACTURAS" ? "Facturas" : value === "NOTAS_CREDITO" ? "Notas de credito" : value === "NOTAS_REMISION" ? "Notas de remision" : "Carga masiva"}
         </button>
       ))}
       {/* SPEC_DOCUMENTOS_ESCRITORIO_v0.1, RN-03: tipos que FS incorpora cuando FE los habilite (Fase B). */}
@@ -2609,13 +2623,13 @@ function DocumentsView({
                 <tr>
                   <th>Fecha</th>
                   <th>Número</th>
-                  <th>Cliente</th>
+                  <th>{esRemision ? "Destinatario" : "Cliente"}</th>
                   <th>RUC o CI</th>
-                  <th>Condición</th>
+                  {esRemision ? <th>Motivo</th> : <th>Condición</th>}
                   <th>Estado</th>
                   <th>CDC</th>
-                  <th>Moneda</th>
-                  <th className="numero">Total</th>
+                  {esRemision ? null : <th>Moneda</th>}
+                  {esRemision ? null : <th className="numero">Total</th>}
                   <th aria-label="Acciones" />
                 </tr>
               </thead>
@@ -2644,11 +2658,15 @@ function DocumentsView({
                       {formatEmisor(documento) ? <small className="document-row-emisor">Emitio {formatEmisor(documento)}</small> : null}
                     </td>
                     <td className="documents-tabla-ruc">{documento.cliente.documento}</td>
-                    <td>{documento.condicion_venta === "CREDITO" ? "Crédito" : "Contado"}</td>
+                    {esRemision ? (
+                      <td>{documento.remision?.motivo_descripcion ?? "-"}</td>
+                    ) : (
+                      <td>{documento.condicion_venta === "CREDITO" ? "Crédito" : "Contado"}</td>
+                    )}
                     <td><EstadoDocumentoPill documento={documento} /></td>
                     <td className="documents-tabla-cdc" title={documento.cdc ?? undefined}>{documento.cdc ? `${documento.cdc.slice(0, 8)}…${documento.cdc.slice(-4)}` : "-"}</td>
-                    <td>PYG</td>
-                    <td className="numero"><strong>{formatGuaranies(documento.totals.total)}</strong></td>
+                    {esRemision ? null : <td>PYG</td>}
+                    {esRemision ? null : <td className="numero"><strong>{formatGuaranies(documento.totals.total)}</strong></td>}
                     <td className="documents-tabla-acciones" onClick={(event) => event.stopPropagation()}>
                       <div className="document-row-menu-wrapper">
                         <button aria-label="Acciones" className="icon-menu-action" onClick={() => setQuickMenuDocId((current) => current === documento.id ? null : documento.id)} type="button">⋮</button>
@@ -2695,7 +2713,7 @@ function DocumentsView({
                   {formatEmisor(documento) ? <small className="document-row-emisor">Emitio {formatEmisor(documento)}</small> : null}
                 </span>
                 <span>
-                  <strong>{formatGuaranies(documento.totals.total)}</strong>
+                  <strong>{documento.tipo === "NOTA_REMISION" ? documento.remision?.motivo_descripcion ?? "Nota de remisión" : formatGuaranies(documento.totals.total)}</strong>
                   <EstadoDocumentoPill documento={documento} />
                   <small>{formatShortDate(documento.created_at)}</small>
                 </span>
@@ -2720,7 +2738,7 @@ function DocumentsView({
                 {formatEmisor(documento) ? <small className="document-row-emisor">Emitio {formatEmisor(documento)}</small> : null}
               </span>
               <span>
-                <strong>{formatGuaranies(documento.totals.total)}</strong>
+                <strong>{documento.tipo === "NOTA_REMISION" ? documento.remision?.motivo_descripcion ?? "Nota de remisión" : formatGuaranies(documento.totals.total)}</strong>
                 <EstadoDocumentoPill documento={documento} />
                 <small>{formatShortDate(documento.created_at)}</small>
               </span>
@@ -2769,10 +2787,31 @@ function DocumentsView({
                   <dt>Documento</dt>
                   <dd>{selected.cliente.documento}</dd>
                 </div>
-                <div>
-                  <dt>Total</dt>
-                  <dd>{formatGuaranies(selected.totals.total)}</dd>
-                </div>
+                {selected.tipo === "NOTA_REMISION" ? (
+                  <>
+                    <div>
+                      <dt>Motivo</dt>
+                      <dd>{selected.remision?.motivo_descripcion ?? "-"}</dd>
+                    </div>
+                    <div>
+                      <dt>Traslado</dt>
+                      <dd>{selected.remision?.inicio_traslado ?? "-"}{selected.remision?.fin_traslado ? ` al ${selected.remision.fin_traslado}` : ""}{selected.remision?.kilometros ? ` · ${selected.remision.kilometros} km` : ""}</dd>
+                    </div>
+                    <div>
+                      <dt>Transportista</dt>
+                      <dd>{selected.remision?.transportista ?? "-"}</dd>
+                    </div>
+                    <div>
+                      <dt>Vehículo</dt>
+                      <dd>{selected.remision?.vehiculo ?? "-"}</dd>
+                    </div>
+                  </>
+                ) : (
+                  <div>
+                    <dt>Total</dt>
+                    <dd>{formatGuaranies(selected.totals.total)}</dd>
+                  </div>
+                )}
                 <div>
                   <dt>Email</dt>
                   <dd>{formatEmailStatus(emailStatus?.status ?? selected.delivery.email_status)}</dd>
@@ -2785,15 +2824,15 @@ function DocumentsView({
                 ) : null}
               </div>
 
-              <section className="invoice-lines" aria-label="Productos vendidos">
-                <h4>Productos vendidos</h4>
+              <section className="invoice-lines" aria-label={selected.tipo === "NOTA_REMISION" ? "Mercaderia trasladada" : "Productos vendidos"}>
+                <h4>{selected.tipo === "NOTA_REMISION" ? "Mercadería trasladada" : "Productos vendidos"}</h4>
                 <div className="invoice-lines-list">
                   {selected.items.map((item) => (
                     <article className="invoice-line-card" key={`${selected.id}-${item.line_no}`}>
                       <strong>
                         {item.cantidad} x {item.descripcion}
                       </strong>
-                      <small>{formatGuaranies(item.subtotal)}</small>
+                      {selected.tipo === "NOTA_REMISION" ? null : <small>{formatGuaranies(item.subtotal)}</small>}
                     </article>
                   ))}
                 </div>
@@ -2804,7 +2843,7 @@ function DocumentsView({
                   <p className="accion-banner-titulo">{selected.accion_detalle.titulo}</p>
                   <p className="accion-banner-descripcion">{selected.accion_detalle.descripcion}</p>
                   {selected.estado === "RECHAZADA" ? <p className="accion-banner-descripcion">{AVISO_INUTILIZACION}</p> : null}
-                  {selected.accion_detalle.acciones_sugeridas.length > 0 || puedeVerificarAhora(selected) ? (
+                  {selected.tipo !== "NOTA_REMISION" && (selected.accion_detalle.acciones_sugeridas.length > 0 || puedeVerificarAhora(selected)) ? (
                     <div className="accion-banner-acciones">
                       {puedeVerificarAhora(selected) ? (
                         <button className="secondary-action" disabled={actionLoading} onClick={() => void refreshSelectedStatus()} type="button">
@@ -2903,13 +2942,18 @@ function DocumentsView({
                     💵 Emitir recibo de cobro
                   </button>
                 ) : null}
+                {selected.tipo !== "NOTA_REMISION" ? (
                 <button className="secondary-action" disabled={actionLoading || !canEmitNotaCredito(selected, documents)} onClick={() => void emitSelectedNotaCredito()} type="button">
                   ↩ Crear nota de credito
                 </button>
+                ) : null}
                 {(selected.totals?.anticipo ?? 0) > 0 ? <small className="muted">{AVISO_NOTA_CREDITO_CON_ANTICIPO}</small> : null}
+                {/* SPEC_DOCUMENTOS_ESCRITORIO_v0.1, RN-09: la nota de remision no se anula desde FS en esta fase. */}
+                {selected.tipo !== "NOTA_REMISION" ? (
                 <button className="secondary-action" disabled={actionLoading || !canCancelDocumento(selected)} onClick={() => void cancelSelectedDocumento()} type="button">
                   ⚠ Anular {getDocumentoNombreLower(selected.tipo)}
                 </button>
+                ) : null}
               </div>
 
               {/* Resultado del ultimo intento de anulacion. Solo se muestra si hubo uno y no
@@ -5884,11 +5928,11 @@ function formatEmisor(documento: DocumentoResponse): string | null {
 }
 
 function formatDocumentoTipo(value: DocumentoResponse["tipo"]): string {
-  return value === "NOTA_CREDITO" ? "Nota credito" : "Factura";
+  return value === "NOTA_CREDITO" ? "Nota credito" : value === "NOTA_REMISION" ? "Nota de remisión" : "Factura";
 }
 
 function getDocumentoNombreLower(tipo: DocumentoResponse["tipo"]): string {
-  return tipo === "NOTA_CREDITO" ? "nota de credito" : "factura";
+  return tipo === "NOTA_CREDITO" ? "nota de credito" : tipo === "NOTA_REMISION" ? "nota de remisión" : "factura";
 }
 
 function formatOperationViewTitle(value: OperationView): string {
