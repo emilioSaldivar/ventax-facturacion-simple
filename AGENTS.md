@@ -132,6 +132,9 @@ La fuente de verdad de este proyecto es:
 - `docs/PLAN_EDITOR_FACTURA_PC_v0.1.md`
 - `docs/TASKS_EDITOR_FACTURA_PC_v0.1.md`
 - `docs/OPERACION_PRUEBAS_PRODUCCION_MONEDA_EXTRANJERA_v0.1.md`
+- `docs/SPEC_UX_NUEVA_FACTURA_v0.1.md`
+- `docs/PLAN_UX_NUEVA_FACTURA_v0.1.md`
+- `docs/TASKS_UX_NUEVA_FACTURA_v0.1.md`
 - `spec/openapi.yaml`
 
 Los documentos bajo `contexto_facturacion_electronica/` y `contexto_pos_graciela/` son antecedentes. No son la especificacion final del nuevo producto.
