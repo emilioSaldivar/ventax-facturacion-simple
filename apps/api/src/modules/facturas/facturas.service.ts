@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { calculateDocumentTotals, type TaxInputLine } from "@facturacion-simple/shared";
+import { calculateDocumentTotalsMoneda, type TaxInputLine } from "@facturacion-simple/shared";
 import { HttpError } from "../../shared/errors/http-error";
 import { logger } from "../../shared/logging/logger";
 import { deriveAccion, esNotaTrabada, puedeReintentarEmision } from "./facturas.accion";
@@ -59,7 +59,8 @@ export function previewFactura(
   });
 
   try {
-    const calculated = calculateDocumentTotals(taxLines);
+    // SPEC_MONEDA_EXTRANJERA_v0.1, RN-03: fuera de PYG, presentacion con 2 decimales.
+    const calculated = calculateDocumentTotalsMoneda(taxLines, input.moneda ?? "PYG");
     const items: FacturaItemPreview[] = calculated.items.map((item, index) => ({
       ...item,
       catalogo_item_id: input.items[index]?.catalogo_item_id?.trim() || null
@@ -204,11 +205,17 @@ function getNotaCreditoIneligibility(documento: DocumentoResponse, creditedFactu
   if ((documento.totals?.anticipo ?? 0) > 0) {
     return MENSAJE_NOTA_CREDITO_CON_ANTICIPO;
   }
+  if (documento.moneda && documento.moneda !== "PYG") {
+    return MENSAJE_NOTA_CREDITO_MONEDA_EXTRANJERA;
+  }
   return null;
 }
 
 /** SPEC_TOTALES_FE_EN_CARGA_v0.1, RN-08: FE no admite la nota total por referencia con anticipo. */
 export const MENSAJE_NOTA_CREDITO_CON_ANTICIPO = "Esta factura tiene anticipo: la nota de credito se gestiona con soporte.";
+
+/** SPEC_MONEDA_EXTRANJERA_v0.1, D-1: FE `segel-rc4.25` emite toda nota de credito en guaranies. */
+export const MENSAJE_NOTA_CREDITO_MONEDA_EXTRANJERA = "La nota de credito de una factura en moneda extranjera se gestiona con soporte.";
 
 export async function getDocumentoById(
   context: OperationalContextResponse,
@@ -1177,6 +1184,10 @@ export async function emitNotaCreditoTotal(
   if (original.tipo !== "FACTURA" || original.estado !== "EMITIDA" || !original.cdc) {
     throw new HttpError(409, "CONFLICT", "Factura no elegible para nota de credito.");
   }
+  if (original.moneda && original.moneda !== "PYG") {
+    // D-1: FE saldria en guaranies con los precios en la moneda de la factura y consumiria el numero.
+    throw new HttpError(409, "CONFLICT", MENSAJE_NOTA_CREDITO_MONEDA_EXTRANJERA, { reason: "NOTA_CREDITO_MONEDA_EXTRANJERA" });
+  }
   if ((original.totals?.anticipo ?? 0) > 0) {
     // RN-08: FE no admite la nota total por referencia con anticipo, y las lineas de FS no la reproducen.
     throw new HttpError(409, "CONFLICT", MENSAJE_NOTA_CREDITO_CON_ANTICIPO, { reason: "NOTA_CREDITO_CON_ANTICIPO" });
@@ -1519,7 +1530,8 @@ function buildFiscalEmitRequest(
     },
     cliente: input.cliente,
     items: preview.items,
-    totals: preview.totals
+    totals: preview.totals,
+    ...(input.moneda && input.moneda !== "PYG" ? { moneda: input.moneda, tipo_cambio: input.tipo_cambio ?? null } : {})
   };
 }
 

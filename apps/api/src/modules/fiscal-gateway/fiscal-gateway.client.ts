@@ -1549,6 +1549,12 @@ export class RealFiscalGateway implements FiscalGateway {
       payload.emission_profile_code = profileCode;
     }
 
+    // SPEC_MONEDA_EXTRANJERA_v0.1 (guia de FE 50.1): precios y pago ya van en la moneda; el tipo de cambio es global.
+    if (request.moneda && request.moneda !== "PYG") {
+      payload.moneda = request.moneda;
+      payload.tipoCambio = request.tipo_cambio;
+    }
+
     return payload;
   }
 

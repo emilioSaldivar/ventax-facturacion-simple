@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { monedasFactura, tieneDecimalesValidos } from "@facturacion-simple/shared";
 import { z } from "zod";
 import { requireAuth } from "../auth/auth.middleware";
 import { clienteRepository } from "../clientes/clientes.repository";
@@ -61,11 +62,31 @@ export const facturaPreviewSchema = z.object({
         codigo: z.string().trim().max(60).nullable().optional(),
         descripcion: z.string().trim().min(1).max(240),
         cantidad: z.coerce.number().int().min(1),
-        precio_unitario: z.coerce.number().int().min(0),
+        // SPEC_MONEDA_EXTRANJERA_v0.1, RN-02: decimales segun la moneda (se valida abajo).
+        precio_unitario: z.coerce.number().min(0),
         iva_tipo: z.enum(ivaTipos).default("IVA_10")
       })
     )
-    .min(1)
+    .min(1),
+  moneda: z.enum(monedasFactura).default("PYG"),
+  tipo_cambio: z.coerce.number().positive().nullable().optional()
+}).superRefine((input, ctx) => {
+  if (input.moneda !== "PYG") {
+    if (!input.tipo_cambio) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["tipo_cambio"], message: "Con moneda extranjera el tipo de cambio es obligatorio." });
+    } else if (Math.abs(input.tipo_cambio * 10000 - Math.round(input.tipo_cambio * 10000)) > 1e-6) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["tipo_cambio"], message: "El tipo de cambio admite hasta 4 decimales." });
+    }
+  }
+  input.items.forEach((item, indice) => {
+    if (!tieneDecimalesValidos(item.precio_unitario, input.moneda)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["items", indice, "precio_unitario"],
+        message: input.moneda === "PYG" ? "En guaranies el precio es un entero." : "El precio admite hasta 2 decimales."
+      });
+    }
+  });
 });
 
 const documentoListQuerySchema = z

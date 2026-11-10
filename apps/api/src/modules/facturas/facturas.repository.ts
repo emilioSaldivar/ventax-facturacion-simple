@@ -29,6 +29,9 @@ interface FacturaRow {
   cliente_snapshot: unknown;
   totals_snapshot: unknown;
   fiscal_response_snapshot: unknown;
+  /** SPEC_MONEDA_EXTRANJERA_v0.1. Ausentes en filas leidas antes de la migracion 0042. */
+  moneda?: string | null;
+  tipo_cambio?: string | number | null;
   /** SPEC_DOCUMENTOS_ESCRITORIO_v0.1, fase B1: solo en notas de remision. */
   remision_snapshot?: unknown;
   fiscal_document_id: string | null;
@@ -90,6 +93,8 @@ const COLUMNAS_DOCUMENTO = `
           cliente_snapshot,
           totals_snapshot,
           fiscal_response_snapshot,
+          moneda,
+          tipo_cambio,
           case when tipo = 'NOTA_REMISION'
                then jsonb_build_object('remision', fiscal_request_snapshot -> 'remision', 'transporte', fiscal_request_snapshot -> 'transporte')
           end as remision_snapshot,
@@ -565,10 +570,12 @@ export class PgFacturaRepository implements FacturaRepository {
             totals_snapshot,
             fiscal_request_snapshot,
             fiscal_response_snapshot,
-            email_estado
+            email_estado,
+            moneda,
+            tipo_cambio
           )
           values (
-            $1, $2, $3, 'FACTURA', $4, 'EMITIENDO', $5, $6, $7::jsonb, $8::jsonb, $9::jsonb, '{}'::jsonb, $10
+            $1, $2, $3, 'FACTURA', $4, 'EMITIENDO', $5, $6, $7::jsonb, $8::jsonb, $9::jsonb, '{}'::jsonb, $10, $11, $12
           )
           returning
             ${COLUMNAS_DOCUMENTO}
@@ -583,7 +590,9 @@ export class PgFacturaRepository implements FacturaRepository {
           JSON.stringify(input.input.cliente),
           JSON.stringify(input.preview.totals),
           JSON.stringify(input.fiscalRequest),
-          input.input.cliente.email?.trim() ? "DELEGATED" : null
+          input.input.cliente.email?.trim() ? "DELEGATED" : null,
+          input.input.moneda ?? "PYG",
+          input.input.moneda && input.input.moneda !== "PYG" ? input.input.tipo_cambio ?? null : null
         ]
       );
 
@@ -1696,6 +1705,8 @@ function mapFacturaRow(
     tipo: row.tipo,
     estado: row.estado,
     condicion_venta: row.condicion_venta,
+    moneda: row.moneda ?? "PYG",
+    tipo_cambio: row.tipo_cambio === null || row.tipo_cambio === undefined ? null : Number(row.tipo_cambio),
     ...(row.tipo === "NOTA_REMISION" ? { remision: resumenRemision(row.remision_snapshot) } : {}),
     numero_fiscal: row.numero_fiscal,
     cdc,

@@ -135,6 +135,23 @@ describe("contrato FE: correo en cola", () => {
   });
 });
 
+describe("contrato FE: factura en moneda extranjera (SPEC_MONEDA_EXTRANJERA_v0.1)", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("fuera de PYG manda moneda y tipoCambio; en PYG no los manda", async () => {
+    const fetchMock = vi.fn(async () => respuesta(201, { document_id: "1", document_uuid: "u", cdc: "c", nro_documento: "0001", status: "QUEUED_BATCH" }));
+    vi.stubGlobal("fetch", fetchMock);
+    await gatewayReal().emitFactura({ ...(solicitud as object), moneda: "USD", tipo_cambio: 7350.5 } as never);
+    const cuerpo = JSON.parse(String((fetchMock.mock.calls[0] as unknown as [string, RequestInit])[1].body));
+    expect(cuerpo).toMatchObject({ moneda: "USD", tipoCambio: 7350.5 });
+    fetchMock.mockClear();
+    await gatewayReal().emitFactura(solicitud as never);
+    const enGuaranies = JSON.parse(String((fetchMock.mock.calls[0] as unknown as [string, RequestInit])[1].body));
+    expect(enGuaranies.moneda).toBeUndefined();
+    expect(enGuaranies.tipoCambio).toBeUndefined();
+  });
+});
+
 describe("contrato FE: nota de credito", () => {
   afterEach(() => vi.unstubAllGlobals());
   const solicitudNc = { ...(solicitud as object), factura_referencia: { documento_id: "d", cdc: "0".repeat(44) }, motivo: "x" } as never;

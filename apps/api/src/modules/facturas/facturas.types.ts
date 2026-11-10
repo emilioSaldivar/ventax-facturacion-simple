@@ -37,6 +37,10 @@ export interface FacturaItemInput {
 
 export interface FacturaPreviewInput {
   condicion_venta: CondicionVenta;
+  /** SPEC_MONEDA_EXTRANJERA_v0.1: ISO 4217; sin el campo, PYG. */
+  moneda?: string;
+  /** Cotizacion a guaranies de toda la factura; obligatoria fuera de PYG. */
+  tipo_cambio?: number | null;
   tipo_transaccion?: 1 | 2 | 3;
   credito_plazo_dias?: number | null;
   cliente: FacturaClienteInput;
@@ -147,6 +151,9 @@ export interface DocumentoResponse {
   estado: DocumentoEstado;
   /** Null en una nota de remision. */
   condicion_venta: CondicionVenta | null;
+  /** SPEC_MONEDA_EXTRANJERA_v0.1: moneda de todos los montos del documento. */
+  moneda: string;
+  tipo_cambio: number | null;
   /** Solo en una nota de remision: resumen del detalle que informo FE. */
   remision?: DocumentoRemision | null;
   numero_fiscal: string | null;

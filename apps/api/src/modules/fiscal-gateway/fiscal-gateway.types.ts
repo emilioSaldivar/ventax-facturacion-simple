@@ -45,6 +45,9 @@ export interface FiscalEmitFacturaRequest {
   cliente: FacturaClienteInput;
   items: FacturaItemPreview[];
   totals: TaxTotals;
+  /** SPEC_MONEDA_EXTRANJERA_v0.1: fuera de PYG van `moneda` y `tipoCambio` a FE. */
+  moneda?: string;
+  tipo_cambio?: number | null;
 }
 
 export interface FiscalEmitNotaCreditoRequest {
