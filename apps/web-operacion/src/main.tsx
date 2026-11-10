@@ -255,9 +255,33 @@ interface DocumentoAccionDetalle {
   titulo: string;
   descripcion: string;
   acciones_sugeridas: Array<
-    "REINTENTAR" | "CORREGIR_REEMITIR" | "CREAR_NCE" | "CONTACTAR_SOPORTE" | "REINTENTAR_NOTA_CREDITO" | "NUEVA_NOTA_CREDITO"
+    | "REINTENTAR"
+    | "CORREGIR_REEMITIR"
+    | "CREAR_NCE"
+    | "CONTACTAR_SOPORTE"
+    | "REINTENTAR_NOTA_CREDITO"
+    | "NUEVA_NOTA_CREDITO"
+    | "INUTILIZAR_NUMERO"
   >;
   soporte_payload: DocumentoAccionSoportePayload | null;
+}
+
+/** SPEC_CORRECCION_INUTILIZACION_RECHAZADAS_v0.1, RN-A4: la otra punta de una correccion. */
+interface DocumentoVinculo {
+  id: string;
+  numero_fiscal: string | null;
+  estado: DocumentoEstado;
+}
+
+/** RN-B4: ultimo intento de inutilizar el numero desde FS. */
+interface DocumentoInutilizacion {
+  status: "ACCEPTED" | "REJECTED" | "FAILED";
+  evento_id: string | null;
+  motivo: string | null;
+  rejection_code: string | null;
+  rejection_message: string | null;
+  intentos: number;
+  last_at: string | null;
 }
 
 interface DocumentoCancelacion {
@@ -311,6 +335,11 @@ interface DocumentoResponse {
   accion_detalle?: DocumentoAccionDetalle;
   /** SPEC_REINTENTO_EMISION_CONFIRMADO_v0.1 RN-01: lo decide el backend, no la UI. */
   puede_reintentar_emision?: boolean;
+  /** SPEC_CORRECCION_INUTILIZACION_RECHAZADAS_v0.1. Opcionales: respuestas previas no los traen. */
+  corrige_a?: DocumentoVinculo | null;
+  corregida_por?: DocumentoVinculo | null;
+  inutilizacion?: DocumentoInutilizacion | null;
+  puede_inutilizar?: boolean;
   documento_relacionado_id: string | null;
   nce_motivo: string | null;
   /** Quien emitio el documento. Opcional: respuestas previas al cambio no lo traen. */
@@ -1852,6 +1881,8 @@ function DocumentsView({
   const [cargaAbiertaId, setCargaAbiertaId] = useState<string | null>(null);
   // FS-33: carga desde la que se abrio la ficha, para volver a ella.
   const [volverACargaId, setVolverACargaId] = useState<string | null>(null);
+  /** SPEC_CORRECCION_INUTILIZACION_RECHAZADAS_v0.1, RN-B3: dialogo de inutilizacion del detalle. */
+  const [inutilizarMotivo, setInutilizarMotivo] = useState<string | null>(null);
   const [tipoOperativoFilter, setTipoOperativoFilter] = useState<"TODOS" | "CONTADO" | "CREDITO">("TODOS");
   const [query, setQuery] = useState("");
   const [desde, setDesde] = useState(last7DaysYmd);
@@ -1934,6 +1965,7 @@ function DocumentsView({
     setActionLoading(true);
     setError(null);
     setMessage(null);
+    setInutilizarMotivo(null);
     setDeliveryLink(null);
     setEmailStatus(null);
 
@@ -2150,6 +2182,29 @@ function DocumentsView({
       setEmailStatus(email);
     } catch (err) {
       setMessage(err instanceof Error ? err.message : "No se pudieron cargar acciones de entrega.");
+    }
+  }
+
+  async function inutilizarSelected() {
+    if (!selected || inutilizarMotivo === null) return;
+    const numero = selected.numero_fiscal ?? "";
+    setActionLoading(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const updated = await api.post<DocumentoResponse>(`/facturas/${selected.id}/inutilizar`, { motivo: inutilizarMotivo.trim() });
+      setSelected(updated);
+      setDocuments((current) => current.map((item) => (item.id === updated.id ? updated : item)));
+      setInutilizarMotivo(null);
+      setMessage(
+        updated.inutilizacion?.status === "ACCEPTED"
+          ? `El número ${numero} quedó inutilizado ante SIFEN.`
+          : `SIFEN no aceptó la inutilización del número ${numero}${updated.inutilizacion?.rejection_code ? ` (${updated.inutilizacion.rejection_code})` : ""}. Puede volver a intentar.`
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo inutilizar el número.");
+    } finally {
+      setActionLoading(false);
     }
   }
 
@@ -2822,6 +2877,26 @@ function DocumentsView({
                     <dd>{formatEmisor(selected)}</dd>
                   </div>
                 ) : null}
+                {selected.corregida_por || selected.corrige_a ? (
+                  <div data-testid="vinculo-correccion">
+                    <dt>{selected.corregida_por ? "Corregida por" : "Corrige a"}</dt>
+                    <dd>
+                      <button
+                        className="carga-enlace"
+                        onClick={() => void openDetail((selected.corregida_por ?? selected.corrige_a)!.id)}
+                        type="button"
+                      >
+                        Factura {(selected.corregida_por ?? selected.corrige_a)!.numero_fiscal ?? "sin número"}
+                      </button>
+                    </dd>
+                  </div>
+                ) : null}
+                {selected.inutilizacion ? (
+                  <div data-testid="estado-inutilizacion">
+                    <dt>Número</dt>
+                    <dd>{formatInutilizacion(selected.inutilizacion)}</dd>
+                  </div>
+                ) : null}
               </div>
 
               <section className="invoice-lines" aria-label={selected.tipo === "NOTA_REMISION" ? "Mercaderia trasladada" : "Productos vendidos"}>
@@ -2842,7 +2917,9 @@ function DocumentsView({
                 <div className={`accion-banner ${accionBannerClass(selected.accion)}`}>
                   <p className="accion-banner-titulo">{selected.accion_detalle.titulo}</p>
                   <p className="accion-banner-descripcion">{selected.accion_detalle.descripcion}</p>
-                  {selected.estado === "RECHAZADA" ? <p className="accion-banner-descripcion">{AVISO_INUTILIZACION}</p> : null}
+                  {selected.estado === "RECHAZADA" && selected.tipo === "FACTURA" && selected.inutilizacion?.status !== "ACCEPTED" ? (
+                    <p className="accion-banner-descripcion">{AVISO_INUTILIZACION}</p>
+                  ) : null}
                   {selected.tipo !== "NOTA_REMISION" && (selected.accion_detalle.acciones_sugeridas.length > 0 || puedeVerificarAhora(selected)) ? (
                     <div className="accion-banner-acciones">
                       {puedeVerificarAhora(selected) ? (
@@ -2862,6 +2939,17 @@ function DocumentsView({
                           type="button"
                         >
                           Corregir y emitir de nuevo
+                        </button>
+                      ) : null}
+                      {selected.accion_detalle.acciones_sugeridas.includes("INUTILIZAR_NUMERO") && inutilizarMotivo === null ? (
+                        <button
+                          className="secondary-action"
+                          data-testid="inutilizar-numero"
+                          disabled={actionLoading}
+                          onClick={() => setInutilizarMotivo("Factura rechazada por SIFEN")}
+                          type="button"
+                        >
+                          Inutilizar número
                         </button>
                       ) : null}
                       {selected.accion_detalle.acciones_sugeridas.includes("REINTENTAR_NOTA_CREDITO") ? (
@@ -2884,6 +2972,40 @@ function DocumentsView({
                           📋 Copiar datos para soporte
                         </button>
                       ) : null}
+                    </div>
+                  ) : null}
+                  {inutilizarMotivo !== null ? (
+                    <div className="carga-confirmacion" role="dialog" aria-label={`Inutilizar número ${selected.numero_fiscal ?? ""}`}>
+                      <p>
+                        <strong>¿Inutilizar el número {selected.numero_fiscal}?</strong> SIFEN lo registra como inutilizado y no se
+                        vuelve a usar. No se puede deshacer.
+                      </p>
+                      <label>
+                        Motivo
+                        <textarea
+                          maxLength={MOTIVO_INUTILIZACION_MAX}
+                          onChange={(event) => setInutilizarMotivo(event.target.value)}
+                          rows={2}
+                          value={inutilizarMotivo}
+                        />
+                      </label>
+                      <small className="muted">
+                        {inutilizarMotivo.trim().length} de {MOTIVO_INUTILIZACION_MAX} caracteres. Mínimo {MOTIVO_INUTILIZACION_MIN}.
+                      </small>
+                      <div className="carga-acciones">
+                        <button className="secondary-action" disabled={actionLoading} onClick={() => setInutilizarMotivo(null)} type="button">
+                          Volver
+                        </button>
+                        <button
+                          className="primary-action"
+                          data-testid="confirmar-inutilizar"
+                          disabled={actionLoading || inutilizarMotivo.trim().length < MOTIVO_INUTILIZACION_MIN}
+                          onClick={() => void inutilizarSelected()}
+                          type="button"
+                        >
+                          Sí, inutilizar
+                        </button>
+                      </div>
                     </div>
                   ) : null}
                 </div>
@@ -4233,6 +4355,7 @@ function InvoiceEditor({
   const emissionResultRef = useRef<HTMLElement | null>(null);
   const lastAppliedClientePrefillIdRef = useRef<number | null>(null);
   const initialDraftAppliedRef = useRef(false);
+  const correccionEmitidaRef = useRef(false);
 
   const api = useMemo(() => createApiClient(accessToken, setAccessToken), [accessToken, setAccessToken]);
   const today = useMemo(() => new Date().toLocaleDateString("es-PY"), []);
@@ -4567,13 +4690,16 @@ function InvoiceEditor({
     setEmissionError(null);
 
     try {
+      // RN-A1: solo la primera emision del editor corrige; otra factura emitida despues no.
+      const corrige = initialDraft?.corrige_documento_id && !correccionEmitidaRef.current ? initialDraft.corrige_documento_id : null;
       const result = await api.request<DocumentoResponse>("/facturas", {
         method: "POST",
         headers: {
           "Idempotency-Key": idempotencyKey
         },
-        body: JSON.stringify(request)
+        body: JSON.stringify(corrige ? { ...request, corrige_documento_id: corrige } : request)
       });
+      if (corrige) correccionEmitidaRef.current = true;
       setEmittedDocumento(result);
       setLastEmittedRequestFingerprint(requestFingerprint ?? JSON.stringify(request));
       setDeliveryLink(null);
@@ -4977,7 +5103,8 @@ function InvoiceEditor({
       {initialDraft?.corrige_numero !== undefined ? (
         <p className="editor-alert ready" role="status">
           Corrigiendo la factura rechazada {initialDraft.corrige_numero ?? "sin numero"}. Revise los datos del cliente:
-          la factura se emite con numero nuevo, la rechazada queda como esta y soporte inutiliza su numero.
+          la factura se emite con numero nuevo y queda vinculada a la rechazada. El numero de la rechazada se inutiliza
+          desde su detalle.
         </p>
       ) : null}
 
@@ -6191,6 +6318,7 @@ function borradorDeCorreccion(documento: DocumentoResponse): InvoiceInitialDraft
     cliente_ruc: documento.cliente.documento_tipo === "RUC" ? documento.cliente.documento : null,
     cliente: { ...documento.cliente, cliente_id: null },
     corrige_numero: documento.numero_fiscal,
+    corrige_documento_id: documento.id,
     items: documento.items.map((item) => ({
       descripcion: item.descripcion,
       cantidad: item.cantidad,
@@ -6201,8 +6329,22 @@ function borradorDeCorreccion(documento: DocumentoResponse): InvoiceInitialDraft
   };
 }
 
-/** FS-36: en esta etapa la inutilizacion la hace soporte (SPEC_DESPLIEGUE_SEGEL_FS_v0.2, D-11). */
-const AVISO_INUTILIZACION = "El numero de esta factura queda pendiente de inutilizar: lo gestiona soporte.";
+/**
+ * SPEC_CORRECCION_INUTILIZACION_RECHAZADAS_v0.1, RN-C3: reemplaza el aviso de FS-36. El operador
+ * inutiliza el numero desde el detalle.
+ */
+const AVISO_INUTILIZACION =
+  "El número de esta factura quedó sin usar. Conviene inutilizarlo antes del día 15 del mes siguiente: SIFEN no lo vuelve a usar.";
+const MOTIVO_INUTILIZACION_MIN = 5;
+const MOTIVO_INUTILIZACION_MAX = 150;
+
+function formatInutilizacion(inutilizacion: DocumentoInutilizacion): string {
+  if (inutilizacion.status === "ACCEPTED") return "Inutilizado ante SIFEN";
+  if (inutilizacion.status === "REJECTED") {
+    return `SIFEN rechazó la inutilización${inutilizacion.rejection_code ? ` (${inutilizacion.rejection_code})` : ""}${inutilizacion.rejection_message ? `: ${inutilizacion.rejection_message}` : ""}`;
+  }
+  return "La inutilización no tuvo respuesta. Puede volver a intentar.";
+}
 
 function getRejectedSifenMessage(summary: SifenSummary | null): string {
   const base = `Documento rechazado por SIFEN: ${formatSifenSummary(summary)}.`;
@@ -6334,6 +6476,13 @@ function esNotaSinConfirmar(documento: DocumentoResponse): boolean {
 
 function formatEstadoDocumento(documento: DocumentoResponse): string {
   if (esNotaSinConfirmar(documento)) return "🟠 Nota credito sin confirmar";
+  // SPEC_CORRECCION_INUTILIZACION_RECHAZADAS_v0.1, RN-C1.
+  if (documento.tipo === "FACTURA" && documento.estado === "RECHAZADA") {
+    const inutilizada = documento.inutilizacion?.status === "ACCEPTED";
+    if (documento.corregida_por && inutilizada) return "⚪ Resuelta";
+    if (inutilizada) return "⚪ Número inutilizado";
+    if (documento.corregida_por) return "🟠 Corregida, falta inutilizar";
+  }
   return formatDocumentoEstadoSimple(documento.estado, documento.tipo);
 }
 
@@ -6422,6 +6571,8 @@ interface InvoiceInitialDraft {
   cliente?: FacturaClienteInput;
   /** FS-28: numero de la factura rechazada que se corrige. */
   corrige_numero?: string | null;
+  /** SPEC_CORRECCION_INUTILIZACION_RECHAZADAS_v0.1, RN-A1: id de la factura que se corrige. */
+  corrige_documento_id?: string;
   items: Array<{
     descripcion: string;
     cantidad: number;

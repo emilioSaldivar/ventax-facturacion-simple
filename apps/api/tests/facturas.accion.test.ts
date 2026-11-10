@@ -138,7 +138,8 @@ describe("deriveAccion", () => {
       })
     );
     expect(accion).toBe("REQUIERE_SOPORTE");
-    expect(accion_detalle.acciones_sugeridas).toEqual(["CONTACTAR_SOPORTE"]);
+    // SPEC_CORRECCION_INUTILIZACION_RECHAZADAS_v0.1, RN-C2: con CDC y numero, el operador tambien puede inutilizar.
+    expect(accion_detalle.acciones_sugeridas).toEqual(["CONTACTAR_SOPORTE", "INUTILIZAR_NUMERO"]);
     expect(accion_detalle.soporte_payload).toMatchObject({ cdc: "01234", numero_fiscal: "001-001-0000001" });
   });
 

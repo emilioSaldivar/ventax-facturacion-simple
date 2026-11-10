@@ -146,6 +146,27 @@ export interface FiscalByCdcResponse {
   resolution_note: string;
 }
 
+/**
+ * SPEC_CORRECCION_INUTILIZACION_RECHAZADAS_v0.1: `POST /v1/evento/inutilizacionnumfactura` de FE, con la
+ * clave compartida. Todos los campos los arma FS desde la factura guardada (RN-B2).
+ */
+export interface FiscalInutilizarNumeracionRequest {
+  emisor_id: string;
+  establecimiento: string;
+  puntoExpedicion: string;
+  desdeNumero: string;
+  hastaNumero: string;
+  motivo: string;
+  tipoDocumento: "FE";
+}
+
+/** `status`: `VOIDED` si SIFEN acepto; si no, el estado del evento que informa FE. */
+export interface FiscalInutilizarNumeracionResponse {
+  event_id: string | null;
+  status: string;
+  sifen: unknown;
+}
+
 export interface FiscalCancelFacturaRequest {
   emisor_id: string;
   cdc: string;
@@ -412,6 +433,7 @@ export interface FiscalGateway {
   /** GET /documentos/{uuid}: estado canonico del documento en FE (clave compartida). */
   getDocumentoCanonico(documentUuid: string): Promise<FiscalDocumentoCanonicoResponse>;
   cancelFactura(request: FiscalCancelFacturaRequest): Promise<FiscalCancelFacturaResponse>;
+  inutilizarNumeracion(request: FiscalInutilizarNumeracionRequest): Promise<FiscalInutilizarNumeracionResponse>;
   getDocumentoEventos(documentUuid: string): Promise<FiscalDocumentoEventosResponse>;
   resolveDocumentoByCdc(cdc: string): Promise<FiscalByCdcResponse>;
   getDocumentoDecisionByDocumentId(input: { emisorId: string; documentId: string }): Promise<FiscalDocumentoDecisionResponse>;

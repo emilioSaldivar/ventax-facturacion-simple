@@ -109,6 +109,26 @@ export interface DocumentoAccionDetalle {
   soporte_payload: DocumentoAccionSoportePayload | null;
 }
 
+/** SPEC_CORRECCION_INUTILIZACION_RECHAZADAS_v0.1, fase A: la otra punta de una correccion. */
+export interface DocumentoVinculo {
+  id: string;
+  numero_fiscal: string | null;
+  estado: DocumentoEstado;
+}
+
+export type DocumentoInutilizacionStatus = "ACCEPTED" | "REJECTED" | "FAILED";
+
+/** SPEC_CORRECCION_INUTILIZACION_RECHAZADAS_v0.1, RN-B4: ultimo intento de inutilizar el numero. */
+export interface DocumentoInutilizacion {
+  status: DocumentoInutilizacionStatus;
+  evento_id: string | null;
+  motivo: string | null;
+  rejection_code: string | null;
+  rejection_message: string | null;
+  intentos: number;
+  last_at: string | null;
+}
+
 export interface DocumentoCancelacion {
   status: FiscalCancelStatus;
   rejection_code: string | null;
@@ -184,6 +204,14 @@ export interface DocumentoResponse {
   accion_detalle?: DocumentoAccionDetalle;
   /** SPEC_REINTENTO_EMISION_CONFIRMADO_v0.1 RN-01: unica condicion de visibilidad de "Reintentar emision". */
   puede_reintentar_emision?: boolean;
+  /** SPEC_CORRECCION_INUTILIZACION_RECHAZADAS_v0.1, RN-A4: factura que esta corrige. */
+  corrige_a?: DocumentoVinculo | null;
+  /** RN-A4: correccion de esta factura. */
+  corregida_por?: DocumentoVinculo | null;
+  /** RN-B4. */
+  inutilizacion?: DocumentoInutilizacion | null;
+  /** RN-B1, derivado en el service. */
+  puede_inutilizar?: boolean;
 }
 
 export interface DocumentoListFilters {
@@ -354,6 +382,20 @@ export interface FacturaQueuedPersistInput {
   input: FacturaPreviewInput;
   preview: FacturaPreviewResponse;
   fiscalRequest: FiscalEmitFacturaRequest;
+  /** SPEC_CORRECCION_INUTILIZACION_RECHAZADAS_v0.1, RN-A1: factura rechazada que se corrige. */
+  documentoRelacionadoId?: string | null;
+}
+
+export interface InutilizacionPersistInput {
+  facturadorId: string;
+  documentoId: string;
+  usuarioId: string;
+  status: DocumentoInutilizacionStatus;
+  eventoId: string | null;
+  motivo: string;
+  numero: string;
+  rejectionCode: string | null;
+  rejectionMessage: string | null;
 }
 
 export interface NotaCreditoPersistInput {
@@ -449,6 +491,8 @@ export interface FacturaRepository {
   }): Promise<DocumentoResponse | null>;
   /** Clave de consumidor de FE del facturador (`facturadores.fe_consumer_api_key`), si tiene. */
   getFacturadorApiKey(facturadorId: string): Promise<string | null>;
+  /** SPEC_CORRECCION_INUTILIZACION_RECHAZADAS_v0.1, RN-B4: guarda el intento y lo deja en auditoria. */
+  registrarInutilizacion(input: InutilizacionPersistInput): Promise<DocumentoResponse | null>;
   /**
    * FE confirmo por idempotencia que el documento ya existe (SPEC_REINTENTO_EMISION_CONFIRMADO_v0.1
    * RN-03): se adopta su identidad en vez de reencolar. Devuelve null si el documento ya tenia

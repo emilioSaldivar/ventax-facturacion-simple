@@ -16,6 +16,7 @@ import {
   cancelDocumentoSend,
   createDocumentoDerived,
   enqueueFacturaEmission,
+  inutilizarNumeroFactura,
   emitNotaCreditoTotal,
   reintentarNotaCreditoPorId,
   getBatchPendientesGestion,
@@ -32,7 +33,7 @@ import {
   validateDocumentoCdcImpact,
   voidDocumentoNumber
 } from "./facturas.service";
-import { condicionesVenta, type DocumentoListFilters } from "./facturas.types";
+import { condicionesVenta, type DocumentoListFilters, type FacturaPreviewInput } from "./facturas.types";
 import { HttpError } from "../../shared/errors/http-error";
 
 const ivaTipos = ["IVA_10", "IVA_5", "EXENTA"] as const;
@@ -125,6 +126,16 @@ const validateCdcSchema = z.object({
 });
 const voidNumberSchema = z.object({
   motivo: z.string().trim().min(1).max(150)
+});
+
+/** SPEC_CORRECCION_INUTILIZACION_RECHAZADAS_v0.1, RN-A1: solo la emision lleva la factura que corrige. */
+const facturaEmisionSchema = facturaPreviewSchema.extend({
+  corrige_documento_id: z.string().uuid().nullable().optional()
+});
+
+/** RN-B2 y RN-B3: del operador solo se toma el motivo; cualquier otro campo se descarta. */
+const inutilizarSchema = z.object({
+  motivo: z.string().trim().min(5).max(150)
 });
 
 const notaCreditoSchema = z.object({
@@ -480,6 +491,22 @@ facturasRouter.post(
 );
 
 facturasRouter.post(
+  "/facturas/:documentoId/inutilizar",
+  requireAuth,
+  validateRequest("params", documentoParamsSchema),
+  validateRequest("body", inutilizarSchema),
+  async (req, res, next) => {
+    try {
+      const context = await getOperationalContext(req.user!.id, operationalContextRepository);
+      const { motivo } = req.body as z.infer<typeof inutilizarSchema>;
+      res.json(await inutilizarNumeroFactura(context, String(req.params.documentoId), { motivo }, facturasRepository, fiscalGateway));
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+facturasRouter.post(
   "/facturas/:documentoId/nota-credito/reintentar",
   requireAuth,
   validateRequest("params", documentoParamsSchema),
@@ -504,14 +531,16 @@ facturasRouter.post("/facturas/preview", requireAuth, validateRequest("body", fa
   }
 });
 
-facturasRouter.post("/facturas", requireAuth, validateRequest("body", facturaPreviewSchema), async (req, res, next) => {
+facturasRouter.post("/facturas", requireAuth, validateRequest("body", facturaEmisionSchema), async (req, res, next) => {
   try {
     const context = await getOperationalContext(req.user!.id, operationalContextRepository);
     const idempotencyKey = parseIdempotencyKey(req.get("idempotency-key"));
-    const result = await enqueueFacturaEmission(context, req.body, facturasRepository, {
+    const { corrige_documento_id: corrigeDocumentoId, ...factura } = req.body as FacturaPreviewInput & { corrige_documento_id?: string | null };
+    const result = await enqueueFacturaEmission(context, factura, facturasRepository, {
       idempotencyKey,
       clienteRepository,
-      contextRepository: operationalContextRepository
+      contextRepository: operationalContextRepository,
+      corrigeDocumentoId: corrigeDocumentoId ?? null
     });
     res.status(201).json(result);
   } catch (error) {

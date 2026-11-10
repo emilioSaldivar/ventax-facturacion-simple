@@ -1113,6 +1113,65 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /facturas/{documentoId}/inutilizar:
+    post:
+      tags: [Facturas]
+      summary: Inutilizar el numero de una factura rechazada (operador)
+      description: |
+        SPEC_CORRECCION_INUTILIZACION_RECHAZADAS_v0.1, fase B. Solo una `FACTURA` en `RECHAZADA` con CDC
+        y numero fiscal, sin inutilizacion aceptada (`puede_inutilizar = true`). El servidor arma el
+        pedido a `facturacion-electronica` (`POST /v1/evento/inutilizacionnumfactura`) con el emisor
+        del facturador y el establecimiento, punto y numero leidos del CDC; del cuerpo solo toma
+        `motivo` e ignora cualquier otro campo. No cambia `estado`: el resultado queda en
+        `inutilizacion`. No se puede deshacer.
+
+        - SIFEN acepta, o FE responde que el numero ya estaba inutilizado: `inutilizacion.status = ACCEPTED`.
+        - SIFEN rechaza el evento: `200` con `inutilizacion.status = REJECTED` y su codigo; se puede reintentar.
+        - FE no responde: queda `FAILED` y responde `502` o `504`.
+        - FE no admite el pedido (`EVENT_IN_PROGRESS`, `RANGE_ALREADY_USED`, `RANGE_POSSIBLY_CONSUMED`):
+          `409` con `details.fe_error`; la factura no cambia.
+      parameters:
+        - $ref: "#/components/parameters/DocumentoId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [motivo]
+              properties:
+                motivo: { type: string, minLength: 5, maxLength: 150 }
+      responses:
+        "200":
+          description: Intento registrado (aceptado o rechazado por SIFEN)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DocumentoResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Documento no encontrado en el facturador del usuario
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: |
+            `details.reason`: `INUTILIZACION_NO_ADMITIDA`, `NUMERACION_NO_IDENTIFICADA` o
+            `INUTILIZACION_RECHAZADA_POR_FE` (con `fe_error`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "502":
+          description: El backend fiscal no respondio; el intento queda `FAILED`
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /facturas/{documentoId}/nota-credito:
     post:
       tags: [NotasCredito]
@@ -2966,6 +3025,15 @@ components:
             requested_at:
               type: string
               format: date-time
+            corrige_documento_id:
+              type: string
+              format: uuid
+              nullable: true
+              description: |
+                Factura que esta emision corrige (SPEC_CORRECCION_INUTILIZACION_RECHAZADAS_v0.1, RN-A1).
+                Debe ser una factura del mismo facturador en `RECHAZADA` o `ERROR_OPERATIVO`, sin
+                correccion previa; si no, `409` con `details.reason` `CORRECCION_NO_ADMITIDA` o
+                `CORRECCION_EXISTENTE` y no se crea nada.
 
     FacturaClienteInput:
       type: object
@@ -3080,6 +3148,14 @@ components:
           type: integer
           description: 'Anticipo aplicado. Con anticipo no se admite la nota de credito total desde FS (`409` con `reason: NOTA_CREDITO_CON_ANTICIPO`).'
 
+    DocumentoVinculo:
+      type: object
+      required: [id, estado]
+      properties:
+        id: { type: string, format: uuid }
+        numero_fiscal: { type: string, nullable: true }
+        estado:
+          $ref: "#/components/schemas/DocumentoEstado"
     DocumentoResponse:
       type: object
       required: [id, tipo, estado, condicion_venta, cliente, items, totals, delivery]
@@ -3127,6 +3203,34 @@ components:
         external_ref:
           type: string
           nullable: true
+        corrige_a:
+          allOf:
+            - $ref: "#/components/schemas/DocumentoVinculo"
+          nullable: true
+          description: Factura que esta corrige (SPEC_CORRECCION_INUTILIZACION_RECHAZADAS_v0.1, RN-A4).
+        corregida_por:
+          allOf:
+            - $ref: "#/components/schemas/DocumentoVinculo"
+          nullable: true
+          description: Correccion de esta factura (RN-A4).
+        inutilizacion:
+          type: object
+          nullable: true
+          description: Ultimo intento de inutilizar el numero desde FS (RN-B4).
+          required: [status, intentos]
+          properties:
+            status: { type: string, enum: [ACCEPTED, REJECTED, FAILED] }
+            evento_id: { type: string, nullable: true }
+            motivo: { type: string, nullable: true }
+            rejection_code: { type: string, nullable: true }
+            rejection_message: { type: string, nullable: true }
+            intentos: { type: integer, minimum: 0 }
+            last_at: { type: string, format: date-time, nullable: true }
+        puede_inutilizar:
+          type: boolean
+          description: |
+            `true` para una `FACTURA` en `RECHAZADA` con CDC y numero, sin inutilizacion aceptada (RN-B1).
+            Cuando es `true`, `accion_detalle.acciones_sugeridas` incluye `INUTILIZAR_NUMERO`.
         puede_reintentar_emision:
           type: boolean
           description: |

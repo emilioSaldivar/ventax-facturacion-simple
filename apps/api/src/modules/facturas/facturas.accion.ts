@@ -1,4 +1,5 @@
 import { resolveCausaSifen, type AccionSugerida } from "./sifen-causa-catalogo";
+import { puedeInutilizar } from "./facturas.inutilizacion";
 import type { DocumentoAccion, DocumentoAccionDetalle, DocumentoResponse } from "./facturas.types";
 
 const DIAS_VENCIMIENTO_VERIFICACION = 30;
@@ -30,6 +31,9 @@ export type DeriveAccionInput = Pick<
    * es candidato a reintento, que es el lado seguro.
    */
   fiscal_status?: Record<string, unknown> | null;
+  /** SPEC_CORRECCION_INUTILIZACION_RECHAZADAS_v0.1, RN-C2. Opcionales por la misma razon. */
+  corregida_por?: DocumentoResponse["corregida_por"];
+  inutilizacion?: DocumentoResponse["inutilizacion"];
 };
 
 /**
@@ -134,6 +138,17 @@ export function deriveAccion(documento: DeriveAccionInput): { accion: DocumentoA
       return { accion: "EN_PROCESO", accion_detalle: buildEnProcesoDetalle(documento) };
 
     case "ERROR_OPERATIVO":
+      if (documento.corregida_por) {
+        return {
+          accion: "OK",
+          accion_detalle: {
+            titulo: `Corregida por la factura ${documento.corregida_por.numero_fiscal ?? "nueva"}`,
+            descripcion: "Esta factura no llegó a SIFEN y ya se emitió su corrección. No requiere ninguna acción.",
+            acciones_sugeridas: [],
+            soporte_payload: null
+          }
+        };
+      }
       return {
         accion: "REQUIERE_ACCION",
         accion_detalle: {
@@ -184,20 +199,29 @@ export function deriveAccion(documento: DeriveAccionInput): { accion: DocumentoA
           }
         };
       }
+      const resuelta = resolucionDeRechazada(documento);
+      if (resuelta) {
+        return resuelta;
+      }
+      const inutilizable = puedeInutilizar(documento);
       if (causa.categoria === "USUARIO") {
         return {
           accion: "REQUIERE_ACCION",
           accion_detalle: {
             titulo: causa.titulo,
             descripcion: causa.descripcion,
-            acciones_sugeridas: causa.acciones,
+            acciones_sugeridas: [...causa.acciones, ...(inutilizable ? (["INUTILIZAR_NUMERO"] as AccionSugerida[]) : [])],
             soporte_payload: null
           }
         };
       }
+      const soporte = buildSoporteDetalle(documento, causa.titulo, causa.descripcion);
       return {
         accion: "REQUIERE_SOPORTE",
-        accion_detalle: buildSoporteDetalle(documento, causa.titulo, causa.descripcion)
+        accion_detalle: {
+          ...soporte,
+          acciones_sugeridas: [...soporte.acciones_sugeridas, ...(inutilizable ? (["INUTILIZAR_NUMERO"] as AccionSugerida[]) : [])]
+        }
       };
     }
 
@@ -207,6 +231,50 @@ export function deriveAccion(documento: DeriveAccionInput): { accion: DocumentoA
         accion_detalle: buildSoporteDetalle(documento, "Estado no reconocido", "No pudimos determinar el estado de este documento automáticamente.")
       };
   }
+}
+
+/**
+ * SPEC_CORRECCION_INUTILIZACION_RECHAZADAS_v0.1, RN-C2: una factura rechazada corregida o con el
+ * numero inutilizado. `null` si no tiene ninguna de las dos: sigue la causa de SIFEN.
+ */
+function resolucionDeRechazada(documento: DeriveAccionInput): { accion: DocumentoAccion; accion_detalle: DocumentoAccionDetalle } | null {
+  const corregida = documento.corregida_por ?? null;
+  const inutilizada = documento.inutilizacion?.status === "ACCEPTED";
+  const numeroCorreccion = corregida?.numero_fiscal ?? "nueva";
+  if (corregida && inutilizada) {
+    return {
+      accion: "OK",
+      accion_detalle: {
+        titulo: "Factura rechazada resuelta",
+        descripcion: `Se corrigió con la factura ${numeroCorreccion} y su número quedó inutilizado ante SIFEN. No requiere ninguna acción.`,
+        acciones_sugeridas: [],
+        soporte_payload: null
+      }
+    };
+  }
+  if (inutilizada) {
+    return {
+      accion: "OK",
+      accion_detalle: {
+        titulo: "Número inutilizado",
+        descripcion: "El número de esta factura quedó inutilizado ante SIFEN. Si la venta todavía se factura, use Corregir y emitir de nuevo.",
+        acciones_sugeridas: ["CORREGIR_REEMITIR"],
+        soporte_payload: null
+      }
+    };
+  }
+  if (corregida) {
+    return {
+      accion: "REQUIERE_ACCION",
+      accion_detalle: {
+        titulo: `Corregida por la factura ${numeroCorreccion}`,
+        descripcion: "Falta inutilizar el número de esta factura rechazada.",
+        acciones_sugeridas: puedeInutilizar(documento) ? ["INUTILIZAR_NUMERO"] : [],
+        soporte_payload: null
+      }
+    };
+  }
+  return null;
 }
 
 function buildOkDetalle(documento: DeriveAccionInput): DocumentoAccionDetalle {

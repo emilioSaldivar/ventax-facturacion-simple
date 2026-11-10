@@ -1,6 +1,7 @@
 import type { FiscalCancelStatus } from "../fiscal-gateway/fiscal-gateway.types";
 import { resumenRemision } from "./nota-remision.resumen";
 import { pool } from "../../db/pool";
+import { HttpError } from "../../shared/errors/http-error";
 import type {
   DocumentoListFilters,
   DocumentoListResponse,
@@ -13,7 +14,10 @@ import type {
   PendingVerificacion,
   FacturaRepository,
   DocumentoEmisor,
-  DocumentoResponse
+  DocumentoInutilizacionStatus,
+  DocumentoResponse,
+  DocumentoVinculo,
+  InutilizacionPersistInput
 } from "./facturas.types";
 
 interface FacturaRow {
@@ -47,7 +51,28 @@ interface FacturaRow {
   cancelacion_retryable: boolean | null;
   cancelacion_intentos: number | null;
   cancelacion_last_at: Date | null;
+  inutilizacion_status: string | null;
+  inutilizacion_evento_id: string | null;
+  inutilizacion_motivo: string | null;
+  inutilizacion_rejection_code: string | null;
+  inutilizacion_rejection_message: string | null;
+  inutilizacion_intentos: number | null;
+  inutilizacion_last_at: Date | null;
   created_at: Date;
+}
+
+/** SPEC_CORRECCION_INUTILIZACION_RECHAZADAS_v0.1, RN-A4: las dos puntas de una correccion. */
+interface Vinculos {
+  corrige_a: DocumentoVinculo | null;
+  corregida_por: DocumentoVinculo | null;
+}
+
+interface VinculoRow {
+  documento_id: string;
+  rol: "CORRIGE_A" | "CORREGIDA_POR";
+  id: string;
+  numero_fiscal: string | null;
+  estado: DocumentoResponse["estado"];
 }
 
 interface FacturaItemRow {
@@ -109,6 +134,13 @@ const COLUMNAS_DOCUMENTO = `
           cancelacion_retryable,
           cancelacion_intentos,
           cancelacion_last_at,
+          inutilizacion_status,
+          inutilizacion_evento_id,
+          inutilizacion_motivo,
+          inutilizacion_rejection_code,
+          inutilizacion_rejection_message,
+          inutilizacion_intentos,
+          inutilizacion_last_at,
           carga_masiva_id,
           carga_numero_archivo,
           created_at`.trim();
@@ -145,10 +177,50 @@ export class PgFacturaRepository implements FacturaRepository {
     );
   }
 
+  /**
+   * SPEC_CORRECCION_INUTILIZACION_RECHAZADAS_v0.1, RN-A4: vinculos de correccion de un conjunto de
+   * facturas en una sola consulta. No va en `COLUMNAS_DOCUMENTO` porque esa proyeccion tambien
+   * se usa en los `returning`.
+   */
+  private async findVinculos(rows: FacturaRow[]): Promise<Map<string, Vinculos>> {
+    const facturas = rows.filter((row) => row.tipo === "FACTURA");
+    const vinculos = new Map<string, Vinculos>();
+    if (facturas.length === 0) {
+      return vinculos;
+    }
+    const ids = facturas.map((row) => row.id);
+    const padres = facturas.map((row) => row.documento_relacionado_id).filter((id): id is string => Boolean(id));
+    const result = await pool.query<VinculoRow>(
+      `
+        select h.documento_relacionado_id as documento_id, 'CORREGIDA_POR' as rol, h.id, h.numero_fiscal, h.estado
+        from facturas_operativas h
+        where h.documento_relacionado_id = any($1::uuid[])
+          and h.tipo = 'FACTURA'
+          and h.deleted_at is null
+        union all
+        select hijo.id as documento_id, 'CORRIGE_A' as rol, p.id, p.numero_fiscal, p.estado
+        from facturas_operativas hijo
+        join facturas_operativas p on p.id = hijo.documento_relacionado_id
+        where hijo.id = any($1::uuid[])
+          and hijo.tipo = 'FACTURA'
+          and p.id = any($2::uuid[])
+      `,
+      [ids, padres]
+    );
+    for (const row of result.rows) {
+      const actual = vinculos.get(row.documento_id) ?? { corrige_a: null, corregida_por: null };
+      const vinculo = { id: row.id, numero_fiscal: row.numero_fiscal, estado: row.estado };
+      if (row.rol === "CORRIGE_A") actual.corrige_a = vinculo;
+      else actual.corregida_por = vinculo;
+      vinculos.set(row.documento_id, actual);
+    }
+    return vinculos;
+  }
+
   /** Unico punto donde una fila de `facturas_operativas` se convierte en respuesta. */
   private async toResponse(row: FacturaRow, items: FacturaItemPreview[]): Promise<DocumentoResponse> {
-    const emisores = await this.findEmisores([row.usuario_id]);
-    return mapFacturaRow(row, items, row.usuario_id ? emisores.get(row.usuario_id) ?? null : null);
+    const [emisores, vinculos] = await Promise.all([this.findEmisores([row.usuario_id]), this.findVinculos([row])]);
+    return mapFacturaRow(row, items, row.usuario_id ? emisores.get(row.usuario_id) ?? null : null, vinculos.get(row.id));
   }
 
   async findById(input: { facturadorId: string; documentoId: string }): Promise<DocumentoResponse | null> {
@@ -324,13 +396,15 @@ export class PgFacturaRepository implements FacturaRepository {
 
     const itemsByFacturaId = await this.findItemsByFacturaIds(listResult.rows.map((row) => row.id));
     const emisores = await this.findEmisores(listResult.rows.map((row) => row.usuario_id));
+    const vinculos = await this.findVinculos(listResult.rows);
 
     return {
       items: listResult.rows.map((row) =>
         mapFacturaRow(
           row,
           itemsByFacturaId.get(row.id) ?? [],
-          row.usuario_id ? emisores.get(row.usuario_id) ?? null : null
+          row.usuario_id ? emisores.get(row.usuario_id) ?? null : null,
+          vinculos.get(row.id)
         )
       ),
       total: Number(countResult.rows[0]?.total ?? 0)
@@ -528,6 +602,10 @@ export class PgFacturaRepository implements FacturaRepository {
       return this.toResponse(factura, input.preview.items);
     } catch (error) {
       await client.query("rollback");
+      // SPEC_CORRECCION_INUTILIZACION_RECHAZADAS_v0.1, RN-A3: otra correccion gano la carrera.
+      if (isUniqueViolation(error) && (error as { constraint?: string }).constraint === "facturas_operativas_correccion_uidx") {
+        throw new HttpError(409, "CONFLICT", "Esta factura ya tiene una corrección emitida.", { reason: "CORRECCION_EXISTENTE" });
+      }
       if (isUniqueViolation(error) && input.idempotencyKey) {
         const existing = await this.findByIdempotencyKey({
           facturadorId: input.facturadorId,
@@ -565,10 +643,11 @@ export class PgFacturaRepository implements FacturaRepository {
             totals_snapshot,
             fiscal_request_snapshot,
             fiscal_response_snapshot,
-            email_estado
+            email_estado,
+            documento_relacionado_id
           )
           values (
-            $1, $2, $3, 'FACTURA', $4, 'EMITIENDO', $5, $6, $7::jsonb, $8::jsonb, $9::jsonb, '{}'::jsonb, $10
+            $1, $2, $3, 'FACTURA', $4, 'EMITIENDO', $5, $6, $7::jsonb, $8::jsonb, $9::jsonb, '{}'::jsonb, $10, $11
           )
           returning
             ${COLUMNAS_DOCUMENTO}
@@ -583,7 +662,8 @@ export class PgFacturaRepository implements FacturaRepository {
           JSON.stringify(input.input.cliente),
           JSON.stringify(input.preview.totals),
           JSON.stringify(input.fiscalRequest),
-          input.input.cliente.email?.trim() ? "DELEGATED" : null
+          input.input.cliente.email?.trim() ? "DELEGATED" : null,
+          input.documentoRelacionadoId ?? null
         ]
       );
 
@@ -1459,6 +1539,74 @@ export class PgFacturaRepository implements FacturaRepository {
     }
   }
 
+  async registrarInutilizacion(input: InutilizacionPersistInput): Promise<DocumentoResponse | null> {
+    const client = await pool.connect();
+    try {
+      await client.query("begin");
+      const updated = await client.query<FacturaRow>(
+        `
+          update facturas_operativas
+          set inutilizacion_status = $3,
+              inutilizacion_evento_id = $4,
+              inutilizacion_motivo = $5,
+              inutilizacion_rejection_code = $6,
+              inutilizacion_rejection_message = $7,
+              inutilizacion_intentos = inutilizacion_intentos + 1,
+              inutilizacion_last_at = now(),
+              inutilizacion_usuario_id = $8,
+              updated_at = now()
+          where facturador_id = $1
+            and id = $2
+            and deleted_at is null
+          returning
+            ${COLUMNAS_DOCUMENTO}
+        `,
+        [
+          input.facturadorId,
+          input.documentoId,
+          input.status,
+          input.eventoId,
+          input.motivo,
+          input.rejectionCode,
+          input.rejectionMessage,
+          input.usuarioId
+        ]
+      );
+      const factura = updated.rows[0];
+      if (!factura) {
+        await client.query("rollback");
+        return null;
+      }
+      await client.query(
+        `
+          insert into audit_events (tenant_id, facturador_id, usuario_id, entity_type, entity_id, event_type, metadata)
+          select tenant_id, facturador_id, $3, 'factura_operativa', id, 'FACTURA_NUMERO_INUTILIZADO', $4::jsonb
+          from facturas_operativas
+          where facturador_id = $1 and id = $2
+        `,
+        [
+          input.facturadorId,
+          input.documentoId,
+          input.usuarioId,
+          JSON.stringify({
+            numero: input.numero,
+            motivo: input.motivo,
+            status: input.status,
+            evento_id: input.eventoId,
+            rejection_code: input.rejectionCode
+          })
+        ]
+      );
+      await client.query("commit");
+      return this.toResponse(factura, await this.findItems(factura.id));
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
   async appendAuditEvent(input: {
     facturadorId: string;
     documentoId: string;
@@ -1681,10 +1829,26 @@ function mapCancelacion(row: FacturaRow): DocumentoResponse["cancelacion"] {
   };
 }
 
+function mapInutilizacion(row: FacturaRow): DocumentoResponse["inutilizacion"] {
+  if (!row.inutilizacion_status) {
+    return null;
+  }
+  return {
+    status: row.inutilizacion_status as DocumentoInutilizacionStatus,
+    evento_id: row.inutilizacion_evento_id ?? null,
+    motivo: row.inutilizacion_motivo ?? null,
+    rejection_code: row.inutilizacion_rejection_code ?? null,
+    rejection_message: row.inutilizacion_rejection_message ?? null,
+    intentos: row.inutilizacion_intentos ?? 0,
+    last_at: row.inutilizacion_last_at ? row.inutilizacion_last_at.toISOString() : null
+  };
+}
+
 function mapFacturaRow(
   row: FacturaRow,
   items: FacturaItemPreview[],
-  emisor: DocumentoEmisor | null
+  emisor: DocumentoEmisor | null,
+  vinculos?: Vinculos
 ): DocumentoResponse {
   const emailStatus = row.email_estado ?? "NOT_APPLICABLE";
   const cdc = row.cdc;
@@ -1717,6 +1881,9 @@ function mapFacturaRow(
     nce_motivo: row.nce_motivo,
     emitido_por: emisor,
     cancelacion: mapCancelacion(row),
+    inutilizacion: mapInutilizacion(row),
+    corrige_a: vinculos?.corrige_a ?? null,
+    corregida_por: vinculos?.corregida_por ?? null,
     carga: row.carga_masiva_id ? { id: row.carga_masiva_id, numero_archivo: row.carga_numero_archivo ?? null } : null,
     delivery: {
       public_url: null,

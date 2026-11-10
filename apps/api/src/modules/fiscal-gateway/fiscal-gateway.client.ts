@@ -13,6 +13,8 @@ import {
   type FiscalEmitNotaCreditoResponse,
   type FiscalArtifactResponse,
   type FiscalCancelFacturaRequest,
+  type FiscalInutilizarNumeracionRequest,
+  type FiscalInutilizarNumeracionResponse,
   type FiscalCancelFacturaResponse,
   type FiscalCancelRejection,
   type FiscalCancelStatus,
@@ -123,6 +125,9 @@ function escenarioMockNotaCredito(request: FiscalEmitNotaCreditoRequest): Fiscal
       return null;
   }
 }
+
+/** Numeros inutilizados por el mock en este proceso (clave: emisor, establecimiento, punto, tipo y numero). */
+const numerosInutilizadosMock = new Map<string, string>();
 
 export class MockFiscalGateway implements FiscalGateway {
   private readonly recibos = new Map<string, FiscalReciboResult>();
@@ -254,6 +259,27 @@ export class MockFiscalGateway implements FiscalGateway {
         status: "ACCEPTED"
       }
     };
+  }
+
+  /**
+   * SPEC_CORRECCION_INUTILIZACION_RECHAZADAS_v0.1. Motivo con `INUT-RECHAZO`: SIFEN rechaza el evento;
+   * un numero ya inutilizado responde `409 EVENT_ALREADY_EXISTS`, como FE.
+   */
+  async inutilizarNumeracion(request: FiscalInutilizarNumeracionRequest): Promise<FiscalInutilizarNumeracionResponse> {
+    const clave = [request.emisor_id, request.establecimiento, request.puntoExpedicion, request.tipoDocumento, request.desdeNumero].join(":");
+    const existente = numerosInutilizadosMock.get(clave);
+    if (existente) {
+      throw new FiscalGatewayError("UPSTREAM_ERROR", "Backend fiscal rechazo la inutilizacion.", {
+        status: 409,
+        body: { error: "EVENT_ALREADY_EXISTS", message: "Ya existe un evento de inutilización para este rango", details: { event_id: existente, status: "ACCEPTED" } }
+      });
+    }
+    const eventId = `mock-inut-${crypto.createHash("sha256").update(`${clave}:${request.motivo}`).digest("hex").slice(0, 12)}`;
+    if (request.motivo.includes("INUT-RECHAZO")) {
+      return { event_id: eventId, status: "REJECTED", sifen: { mode: "mock", dCodRes: "4003", dMsgRes: "Rango no habilitado (mock)" } };
+    }
+    numerosInutilizadosMock.set(clave, eventId);
+    return { event_id: eventId, status: "VOIDED", sifen: { mode: "mock", dCodRes: "0600", dMsgRes: "Evento registrado correctamente" } };
   }
 
   async getXml(documentUuid: string): Promise<FiscalArtifactResponse> {
@@ -860,6 +886,29 @@ export class RealFiscalGateway implements FiscalGateway {
     }
 
     return mapFiscalDocumentoCanonicoResponse(body);
+  }
+
+  /** SPEC_CORRECCION_INUTILIZACION_RECHAZADAS_v0.1, D-1: ruta de FE con la clave compartida. */
+  async inutilizarNumeracion(request: FiscalInutilizarNumeracionRequest): Promise<FiscalInutilizarNumeracionResponse> {
+    const response = await this.fetchWithTimeout(`${this.config.baseUrl}/evento/inutilizacionnumfactura`, {
+      method: "POST",
+      headers: { ...this.buildHeaders(), "content-type": "application/json" },
+      body: JSON.stringify(request)
+    });
+    const body = await readJson(response);
+    if (!response.ok) {
+      throw new FiscalGatewayError(
+        response.status === 408 || response.status === 504 ? "TIMEOUT" : "UPSTREAM_ERROR",
+        "Backend fiscal rechazo la inutilizacion.",
+        { status: response.status, body }
+      );
+    }
+    const data = body && typeof body === "object" ? (body as Record<string, unknown>) : {};
+    return {
+      event_id: data.event_id === undefined || data.event_id === null ? null : String(data.event_id),
+      status: typeof data.status === "string" ? data.status : "UNKNOWN",
+      sifen: data.sifen ?? null
+    };
   }
 
   async cancelFactura(request: FiscalCancelFacturaRequest): Promise<FiscalCancelFacturaResponse> {

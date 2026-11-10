@@ -5,6 +5,13 @@ import { logger } from "../../shared/logging/logger";
 import { deriveAccion, esNotaTrabada, puedeReintentarEmision } from "./facturas.accion";
 import { clasificarRespuestaNotaCredito, type ClasificacionNotaCredito } from "./nota-credito.clasificacion";
 import { notifyAccionRequerida } from "./facturas.notificaciones";
+import {
+  buscarCodigoSifen,
+  leerNumeracionDelCdc,
+  mismoEmisor,
+  numeroComparable,
+  puedeInutilizar
+} from "./facturas.inutilizacion";
 import type { ClienteRepository, ClienteResponse } from "../clientes/clientes.types";
 import type { OperationalContextRepository, OperationalContextResponse } from "../context/context.types";
 import {
@@ -141,7 +148,13 @@ export async function listDocumentos(
 
 function withAccion(documento: DocumentoResponse): DocumentoResponse {
   const { accion, accion_detalle } = deriveAccion(documento);
-  return { ...documento, accion, accion_detalle, puede_reintentar_emision: puedeReintentarEmision(documento) };
+  return {
+    ...documento,
+    accion,
+    accion_detalle,
+    puede_reintentar_emision: puedeReintentarEmision(documento),
+    puede_inutilizar: puedeInutilizar(documento)
+  };
 }
 
 export async function listNotaCreditoCandidates(
@@ -1347,7 +1360,13 @@ export async function enqueueFacturaEmission(
   context: OperationalContextResponse,
   input: FacturaPreviewInput,
   repository: FacturaRepository,
-  options: { idempotencyKey?: string; clienteRepository?: ClienteRepository; contextRepository?: OperationalContextRepository } = {}
+  options: {
+    idempotencyKey?: string;
+    clienteRepository?: ClienteRepository;
+    contextRepository?: OperationalContextRepository;
+    /** SPEC_CORRECCION_INUTILIZACION_RECHAZADAS_v0.1, RN-A1. */
+    corrigeDocumentoId?: string | null;
+  } = {}
 ): Promise<DocumentoResponse> {
   if (options.idempotencyKey) {
     const existing = await repository.findByIdempotencyKey({
@@ -1371,6 +1390,10 @@ export async function enqueueFacturaEmission(
     );
   }
 
+  const documentoRelacionadoId = options.corrigeDocumentoId
+    ? await validarCorreccion(context, options.corrigeDocumentoId, repository)
+    : null;
+
   const resolvedInput = await resolveFacturaInputCliente(context, input, options.clienteRepository);
   const preview = previewFactura(context, resolvedInput);
   const externalRef = buildExternalRef(context, options.idempotencyKey);
@@ -1384,12 +1407,144 @@ export async function enqueueFacturaEmission(
     idempotencyKey: options.idempotencyKey,
     input: resolvedInput,
     preview,
-    fiscalRequest
+    fiscalRequest,
+    documentoRelacionadoId
   });
 
   await persistTipoTransaccionDefault(context, resolvedInput.tipo_transaccion, options.contextRepository);
 
   return withAccion(created);
+}
+
+/** SPEC_CORRECCION_INUTILIZACION_RECHAZADAS_v0.1, RN-A2: solo una factura rechazada o con error, sin correccion. */
+async function validarCorreccion(
+  context: OperationalContextResponse,
+  documentoId: string,
+  repository: FacturaRepository
+): Promise<string> {
+  const original = await repository.findById({ facturadorId: context.facturador.id, documentoId });
+  if (original?.corregida_por) {
+    throw new HttpError(
+      409,
+      "CONFLICT",
+      `Esta factura ya se corrigió con la factura ${original.corregida_por.numero_fiscal ?? "nueva"}.`,
+      { reason: "CORRECCION_EXISTENTE" }
+    );
+  }
+  if (!original || original.tipo !== "FACTURA" || (original.estado !== "RECHAZADA" && original.estado !== "ERROR_OPERATIVO")) {
+    throw new HttpError(409, "CONFLICT", "Solo se corrige una factura rechazada o con error.", {
+      reason: "CORRECCION_NO_ADMITIDA"
+    });
+  }
+  return original.id;
+}
+
+/** Mensajes simples para los 409 de `/v1/evento/inutilizacionnumfactura` (RN-B5). */
+const MENSAJES_INUTILIZACION: Record<string, string> = {
+  EVENT_IN_PROGRESS: "Ya hay una inutilización de este número en curso. Espere unos minutos y vuelva a revisar.",
+  RANGE_ALREADY_USED: "SIFEN tiene un documento aprobado con este número: no se puede inutilizar.",
+  RANGE_POSSIBLY_CONSUMED:
+    "El servicio fiscal todavía no confirmó el rechazo de este número. Verifique el estado fiscal y vuelva a intentar."
+};
+
+/**
+ * SPEC_CORRECCION_INUTILIZACION_RECHAZADAS_v0.1, fase B. Inutiliza el numero de una factura rechazada
+ * con la ruta de FE de clave compartida (D-1): emisor, establecimiento, punto y numero salen de la
+ * factura guardada; del operador solo se toma el motivo (RN-B2).
+ */
+export async function inutilizarNumeroFactura(
+  context: OperationalContextResponse,
+  documentoId: string,
+  input: { motivo: string },
+  repository: FacturaRepository,
+  gateway: FiscalGateway
+): Promise<DocumentoResponse> {
+  const documento = await getDocumentoById(context, documentoId, repository);
+  if (!puedeInutilizar(documento)) {
+    throw new HttpError(
+      409,
+      "CONFLICT",
+      documento.inutilizacion?.status === "ACCEPTED"
+        ? "El número de esta factura ya está inutilizado."
+        : "Solo se inutiliza el número de una factura rechazada por SIFEN.",
+      { reason: "INUTILIZACION_NO_ADMITIDA" }
+    );
+  }
+  const numeracion = leerNumeracionDelCdc(documento.cdc);
+  const numero = numeroComparable(documento.numero_fiscal);
+  if (!numeracion || numeracion.tipo !== "01" || !mismoEmisor(context.facturador.emisor_id, numeracion) || numeracion.numero !== numero) {
+    throw new HttpError(409, "CONFLICT", "No se pudo identificar el número fiscal de esta factura. Contacte a soporte.", {
+      reason: "NUMERACION_NO_IDENTIFICADA"
+    });
+  }
+
+  const registrar = async (
+    status: "ACCEPTED" | "REJECTED" | "FAILED",
+    eventoId: string | null,
+    rejection: { code: string | null; message: string | null } = { code: null, message: null }
+  ): Promise<DocumentoResponse> => {
+    const actualizado = await repository.registrarInutilizacion({
+      facturadorId: context.facturador.id,
+      documentoId: documento.id,
+      usuarioId: context.user.id,
+      status,
+      eventoId,
+      motivo: input.motivo,
+      numero: `${numeracion.establecimiento}-${numeracion.punto}-${numeracion.numero}`,
+      rejectionCode: rejection.code,
+      rejectionMessage: rejection.message
+    });
+    if (!actualizado) {
+      throw new HttpError(404, "NOT_FOUND", "Documento no encontrado.");
+    }
+    return withAccion(actualizado);
+  };
+
+  let respuesta;
+  try {
+    respuesta = await gateway.inutilizarNumeracion({
+      emisor_id: context.facturador.emisor_id,
+      establecimiento: numeracion.establecimiento,
+      puntoExpedicion: numeracion.punto,
+      desdeNumero: numeracion.numero,
+      hastaNumero: numeracion.numero,
+      motivo: input.motivo,
+      tipoDocumento: "FE"
+    });
+  } catch (error) {
+    if (!(error instanceof FiscalGatewayError)) {
+      throw error;
+    }
+    const details = (error.details ?? {}) as { status?: number; body?: Record<string, unknown> | null };
+    const body = details.body ?? {};
+    const feError = typeof body.error === "string" ? body.error : null;
+    if (details.status === 409 && feError === "EVENT_ALREADY_EXISTS") {
+      const feDetails = (body.details ?? {}) as Record<string, unknown>;
+      const eventoId = feDetails.event_id === undefined || feDetails.event_id === null ? null : String(feDetails.event_id);
+      return registrar("ACCEPTED", eventoId);
+    }
+    if (details.status === 409 || details.status === 422) {
+      throw new HttpError(
+        409,
+        "CONFLICT",
+        (feError ? MENSAJES_INUTILIZACION[feError] : undefined) ??
+          (typeof body.message === "string" ? body.message : "El servicio fiscal no admitió la inutilización."),
+        { reason: "INUTILIZACION_RECHAZADA_POR_FE", fe_error: feError }
+      );
+    }
+    await registrar("FAILED", null);
+    throw new HttpError(
+      error.code === "TIMEOUT" ? 504 : 502,
+      "INTERNAL_ERROR",
+      "El servicio fiscal no respondió la inutilización. Puede volver a intentar.",
+      { gateway_code: error.code }
+    );
+  }
+
+  const aceptada = respuesta.status === "VOIDED" || respuesta.status === "ACCEPTED";
+  return aceptada
+    ? registrar("ACCEPTED", respuesta.event_id)
+    : registrar("REJECTED", respuesta.event_id, buscarCodigoSifen(respuesta.sifen));
 }
 
 async function persistTipoTransaccionDefault(

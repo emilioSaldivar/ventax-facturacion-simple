@@ -233,6 +233,10 @@ class FakeFacturaRepository implements FacturaRepository {
     };
   }
 
+  async registrarInutilizacion(): Promise<DocumentoResponse | null> {
+    return null;
+  }
+
   async createQueuedEmission(input: FacturaQueuedPersistInput): Promise<DocumentoResponse> {
     this.lastQueuedInput = input;
     return {
@@ -588,6 +592,10 @@ class FakeFiscalGateway implements FiscalGateway {
     }
     const status = STATUS_CANONICO_POR_ESTADO[this.refreshResponse.estado] ?? null;
     return { status, estado: this.refreshResponse.estado, current_cdc: this.refreshResponse.current_cdc, nro_factura: null, raw: { document_uuid: documentUuid, status } };
+  }
+
+  async inutilizarNumeracion() {
+    return { event_id: "fake-inut", status: "VOIDED", sifen: null };
   }
 
   async cancelFactura(request: FiscalCancelFacturaRequest): Promise<FiscalCancelFacturaResponse> {

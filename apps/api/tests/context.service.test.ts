@@ -89,6 +89,10 @@ class FakeFiscalGateway implements FiscalGateway {
     throw new Error("not needed");
   }
 
+  async inutilizarNumeracion() {
+    return { event_id: "fake-inut", status: "VOIDED", sifen: null };
+  }
+
   async cancelFactura() {
     throw new Error("not needed");
   }

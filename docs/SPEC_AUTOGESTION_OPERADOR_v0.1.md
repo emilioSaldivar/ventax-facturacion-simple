@@ -113,6 +113,7 @@ Visto en el ensayo local. Nada de esto se implementa en la segunda entrega; se r
 
 - Hoy "Corregir y emitir de nuevo" crea una factura nueva y la rechazada queda sin atender: su numero queda salteado hasta que soporte de FE lo inutilice (D-11 de la segunda entrega). FS lo avisa (FS-36).
 - Minimo pedido por el usuario para despues del despliegue: que un usuario de FS pueda inutilizar el numero de la rechazada y luego emitir la factura nueva, si no puede corregirla. FE expone `POST /v1/evento/inutilizacionnumfactura` con la clave compartida.
+- **Implementado (2026-11-10)** en `SPEC_CORRECCION_INUTILIZACION_RECHAZADAS_v0.1`: el operador inutiliza el numero desde el detalle de la factura, y la correccion queda vinculada a la rechazada.
 - Despues, la autogestion completa de la seccion 0: corregir con el mismo numero dentro del plazo.
 
 ### 9.3 Interfaz de escritorio

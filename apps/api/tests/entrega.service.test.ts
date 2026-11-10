@@ -84,6 +84,10 @@ class FakeFacturaRepository implements FacturaRepository {
     return buildDocumento();
   }
 
+  async registrarInutilizacion(): Promise<DocumentoResponse | null> {
+    return null;
+  }
+
   async createQueuedEmission(_input: FacturaQueuedPersistInput): Promise<DocumentoResponse> {
     return buildDocumento();
   }
@@ -146,6 +150,10 @@ class FakeFiscalGateway implements FiscalGateway {
 
   async refreshFacturaStatus() {
     throw new Error("not needed");
+  }
+
+  async inutilizarNumeracion() {
+    return { event_id: "fake-inut", status: "VOIDED", sifen: null };
   }
 
   async cancelFactura() {
