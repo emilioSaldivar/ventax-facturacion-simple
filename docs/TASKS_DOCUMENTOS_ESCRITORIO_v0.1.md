@@ -7,20 +7,37 @@
 
 ## Estado
 
-Fase A en implementacion desde el 2026-11-09, autorizada por el usuario. Fase B espera los contratos de FE (VE-F01, VE-F04).
+**Fase A implementada y validada el 2026-11-09** en el stack local (FS `789a588`, FE `segel-rc4.13`), sin despliegue. Fase B espera el contrato de la nota de remision de FE (VE-F04); el de tipos ya existe (catalogo `CARGA_TIPO_DOCUMENTO`, FE `segel-rc4.18`).
 
 ## Matriz
 
 | ID | Fase | Tarea | Validacion | Estado |
 |---|---|---|---|---|
-| DES-001 | A | `useEsEscritorio` y menu lateral (PLAN 1 y 2) | `typecheck`; Playwright 1280 y 390 | TODO |
-| DES-002 | A | Pestañas con "Próximamente" (PLAN 3) | Playwright CA-04 | TODO |
-| DES-003 | A | Tabla de documentos y menu de fila compartido (PLAN 3) | Playwright CA-01 y CA-03 | TODO |
-| DES-004 | A | Filtros en fila y paginacion (PLAN 3) | Playwright CA-05 | TODO |
-| DES-005 | A | Helper de navegacion en los guiones de Playwright y repeticion de los E2E (PLAN 2 y 5) | CA-06 | TODO |
-| DES-006 | A | Repaso de SPEC, PLAN, TASKS; BACKLOG FS-37 | Lectura cruzada | TODO |
+| DES-001 | A | `useEsEscritorio` y menu lateral (PLAN 1 y 2) | `typecheck`; Playwright 1280 y 390 | DONE: `d1b3afa`; E-1 |
+| DES-002 | A | Pestañas con "Próximamente" (PLAN 3) | Playwright CA-04 | DONE: `d1b3afa` y `74a8132` (pestañas que pasan de linea en celular); E-1 |
+| DES-003 | A | Tabla de documentos y menu de fila compartido (PLAN 3) | Playwright CA-01 y CA-03 | DONE: `d1b3afa` y `789a588` (RUC y numero sin cortar); E-1 |
+| DES-004 | A | Filtros en fila y paginacion (PLAN 3) | Playwright CA-05 | DONE: `d1b3afa` y `789a588`; E-1 |
+| DES-005 | A | Helper de navegacion en los guiones de Playwright y repeticion de los E2E (PLAN 2 y 5) | CA-06 | DONE: `scripts/lib/navegacion.cjs` en los cuatro guiones de `scripts/segel-fs`; E-2 |
+| DES-006 | A | Repaso de SPEC, PLAN, TASKS; BACKLOG FS-37 | Lectura cruzada | DONE: SPEC, PLAN y BACKLOG FS-37 y FS-50 repasados |
 | DES-101 | B | Tipos nuevos en FS e incorporacion desde la carga | Espera contratos de FE | BLOQUEADA |
 
 ## Evidencia
 
-Se completa al cerrar cada tarea.
+### E-1. Documentos en escritorio (2026-11-09)
+
+`scripts/segel-fs/playwright-documentos-escritorio.cjs`, solo lectura, contra el stack local: **23/23**. Capturas en `test-results/documentos-escritorio/`.
+
+| Escenario | Viewport | Resultado |
+|---|---|---|
+| Menu lateral visible, sin boton de menu, Documentos marcado | 1440 y 1280 | OK |
+| CA-01: tabla con Fecha, Numero, Cliente, RUC o CI, Condicion, Estado, CDC, Moneda y Total; sin tarjetas; sin desplazamiento horizontal | 1440 y 1280 | OK |
+| CA-04: Notas de debito, Notas de remision y Autofacturas "Próximamente", deshabilitadas | 1440 y 1280 | OK |
+| CA-05: filtros a la vista; paginacion avanza ("Página 2 de 19 · 565 documentos") | 1440 y 1280 | OK |
+| CA-03: menu de la fila con "Ver detalle"; clic en la fila abre la ficha | 1440 y 1280 | OK |
+| CA-02: boton de menu, tarjetas y sin tabla, sin desplazamiento horizontal | 390 | OK; la primera corrida fallo por las seis pestañas en una linea, corregido en `74a8132` |
+
+Ajustes por revision de las capturas: el RUC y el numero no se cortan en dos lineas, y "Mas filtros" no se muestra en escritorio porque los filtros ya estan a la vista (`789a588`).
+
+### E-2. Recorridos existentes con el menu lateral (CA-06)
+
+`playwright-atencion-comprobantes.cjs` con el helper de navegacion: **21/21** (1010565 rechazado con `1306` e inutilizado; carga invalida cerrada sola). Los guiones anteriores fuera de `scripts/segel-fs` siguen usando el boton de menu: corren en 390 px o hay que pasarles el helper si se repiten en escritorio.
