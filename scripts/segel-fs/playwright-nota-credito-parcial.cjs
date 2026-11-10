@@ -130,6 +130,8 @@ async function notaParcial(page, cantidades, etiqueta) {
 
     // CA-03: pedir mas que el saldo no se envia.
     await fichaAprobada(page, "USD 400,49");
+    // La seccion de lo acreditado llega despues de abrir la ficha (GET /nota-credito/saldo).
+    await page.locator(".nc-acreditado").waitFor({ timeout: 15000 }).catch(() => {});
     const ficha = (await page.locator(".document-detail").innerText()).replace(/\s+/g, " ");
     check("CA-01 1440: la ficha de la factura muestra lo acreditado y el saldo", ficha.includes("Acreditado por notas de crédito") && ficha.includes("1 de 2"), ficha.slice(0, 300));
     const boton = page.getByRole("button", { name: /Crear nota de credito/ }).first();
@@ -155,8 +157,11 @@ async function notaParcial(page, cantidades, etiqueta) {
     check("CA-02 1440: sin saldo, la ventana no ofrece ni total ni parcial", sinSaldo.includes("acreditada por completo"), sinSaldo.slice(0, 200));
     await page.getByRole("button", { name: "Cancelar" }).click();
 
-    // Las dos notas figuran en USD.
+    // Las dos notas figuran en USD. La ficha abierta tapa las pestañas: se recarga.
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await esperarSesion(page);
     await abrirVista(page, "Documentos");
+    await page.locator("table.documents-tabla").waitFor({ timeout: 20000 });
     await page.locator('.filter-tabs button:has-text("Notas de credito")').first().click();
     await page.waitForTimeout(2500);
     const notas = (await page.locator("table.documents-tabla tbody tr").allInnerTexts()).map((t) => t.replace(/\s+/g, " "));
