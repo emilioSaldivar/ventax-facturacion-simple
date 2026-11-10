@@ -4926,7 +4926,7 @@ function InvoiceEditor({
         line.descripcion.trim() &&
         Number.isInteger(Number(line.cantidad)) &&
         Number(line.cantidad) > 0 &&
-        Number.isInteger(Number(line.precio_unitario)) &&
+        precioValido(Number(line.precio_unitario), moneda) &&
         Number(line.precio_unitario) > 0
     )
     .forEach((line, index) => {
@@ -5425,12 +5425,15 @@ function InvoiceEditor({
                 <button
                   className="primary-action save-catalog"
                   disabled={
+                    // SPEC_MONEDA_EXTRANJERA_v0.1: el catalogo esta en guaranies; en otra moneda no se guarda.
+                    enMonedaExtranjera ||
                     catalogSaving[activeLine.id] ||
                     !activeLine.descripcion.trim() ||
                     !Number.isInteger(Number(activeLine.precio_unitario)) ||
                     Number(activeLine.precio_unitario) <= 0
                   }
                   onClick={() => void confirmLine(activeLine, true)}
+                  title={enMonedaExtranjera ? "El catálogo está en guaraníes" : undefined}
                   type="button"
                 >
                   {catalogSaving[activeLine.id] ? "Guardando..." : "AGREGAR Y GUARDAR"}
@@ -5440,7 +5443,7 @@ function InvoiceEditor({
                   disabled={
                     catalogSaving[activeLine.id] ||
                     !activeLine.descripcion.trim() ||
-                    !Number.isInteger(Number(activeLine.precio_unitario)) ||
+                    !precioValido(Number(activeLine.precio_unitario), moneda) ||
                     Number(activeLine.precio_unitario) <= 0
                   }
                   onClick={() => void confirmLine(activeLine, false)}
