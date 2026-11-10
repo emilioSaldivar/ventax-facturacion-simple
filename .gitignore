@@ -1,4 +1,5 @@
-node_modules/
+# Tambien enlaces simbolicos (worktrees con node_modules enlazado): sin barra final.
+node_modules
 dist/
 coverage/
 backups/
