@@ -96,6 +96,7 @@ Precisiones de FE del refinamiento final (seccion 35 del pedido, `dac1469`):
 
 - **RN-01.** Sin moneda elegida, todo como hoy (guaranies enteros, sin `moneda` en el pedido).
 - **RN-02.** Con moneda extranjera, el tipo de cambio es obligatorio, mayor que cero y con hasta 4 decimales; los precios mayores que cero con hasta 2 decimales.
+- **RN-02a (textos de pantalla, pedido del usuario 2026-11-10).** El tipo de cambio se rotula "Tipo de cambio: guaranies por 1 USD", con el ejemplo "Ej.: 7.350,50 Gs." y la ayuda "Cuantos guaranies vale 1 dolar. Obligatorio al facturar en USD. Puede tener hasta 4 decimales." El precio se rotula "Precio (USD)" con la ayuda "En dolares, con hasta 2 decimales (centavos)." Motivo: el texto anterior ("Obligatorio en USD: ... hasta 4 decimales") se leia como si el tipo de cambio fuera en dolares o como si los precios admitieran 4 decimales.
 - **RN-03.** El calculo de FS es de presentacion: subtotal = cantidad x precio, redondeado a 2 decimales; base e IVA por la tasa del articulo, redondeados a 2 decimales. Si difiere en centavos del KUDE, manda el KUDE.
 - **RN-04.** Formato de montos: guaranies "Gs. 1.234.567"; otra moneda "USD 1.234,50".
 - **RN-05.** RN de nota de credito y recibo segun el punto 6 y 7 del alcance.

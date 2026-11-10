@@ -5432,15 +5432,18 @@ function InvoiceEditor({
             </label>
             {enMonedaExtranjera ? (
               <label className="credit-term-field">
-                Tipo de cambio (Gs. por {moneda})
+                Tipo de cambio: guaraníes por 1 {moneda}
                 <input
                   aria-label="Tipo de cambio"
                   inputMode="decimal"
                   onChange={(event) => setTipoCambio(event.target.value.replace(/[^\d.,]/g, "").replace(",", "."))}
-                  placeholder="Ej.: 7350,50"
+                  placeholder="Ej.: 7.350,50 Gs."
                   value={tipoCambio.replace(".", ",")}
                 />
-                {!tipoCambioValido ? <small className="field-hint">Obligatorio en {moneda}: mayor que cero, hasta 4 decimales.</small> : null}
+                {/* SPEC_MONEDA_EXTRANJERA_v0.1, RN-02: el tipo de cambio va en guaranies (hasta 4 decimales, MT150 D018); los precios, en la moneda con 2. */}
+                <small className="field-hint">
+                  Cuántos guaraníes vale 1 {moneda === "USD" ? "dólar" : moneda}. {tipoCambioValido ? "" : `Obligatorio al facturar en ${moneda}. `}Puede tener hasta 4 decimales.
+                </small>
               </label>
             ) : null}
             {lineasInvalidasIds.size > 0 ? (
@@ -5717,7 +5720,7 @@ function InvoiceEditor({
                 </label>
 
                 <label>
-                  Precio
+                  Precio{enMonedaExtranjera ? ` (${moneda})` : ""}
                   <input
                     inputMode="decimal"
                     min="0"
@@ -5731,6 +5734,7 @@ function InvoiceEditor({
                     placeholder={enMonedaExtranjera ? "0,00" : "0"}
                     value={enMonedaExtranjera ? activeLine.precio_unitario.replace(".", ",") : formatIntegerInput(activeLine.precio_unitario)}
                   />
+                  {enMonedaExtranjera ? <small className="field-hint">En {moneda === "USD" ? "dólares" : moneda}, con hasta 2 decimales (centavos).</small> : null}
                 </label>
               </div>
 
