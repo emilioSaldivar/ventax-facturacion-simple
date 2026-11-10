@@ -39,20 +39,41 @@
 |---|---|---|
 | D-1 | Nota de credito en moneda extranjera | El usuario pidio a FE completarla (2026-11-10). **FE `segel-rc4.27`:** la nota total por referencia toma moneda y tipo de cambio de la factura; la nota con lineas acepta `moneda` y `tipoCambio`; FE compara la moneda antes de numerar (`422 INVALID_REFERENCED_DOCUMENT`). En FS: la NC de una factura en moneda extranjera va siempre por referencia y guarda la moneda de su factura. Con FE anterior a `rc4.27` la NC queda bloqueada |
 | D-2 | Recibo en moneda extranjera | **FE `segel-rc4.27`** imprime los centavos y el nombre de la moneda ("CIENTO CINCUENTA DÓLARES ESTADOUNIDENSES CON 50/100"). En FS: el recibo de una factura en moneda extranjera sale en esa moneda (codigo ISO en mayusculas) |
-| D-3 | Despliegue | El cliente en dolares necesita FE `segel-rc4.25` o posterior en produccion (hoy `segel-rc4.6.1`); decision del usuario |
+| D-3 | Despliegue | El cliente en dolares necesita FE `segel-rc4.27` o posterior en produccion (candidata `segel-rc4.30`; hoy `segel-rc4.6.1`) y FS con `FE_NC_MONEDA_EXTRANJERA=true`; decision del usuario |
+| D-4 | Monedas del selector | El usuario pidio "PYG / USD". Propuesta: el selector ofrece Guarani y Dolar; Euro y Real quedan en el codigo (`monedasFactura`) pero fuera del selector hasta que un cliente los necesite. **Pendiente de confirmar** |
+| D-5 | Que muestra la pantalla | Toda cifra de la factura (precio, subtotal, IVA, totales, pago, lista, tabla, ficha, nota y recibo) se muestra en la moneda del documento con su formato (RN-04); el guarani no cambia. Confirmado por el usuario el 2026-11-10 ("ver las monedas en base a lo que se marca") |
 
-## Alineacion con FE `segel-rc4.29` (entrega de FE, 2026-11-10)
+## Alineacion con los ultimos contratos de FE (`segel-rc4.26` a `segel-rc4.30`; entrega de FE del 2026-11-10)
 
-Fuente: repositorio `facturacion-electronica`, rama `docs/programa-cobertura-mt150` (`8d9405b`), `docs/PEDIDO_FACTURACION_SIMPLE_COBERTURA_MT150_v0.1.md` seccion 33. Pedido del usuario: alinear FS a esa version, pantallas con selector PYG / USD y pruebas en test de todos los casos. El contrato de FE no cambia respecto de `rc4.27`; `rc4.28` y `rc4.29` cambian solo el KUDE y el backoffice de FE.
+Fuente: repositorio `facturacion-electronica`, rama `docs/programa-cobertura-mt150` (`8d9405b`), `docs/PEDIDO_FACTURACION_SIMPLE_COBERTURA_MT150_v0.1.md` seccion 33, y `docs/VERIFICACION_PRODUCCION_MONEDA_EXTRANJERA_v0.1.md` (rama `branding/segel-staging`). Pedido del usuario: alinear FS a esa version, pantallas que muestren los montos segun la moneda elegida, y pruebas en SIFEN test de todos los casos. **Candidata de despliegue de FE: `segel-rc4.30`** (rc4.29 mas la firma del PDF del recibo con certificados de cadena larga, como el de RAJ).
 
-Lo que FS ya cumple de la recomendacion de FE (33.3): selector de moneda con tipo de cambio obligatorio de hasta 4 decimales; precios con hasta 2 decimales fuera de PYG y enteros en PYG; pago contado igual al total en la moneda; NC por referencia (`/nota-credito/total`); recibo con `moneda` en mayusculas y centavos.
+| Tag de FE | Que trae | Que hace FS con eso | Estado en FS |
+|---|---|---|---|
+| `rc4.26` | `POST /v1/nota-debito` (permiso `NDE_EMIT`) | Nada en esta cadena: la nota de debito es alcance aparte (BACKLOG) | Fuera de alcance |
+| `rc4.27` | NC en la moneda de la factura (`/nota-credito/total` la toma sola); `422 INVALID_REFERENCED_DOCUMENT` si la moneda difiere; recibo con centavos y nombre de la moneda; `GET /v1/documentos/{uuid}/totales` | NC por referencia detras de `FE_NC_MONEDA_EXTRANJERA` (D-1); recibo en la moneda de la factura (D-2); totales oficiales (A-2) | D-1 y D-2 hechos y probados; A-2 pendiente |
+| `rc4.28` | KUDE propio de factura y NC (CDC completo, valor del tipo de cambio, 2 decimales, total en Gs y en letras); logo, "sin logo" y nombre comercial por perfil de emision | Solo PDF. FS ya manda `emission_profile_code` del contexto del operador: no cambia nada; se verifica en la matriz (caso 8) | Sin cambio en FS |
+| `rc4.29` | Backoffice de FE: nombre comercial y logo por perfil | Nada | Sin cambio en FS |
+| `rc4.30` | Firma del PDF del recibo con certificados de cadena larga | Nada; habilita el caso 6 con RAJ | Sin cambio en FS |
+
+Reglas de FE para montos (33.2) y como las cubre FS:
+
+| Dato | FE | FS hoy | Falta |
+|---|---|---|---|
+| Precio unitario | PYG: entero recomendado; USD: hasta 2 decimales, 422 si mas; FE no redondea | PYG entero, USD hasta 2 decimales, en pantalla y en la API | Nada |
+| Pago contado | Igual al total, en la moneda | Igual al total de la vista previa | Nada |
+| `tipoCambio` | Obligatorio fuera de PYG, hasta 4 decimales; no va en PYG | Igual | Nada |
+| Cantidad | Hasta 4 decimales (MT150 E711); FE no la valida | Solo enteros desde 1 | **A-1** |
+| Totales, IVA, redondeo, total en Gs | Los calcula FE | FS calcula una vista previa y la guarda como total del documento | **A-2** |
+| Descuentos y anticipos | PYG enteros; USD 2 decimales | La factura manual de FS no los tiene | Alcance nuevo (ver editor PC, D-2 de esa cadena) |
 
 Lo que falta en FS:
 
-- **A-1. Cantidad con hasta 4 decimales** (MT150 E711). FE no la valida; la pantalla y la API de FS si. Hoy FS acepta solo enteros desde 1.
-- **A-2. Totales oficiales de FE.** Con la factura o nota aprobada, FS consulta `GET /v1/documentos/{uuid}/totales` y guarda esos totales en el documento; las pantallas muestran los de FE. El calculo de FS queda solo para la vista previa. En guaranies el total de FE puede diferir de la suma simple por el redondeo de SIFEN: vale el de FE.
+- **A-1. Cantidad con hasta 4 decimales**, en pantalla y en la API, en cualquier moneda.
+- **A-2. Totales oficiales de FE.** Con la factura o nota aprobada, FS consulta `GET /v1/documentos/{uuid}/totales` y guarda esos totales; las pantallas muestran los de FE. El calculo de FS queda solo para la vista previa. En guaranies el total de FE puede diferir de la suma simple por el redondeo de SIFEN: vale el de FE.
 
-Sin cambio en FS: descuentos y anticipos (la factura manual de FS no los tiene); NC parcial con lineas y credito con cuotas (alcance nuevo, decide el usuario).
+Sin cambio en FS: NC parcial con lineas y credito con cuotas (FE los soporta y los probo con RAJ; en FS son alcance nuevo, decide el usuario).
+
+**Sobre la configuracion por cliente (pregunta del usuario, 2026-11-10):** FS no agrega ninguna variable de entorno por cliente. Un cliente nuevo entra con el import de su export de configuracion de FE (tenant, facturador, puntos, perfiles de emision y su clave de consumidor, que queda en la base). El `.env` de FS es uno por instancia y solo tiene lo de la instancia: base de datos, URL de FE, clave compartida de FE para consultas de estado y banderas. El archivo `.env.raj` que aparece en las pruebas es el `.env` de un stack FS local y descartable (`raj-fs`), levantado solo porque FS apunta a un unico FE por instancia y el stack de ensayo ya apunta a `fe-segel`; en produccion RAJ se importa en `segel-fs` como un facturador mas.
 
 ## Fuera de alcance
 
@@ -69,6 +90,7 @@ Sin cambio en FS: descuentos y anticipos (la factura manual de FS no los tiene);
 - **RN-05.** RN de nota de credito y recibo segun el punto 6 y 7 del alcance.
 - **RN-06.** Cantidad mayor que cero con hasta 4 decimales, en cualquier moneda (A-1). El subtotal de la vista previa se redondea a la precision de la moneda.
 - **RN-07.** Documento aprobado: FS guarda los totales de `GET /totales` (A-2). Si la consulta falla, conserva los de la vista previa y reintenta en la siguiente verificacion; nunca bloquea la emision ni el estado.
+- **RN-08.** Cambiar la moneda en el editor cambia de inmediato el formato de todas las cifras y la precision admitida en precio y cantidad. No convierte montos: si hay lineas cargadas, el editor avisa y marca las que dejan de ser validas (por ejemplo, precio con decimales al volver a PYG); no se puede emitir hasta corregirlas. El tipo de cambio se vacia al volver a PYG.
 
 ## Criterios de aceptacion
 
@@ -82,3 +104,4 @@ Sin cambio en FS: descuentos y anticipos (la factura manual de FS no los tiene);
 - **CA-08.** Una factura con cantidad 1,5 se emite y se aprueba; con 5 decimales la pantalla no deja agregar la linea y la API responde 400.
 - **CA-09.** Con la factura aprobada, el total que muestra FS es el de `GET /totales` de FE.
 - **CA-10.** Matriz de la entrega de FE (33.5) con RAJ S.A. en SIFEN test: casos 1, 2, 3, 4, 6, 7, 8, 10, 11, 12 y 13 (FS); 9 lo hizo FE; 2b y 5 fuera de alcance.
+- **CA-11.** Con lineas en USD, volver a PYG marca las lineas con decimales y no deja emitir; corregidas, la factura sale en guaranies (RN-08).

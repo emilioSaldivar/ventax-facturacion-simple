@@ -7,7 +7,9 @@
 
 ## Estado
 
-Documentada el 2026-11-10. Implementada en la rama `feat/moneda-extranjera` (worktree), a la espera del commit de FS-51 para llevarla a `feat/identidad-segel`. MON-006 corrida contra FE `segel-rc4.27` el 2026-11-10: 19/19.
+Documentada el 2026-11-10. Implementada en la rama `feat/moneda-extranjera` (worktree), a la espera del commit de FS-51 para llevarla a `feat/identidad-segel`. MON-006 corrida contra FE `segel-rc4.27` el 2026-11-10: 19/19. Refinada el 2026-11-10 con la entrega de FE (`rc4.26` a `rc4.30`) y el pedido del usuario: MON-008 y MON-009 cierran la alineacion de contratos; el modo completo en PC va en `TASKS_EDITOR_FACTURA_PC_v0.1.md`, despues de estas.
+
+Orden propuesto: MON-008 -> MON-009 -> MON-011 (D-4, selector) -> MON-010 (matriz RAJ, en paralelo) -> MON-007 -> editor PC -> merge a `feat/identidad-segel` tras FS-51 -> despliegue (D-3, decision del usuario).
 
 ## Matriz
 
@@ -22,7 +24,8 @@ Documentada el 2026-11-10. Implementada en la rama `feat/moneda-extranjera` (wor
 | MON-007 | Repaso y BACKLOG FS-49 | Lectura cruzada | TODO |
 | MON-008 | Cantidad con hasta 4 decimales (PLAN 7, A-1) | `test`, `typecheck`, `lint`, `build` | TODO |
 | MON-009 | Totales oficiales de FE con `GET /totales` (PLAN 7, A-2) | `test`, `typecheck`, `lint` | TODO |
-| MON-010 | Matriz RAJ de la entrega de FE en SIFEN test (SPEC CA-10) | Playwright y numeros/CDC enviados a FE | EN CURSO: casos 1 y 2 emitidos desde FS y aprobados en SIFEN test (0260): `001-001-0000748` protocolo 50408443, `001-001-0000749` protocolo 50408444; caso 3 (nuevo-repo-18) `001-002-0000044` protocolo 50408448. FE verifico el XML contra MT150 (`cMoneOpe` USD, `dTiCam`, pagos en USD, `dTotalGs`). Caso 6 en espera de FE (firma del PDF del recibo con el certificado de RAJ, `PDF_SIGNATURE_FAILED`). bloqueado por 401 en la verificacion de estado de `raj-fs` (clave compartida de `FE_API_KEY`), decision del usuario |
+| MON-010 | Matriz RAJ de la entrega de FE en SIFEN test (SPEC CA-10) | Playwright y numeros/CDC enviados a FE | EN CURSO: casos 1 y 2 emitidos desde FS y aprobados en SIFEN test (0260): `001-001-0000748` protocolo 50408443, `001-001-0000749` protocolo 50408444; caso 3 (nuevo-repo-18) `001-002-0000044` protocolo 50408448. FE verifico el XML contra MT150 (`cMoneOpe` USD, `dTiCam`, pagos en USD, `dTotalGs`). Caso 6 en espera de FE (firma del PDF del recibo con el certificado de RAJ, `PDF_SIGNATURE_FAILED`). bloqueado por 401 en la verificacion de estado del stack local `raj-fs`: su `.env.raj` (archivo del stack de prueba, no configuracion por cliente; ver SPEC, seccion de alineacion) necesita la clave compartida de `fe-cargas-real` en `FE_API_KEY`; cambio de entorno local que espera al usuario. Caso 6 habilitado por FE `rc4.30` |
+| MON-011 | Selector con Guarani y Dolar (SPEC D-4) y aviso al cambiar de moneda con lineas cargadas (RN-08, CA-11) | `typecheck`, `build`, Playwright 1440 y 390 | TODO, espera D-4 |
 
 ## Evidencia
 
