@@ -4729,6 +4729,9 @@ components:
         importe:
           type: number
           format: double
+        moneda:
+          type: string
+          description: Moneda del recibo (ISO 4217). Un recibo creado desde una factura credito toma la moneda de la factura.
         forma_pago:
           $ref: "#/components/schemas/ReciboFormaPago"
         referencia_documento_numero_display:

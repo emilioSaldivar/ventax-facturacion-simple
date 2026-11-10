@@ -334,6 +334,15 @@ describe("verificarRecibo", () => {
     expect(result.concepto).toBe("Pago de servicio");
   });
 
+  it("SPEC_MONEDA_EXTRANJERA_v0.1: la verificacion publica informa la moneda del recibo", async () => {
+    const repo = makeRepo({ findByVerificationToken: vi.fn().mockResolvedValue(makeRecibo({ estado: "EMITIDO", importe: 199.98, moneda: "USD" })) });
+    const gateway = makeGateway({
+      verificarRecibo: vi.fn().mockResolvedValue({ valido: true, estado: "EMITIDO", firmado_en: "2026-06-25T10:00:00Z", raw: {} }),
+    });
+    const result = await verificarRecibo("tok-abc", repo, gateway);
+    expect(result).toMatchObject({ importe: 199.98, moneda: "USD" });
+  });
+
   it("no expone datos comerciales si el backend fiscal dice que no es valido (fail-closed)", async () => {
     const repo = makeRepo({ findByVerificationToken: vi.fn().mockResolvedValue(makeRecibo({ estado: "EMITIDO" })) });
     const gateway = makeGateway({ verificarRecibo: vi.fn().mockResolvedValue({ valido: false, raw: {} }) });

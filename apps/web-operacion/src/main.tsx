@@ -690,6 +690,7 @@ interface ReciboPublicaPayload {
   pagador_nombre?: string;
   concepto?: string;
   importe?: number;
+  moneda?: string;
   forma_pago?: string;
   referencia_documento_numero_display?: string | null;
   estado?: "EMITIDO" | "ANULADO";
@@ -790,7 +791,7 @@ function ReciboPublicaView({ token }: { token: string }) {
 
           <div style={{ borderRadius: "8px", background: "var(--segel-primary-50)", padding: "14px" }}>
             <dt style={{ color: "#65747b", fontSize: "12px", fontWeight: 800 }}>Importe</dt>
-            <dd style={{ margin: "2px 0 0", fontSize: "26px", fontWeight: 900 }}>{data.importe != null ? formatGuaranies(data.importe) : ""}</dd>
+            <dd style={{ margin: "2px 0 0", fontSize: "26px", fontWeight: 900 }}>{data.importe != null ? formatMonto(data.importe, data.moneda) : ""}</dd>
           </div>
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "10px" }} className="public-doc-actions">
@@ -7571,6 +7572,7 @@ interface ReciboRecord {
   pagador_documento: string | null;
   concepto: string;
   importe: number;
+  moneda?: string;
   forma_pago: ReciboFormaPago;
   referencia_bancaria: string | null;
   referencia_documento_uuid: string | null;
@@ -7613,6 +7615,8 @@ function RecibosView({
   const [formPagadorDoc, setFormPagadorDoc] = useState("");
   const [formConcepto, setFormConcepto] = useState("");
   const [formImporte, setFormImporte] = useState("");
+  // SPEC_MONEDA_EXTRANJERA_v0.1: el recibo desde una factura en moneda extranjera conserva esa moneda.
+  const [formMoneda, setFormMoneda] = useState("PYG");
   const [formFormaPago, setFormFormaPago] = useState<ReciboFormaPago>("EFECTIVO");
   const [formFechaCobro, setFormFechaCobro] = useState(() => new Date().toISOString().slice(0, 10));
   const [formRefBancaria, setFormRefBancaria] = useState("");
@@ -7743,6 +7747,7 @@ function RecibosView({
     setFormPagadorDoc("");
     setFormConcepto("");
     setFormImporte("");
+    setFormMoneda("PYG");
     setFormFormaPago("EFECTIVO");
     setFormFechaCobro(new Date().toISOString().slice(0, 10));
     setFormRefBancaria("");
@@ -7763,6 +7768,7 @@ function RecibosView({
     setFormPagadorDoc(r.pagador_documento ?? "");
     setFormConcepto(r.concepto);
     setFormImporte(String(r.importe));
+    setFormMoneda(r.moneda ?? "PYG");
     setFormFormaPago(r.forma_pago);
     setFormFechaCobro(r.fecha_cobro);
     setFormRefBancaria(r.referencia_bancaria ?? "");
@@ -7788,6 +7794,7 @@ function RecibosView({
         pagador_documento: formPagadorDoc.trim() || null,
         concepto: formConcepto.trim(),
         importe: Number(formImporte),
+        moneda: formMoneda,
         forma_pago: formFormaPago,
         fecha_cobro: formFechaCobro,
         referencia_bancaria: formRefBancaria.trim() || null,
@@ -8079,12 +8086,12 @@ function RecibosView({
               <input type="text" value={formConcepto} onChange={(e) => setFormConcepto(e.target.value)} placeholder="Pago de servicio mensual" />
             </label>
             <label>
-              Importe (Gs.) *
+              Importe ({formMoneda === "PYG" ? "Gs." : formMoneda}) *
               <input
-                inputMode="numeric"
-                onChange={(e) => setFormImporte(normalizeIntegerInput(e.target.value))}
+                inputMode={formMoneda === "PYG" ? "numeric" : "decimal"}
+                onChange={(e) => setFormImporte(formMoneda === "PYG" ? normalizeIntegerInput(e.target.value) : normalizeDecimalInput(e.target.value))}
                 placeholder="0"
-                value={formatIntegerInput(formImporte)}
+                value={formMoneda === "PYG" ? formatIntegerInput(formImporte) : formImporte.replace(".", ",")}
               />
             </label>
             <label>
@@ -8150,7 +8157,7 @@ function RecibosView({
           <div><dt>Pagador</dt><dd>{r.pagador_nombre}</dd></div>
           {r.pagador_documento ? <div><dt>{r.pagador_documento_tipo ?? "Doc."}</dt><dd>{r.pagador_documento}</dd></div> : null}
           <div><dt>Concepto</dt><dd>{r.concepto}</dd></div>
-          <div><dt>Importe</dt><dd>{formatGuaranies(r.importe)}</dd></div>
+          <div><dt>Importe</dt><dd>{formatMonto(r.importe, r.moneda)}</dd></div>
           <div><dt>Forma de pago</dt><dd>{FORMAS_PAGO_LABELS[r.forma_pago]}</dd></div>
           <div><dt>Fecha cobro</dt><dd>{r.fecha_cobro}</dd></div>
           {r.referencia_bancaria ? <div><dt>Referencia</dt><dd>{r.referencia_bancaria}</dd></div> : null}
@@ -8217,7 +8224,7 @@ function RecibosView({
               </div>
               <div className="nota-card-meta">
                 <span>{r.concepto}</span>
-                <span>{formatGuaranies(r.importe)}</span>
+                <span>{formatMonto(r.importe, r.moneda)}</span>
                 <span>{FORMAS_PAGO_LABELS[r.forma_pago]}</span>
                 {r.numero != null ? <span>N° {String(r.numero).padStart(7, "0")}</span> : null}
               </div>

@@ -291,6 +291,7 @@ export interface ReciboVerificacionResult {
   pagador_nombre?: string;
   concepto?: string;
   importe?: number;
+  moneda?: string;
   forma_pago?: ReciboRecord["forma_pago"];
   referencia_documento_numero_display?: string | null;
   estado?: ReciboRecord["estado"];
@@ -325,6 +326,7 @@ export async function verificarRecibo(
     pagador_nombre: cached.pagador_nombre,
     concepto: cached.concepto,
     importe: cached.importe,
+    moneda: cached.moneda,
     forma_pago: cached.forma_pago,
     referencia_documento_numero_display: cached.referencia_documento_numero_display,
     estado: fiscalResult.estado ?? cached.estado,
