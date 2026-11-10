@@ -1,4 +1,5 @@
 import type { FiscalCancelStatus } from "../fiscal-gateway/fiscal-gateway.types";
+import type { TaxTotals } from "@facturacion-simple/shared";
 import { resumenRemision } from "./nota-remision.resumen";
 import { pool } from "../../db/pool";
 import type {
@@ -394,6 +395,20 @@ export class PgFacturaRepository implements FacturaRepository {
     }
 
     return this.toResponse(factura, await this.findItems(factura.id));
+  }
+
+  async updateTotals(input: { facturadorId: string; documentoId: string; totals: TaxTotals }): Promise<DocumentoResponse | null> {
+    const result = await pool.query<FacturaRow>(
+      `
+        update facturas_operativas
+        set totals_snapshot = $3::jsonb, updated_at = now()
+        where facturador_id = $1 and id = $2 and deleted_at is null
+        returning ${COLUMNAS_DOCUMENTO}
+      `,
+      [input.facturadorId, input.documentoId, JSON.stringify(input.totals)]
+    );
+    const factura = result.rows[0];
+    return factura ? this.toResponse(factura, await this.findItems(factura.id)) : null;
   }
 
   async createFromEmission(input: FacturaPersistInput): Promise<DocumentoResponse> {

@@ -30,6 +30,8 @@ import {
   type FiscalGatewayHealth,
   type FiscalFacturalistaResponse,
   type FiscalDocumentoCanonicoResponse,
+  type FiscalDocumentoTotalesResponse,
+  type FeDetalleTotales,
   type FiscalEstadoCanonico,
   type FiscalIdempotencyReconciliationItem,
   type FiscalIdempotencyReconciliationItemResult,
@@ -124,6 +126,17 @@ function escenarioMockNotaCredito(request: FiscalEmitNotaCreditoRequest): Fiscal
   }
 }
 
+/**
+ * SPEC_MONEDA_EXTRANJERA_v0.1, A-2: totales que el mock "aprobo", por document_uuid, para responder `/totales`
+ * con el mismo formato que FE (gTotSub) y que el flujo local sea el mismo que contra FE.
+ */
+const totalesMockPorDocumento = new Map<string, { moneda: string; tipo_cambio: number | null; totals: TaxTotalsMock }>();
+type TaxTotalsMock = { subtotal: number; total_sin_iva: number; iva_5: number; iva_10: number; total_iva: number; total: number };
+
+function registrarTotalesMock(documentUuid: string, request: { moneda?: string; tipo_cambio?: number | null; totals: TaxTotalsMock }): void {
+  totalesMockPorDocumento.set(documentUuid, { moneda: request.moneda ?? "PYG", tipo_cambio: request.tipo_cambio ?? null, totals: request.totals });
+}
+
 export class MockFiscalGateway implements FiscalGateway {
   private readonly recibos = new Map<string, FiscalReciboResult>();
 
@@ -144,6 +157,7 @@ export class MockFiscalGateway implements FiscalGateway {
     const numeric = String(Number.parseInt(digest.slice(0, 8), 16) % 10_000_000).padStart(7, "0");
     const cdc = digest.padEnd(44, "0").slice(0, 44);
     const document_uuid = `${digestLower.slice(0, 8)}-${digestLower.slice(8, 12)}-4${digestLower.slice(13, 16)}-${digestLower.slice(16, 20)}-${digestLower.slice(20, 32)}`;
+    registrarTotalesMock(document_uuid, request);
 
     return {
       fiscal_document_id: `mock-${request.external_ref}`,
@@ -181,6 +195,8 @@ export class MockFiscalGateway implements FiscalGateway {
     const numeric = String(Number.parseInt(digest.slice(0, 8), 16) % 10_000_000).padStart(7, "0");
     const cdc = digest.padEnd(44, "0").slice(0, 44);
     const document_uuid = `${digestLower.slice(0, 8)}-${digestLower.slice(8, 12)}-4${digestLower.slice(13, 16)}-${digestLower.slice(16, 20)}-${digestLower.slice(20, 32)}`;
+
+    registrarTotalesMock(document_uuid, request);
 
     return {
       fiscal_document_id: `mock-${request.external_ref}`,
@@ -226,6 +242,30 @@ export class MockFiscalGateway implements FiscalGateway {
 
   async getMotivoRechazo(): Promise<FiscalMotivoRechazo | null> {
     return null;
+  }
+
+  async getDocumentoTotales(documentUuid: string): Promise<FiscalDocumentoTotalesResponse> {
+    const guardado = totalesMockPorDocumento.get(documentUuid);
+    if (!guardado) {
+      throw new FiscalGatewayError("UPSTREAM_ERROR", "Backend fiscal rechazo la consulta de totales.", { status: 404, body: { error: "XML_NOT_AVAILABLE" } });
+    }
+    const t = guardado.totals;
+    const totales: FeDetalleTotales = {
+      bruto: t.subtotal,
+      descuento: 0,
+      anticipo: 0,
+      total: t.total,
+      redondeo: 0,
+      gravada_10: t.iva_10 > 0 ? Math.round((t.iva_10 * 10) * 100) / 100 : 0,
+      gravada_5: t.iva_5 > 0 ? Math.round((t.iva_5 * 20) * 100) / 100 : 0,
+      exenta: 0,
+      exonerada: 0,
+      iva_10: t.iva_10,
+      iva_5: t.iva_5,
+      iva_total: t.total_iva
+    };
+    const total_guaranies = guardado.moneda === "PYG" || !guardado.tipo_cambio ? t.total : Math.round(t.total * guardado.tipo_cambio);
+    return { moneda: guardado.moneda, tipo_cambio: guardado.tipo_cambio, totales, total_guaranies, raw: { mode: "mock", document_uuid: documentUuid } };
   }
 
   async getDocumentoCanonico(documentUuid: string): Promise<FiscalDocumentoCanonicoResponse> {
@@ -838,6 +878,21 @@ export class RealFiscalGateway implements FiscalGateway {
       );
     }
     return extraerMotivoRechazo((body as { status?: unknown } | null)?.status);
+  }
+
+  async getDocumentoTotales(documentUuid: string): Promise<FiscalDocumentoTotalesResponse> {
+    const url = new URL(`${this.config.baseUrl}/documentos/${encodeURIComponent(documentUuid)}/totales`);
+    url.searchParams.set("env", this.config.environment);
+    const response = await this.fetchWithTimeout(url.toString(), { method: "GET", headers: this.buildHeaders() });
+    const body = await readJson(response);
+    if (!response.ok) {
+      throw new FiscalGatewayError(
+        response.status === 408 || response.status === 504 ? "TIMEOUT" : "UPSTREAM_ERROR",
+        "Backend fiscal rechazo la consulta de totales.",
+        { status: response.status, body }
+      );
+    }
+    return mapFiscalDocumentoTotalesResponse(body);
   }
 
   async getDocumentoCanonico(documentUuid: string): Promise<FiscalDocumentoCanonicoResponse> {
@@ -1940,6 +1995,37 @@ function mapFiscalByCdcResponse(body: unknown): FiscalByCdcResponse {
     emisor_id: stringOrNull(data.emisor_id) ?? "",
     env: data.env === "prod" ? "prod" : "test",
     resolution_note: stringOrNull(data.resolution_note) ?? ""
+  };
+}
+
+/** SPEC_MONEDA_EXTRANJERA_v0.1, A-2. Un cuerpo sin `totales.total` numerico es un error de contrato. */
+export function mapFiscalDocumentoTotalesResponse(body: unknown): FiscalDocumentoTotalesResponse {
+  const raw = (body && typeof body === "object" ? body : {}) as Record<string, unknown>;
+  const t = (raw.totales && typeof raw.totales === "object" ? raw.totales : {}) as Record<string, unknown>;
+  const num = (valor: unknown) => (typeof valor === "number" && Number.isFinite(valor) ? valor : Number(valor ?? 0) || 0);
+  if (typeof t.total !== "number" || !Number.isFinite(t.total)) {
+    throw new FiscalGatewayError("UPSTREAM_ERROR", "Respuesta de totales sin total.", { status: 200, body });
+  }
+  const moneda = typeof raw.moneda === "string" && raw.moneda ? raw.moneda : "PYG";
+  return {
+    moneda,
+    tipo_cambio: raw.tipo_cambio == null ? null : num(raw.tipo_cambio),
+    totales: {
+      bruto: num(t.bruto),
+      descuento: num(t.descuento),
+      anticipo: num(t.anticipo),
+      total: t.total,
+      redondeo: num(t.redondeo),
+      gravada_10: num(t.gravada_10),
+      gravada_5: num(t.gravada_5),
+      exenta: num(t.exenta),
+      exonerada: num(t.exonerada),
+      iva_10: num(t.iva_10),
+      iva_5: num(t.iva_5),
+      iva_total: num(t.iva_total)
+    },
+    total_guaranies: raw.total_guaranies == null ? t.total : num(raw.total_guaranies),
+    raw
   };
 }
 

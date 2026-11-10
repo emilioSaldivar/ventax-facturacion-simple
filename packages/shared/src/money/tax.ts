@@ -31,6 +31,15 @@ export interface TaxTotals {
   anticipo?: PygAmount;
   /** SPEC_TOTALES_FE_EN_CARGA_v0.1, RN-07: con descuento, anticipo o IVA exonerado, la nota de credito va por referencia en FE. */
   nota_credito_por_referencia?: boolean;
+  /**
+   * SPEC_MONEDA_EXTRANJERA_v0.1, A-2 / RN-07: origen de los totales. "FE": los de `GET /documentos/{uuid}/totales`
+   * del documento aprobado (oficiales). Ausente o "FS": el calculo de la vista previa.
+   */
+  fuente?: "FS" | "FE";
+  /** dTotalGs (F023) de FE: total en guaranies; en PYG, el total. Solo con `fuente: "FE"`. */
+  total_guaranies?: number;
+  /** dRedon (F013) de FE. Solo con `fuente: "FE"`. */
+  redondeo?: number;
 }
 
 export interface TaxCalculationResult {

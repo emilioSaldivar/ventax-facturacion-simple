@@ -425,6 +425,8 @@ export interface FacturaRepository {
     sifenResultCode?: string | null;
     sifenResultMessage?: string | null;
   }): Promise<DocumentoResponse | null>;
+  /** SPEC_MONEDA_EXTRANJERA_v0.1, A-2: guarda los totales oficiales de FE; no toca estado ni agenda. */
+  updateTotals(input: { facturadorId: string; documentoId: string; totals: TaxTotals }): Promise<DocumentoResponse | null>;
   claimNextVerificacion(batchSize: number): Promise<PendingVerificacion[]>;
   scheduleNextVerificacion(input: { documentoId: string; nextAt: Date | null; attempts: number }): Promise<void>;
   /** Solo cambia documentos en PENDING: un estado final no retrocede. */

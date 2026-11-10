@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import { env } from "../../config/env";
-import { calculateDocumentTotalsMoneda, type TaxInputLine } from "@facturacion-simple/shared";
+import { calculateDocumentTotalsMoneda, type TaxInputLine, type TaxTotals } from "@facturacion-simple/shared";
 import { HttpError } from "../../shared/errors/http-error";
 import { logger } from "../../shared/logging/logger";
 import { deriveAccion, esNotaTrabada, puedeReintentarEmision } from "./facturas.accion";
@@ -16,7 +16,8 @@ import {
   type FiscalEmitNotaCreditoRequest,
   type FiscalEmitNotaCreditoResponse,
   type FiscalIdempotencyReconciliationItem,
-  type FiscalIdempotencyReconciliationItemResult
+  type FiscalIdempotencyReconciliationItemResult,
+  type FiscalDocumentoTotalesResponse
 } from "../fiscal-gateway/fiscal-gateway.types";
 import type {
   BatchPendientesGestionResponse,
@@ -377,7 +378,8 @@ export async function refreshFiscalStatusForDocumento(
       throw new HttpError(404, "NOT_FOUND", "Documento no encontrado.");
     }
 
-    return updated;
+    // SPEC_MONEDA_EXTRANJERA_v0.1, A-2: con el documento aprobado se guardan los totales oficiales de FE.
+    return await guardarTotalesFe(facturadorId, updated, repository, gateway);
   } catch (error) {
     if (error instanceof FiscalGatewayError) {
       throw new HttpError(
@@ -1223,7 +1225,9 @@ export async function emitNotaCreditoTotal(
     estado: clasificacion.estado,
     trabada: clasificacion.trabada
   });
-  return { documento: withAccion(created), reintento: false };
+  // A-2: nota aprobada en el acto; la NC usa la clave compartida, la misma de `/totales`.
+  const conTotales = await guardarTotalesFe(context.facturador.id, created, repository, gateway);
+  return { documento: withAccion(conTotales), reintento: false };
 }
 
 /**
@@ -1463,11 +1467,13 @@ export async function processNextQueuedFiscalEmission(
 
   try {
     const response = await effectiveGateway.emitFactura(pending.fiscalRequest);
-    return repository.completePendingEmission({
+    const completado = await repository.completePendingEmission({
       outboxId: pending.outboxId,
       documentoId: pending.documentoId,
       response
     });
+    // A-2: aprobada en el acto (sincronico o mock); `gateway` es el de clave compartida, el de `/totales`.
+    return completado ? await guardarTotalesFe(pending.facturadorId, completado, repository, gateway) : completado;
   } catch (error) {
     if (error instanceof FiscalGatewayError) {
       const ageMs = Date.now() - new Date(pending.documentoCreatedAt).getTime();
@@ -1599,6 +1605,64 @@ function buildExternalRef(context: OperationalContextResponse, idempotencyKey?: 
 }
 
 /** SPEC_NOTA_CREDITO_TRABADA_v0.1, RN-01: misma factura y mismo intento dan siempre la misma clave. */
+/**
+ * SPEC_MONEDA_EXTRANJERA_v0.1, A-2 / RN-07: totales de FE (`gTotSub`) en el formato de FS. `total_sin_iva` sale de
+ * `total - iva_total` (no de `gravada_*`). Descuento y anticipo solo si existen, como en la carga.
+ */
+export function totalesDesdeFe(fe: FiscalDocumentoTotalesResponse, previos?: TaxTotals | null): TaxTotals {
+  const t = fe.totales;
+  return {
+    subtotal: t.bruto || t.total,
+    total_sin_iva: redondearMonto(t.total - t.iva_total, fe.moneda),
+    iva_5: t.iva_5,
+    iva_10: t.iva_10,
+    total_iva: t.iva_total,
+    total: t.total,
+    ...(t.descuento > 0 ? { descuento: t.descuento } : {}),
+    ...(t.anticipo > 0 ? { anticipo: t.anticipo } : {}),
+    ...(previos?.nota_credito_por_referencia ? { nota_credito_por_referencia: true } : {}),
+    redondeo: t.redondeo,
+    total_guaranies: fe.total_guaranies,
+    fuente: "FE"
+  };
+}
+
+function redondearMonto(valor: number, moneda: string): number {
+  return moneda === "PYG" ? Math.round(valor) : Math.round(valor * 100) / 100;
+}
+
+/**
+ * A-2: si el documento (factura o nota) esta aprobado y sus totales no son todavia los de FE, los pide a
+ * `GET /totales` y los guarda. Nunca falla: si FE no responde, el documento queda con la vista previa y se
+ * reintenta en el proximo refresco (RN-07).
+ */
+export async function guardarTotalesFe(
+  facturadorId: string,
+  documento: DocumentoResponse,
+  repository: FacturaRepository,
+  gateway: FiscalGateway
+): Promise<DocumentoResponse> {
+  if (documento.estado !== "EMITIDA" || !documento.document_uuid) return documento;
+  if (documento.tipo !== "FACTURA" && documento.tipo !== "NOTA_CREDITO") return documento;
+  if (documento.totals?.fuente === "FE") return documento;
+  try {
+    const fe = await gateway.getDocumentoTotales(documento.document_uuid);
+    if (documento.moneda && fe.moneda !== documento.moneda) {
+      logger.warn({ documentoId: documento.id, moneda_fs: documento.moneda, moneda_fe: fe.moneda }, "totales de FE: la moneda difiere; no se guardan");
+      return documento;
+    }
+    const actualizado = await repository.updateTotals({
+      facturadorId,
+      documentoId: documento.id,
+      totals: totalesDesdeFe(fe, documento.totals)
+    });
+    return actualizado ?? documento;
+  } catch (error) {
+    logger.warn({ err: error, documentoId: documento.id }, "totales de FE: no se pudieron guardar; se reintenta en el proximo refresco");
+    return documento;
+  }
+}
+
 export function buildNotaCreditoExternalRef(context: OperationalContextResponse, facturaId: string, intento: number): string {
   return `nce_${crypto.createHash("sha256").update(`${context.facturador.id}:${facturaId}:${intento}`).digest("hex").slice(0, 32)}`;
 }

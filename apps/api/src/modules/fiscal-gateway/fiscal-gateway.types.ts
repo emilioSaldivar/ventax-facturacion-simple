@@ -96,6 +96,15 @@ export interface FiscalRefreshStatusRequest {
 /** Traduccion del `status` canonico de FE a estado del SaaS (SPEC_ESTADO_FISCAL_CANONICO_v0.1). */
 export type FiscalEstadoCanonico = "EMITIDA" | "PENDIENTE_SIFEN" | "RECHAZADA" | "ANULADA";
 
+/** SPEC_MONEDA_EXTRANJERA_v0.1, A-2: `GET /v1/documentos/{uuid}/totales` (FE `segel-rc4.27`). */
+export interface FiscalDocumentoTotalesResponse {
+  moneda: string;
+  tipo_cambio: number | null;
+  totales: FeDetalleTotales;
+  total_guaranies: number;
+  raw: Record<string, unknown>;
+}
+
 export interface FiscalDocumentoCanonicoResponse {
   /** `DocumentStatus` de FE, sin traducir. */
   status: string | null;
@@ -414,6 +423,8 @@ export interface FiscalGateway {
   getMotivoRechazo(documentUuid: string): Promise<FiscalMotivoRechazo | null>;
   /** GET /documentos/{uuid}: estado canonico del documento en FE (clave compartida). */
   getDocumentoCanonico(documentUuid: string): Promise<FiscalDocumentoCanonicoResponse>;
+  /** Clave compartida de la instancia (mismo grupo que `/sifen`). 404 `XML_NOT_AVAILABLE` llega como `UPSTREAM_ERROR`. */
+  getDocumentoTotales(documentUuid: string): Promise<FiscalDocumentoTotalesResponse>;
   cancelFactura(request: FiscalCancelFacturaRequest): Promise<FiscalCancelFacturaResponse>;
   getDocumentoEventos(documentUuid: string): Promise<FiscalDocumentoEventosResponse>;
   resolveDocumentoByCdc(cdc: string): Promise<FiscalByCdcResponse>;

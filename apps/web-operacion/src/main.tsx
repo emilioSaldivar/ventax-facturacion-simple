@@ -239,6 +239,10 @@ interface FacturaPreviewResponse {
     descuento?: number;
     anticipo?: number;
     nota_credito_por_referencia?: boolean;
+    /** SPEC_MONEDA_EXTRANJERA_v0.1, A-2: "FE" con los totales oficiales del documento aprobado. */
+    fuente?: "FS" | "FE";
+    total_guaranies?: number;
+    redondeo?: number;
   };
 }
 
@@ -2817,7 +2821,7 @@ function DocumentsView({
                 ) : (
                   <div>
                     <dt>Total</dt>
-                    <dd>{formatMonto(selected.totals.total, selected.moneda)}{selected.moneda && selected.moneda !== "PYG" && selected.tipo_cambio ? <small className="muted"> · Tipo de cambio {selected.tipo_cambio.toLocaleString("es-PY")}</small> : null}</dd>
+                    <dd>{formatMonto(selected.totals.total, selected.moneda)}{selected.moneda && selected.moneda !== "PYG" && selected.tipo_cambio ? <small className="muted"> · Tipo de cambio {selected.tipo_cambio.toLocaleString("es-PY")}</small> : null}{selected.moneda && selected.moneda !== "PYG" && selected.totals.fuente === "FE" && selected.totals.total_guaranies != null ? <small className="muted"> · Equivale a {formatGuaranies(selected.totals.total_guaranies)}</small> : null}</dd>
                   </div>
                 )}
                 <div>

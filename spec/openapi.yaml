@@ -3076,17 +3076,17 @@ components:
       required: [subtotal, total_sin_iva, iva_5, iva_10, total_iva, total]
       properties:
         subtotal:
-          type: integer
+          type: number
         total_sin_iva:
-          type: integer
+          type: number
         iva_5:
-          type: integer
+          type: number
         iva_10:
-          type: integer
+          type: number
         total_iva:
-          type: integer
+          type: number
         total:
-          type: integer
+          type: number
         descuento:
           type: integer
           description: 'Solo en facturas de carga con los totales del backend fiscal (SPEC_TOTALES_FE_EN_CARGA_v0.1). Descuentos por articulo y global.'
@@ -3096,6 +3096,16 @@ components:
         anticipo:
           type: integer
           description: 'Anticipo aplicado. Con anticipo no se admite la nota de credito total desde FS (`409` con `reason: NOTA_CREDITO_CON_ANTICIPO`). Una factura en moneda extranjera tampoco (`409` con `reason: NOTA_CREDITO_MONEDA_EXTRANJERA`).'
+        fuente:
+          type: string
+          enum: [FS, FE]
+          description: "`FE`: totales oficiales de `GET /v1/documentos/{uuid}/totales` del documento aprobado (SPEC_MONEDA_EXTRANJERA_v0.1 A-2). Ausente o `FS`: calculo de la vista previa. Montos enteros en `PYG` y con 2 decimales en otra moneda."
+        total_guaranies:
+          type: integer
+          description: dTotalGs de FE (total por tipo de cambio, redondeado). Solo con `fuente` FE.
+        redondeo:
+          type: number
+          description: dRedon de FE. Solo con `fuente` FE.
 
     DocumentoResponse:
       type: object
