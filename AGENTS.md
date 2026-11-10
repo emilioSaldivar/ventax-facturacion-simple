@@ -122,6 +122,16 @@ La fuente de verdad de este proyecto es:
 - `docs/SPEC_PLANILLAS_EJEMPLO_v0.1.md`
 - `docs/PLAN_PLANILLAS_EJEMPLO_v0.1.md`
 - `docs/TASKS_PLANILLAS_EJEMPLO_v0.1.md`
+- `docs/SPEC_MONEDA_EXTRANJERA_v0.1.md`
+- `docs/PLAN_MONEDA_EXTRANJERA_v0.1.md`
+- `docs/TASKS_MONEDA_EXTRANJERA_v0.1.md`
+- `docs/SPEC_NOTA_CREDITO_PARCIAL_v0.1.md`
+- `docs/PLAN_NOTA_CREDITO_PARCIAL_v0.1.md`
+- `docs/TASKS_NOTA_CREDITO_PARCIAL_v0.1.md`
+- `docs/SPEC_EDITOR_FACTURA_PC_v0.1.md`
+- `docs/PLAN_EDITOR_FACTURA_PC_v0.1.md`
+- `docs/TASKS_EDITOR_FACTURA_PC_v0.1.md`
+- `docs/OPERACION_PRUEBAS_PRODUCCION_MONEDA_EXTRANJERA_v0.1.md`
 - `spec/openapi.yaml`
 
 Los documentos bajo `contexto_facturacion_electronica/` y `contexto_pos_graciela/` son antecedentes. No son la especificacion final del nuevo producto.

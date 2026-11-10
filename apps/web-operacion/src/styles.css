@@ -3055,3 +3055,241 @@ dd {
   margin: 6px;
   font-size: 12px;
 }
+
+/* SPEC_MONEDA_EXTRANJERA_v0.1, RN-08: linea que no vale en la moneda elegida. */
+.sale-item-card.line-invalid {
+  border-color: var(--danger, #c0392b);
+}
+
+.line-invalid-hint,
+.moneda-aviso {
+  color: var(--danger, #c0392b);
+  font-weight: 600;
+}
+
+.moneda-aviso {
+  grid-column: 1 / -1;
+  margin: 4px 0 0;
+}
+
+/* SPEC_NOTA_CREDITO_PARCIAL_v0.1: ventana de nota de credito total o parcial. */
+.nc-parcial {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.nc-parcial .segmented {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0;
+}
+
+.nc-parcial .segmented button {
+  padding: 8px 12px;
+  border: 1px solid var(--border, #d0d5dd);
+  background: transparent;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.nc-parcial .segmented button.active {
+  background: var(--accent, #c8102e);
+  border-color: var(--accent, #c8102e);
+  color: #fff;
+}
+
+.nc-parcial .segmented button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.nc-parcial-tabla-wrap {
+  max-height: 280px;
+  overflow: auto;
+}
+
+.nc-parcial-tabla {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.nc-parcial-tabla th,
+.nc-parcial-tabla td {
+  padding: 6px;
+  border-bottom: 1px solid var(--border, #e4e7ec);
+  text-align: left;
+}
+
+.nc-parcial-tabla td:nth-child(n + 2),
+.nc-parcial-tabla th:nth-child(n + 2) {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.nc-parcial-tabla input {
+  width: 96px;
+  text-align: right;
+}
+
+.nc-parcial-total {
+  margin: 0;
+  text-align: right;
+}
+
+/* SPEC_EDITOR_FACTURA_PC_v0.1: editor de factura en modo completo (>= 1024 px). */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.modo-editor-toggle {
+  display: inline-flex;
+  border: 1px solid var(--border, #d0d5dd);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.modo-editor-toggle button {
+  padding: 6px 10px;
+  border: 0;
+  background: transparent;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.modo-editor-toggle button.active {
+  background: var(--accent, #c8102e);
+  color: #fff;
+}
+
+@media (min-width: 1024px) {
+  .invoice-editor.completo {
+    max-width: 1440px;
+    grid-template-columns: minmax(0, 1fr) minmax(340px, 420px);
+    column-gap: 20px;
+    align-items: start;
+  }
+
+  .invoice-editor.completo > * {
+    grid-column: 1 / -1;
+  }
+
+  /* Cliente a la izquierda y opciones de factura a la derecha; grilla a lo ancho; totales al pie, a la derecha. */
+  .invoice-editor.completo > .invoice-band {
+    order: 1;
+  }
+
+  .invoice-editor.completo > .client-section {
+    order: 2;
+    grid-column: 1;
+  }
+
+  .invoice-editor.completo > .comprobante-section {
+    order: 3;
+    grid-column: 2;
+  }
+
+  .invoice-editor.completo > .products-section {
+    order: 4;
+  }
+
+  .invoice-editor.completo > .totals-section {
+    order: 5;
+    grid-column: 2;
+  }
+
+  .invoice-editor.completo > .emission-result {
+    order: 6;
+  }
+
+  .invoice-editor.completo .client-section .field-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.grilla-lineas-wrap {
+  overflow-x: auto;
+}
+
+.grilla-lineas {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.grilla-lineas th,
+.grilla-lineas td {
+  padding: 6px;
+  border-bottom: 1px solid var(--border, #e4e7ec);
+  text-align: left;
+  vertical-align: top;
+}
+
+.grilla-lineas th {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.grilla-lineas input,
+.grilla-lineas select {
+  width: 100%;
+}
+
+.grilla-lineas .col-codigo { width: 110px; }
+.grilla-lineas .col-cantidad { width: 100px; }
+.grilla-lineas .col-precio { width: 150px; }
+.grilla-lineas .col-iva { width: 96px; }
+.grilla-lineas .col-subtotal { width: 150px; text-align: right; white-space: nowrap; }
+.grilla-lineas .col-acciones { width: 84px; }
+
+.grilla-lineas td.col-cantidad input,
+.grilla-lineas td.col-precio input {
+  text-align: right;
+}
+
+.grilla-lineas tr.fila-invalida td {
+  background: rgba(192, 57, 43, 0.06);
+}
+
+.grilla-lineas .col-descripcion {
+  position: relative;
+}
+
+.grilla-sugerencias {
+  position: absolute;
+  z-index: 5;
+  left: 6px;
+  right: 6px;
+  margin: 2px 0 0;
+  padding: 4px 0;
+  list-style: none;
+  background: var(--surface, #fff);
+  border: 1px solid var(--border, #d0d5dd);
+  border-radius: 8px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
+}
+
+.grilla-sugerencias button {
+  width: 100%;
+  padding: 6px 10px;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.grilla-sugerencias button:hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.grilla-acciones {
+  display: flex;
+  gap: 4px;
+}

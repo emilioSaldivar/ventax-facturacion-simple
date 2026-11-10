@@ -37,6 +37,10 @@ export interface FacturaItemInput {
 
 export interface FacturaPreviewInput {
   condicion_venta: CondicionVenta;
+  /** SPEC_MONEDA_EXTRANJERA_v0.1: ISO 4217; sin el campo, PYG. */
+  moneda?: string;
+  /** Cotizacion a guaranies de toda la factura; obligatoria fuera de PYG. */
+  tipo_cambio?: number | null;
   tipo_transaccion?: 1 | 2 | 3;
   credito_plazo_dias?: number | null;
   cliente: FacturaClienteInput;
@@ -167,6 +171,9 @@ export interface DocumentoResponse {
   estado: DocumentoEstado;
   /** Null en una nota de remision. */
   condicion_venta: CondicionVenta | null;
+  /** SPEC_MONEDA_EXTRANJERA_v0.1: moneda de todos los montos del documento. */
+  moneda: string;
+  tipo_cambio: number | null;
   /** Solo en una nota de remision: resumen del detalle que informo FE. */
   remision?: DocumentoRemision | null;
   numero_fiscal: string | null;
@@ -406,6 +413,9 @@ export interface NotaCreditoPersistInput {
   motivo: string;
   externalRef: string;
   idempotencyKey?: string;
+  /** SPEC_NOTA_CREDITO_PARCIAL_v0.1: lineas y totales propios de la nota. Sin ellos, los de la factura (nota total). */
+  items?: FacturaItemPreview[];
+  totals?: TaxTotals;
   fiscalRequest: FiscalEmitNotaCreditoRequest;
   fiscalResponse: FiscalEmitNotaCreditoResponse | null;
   fiscalError: Record<string, unknown> | null;
@@ -460,6 +470,8 @@ export interface FacturaRepository {
     sifenResultCode?: string | null;
     sifenResultMessage?: string | null;
   }): Promise<DocumentoResponse | null>;
+  /** SPEC_MONEDA_EXTRANJERA_v0.1, A-2: guarda los totales oficiales de FE; no toca estado ni agenda. */
+  updateTotals(input: { facturadorId: string; documentoId: string; totals: TaxTotals }): Promise<DocumentoResponse | null>;
   claimNextVerificacion(batchSize: number): Promise<PendingVerificacion[]>;
   scheduleNextVerificacion(input: { documentoId: string; nextAt: Date | null; attempts: number }): Promise<void>;
   /** Solo cambia documentos en PENDING: un estado final no retrocede. */

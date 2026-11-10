@@ -45,6 +45,9 @@ export interface FiscalEmitFacturaRequest {
   cliente: FacturaClienteInput;
   items: FacturaItemPreview[];
   totals: TaxTotals;
+  /** SPEC_MONEDA_EXTRANJERA_v0.1: fuera de PYG van `moneda` y `tipoCambio` a FE. */
+  moneda?: string;
+  tipo_cambio?: number | null;
 }
 
 export interface FiscalEmitNotaCreditoRequest {
@@ -62,6 +65,12 @@ export interface FiscalEmitNotaCreditoRequest {
   };
   /** SPEC_TOTALES_FE_EN_CARGA_v0.1, RN-07: `POST /v1/nota-credito/total`, sin receptor ni items (FE `rc4.13`). */
   por_referencia?: boolean;
+  /**
+   * SPEC_NOTA_CREDITO_PARCIAL_v0.1: la nota con lineas lleva la moneda y el tipo de cambio de su factura fuera de
+   * PYG (FE `rc4.27`). En la nota por referencia FE los toma de la factura y no se mandan.
+   */
+  moneda?: string;
+  tipo_cambio?: number | null;
 }
 
 export interface FiscalEmitFacturaResponse {
@@ -92,6 +101,15 @@ export interface FiscalRefreshStatusRequest {
 
 /** Traduccion del `status` canonico de FE a estado del SaaS (SPEC_ESTADO_FISCAL_CANONICO_v0.1). */
 export type FiscalEstadoCanonico = "EMITIDA" | "PENDIENTE_SIFEN" | "RECHAZADA" | "ANULADA";
+
+/** SPEC_MONEDA_EXTRANJERA_v0.1, A-2: `GET /v1/documentos/{uuid}/totales` (FE `segel-rc4.27`). */
+export interface FiscalDocumentoTotalesResponse {
+  moneda: string;
+  tipo_cambio: number | null;
+  totales: FeDetalleTotales;
+  total_guaranies: number;
+  raw: Record<string, unknown>;
+}
 
 export interface FiscalDocumentoCanonicoResponse {
   /** `DocumentStatus` de FE, sin traducir. */
@@ -432,6 +450,8 @@ export interface FiscalGateway {
   getMotivoRechazo(documentUuid: string): Promise<FiscalMotivoRechazo | null>;
   /** GET /documentos/{uuid}: estado canonico del documento en FE (clave compartida). */
   getDocumentoCanonico(documentUuid: string): Promise<FiscalDocumentoCanonicoResponse>;
+  /** Clave compartida de la instancia (mismo grupo que `/sifen`). 404 `XML_NOT_AVAILABLE` llega como `UPSTREAM_ERROR`. */
+  getDocumentoTotales(documentUuid: string): Promise<FiscalDocumentoTotalesResponse>;
   cancelFactura(request: FiscalCancelFacturaRequest): Promise<FiscalCancelFacturaResponse>;
   inutilizarNumeracion(request: FiscalInutilizarNumeracionRequest): Promise<FiscalInutilizarNumeracionResponse>;
   getDocumentoEventos(documentUuid: string): Promise<FiscalDocumentoEventosResponse>;

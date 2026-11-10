@@ -29,6 +29,8 @@ const envSchema = z.object({
   VERIFICACION_LOTE_SIN_REFRESH: z.enum(["true", "false"]).default("false").transform((value) => value === "true"),
   /** Carga masiva de facturas (SPEC_CARGA_MASIVA_FACTURAS_v0.1). Apagada: rutas 404, sin pestana, sin worker. */
   CARGA_MASIVA_ENABLED: z.enum(["true", "false"]).default("false").transform((value) => value === "true"),
+  // SPEC_MONEDA_EXTRANJERA_v0.1, D-1: encender solo con FE segel-rc4.27 o posterior (NC en la moneda de la factura).
+  FE_NC_MONEDA_EXTRANJERA: z.enum(["true", "false"]).default("false").transform((value) => value === "true"),
   /** RN-01b: por encima del tope de FE (20 MB) y por debajo del nginx (25 MB), para que el 413 normal lo de FE. */
   CARGA_MAX_BYTES: z.coerce.number().int().positive().default(25165824),
   CARGA_SUBIDAS_SIMULTANEAS: z.coerce.number().int().positive().default(2),

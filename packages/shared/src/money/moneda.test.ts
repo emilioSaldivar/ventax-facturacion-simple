@@ -28,4 +28,9 @@ describe("moneda (SPEC_MONEDA_EXTRANJERA_v0.1)", () => {
     expect(tieneDecimalesValidos(12.3, "PYG")).toBe(false);
     expect(tieneDecimalesValidos(1200, "PYG")).toBe(true);
   });
+
+  it("cantidad decimal en USD: 1,5 x 150,25 = 225,38", () => {
+    const { totals } = calculateDocumentTotalsMoneda([{ descripcion: "A", cantidad: 1.5, precio_unitario: 150.25, iva_tipo: "IVA_10" }], "USD");
+    expect(totals).toMatchObject({ total: 225.38, iva_10: 20.49, total_sin_iva: 204.89 });
+  });
 });

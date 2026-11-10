@@ -1177,9 +1177,12 @@ paths:
       tags: [NotasCredito]
       summary: Emitir Nota de Credito Electronica desde factura elegible
       description: |
-        Emite una NCE total en el MVP. Solo acepta facturas `EMITIDA` con CDC.
-        A lo sumo una nota viva por factura: una nota `RECHAZADA` no bloquea otra
-        (SPEC_NOTA_CREDITO_TRABADA_v0.1, RN-02). El envio fiscal usa `envio.mode=BATCH`
+        Sin `lineas`, emite la NCE total (como en el MVP); con `lineas`, una NCE parcial por esas lineas y
+        cantidades, con el precio y el IVA de la factura (SPEC_NOTA_CREDITO_PARCIAL_v0.1). Solo acepta
+        facturas `EMITIDA` con CDC. La total exige que la factura no tenga ninguna nota viva; las parciales
+        se suman hasta cubrir la factura (saldo por linea, RN-06). Una nota `RECHAZADA` no cuenta.
+        En moneda extranjera la total va por referencia y la parcial con `moneda` y `tipoCambio` de la
+        factura, ambas solo con `FE_NC_MONEDA_EXTRANJERA`. El envio fiscal usa `envio.mode=BATCH`
         y puede quedar `PENDIENTE_SIFEN` mientras SIFEN procesa el lote.
 
         La clave de idempotencia hacia FE la deriva el servidor a partir de la factura
@@ -1216,10 +1219,20 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
+        "400":
+          description: >-
+            `lineas` no validas: linea inexistente o repetida, cantidad con mas de 4 decimales o mayor que el
+            saldo. `details.lineas[]` trae `line_no`, `motivo` y, si corresponde, `saldo`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         "409":
           description: >-
-            Factura no elegible, ya tiene una nota viva, o FE responde `CREDIT_NOTE_TOTAL_EXCEEDED`
-            (FE registra una nota que FS no conoce; requiere soporte, RN-10)
+            Factura no elegible (`details.reason`: `NOTA_CREDITO_YA_EMITIDA` si se pide la total con una nota
+            viva, `NOTA_CREDITO_SOLO_TOTAL`, `NOTA_CREDITO_TRABADA`, `NOTA_CREDITO_MONEDA_EXTRANJERA`,
+            `NOTA_CREDITO_CON_ANTICIPO`), o FE responde `CREDIT_NOTE_TOTAL_EXCEEDED` o
+            `INVALID_REFERENCED_DOCUMENT` (`details.fe_code`; FE no numero)
           content:
             application/json:
               schema:
@@ -1230,6 +1243,32 @@ paths:
           description: >-
             FE rechazo el pedido con un error que no crea la nota (400, 401, 404, 409 no idempotente,
             422, 429). Los errores que pudieron crearla se guardan y responden 201
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /facturas/{documentoId}/nota-credito/saldo:
+    get:
+      tags: [NotasCredito]
+      summary: Saldo acreditable por linea de una factura
+      description: >-
+        SPEC_NOTA_CREDITO_PARCIAL_v0.1. Cantidad facturada, acreditada por notas vivas y saldo de cada linea, y si
+        la factura admite nota total o parcial.
+      parameters:
+        - $ref: "#/components/parameters/DocumentoId"
+      responses:
+        "200":
+          description: Saldo
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotaCreditoSaldoResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: El documento no es una factura
           content:
             application/json:
               schema:
@@ -2647,6 +2686,9 @@ components:
         carga_masiva_habilitada:
           type: boolean
           description: La instancia tiene encendida la carga masiva (`CARGA_MASIVA_ENABLED`).
+        nc_moneda_extranjera_habilitada:
+          type: boolean
+          description: FE admite la nota de credito de una factura en moneda extranjera, en la moneda de la factura (`FE_NC_MONEDA_EXTRANJERA`). Apagada, esa nota se bloquea con el motivo `NOTA_CREDITO_MONEDA_EXTRANJERA`.
 
     TenantSummary:
       type: object
@@ -2999,6 +3041,15 @@ components:
       type: object
       required: [condicion_venta, tipo_transaccion, cliente, items]
       properties:
+        moneda:
+          type: string
+          enum: [PYG, USD, EUR, BRL]
+          default: PYG
+          description: 'SPEC_MONEDA_EXTRANJERA_v0.1. Fuera de PYG los precios admiten hasta 2 decimales; en PYG son enteros.'
+        tipo_cambio:
+          type: number
+          nullable: true
+          description: 'Cotizacion a guaranies de toda la factura, hasta 4 decimales. Obligatoria fuera de PYG.'
         condicion_venta:
           $ref: "#/components/schemas/CondicionVenta"
         tipo_transaccion:
@@ -3074,11 +3125,14 @@ components:
         descripcion:
           type: string
         cantidad:
-          type: integer
-          minimum: 1
+          type: number
+          exclusiveMinimum: 0
+          multipleOf: 0.0001
+          description: Mayor que cero con hasta 4 decimales (MT150 E711; SPEC_MONEDA_EXTRANJERA_v0.1 RN-06).
         precio_unitario:
-          type: integer
+          type: number
           minimum: 0
+          description: Entero en `PYG`; hasta 2 decimales en otra moneda (RN-02).
         iva_tipo:
           $ref: "#/components/schemas/IvaTipo"
 
@@ -3108,18 +3162,20 @@ components:
         descripcion:
           type: string
         cantidad:
-          type: integer
+          type: number
+          description: Hasta 4 decimales.
         precio_unitario:
-          type: integer
+          type: number
+          description: Entero en `PYG`; 2 decimales en otra moneda.
         iva_tipo:
           $ref: "#/components/schemas/IvaTipo"
         subtotal:
-          type: integer
+          type: number
         base_imponible:
-          type: integer
+          type: number
           description: Redondeado por linea.
         iva_monto:
-          type: integer
+          type: number
           description: Redondeado por linea.
 
     DocumentoTotals:
@@ -3127,17 +3183,17 @@ components:
       required: [subtotal, total_sin_iva, iva_5, iva_10, total_iva, total]
       properties:
         subtotal:
-          type: integer
+          type: number
         total_sin_iva:
-          type: integer
+          type: number
         iva_5:
-          type: integer
+          type: number
         iva_10:
-          type: integer
+          type: number
         total_iva:
-          type: integer
+          type: number
         total:
-          type: integer
+          type: number
         descuento:
           type: integer
           description: 'Solo en facturas de carga con los totales del backend fiscal (SPEC_TOTALES_FE_EN_CARGA_v0.1). Descuentos por articulo y global.'
@@ -3146,7 +3202,17 @@ components:
           description: 'Factura de carga con descuentos, anticipos o IVA exonerado: su nota de credito total se emite por referencia en el backend fiscal, sin lineas.'
         anticipo:
           type: integer
-          description: 'Anticipo aplicado. Con anticipo no se admite la nota de credito total desde FS (`409` con `reason: NOTA_CREDITO_CON_ANTICIPO`).'
+          description: 'Anticipo aplicado. Con anticipo no se admite la nota de credito total desde FS (`409` con `reason: NOTA_CREDITO_CON_ANTICIPO`). Una factura en moneda extranjera tampoco (`409` con `reason: NOTA_CREDITO_MONEDA_EXTRANJERA`).'
+        fuente:
+          type: string
+          enum: [FS, FE]
+          description: "`FE`: totales oficiales de `GET /v1/documentos/{uuid}/totales` del documento aprobado (SPEC_MONEDA_EXTRANJERA_v0.1 A-2). Ausente o `FS`: calculo de la vista previa. Montos enteros en `PYG` y con 2 decimales en otra moneda."
+        total_guaranies:
+          type: integer
+          description: dTotalGs de FE (total por tipo de cambio, redondeado). Solo con `fuente` FE.
+        redondeo:
+          type: number
+          description: dRedon de FE. Solo con `fuente` FE.
 
     DocumentoVinculo:
       type: object
@@ -3178,6 +3244,12 @@ components:
             - $ref: "#/components/schemas/CondicionVenta"
           nullable: true
           description: Null en una nota de remision.
+        moneda:
+          type: string
+          description: 'Moneda de todos los montos del documento (ISO 4217); PYG por omision.'
+        tipo_cambio:
+          type: number
+          nullable: true
         remision:
           type: object
           nullable: true
@@ -3877,7 +3949,54 @@ components:
         motivo:
           type: string
           maxLength: 300
-          description: Motivo operativo de la NCE total. Las lineas se copian de la factura original en el MVP.
+          description: Motivo operativo de la NCE.
+        lineas:
+          type: array
+          minItems: 1
+          maxItems: 200
+          description: >-
+            SPEC_NOTA_CREDITO_PARCIAL_v0.1. Lineas de la factura a acreditar. Sin este campo, la nota es total y
+            copia todas las lineas.
+          items:
+            type: object
+            required: [line_no, cantidad]
+            properties:
+              line_no:
+                type: integer
+                minimum: 1
+              cantidad:
+                type: number
+                exclusiveMinimum: 0
+                multipleOf: 0.0001
+                description: Hasta 4 decimales, no mayor que el saldo de la linea.
+
+    NotaCreditoSaldoResponse:
+      type: object
+      required: [moneda, admite_total, admite_parcial, motivo_no_parcial, lineas]
+      properties:
+        moneda:
+          type: string
+        admite_total:
+          type: boolean
+          description: Sin notas vivas.
+        admite_parcial:
+          type: boolean
+        motivo_no_parcial:
+          type: string
+          nullable: true
+        lineas:
+          type: array
+          items:
+            type: object
+            properties:
+              line_no: { type: integer }
+              descripcion: { type: string }
+              codigo: { type: string, nullable: true }
+              precio_unitario: { type: number }
+              iva_tipo: { $ref: "#/components/schemas/IvaTipo" }
+              cantidad_facturada: { type: number }
+              cantidad_acreditada: { type: number }
+              saldo: { type: number }
 
     CancelacionRequest:
       type: object
@@ -4815,6 +4934,9 @@ components:
         importe:
           type: number
           format: double
+        moneda:
+          type: string
+          description: Moneda del recibo (ISO 4217). Un recibo creado desde una factura credito toma la moneda de la factura.
         forma_pago:
           $ref: "#/components/schemas/ReciboFormaPago"
         referencia_documento_numero_display:

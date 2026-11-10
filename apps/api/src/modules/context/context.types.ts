@@ -48,6 +48,8 @@ export interface OperationalContextResponse {
   display?: OperationalDisplay;
   /** La instancia tiene la carga masiva encendida (CARGA_MASIVA_ENABLED). Solo en GET /me/context. */
   carga_masiva_habilitada?: boolean;
+  /** FE admite la nota de credito en la moneda de la factura (FE_NC_MONEDA_EXTRANJERA, SPEC_MONEDA_EXTRANJERA_v0.1 D-1). Solo en GET /me/context. */
+  nc_moneda_extranjera_habilitada?: boolean;
   /** Interno, no documentado en spec/openapi.yaml: usado solo por facturas.service.ts para persistir tipo_transaccion_default. */
   actividad_punto_perfil_id: string;
 }

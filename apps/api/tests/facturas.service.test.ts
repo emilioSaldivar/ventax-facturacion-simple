@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { env } from "../src/config/env";
 import { MockFiscalGateway, llamadasMockNotaCreditoPorClave } from "../src/modules/fiscal-gateway/fiscal-gateway.client";
 import { reintentarNotaCreditoPorId } from "../src/modules/facturas/facturas.service";
 import {
@@ -42,6 +43,7 @@ import {
   getReconciliacionFiscal,
   listNotaCreditoCandidates,
   MENSAJE_NOTA_CREDITO_CON_ANTICIPO,
+  MENSAJE_NOTA_CREDITO_MONEDA_EXTRANJERA,
   listDocumentos,
   previewFactura,
   refreshDocumentoStatus
@@ -963,7 +965,8 @@ describe("facturas service", () => {
     expect(candidates.items[0]).toMatchObject({
       documento: { id: facturaEmitida.id },
       elegible: false,
-      motivo_no_elegible: "La factura ya tiene una nota de credito total."
+      // SPEC_NOTA_CREDITO_PARCIAL_v0.1: la nota total copia todas las lineas; no queda saldo.
+      motivo_no_elegible: "La factura ya esta acreditada por completo."
     });
     expect(candidates.items[1]).toMatchObject({
       documento: { id: facturaPendiente.id },
@@ -1397,6 +1400,65 @@ describe("facturas service", () => {
     repo.list = async () => ({ total: 1, items: [repo.findByIdResponse!] });
     const candidates = await listNotaCreditoCandidates(context, { limit: 30, offset: 0 }, repo);
     expect(candidates.items[0]).toMatchObject({ elegible: true });
+  });
+
+  describe("moneda extranjera (SPEC_MONEDA_EXTRANJERA_v0.1)", () => {
+    it("la vista previa en USD calcula con 2 decimales", () => {
+      const result = previewFactura(context, {
+        condicion_venta: "CONTADO",
+        moneda: "USD",
+        tipo_cambio: 7350.5,
+        cliente: { documento_tipo: "RUC", documento: "80136968-1", razon_social: "Cliente Demo" },
+        items: [{ descripcion: "Consultoria", cantidad: 2, precio_unitario: 150.25, iva_tipo: "IVA_10" }]
+      });
+      expect(result.totals).toMatchObject({ total: 300.5, iva_10: 27.32, total_sin_iva: 273.18 });
+    });
+
+    it("RN-06: la vista previa acepta cantidad decimal (PYG y USD)", () => {
+      const cliente = { documento_tipo: "RUC" as const, documento: "80136968-1", razon_social: "Cliente Demo" };
+      const pyg = previewFactura(context, { condicion_venta: "CONTADO", cliente, items: [{ descripcion: "Kilos", cantidad: 2.5, precio_unitario: 10001, iva_tipo: "IVA_10" }] });
+      expect(pyg.totals.total).toBe(25003);
+      expect(pyg.items[0].cantidad).toBe(2.5);
+      const usd = previewFactura(context, {
+        condicion_venta: "CONTADO",
+        moneda: "USD",
+        tipo_cambio: 6329.77,
+        cliente,
+        items: [{ descripcion: "Horas", cantidad: 1.5, precio_unitario: 150.25, iva_tipo: "IVA_10" }]
+      });
+      expect(usd.totals).toMatchObject({ total: 225.38, iva_10: 20.49 });
+    });
+
+    it("D-1: la nota de credito de una factura en USD se bloquea sin llamar a FE", async () => {
+      const repo = new FakeFacturaRepository();
+      repo.findByIdResponse = { ...buildDocumento({ estado: "EMITIDA", cdc: "A".repeat(44) }), moneda: "USD", tipo_cambio: 7350.5 };
+      const gateway = new FakeFiscalGateway(new FiscalGatewayError("UPSTREAM_ERROR", "Should not emit"));
+      await expect(
+        emitNotaCreditoTotal(context, "66666666-6666-4666-8666-666666666666", { motivo: "Error" }, repo, gateway, { idempotencyKey: "x" })
+      ).rejects.toMatchObject({ statusCode: 409, details: { reason: "NOTA_CREDITO_MONEDA_EXTRANJERA" } });
+      expect(gateway.lastNotaCreditoRequest).toBeNull();
+      repo.list = async () => ({ total: 1, items: [repo.findByIdResponse!] });
+      const candidates = await listNotaCreditoCandidates(context, { limit: 30, offset: 0 }, repo);
+      expect(candidates.items[0]).toMatchObject({ elegible: false, motivo_no_elegible: MENSAJE_NOTA_CREDITO_MONEDA_EXTRANJERA });
+    });
+
+    it("D-1 con FE_NC_MONEDA_EXTRANJERA: la nota de una factura en USD va por referencia y guarda la moneda", async () => {
+      const previo = env.FE_NC_MONEDA_EXTRANJERA;
+      env.FE_NC_MONEDA_EXTRANJERA = true;
+      try {
+        const repo = new FakeFacturaRepository();
+        repo.findByIdResponse = { ...buildDocumento({ estado: "EMITIDA", cdc: "A".repeat(44) }), moneda: "USD", tipo_cambio: 7350.5 };
+        const gateway = new FakeFiscalGateway(new FiscalGatewayError("UPSTREAM_ERROR", "Should not emit"));
+        await emitNotaCreditoTotal(context, "66666666-6666-4666-8666-666666666666", { motivo: "Error" }, repo, gateway, { idempotencyKey: "x" });
+        expect(gateway.lastNotaCreditoRequest?.por_referencia).toBe(true);
+        expect(repo.lastNotaCreditoInput?.original).toMatchObject({ moneda: "USD", tipo_cambio: 7350.5 });
+        repo.list = async () => ({ total: 1, items: [repo.findByIdResponse!] });
+        const candidates = await listNotaCreditoCandidates(context, { limit: 30, offset: 0 }, repo);
+        expect(candidates.items[0]).toMatchObject({ elegible: true });
+      } finally {
+        env.FE_NC_MONEDA_EXTRANJERA = previo;
+      }
+    });
   });
 
   it("SPEC_TOTALES_FE_EN_CARGA_v0.1 RN-08: factura de carga con anticipo no emite nota de credito ni llama a FE", async () => {

@@ -18,6 +18,7 @@ export interface ClasificacionNotaCredito {
 const ESTADOS_FE_TRABADA = new Set(["DRAFT", "TRANSMISSION_FAILED"]);
 
 export const MENSAJE_TOTAL_EXCEDIDO = "FE ya registra una nota de credito por esta factura. Requiere soporte.";
+export const MENSAJE_MONEDA_DISTINTA = "La moneda de la nota de credito no coincide con la de la factura.";
 
 export function clasificarRespuestaNotaCredito(
   resultado: FiscalEmitNotaCreditoResponse | FiscalGatewayError
@@ -52,7 +53,12 @@ function clasificarError(error: FiscalGatewayError): ClasificacionNotaCredito {
 
   if (feError === "CREDIT_NOTE_TOTAL_EXCEEDED") {
     // RN-10: FE tiene una nota por esta factura que FS no conoce. Caso residual.
-    throw new HttpError(409, "CONFLICT", MENSAJE_TOTAL_EXCEDIDO, { gateway_code: error.code, details: error.details ?? null });
+    // SPEC_NOTA_CREDITO_PARCIAL_v0.1, RN-05: tambien cuando la suma de notas parciales supera la factura.
+    throw new HttpError(409, "CONFLICT", MENSAJE_TOTAL_EXCEDIDO, { gateway_code: error.code, fe_code: feError, details: error.details ?? null });
+  }
+  if (feError === "INVALID_REFERENCED_DOCUMENT") {
+    // RN-05: la moneda de la nota no coincide con la de la factura. FE no numero.
+    throw new HttpError(409, "CONFLICT", MENSAJE_MONEDA_DISTINTA, { gateway_code: error.code, fe_code: feError, details: error.details ?? null });
   }
 
   let code: string | null = null;

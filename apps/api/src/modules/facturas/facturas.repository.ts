@@ -1,4 +1,5 @@
 import type { FiscalCancelStatus } from "../fiscal-gateway/fiscal-gateway.types";
+import type { TaxTotals } from "@facturacion-simple/shared";
 import { resumenRemision } from "./nota-remision.resumen";
 import { pool } from "../../db/pool";
 import { HttpError } from "../../shared/errors/http-error";
@@ -33,6 +34,9 @@ interface FacturaRow {
   cliente_snapshot: unknown;
   totals_snapshot: unknown;
   fiscal_response_snapshot: unknown;
+  /** SPEC_MONEDA_EXTRANJERA_v0.1. Ausentes en filas leidas antes de la migracion 0042. */
+  moneda?: string | null;
+  tipo_cambio?: string | number | null;
   /** SPEC_DOCUMENTOS_ESCRITORIO_v0.1, fase B1: solo en notas de remision. */
   remision_snapshot?: unknown;
   fiscal_document_id: string | null;
@@ -115,6 +119,8 @@ const COLUMNAS_DOCUMENTO = `
           cliente_snapshot,
           totals_snapshot,
           fiscal_response_snapshot,
+          moneda,
+          tipo_cambio,
           case when tipo = 'NOTA_REMISION'
                then jsonb_build_object('remision', fiscal_request_snapshot -> 'remision', 'transporte', fiscal_request_snapshot -> 'transporte')
           end as remision_snapshot,
@@ -465,6 +471,20 @@ export class PgFacturaRepository implements FacturaRepository {
     return this.toResponse(factura, await this.findItems(factura.id));
   }
 
+  async updateTotals(input: { facturadorId: string; documentoId: string; totals: TaxTotals }): Promise<DocumentoResponse | null> {
+    const result = await pool.query<FacturaRow>(
+      `
+        update facturas_operativas
+        set totals_snapshot = $3::jsonb, updated_at = now()
+        where facturador_id = $1 and id = $2 and deleted_at is null
+        returning ${COLUMNAS_DOCUMENTO}
+      `,
+      [input.facturadorId, input.documentoId, JSON.stringify(input.totals)]
+    );
+    const factura = result.rows[0];
+    return factura ? this.toResponse(factura, await this.findItems(factura.id)) : null;
+  }
+
   async createFromEmission(input: FacturaPersistInput): Promise<DocumentoResponse> {
     const client = await pool.connect();
 
@@ -644,10 +664,12 @@ export class PgFacturaRepository implements FacturaRepository {
             fiscal_request_snapshot,
             fiscal_response_snapshot,
             email_estado,
-            documento_relacionado_id
+            documento_relacionado_id,
+            moneda,
+            tipo_cambio
           )
           values (
-            $1, $2, $3, 'FACTURA', $4, 'EMITIENDO', $5, $6, $7::jsonb, $8::jsonb, $9::jsonb, '{}'::jsonb, $10, $11
+            $1, $2, $3, 'FACTURA', $4, 'EMITIENDO', $5, $6, $7::jsonb, $8::jsonb, $9::jsonb, '{}'::jsonb, $10, $11, $12, $13
           )
           returning
             ${COLUMNAS_DOCUMENTO}
@@ -663,7 +685,9 @@ export class PgFacturaRepository implements FacturaRepository {
           JSON.stringify(input.preview.totals),
           JSON.stringify(input.fiscalRequest),
           input.input.cliente.email?.trim() ? "DELEGATED" : null,
-          input.documentoRelacionadoId ?? null
+          input.documentoRelacionadoId ?? null,
+          input.input.moneda ?? "PYG",
+          input.input.moneda && input.input.moneda !== "PYG" ? input.input.tipo_cambio ?? null : null
         ]
       );
 
@@ -799,14 +823,17 @@ export class PgFacturaRepository implements FacturaRepository {
             sifen_result_message,
             sifen_last_checked_at,
             verificacion_next_at,
-            emitted_at
+            emitted_at,
+            moneda,
+            tipo_cambio
           )
           values (
             $1, $2, $3, 'NOTA_CREDITO', $4, $5, $6, $7, $8, $9, $10::jsonb, $11::jsonb, $12::jsonb,
             $13::jsonb, $14, $15, $16, $17, $18, $19, $20, $21,
             case when $19::text is not null then now() end,
             case when $22::boolean then null when $5 in ('PENDIENTE_SIFEN', 'EMITIENDO') and $15::text is not null then now() + interval '5 minutes' end,
-            now()
+            now(),
+            $23, $24
           )
           returning
             ${COLUMNAS_DOCUMENTO}
@@ -822,7 +849,7 @@ export class PgFacturaRepository implements FacturaRepository {
           input.original.id,
           input.motivo,
           JSON.stringify(input.original.cliente),
-          JSON.stringify(input.original.totals),
+          JSON.stringify(input.totals ?? input.original.totals),
           JSON.stringify(input.fiscalRequest),
           JSON.stringify(input.fiscalResponse?.raw ?? input.fiscalError ?? {}),
           input.fiscalResponse?.fiscal_document_id ?? null,
@@ -833,13 +860,16 @@ export class PgFacturaRepository implements FacturaRepository {
           input.fiscalResponse?.status_raw ?? null,
           input.fiscalResponse?.result_code ?? null,
           input.fiscalResponse?.result_message ?? null,
-          input.trabada ?? false
+          input.trabada ?? false,
+          // SPEC_MONEDA_EXTRANJERA_v0.1, D-1: la NC esta en la moneda de su factura.
+          input.original.moneda ?? "PYG",
+          input.original.moneda && input.original.moneda !== "PYG" ? input.original.tipo_cambio ?? null : null
         ]
       );
 
       const notaCredito = inserted.rows[0]!;
 
-      for (const item of input.original.items) {
+      for (const item of input.items ?? input.original.items) {
         await client.query(
           `
             insert into factura_items_snapshot (
@@ -906,7 +936,7 @@ export class PgFacturaRepository implements FacturaRepository {
 
       await client.query("commit");
 
-      return this.toResponse(notaCredito, input.original.items);
+      return this.toResponse(notaCredito, input.items ?? input.original.items);
     } catch (error) {
       await client.query("rollback");
       if (isUniqueViolation(error)) {
@@ -921,16 +951,8 @@ export class PgFacturaRepository implements FacturaRepository {
           return existingByIdempotency;
         }
 
-        // SPEC_NOTA_CREDITO_TRABADA_v0.1, RN-02: el indice por factura excluye las rechazadas; se devuelve la viva.
-        const notas = await this.findNotasCreditoByOriginal({
-          facturadorId: input.facturadorId,
-          documentoId: input.original.id
-        });
-        const existingByOriginal = notas.find((nota) => nota.estado !== "RECHAZADA");
-
-        if (existingByOriginal) {
-          return existingByOriginal;
-        }
+        // SPEC_NOTA_CREDITO_PARCIAL_v0.1: ya no hay indice unico por factura (0043). Solo la clave de idempotencia
+        // puede chocar; devolver otra nota de la factura escondia una nota emitida en FE.
       }
       throw error;
     } finally {
@@ -1860,6 +1882,8 @@ function mapFacturaRow(
     tipo: row.tipo,
     estado: row.estado,
     condicion_venta: row.condicion_venta,
+    moneda: row.moneda ?? "PYG",
+    tipo_cambio: row.tipo_cambio === null || row.tipo_cambio === undefined ? null : Number(row.tipo_cambio),
     ...(row.tipo === "NOTA_REMISION" ? { remision: resumenRemision(row.remision_snapshot) } : {}),
     numero_fiscal: row.numero_fiscal,
     cdc,

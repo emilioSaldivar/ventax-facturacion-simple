@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { cantidadEscalada, monedasFactura, tieneDecimalesValidos } from "@facturacion-simple/shared";
 import { z } from "zod";
 import { requireAuth } from "../auth/auth.middleware";
 import { clienteRepository } from "../clientes/clientes.repository";
@@ -17,7 +18,8 @@ import {
   createDocumentoDerived,
   enqueueFacturaEmission,
   inutilizarNumeroFactura,
-  emitNotaCreditoTotal,
+  emitNotaCredito,
+  getNotaCreditoSaldo,
   reintentarNotaCreditoPorId,
   getBatchPendientesGestion,
   getDocumentoDecision,
@@ -41,7 +43,8 @@ const documentoTipos = ["FACTURA", "NOTA_CREDITO", "NOTA_REMISION"] as const;
 const documentoTiposOperativos = ["CONTADO", "CREDITO", "NOTA_CREDITO"] as const;
 const documentoEstados = ["EMITIENDO", "EMITIDA", "PENDIENTE_SIFEN", "RECHAZADA", "ERROR_OPERATIVO", "ERROR_TEMPORAL", "ANULADA", "CANCELADO_LOCAL"] as const;
 
-export const facturaPreviewSchema = z.object({
+/** Base de la factura, sin las reglas que cruzan campos (se aplican con `refinarFactura`). */
+const facturaBaseSchema = z.object({
   condicion_venta: z.enum(condicionesVenta),
   tipo_transaccion: z.coerce.number().int().refine((value) => [1, 2, 3].includes(value), "tipo_transaccion invalido. Use 1, 2 o 3.").default(2),
   credito_plazo_dias: z.coerce.number().int().min(1).max(365).nullable().optional(),
@@ -61,13 +64,44 @@ export const facturaPreviewSchema = z.object({
         catalogo_item_id: z.string().uuid().nullable().optional(),
         codigo: z.string().trim().max(60).nullable().optional(),
         descripcion: z.string().trim().min(1).max(240),
-        cantidad: z.coerce.number().int().min(1),
-        precio_unitario: z.coerce.number().int().min(0),
+        // SPEC_MONEDA_EXTRANJERA_v0.1, RN-06: mayor que cero con hasta 4 decimales (MT150 E711; se valida abajo).
+        cantidad: z.coerce.number().positive(),
+        // SPEC_MONEDA_EXTRANJERA_v0.1, RN-02: decimales segun la moneda (se valida abajo).
+        precio_unitario: z.coerce.number().min(0),
         iva_tipo: z.enum(ivaTipos).default("IVA_10")
       })
     )
-    .min(1)
+    .min(1),
+  moneda: z.enum(monedasFactura).default("PYG"),
+  tipo_cambio: z.coerce.number().positive().nullable().optional()
 });
+
+type FacturaBase = z.infer<typeof facturaBaseSchema>;
+
+/** SPEC_MONEDA_EXTRANJERA_v0.1, RN-02 y RN-06: tipo de cambio, decimales del precio por moneda y de la cantidad. */
+function refinarFactura(input: FacturaBase, ctx: z.RefinementCtx): void {
+  if (input.moneda !== "PYG") {
+    if (!input.tipo_cambio) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["tipo_cambio"], message: "Con moneda extranjera el tipo de cambio es obligatorio." });
+    } else if (Math.abs(input.tipo_cambio * 10000 - Math.round(input.tipo_cambio * 10000)) > 1e-6) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["tipo_cambio"], message: "El tipo de cambio admite hasta 4 decimales." });
+    }
+  }
+  input.items.forEach((item, indice) => {
+    if (cantidadEscalada(item.cantidad) === null) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["items", indice, "cantidad"], message: "La cantidad admite hasta 4 decimales." });
+    }
+    if (!tieneDecimalesValidos(item.precio_unitario, input.moneda)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["items", indice, "precio_unitario"],
+        message: input.moneda === "PYG" ? "En guaranies el precio es un entero." : "El precio admite hasta 2 decimales."
+      });
+    }
+  });
+}
+
+export const facturaPreviewSchema = facturaBaseSchema.superRefine(refinarFactura);
 
 const documentoListQuerySchema = z
   .object({
@@ -129,18 +163,39 @@ const voidNumberSchema = z.object({
 });
 
 /** SPEC_CORRECCION_INUTILIZACION_RECHAZADAS_v0.1, RN-A1: solo la emision lleva la factura que corrige. */
-const facturaEmisionSchema = facturaPreviewSchema.extend({
-  corrige_documento_id: z.string().uuid().nullable().optional()
-});
+const facturaEmisionSchema = facturaBaseSchema
+  .extend({
+    corrige_documento_id: z.string().uuid().nullable().optional()
+  })
+  .superRefine(refinarFactura);
 
 /** RN-B2 y RN-B3: del operador solo se toma el motivo; cualquier otro campo se descarta. */
 const inutilizarSchema = z.object({
   motivo: z.string().trim().min(5).max(150)
 });
 
-const notaCreditoSchema = z.object({
-  motivo: z.string().trim().min(1).max(300)
-});
+const notaCreditoSchema = z
+  .object({
+    motivo: z.string().trim().min(1).max(300),
+    // SPEC_NOTA_CREDITO_PARCIAL_v0.1: con lineas, nota parcial; sin ellas, la total de siempre.
+    lineas: z
+      .array(z.object({ line_no: z.number().int().positive(), cantidad: z.number().positive() }))
+      .min(1)
+      .max(200)
+      .optional()
+  })
+  .superRefine((input, ctx) => {
+    const vistas = new Set<number>();
+    input.lineas?.forEach((linea, indice) => {
+      if (cantidadEscalada(linea.cantidad) === null) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["lineas", indice, "cantidad"], message: "La cantidad admite hasta 4 decimales." });
+      }
+      if (vistas.has(linea.line_no)) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["lineas", indice, "line_no"], message: "Linea repetida." });
+      }
+      vistas.add(linea.line_no);
+    });
+  });
 
 /**
  * `/conciliacion/idempotency` exige la clave de consumidor del facturador, a diferencia de
@@ -476,7 +531,7 @@ facturasRouter.post(
     try {
       const context = await getOperationalContext(req.user!.id, operationalContextRepository);
       // SPEC_NOTA_CREDITO_TRABADA_v0.1, RN-01: la clave la deriva el servidor; el encabezado se ignora.
-      const { documento, reintento } = await emitNotaCreditoTotal(
+      const { documento, reintento } = await emitNotaCredito(
         context,
         String(req.params.documentoId),
         req.body,
@@ -484,6 +539,21 @@ facturasRouter.post(
         fiscalGateway
       );
       res.status(reintento ? 200 : 201).json(documento);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// SPEC_NOTA_CREDITO_PARCIAL_v0.1: saldo acreditable por linea y que admite la factura (total o parcial).
+facturasRouter.get(
+  "/facturas/:documentoId/nota-credito/saldo",
+  requireAuth,
+  validateRequest("params", documentoParamsSchema),
+  async (req, res, next) => {
+    try {
+      const context = await getOperationalContext(req.user!.id, operationalContextRepository);
+      res.json(await getNotaCreditoSaldo(context, String(req.params.documentoId), facturasRepository));
     } catch (error) {
       next(error);
     }

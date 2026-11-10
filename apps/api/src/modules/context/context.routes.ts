@@ -10,7 +10,7 @@ export const contextRouter = Router();
 contextRouter.get("/me/context", requireAuth, async (req, res, next) => {
   try {
     const context = await getOperationalContext(req.user!.id, operationalContextRepository);
-    res.json({ ...context, carga_masiva_habilitada: env.CARGA_MASIVA_ENABLED });
+    res.json({ ...context, carga_masiva_habilitada: env.CARGA_MASIVA_ENABLED, nc_moneda_extranjera_habilitada: env.FE_NC_MONEDA_EXTRANJERA });
   } catch (error) {
     next(error);
   }
