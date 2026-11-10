@@ -120,6 +120,13 @@ async function abrirDocumento(page, numero) {
     const r1 = await prepararRechazada(token, `A-${vp.nombre}`, String(base + 1), "1306");
     const r2 = await prepararRechazada(token, `B-${vp.nombre}`, String(base + 2), "1306");
     const ctx = await browser.newContext({ viewport: { width: vp.width, height: vp.height } });
+    // SPEC_EDITOR_FACTURA_PC_v0.1: este flujo se prueba con el editor simple tambien en escritorio; el modo
+    // completo tiene su propio script (scripts/segel-fs/playwright-editor-pc.cjs).
+    await ctx.addInitScript(() => {
+      try {
+        window.localStorage.setItem("fs.editor.modo", "simple");
+      } catch {}
+    });
     const page = await ctx.newPage();
     page.setDefaultTimeout(20000);
     try {
