@@ -1,8 +1,8 @@
 # PLAN Editor De Factura En Modo Completo (PC) v0.1
 
-**Fecha:** 2026-11-10 · **SPEC:** `docs/SPEC_EDITOR_FACTURA_PC_v0.1.md` · **Estado:** borrador; se refina cuando el usuario confirme D-1 a D-5.
+**Fecha:** 2026-11-10 · **SPEC:** `docs/SPEC_EDITOR_FACTURA_PC_v0.1.md` · **Estado:** D-1 a D-5 confirmadas (2026-11-10).
 
-Se implementa despues de la cadena de moneda extranjera (MON-008 cantidad decimal y, si el usuario lo decide, MON-009 totales de FE), porque la grilla depende de la precision por moneda y de que `cantidad` acepte decimales en la API.
+Se implementa despues de MON-008 (cantidad decimal en la API y en `tax.ts`), MON-009 (totales de FE) y MON-011 (selector de dos monedas y RN-08), porque la grilla reutiliza `cantidadValida`, `precioValido`, `normalizeDecimalInput(valor, decimales)` y el comportamiento al cambiar de moneda. Sin esas tres, la grilla no puede validar por fila.
 
 ## 1. Estado del editor (`main.tsx`, `InvoiceEditor`)
 
@@ -30,7 +30,14 @@ Se implementa despues de la cadena de moneda extranjera (MON-008 cantidad decima
 
 - Sin cambio en rutas ni esquemas, salvo lo que ya trae la cadena de moneda (`cantidad` decimal, MON-008). `spec/openapi.yaml` no cambia en esta cadena.
 
-## 6. Pruebas
+## 6. Detalle por archivo para quien implemente
+
+- `apps/web-operacion/src/main.tsx`: `InvoiceEditor` conserva el estado; se extraen `EditorCompleto`, `GrillaLineas` y `ModoEditorToggle` como componentes en el mismo archivo o en `apps/web-operacion/src/editor-completo.tsx` (como ya existe `carga-masiva.tsx`); la ventana "Agregar producto" no se toca.
+- `apps/web-operacion/src/styles.css`: `.invoice-editor.completo`, `.grilla-lineas`, `.grilla-lineas td.invalida`, `.modo-editor-toggle`; media query `(min-width: 1024px)`.
+- Preferencia: clave `fs.editor.modo` en `localStorage`, valores `simple` | `completo`, lectura y escritura con `try/catch`.
+- Sin cambios en `apps/api`, `packages/shared` ni `spec/openapi.yaml`.
+
+## 7. Pruebas
 
 - Unitarias de la vista previa local con cantidades decimales y de la validacion por fila (`precioValido`, cantidad).
-- Playwright `scripts/segel-fs/playwright-editor-pc.cjs`: CA-01 a CA-06 en 1440 y 1280, CA-03 en 390, con una emision real en SIFEN test en 1440 (tres lineas, una con cantidad decimal, en USD si D-4 de moneda lo permite). Evidencia en `TASKS_EDITOR_FACTURA_PC_v0.1.md`.
+- Playwright `scripts/segel-fs/playwright-editor-pc.cjs`: CA-01 a CA-06 en 1440 y 1280, CA-03 en 390, con una emision real en SIFEN test en 1440 (tres lineas en USD, una con cantidad 1,5, tipo de cambio 7350,5) y otra en PYG. Comprobar ademas que el cuerpo enviado a `POST /facturas` desde el modo completo es identico al del modo simple con las mismas lineas (RN-02): interceptar la peticion con `page.route` o `page.waitForRequest` y comparar los JSON. Evidencia en `TASKS_EDITOR_FACTURA_PC_v0.1.md`.
