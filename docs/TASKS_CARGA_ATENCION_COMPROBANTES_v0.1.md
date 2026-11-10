@@ -22,7 +22,7 @@
 | CAC-006 | 3 | Pantalla (PLAN 6) | `typecheck` y `build` de `web-operacion` | DONE: `145e318`; `typecheck` y `build` de `web-operacion` sin errores |
 | CAC-007 | 4 | Stack local: `fe-segel` desde `feat/carga-atencion-comprobantes`, FS desde esta rama, linea base de numeracion (PLAN 9) | Salud de los servicios; imagen anterior anotada | DONE: E-1 |
 | CAC-008 | 4 | Playwright CA-01 a CA-07 contra el stack local, 390 y 1280 (PLAN 8) | Resultado de Playwright con capturas | DONE: E-2, 19/19 |
-| CAC-010 | 6 | RN-10: estado "Requiere atención" sin barra de espera (decision del usuario) | `typecheck`, `build`; Playwright sobre la carga de anticipo del stack local, 390 y 1280 | TODO |
+| CAC-010 | 6 | RN-10: estado "Requiere atención" sin barra de espera (decision del usuario) | `typecheck`, `build`; Playwright con una carga rechazada, 390 y 1280 | DONE: `9d62790`; E-5, 21/21 |
 | CAC-009 | 5 | Repaso de SPEC, PLAN y TASKS; BACKLOG FS-47; aviso a FE con `FE_REF` | Lectura cruzada | DONE: SPEC y PLAN repasados (ver E-3); BACKLOG FS-47 cerrado; aviso a FE |
 
 ## Evidencia
@@ -74,3 +74,8 @@ Stack local reconstruido con FS `102783e` y FE `97d89b6` (rama de FE `test/fs-rc
 | `CREDITO_CUOTAS_DETALLE` | 1010560 | 2500000 | 2500000 | 3 cuotas guardadas en el pedido fiscal de FS |
 
 Ningun aviso "el total calculado difiere" en el log de FS. FS no muestra en pantalla tipo de operacion, compras publicas ni lote y vencimiento: quedan en el pedido fiscal guardado. Numeracion despues: siguiente factura `1010561`.
+
+### E-5. RN-10, estado "Requiere atención" (2026-11-09)
+
+Pedido del usuario al ver la carga de anticipo en "En SIFEN" con todo ya respondido. Stack local con FS `9d62790` y FE `segel-rc4.13`. `playwright-atencion-comprobantes.cjs` ampliado con RN-10: **21/21**. Factura `1010564` rechazada con `1306`: la carga se muestra "Requiere atención", sin barra ni "Esperando la respuesta de SIFEN"; al inutilizar (`Aceptada`) vuelve a "Finalizada" en el detalle y en la lista. El usuario inutilizo antes, por la app, el `1010563` de la carga de anticipo (`ACCEPTED`, auditado). Siguiente factura local: `1010565`.
+

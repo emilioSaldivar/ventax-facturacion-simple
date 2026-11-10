@@ -90,7 +90,9 @@ async function rechazo(browser) {
   check("CA-01: aviso y total 'Requieren atención'", /Requieren atención\s*\n?\s*1/.test(texto) && texto.includes("La carga no termina hasta inutilizarlos"), texto.slice(0, 300));
   check("CA-01: numero sin resolver, rechazado por SIFEN", (await atencion.innerText()).includes("rechazado por SIFEN"), await atencion.innerText());
   check("CA-01: el rechazo trae su codigo SIFEN", texto.includes("1306"), "");
-  check("rechazo: la carga sigue abierta en SIFEN", (await estado(page)).includes("En SIFEN"), await estado(page));
+  // RN-10: sin nada en proceso, la carga solo espera al operador.
+  check("RN-10: el estado se muestra como Requiere atención", (await estado(page)) === "Requiere atención", await estado(page));
+  check("RN-10: sin barra ni 'Esperando la respuesta de SIFEN'", !texto.includes("Esperando la respuesta de SIFEN") && (await page.locator(".carga-barra").count()) === 0, "");
   const editar = page.getByRole("button", { name: "Editar" }).first();
   check("CA-04: Editar deshabilitado", await editar.isDisabled(), "");
   check("CA-04: texto 'Edición no disponible todavía'", texto.includes("Edición no disponible todavía"), "");
@@ -111,6 +113,12 @@ async function rechazo(browser) {
   check("CA-02: la inutilizacion se envia y FE responde", /Aceptada|En curso/.test(avisoTexto), avisoTexto || (await page.locator(".carga-masiva").innerText()).slice(0, 300));
 
   const cerrada = await esperar(page, async () => (await estado(page)).includes("Finalizada"), "CA-02: la carga termina al inutilizar");
+  await page.getByRole("button", { name: "Volver a las cargas" }).click();
+  await page.getByRole("heading", { name: "Cargas de facturas" }).waitFor({ timeout: 20000 });
+  const filaLista = page.locator("tr", { hasText: path.basename(rutaRechazo) }).first();
+  check("RN-10: en la lista, la carga cerrada vuelve a Finalizada", (await filaLista.locator(".status-pill").innerText()).includes("Finalizada"), "");
+  await page.locator(".carga-enlace", { hasText: path.basename(rutaRechazo) }).first().click();
+  await page.locator(".carga-encabezado .status-pill").first().waitFor({ timeout: 20000 });
   if (cerrada) check("CA-02: la carga termina al inutilizar", true, await estado(page));
   const inut = await page.locator(".carga-inutilizacion").first().innerText().catch(() => "");
   check("CA-02: el comprobante muestra la inutilizacion", inut.includes("Inutilización"), inut);
