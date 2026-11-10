@@ -20,6 +20,9 @@ Documentada el 2026-11-10. Implementada en la rama `feat/moneda-extranjera` (wor
 | MON-005 | `spec/openapi.yaml` (PLAN 5) | YAML valido | DONE (40efc89, 33a30c2, 91f0334) |
 | MON-006 | Playwright con FE `segel-rc4.27` en SIFEN test (PLAN 6): con `ENSAYO_NC_MONEDA=1` y `FE_NC_MONEDA_EXTRANJERA=true` suma NC y recibo en USD | Resultado y capturas | DONE (2026-11-10, 19/19) |
 | MON-007 | Repaso y BACKLOG FS-49 | Lectura cruzada | TODO |
+| MON-008 | Cantidad con hasta 4 decimales (PLAN 7, A-1) | `test`, `typecheck`, `lint`, `build` | TODO |
+| MON-009 | Totales oficiales de FE con `GET /totales` (PLAN 7, A-2) | `test`, `typecheck`, `lint` | TODO |
+| MON-010 | Matriz RAJ de la entrega de FE en SIFEN test (SPEC CA-10) | Playwright y numeros/CDC enviados a FE | EN CURSO: casos 1 y 2 emitidos (`001-001-0000748`, `0000749`); bloqueado por 401 en la verificacion de estado de `raj-fs` (clave compartida de `FE_API_KEY`), decision del usuario |
 
 ## Evidencia
 

@@ -41,6 +41,19 @@
 | D-2 | Recibo en moneda extranjera | **FE `segel-rc4.27`** imprime los centavos y el nombre de la moneda ("CIENTO CINCUENTA DÓLARES ESTADOUNIDENSES CON 50/100"). En FS: el recibo de una factura en moneda extranjera sale en esa moneda (codigo ISO en mayusculas) |
 | D-3 | Despliegue | El cliente en dolares necesita FE `segel-rc4.25` o posterior en produccion (hoy `segel-rc4.6.1`); decision del usuario |
 
+## Alineacion con FE `segel-rc4.29` (entrega de FE, 2026-11-10)
+
+Fuente: repositorio `facturacion-electronica`, rama `docs/programa-cobertura-mt150` (`8d9405b`), `docs/PEDIDO_FACTURACION_SIMPLE_COBERTURA_MT150_v0.1.md` seccion 33. Pedido del usuario: alinear FS a esa version, pantallas con selector PYG / USD y pruebas en test de todos los casos. El contrato de FE no cambia respecto de `rc4.27`; `rc4.28` y `rc4.29` cambian solo el KUDE y el backoffice de FE.
+
+Lo que FS ya cumple de la recomendacion de FE (33.3): selector de moneda con tipo de cambio obligatorio de hasta 4 decimales; precios con hasta 2 decimales fuera de PYG y enteros en PYG; pago contado igual al total en la moneda; NC por referencia (`/nota-credito/total`); recibo con `moneda` en mayusculas y centavos.
+
+Lo que falta en FS:
+
+- **A-1. Cantidad con hasta 4 decimales** (MT150 E711). FE no la valida; la pantalla y la API de FS si. Hoy FS acepta solo enteros desde 1.
+- **A-2. Totales oficiales de FE.** Con la factura o nota aprobada, FS consulta `GET /v1/documentos/{uuid}/totales` y guarda esos totales en el documento; las pantallas muestran los de FE. El calculo de FS queda solo para la vista previa. En guaranies el total de FE puede diferir de la suma simple por el redondeo de SIFEN: vale el de FE.
+
+Sin cambio en FS: descuentos y anticipos (la factura manual de FS no los tiene); NC parcial con lineas y credito con cuotas (alcance nuevo, decide el usuario).
+
 ## Fuera de alcance
 
 - Carga masiva en moneda extranjera (la incorporacion desde la carga sigue en FS-49).
@@ -54,6 +67,8 @@
 - **RN-03.** El calculo de FS es de presentacion: subtotal = cantidad x precio, redondeado a 2 decimales; base e IVA por la tasa del articulo, redondeados a 2 decimales. Si difiere en centavos del KUDE, manda el KUDE.
 - **RN-04.** Formato de montos: guaranies "Gs. 1.234.567"; otra moneda "USD 1.234,50".
 - **RN-05.** RN de nota de credito y recibo segun el punto 6 y 7 del alcance.
+- **RN-06.** Cantidad mayor que cero con hasta 4 decimales, en cualquier moneda (A-1). El subtotal de la vista previa se redondea a la precision de la moneda.
+- **RN-07.** Documento aprobado: FS guarda los totales de `GET /totales` (A-2). Si la consulta falla, conserva los de la vista previa y reintenta en la siguiente verificacion; nunca bloquea la emision ni el estado.
 
 ## Criterios de aceptacion
 
@@ -64,3 +79,6 @@
 - **CA-05.** Una factura en guaranies sale igual que antes.
 - **CA-06.** La nota de credito de una factura en USD se comporta segun la respuesta de FE (bloqueada o habilitada).
 - **CA-07.** Escritorio 1440 y 1280, y 390.
+- **CA-08.** Una factura con cantidad 1,5 se emite y se aprueba; con 5 decimales la pantalla no deja agregar la linea y la API responde 400.
+- **CA-09.** Con la factura aprobada, el total que muestra FS es el de `GET /totales` de FE.
+- **CA-10.** Matriz de la entrega de FE (33.5) con RAJ S.A. en SIFEN test: casos 1, 2, 3, 4, 6, 7, 8, 10, 11, 12 y 13 (FS); 9 lo hizo FE; 2b y 5 fuera de alcance.
