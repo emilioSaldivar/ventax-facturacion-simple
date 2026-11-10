@@ -3,6 +3,7 @@
 // Solo contra el stack local de Segel con SIFEN test, nunca segel-fs.
 //
 //   ENSAYO_PASSWORD_FILE=/ruta/operador.pass node scripts/segel-fs/playwright-atencion-comprobantes.cjs <cac-rechazo.csv> <cac-invalida.csv>
+//   ENSAYO_RETOMAR=1 ...  retoma la carga de rechazo ya confirmada (mismo archivo) y omite la invalida.
 //
 // 1. cac-rechazo: un comprobante con un RUC que SIFEN test no reconoce (1306). Se confirma, se espera el rechazo,
 //    se ve la atencion y "Editar" deshabilitado, un motivo corto no se envia, se inutiliza y la carga termina.
@@ -75,10 +76,16 @@ async function rechazo(browser) {
   page.setDefaultTimeout(30000);
   await login(page);
   await irACargas(page);
-  await subir(page, rutaRechazo);
-  check("rechazo: archivo validado", (await estado(page)).includes("Lista para confirmar"), await estado(page));
-  await page.getByRole("button", { name: "Confirmar y emitir" }).click();
-  await page.getByRole("button", { name: /Sí, emitir 1 facturas/ }).click();
+  if (process.env.ENSAYO_RETOMAR === "1") {
+    // Retoma una carga del mismo archivo ya confirmada (SIFEN test puede tardar mas que el limite en responder el lote).
+    await page.locator(".carga-enlace", { hasText: path.basename(rutaRechazo) }).first().click();
+    await page.locator(".carga-encabezado .status-pill").first().waitFor({ timeout: 20000 });
+  } else {
+    await subir(page, rutaRechazo);
+    check("rechazo: archivo validado", (await estado(page)).includes("Lista para confirmar"), await estado(page));
+    await page.getByRole("button", { name: "Confirmar y emitir" }).click();
+    await page.getByRole("button", { name: /Sí, emitir 1 facturas/ }).click();
+  }
 
   const atencion = page.locator(".carga-atencion").first();
   if (!(await esperar(page, async () => (await atencion.count()) > 0, "rechazo: SIFEN rechaza y aparece la atencion"))) {
@@ -155,7 +162,7 @@ async function invalida(browser) {
 (async () => {
   const browser = await chromium.launch();
   try {
-    await invalida(browser);
+    if (process.env.ENSAYO_RETOMAR !== "1") await invalida(browser);
     await rechazo(browser);
   } catch (error) {
     check("ejecucion sin errores", false, error.message.split("\n")[0]);
