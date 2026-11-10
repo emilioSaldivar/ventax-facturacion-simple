@@ -27,6 +27,9 @@ export interface PublicDocumentResponse {
   cliente: FacturaClienteInput;
   totals: TaxTotals;
   email_status: EmailStatus;
+  /** SPEC_MONEDA_EXTRANJERA_v0.1, D-5: moneda ISO del documento y tipo de cambio global (null en PYG). */
+  moneda: string;
+  tipo_cambio: number | null;
   artifacts: {
     kude_pdf: {
       available: boolean;
@@ -51,6 +54,8 @@ export interface PublicDocumentRecord {
     cliente: FacturaClienteInput;
     totals: TaxTotals;
     email_status: EmailStatus;
+    moneda: string;
+    tipo_cambio: number | null;
   };
 }
 

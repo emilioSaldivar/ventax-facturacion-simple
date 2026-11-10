@@ -322,6 +322,30 @@ describe("entrega service", () => {
     expect(html).not.toContain("Cliente <script>");
   });
 
+  it("SPEC_MONEDA_EXTRANJERA_v0.1, D-5: la pagina publica muestra el total en la moneda del documento", async () => {
+    const deliveryLinks = new FakeDeliveryLinkRepository();
+    const base = buildPublicDocument();
+    deliveryLinks.publicDocument = {
+      ...base,
+      documento: {
+        ...base.documento,
+        moneda: "USD",
+        tipo_cambio: 6329.77,
+        totals: { ...base.documento.totals, total: 275.23, fuente: "FE", total_guaranies: 1742158 }
+      }
+    };
+    const html = renderPublicDocumentHtml(await getPublicDocument("A".repeat(43), deliveryLinks));
+    expect(html).toContain("USD 275,23");
+    expect(html).toContain("Tipo de cambio 6.329,77");
+    expect(html).toMatch(/Equivale a Gs\.?\s*1\.742\.158/);
+    expect(html).not.toMatch(/Gs\.?\s*275(?![\d.,])/);
+
+    // En guaranies, como siempre y sin detalle de moneda.
+    deliveryLinks.publicDocument = { ...base, documento: { ...base.documento, moneda: "PYG", tipo_cambio: null } };
+    const pyg = renderPublicDocumentHtml(await getPublicDocument("A".repeat(43), deliveryLinks));
+    expect(pyg).not.toContain("Tipo de cambio");
+  });
+
   it("fetches public artifacts by CDC through fiscal gateway", async () => {
     const deliveryLinks = new FakeDeliveryLinkRepository();
     const gateway = new FakeFiscalGateway();

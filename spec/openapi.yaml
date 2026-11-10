@@ -4087,6 +4087,13 @@ components:
           $ref: "#/components/schemas/FacturaClienteInput"
         totals:
           $ref: "#/components/schemas/DocumentoTotals"
+        moneda:
+          type: string
+          description: Moneda ISO del documento (`PYG` por omision). La pagina publica muestra el total en esta moneda (SPEC_MONEDA_EXTRANJERA_v0.1 D-5).
+        tipo_cambio:
+          type: number
+          nullable: true
+          description: Tipo de cambio global; null en `PYG`.
         email_status:
           $ref: "#/components/schemas/EmailStatus"
         artifacts:

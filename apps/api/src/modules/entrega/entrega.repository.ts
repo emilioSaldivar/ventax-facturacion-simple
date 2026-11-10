@@ -21,6 +21,8 @@ interface PublicDocumentRow {
   cliente_snapshot: unknown;
   totals_snapshot: unknown;
   email_estado: PublicDocumentRecord["documento"]["email_status"] | null;
+  moneda: string | null;
+  tipo_cambio: string | number | null;
 }
 
 export class PgDeliveryLinkRepository implements DeliveryLinkRepository {
@@ -56,7 +58,9 @@ export class PgDeliveryLinkRepository implements DeliveryLinkRepository {
           fo.cdc,
           fo.cliente_snapshot,
           fo.totals_snapshot,
-          fo.email_estado
+          fo.email_estado,
+          fo.moneda,
+          fo.tipo_cambio
         from documento_links_publicos dlp
         join facturas_operativas fo on fo.id = dlp.factura_operativa_id
         join facturadores f on f.id = dlp.facturador_id
@@ -159,7 +163,10 @@ function mapPublicRow(row: PublicDocumentRow | undefined): PublicDocumentRecord 
       cdc: row.cdc,
       cliente: row.cliente_snapshot as PublicDocumentRecord["documento"]["cliente"],
       totals: row.totals_snapshot as PublicDocumentRecord["documento"]["totals"],
-      email_status: row.email_estado ?? "NOT_APPLICABLE"
+      email_status: row.email_estado ?? "NOT_APPLICABLE",
+      // SPEC_MONEDA_EXTRANJERA_v0.1, D-5: la pagina publica muestra el total en la moneda del documento.
+      moneda: row.moneda ?? "PYG",
+      tipo_cambio: row.tipo_cambio == null ? null : Number(row.tipo_cambio)
     }
   };
 }

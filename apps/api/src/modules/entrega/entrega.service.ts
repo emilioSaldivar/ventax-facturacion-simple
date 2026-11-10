@@ -106,6 +106,8 @@ export async function getPublicDocument(token: string, repository: DeliveryLinkR
     cliente: record.documento.cliente,
     totals: record.documento.totals,
     email_status: record.documento.email_status,
+    moneda: record.documento.moneda ?? "PYG",
+    tipo_cambio: record.documento.tipo_cambio ?? null,
     // FS-31: la pagina publica de un documento sin validez no ofrece KuDE ni XML.
     artifacts: buildPublicArtifacts(record.token, ESTADOS_SIN_VALIDEZ.has(record.documento.estado) ? null : record.documento.cdc)
   };
@@ -351,7 +353,8 @@ export function renderPublicDocumentHtml(documento: PublicDocumentResponse): str
           </dl>
           <div class="total">
             <dt>Total</dt>
-            <dd>${escapeHtml(formatGuaranies(documento.totals.total))}</dd>
+            <dd>${escapeHtml(formatMontoPublico(documento.totals.total, documento.moneda))}</dd>
+            ${detalleMonedaPublico(documento)}
           </div>
           <div class="actions">
             <a class="primary${kudeUrl ? "" : " disabled"}" href="${escapeAttribute(kudeUrl ?? "#")}">Ver factura PDF</a>
@@ -448,6 +451,21 @@ function formatPublicEmailStatus(status: PublicDocumentResponse["email_status"])
     return "Sin email";
   }
   return "No disponible";
+}
+
+/** SPEC_MONEDA_EXTRANJERA_v0.1, RN-04: "Gs. 1.234.567" o "USD 1.234,50". */
+function formatMontoPublico(value: number, moneda: string | null | undefined): string {
+  if (!moneda || moneda === "PYG") return formatGuaranies(value);
+  return `${moneda} ${new Intl.NumberFormat("es-PY", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value)}`;
+}
+
+/** En moneda extranjera: tipo de cambio y, con los totales oficiales de FE, el equivalente en guaranies. */
+function detalleMonedaPublico(documento: PublicDocumentResponse): string {
+  if (!documento.moneda || documento.moneda === "PYG") return "";
+  const partes: string[] = [];
+  if (documento.tipo_cambio) partes.push(`Tipo de cambio ${new Intl.NumberFormat("es-PY", { maximumFractionDigits: 4 }).format(documento.tipo_cambio)}`);
+  if (documento.totals.fuente === "FE" && documento.totals.total_guaranies != null) partes.push(`Equivale a ${formatGuaranies(documento.totals.total_guaranies)}`);
+  return partes.length ? `<p class="muted">${escapeHtml(partes.join(" · "))}</p>` : "";
 }
 
 function formatGuaranies(value: number): string {
