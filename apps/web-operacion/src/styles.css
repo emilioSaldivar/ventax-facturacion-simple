@@ -2827,6 +2827,11 @@ dd {
 }
 
 /* SPEC_DOCUMENTOS_ESCRITORIO_v0.1: escritorio primero (>= 1024 px), menu lateral y documentos en tabla. */
+/* Seis pestañas no entran en una linea de celular: pasan a la siguiente, sin desbordar la pagina. */
+.documents-filters > .filter-tabs {
+  flex-wrap: wrap;
+}
+
 .pestana-proximamente {
   opacity: 0.6;
   cursor: not-allowed;
