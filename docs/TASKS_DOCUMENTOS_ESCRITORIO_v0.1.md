@@ -19,7 +19,13 @@
 | DES-004 | A | Filtros en fila y paginacion (PLAN 3) | Playwright CA-05 | DONE: `d1b3afa` y `789a588`; E-1 |
 | DES-005 | A | Helper de navegacion en los guiones de Playwright y repeticion de los E2E (PLAN 2 y 5) | CA-06 | DONE: `scripts/lib/navegacion.cjs` en los cuatro guiones de `scripts/segel-fs`; E-2 |
 | DES-006 | A | Repaso de SPEC, PLAN, TASKS; BACKLOG FS-37 | Lectura cruzada | DONE: SPEC, PLAN y BACKLOG FS-37 y FS-50 repasados |
-| DES-101 | B | Tipos nuevos en FS e incorporacion desde la carga | Espera contratos de FE | BLOQUEADA |
+| DES-101 | B1 | Migracion `0040` y tipos (PLAN 6) | `test`, `typecheck` y `lint` de `api` | TODO |
+| DES-102 | B1 | Gateway, mock, ruta de subida y plantilla por tipo (PLAN 6) | Pruebas de gateway, mock y ruta | TODO |
+| DES-103 | B1 | Incorporacion de comprobantes NRE (PLAN 6) | Pruebas del mapeo y del worker | TODO |
+| DES-104 | B1 | Pantalla: selector de tipo, pestaña y ficha de NRE (PLAN 6) | `typecheck` y `build` | TODO |
+| DES-105 | B1 | `spec/openapi.yaml` | YAML valido | TODO |
+| DES-106 | B1 | Playwright con FE `segel-rc4.21` en SIFEN test, 1440, 1280 y 390 | Resultado y capturas | TODO |
+| DES-107 | B | Nota de debito y autofactura | Espera contratos de FE | BLOQUEADA |
 
 ## Evidencia
 

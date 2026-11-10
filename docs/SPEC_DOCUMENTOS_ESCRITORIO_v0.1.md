@@ -31,6 +31,16 @@ Que en PC la app se use como un sistema de facturacion de escritorio: navegacion
 - Tipos `NOTA_REMISION`, `NOTA_DEBITO` y `AUTOFACTURA` en FS (migracion de `facturas_operativas_tipo_check`), incorporacion desde la carga (hoy RN-05 de `SPEC_TOTALES_FE_EN_CARGA_v0.1` los descarta) y su listado propio. La nota de remision lleva columnas propias (sin total ni IVA; transporte y rastreo).
 - Disponibilidad de cada pestaña y del selector de "Nueva carga" segun el catalogo fijo `CARGA_TIPO_DOCUMENTO` de FE (`segel-rc4.18`, `habilitado_api`), fijado en el codigo de FS o cacheado; el tipo elegido viaja en `POST /v1/cargas` como `tipo_documento` (BACKLOG FS-50).
 
+### Fase B1: notas de remision (2026-11-10, FE `segel-rc4.21`)
+
+Contrato de FE: `POST /v1/cargas?...&tipo_documento=NOTA_REMISION` (una carga, un tipo); plantilla, ejemplos y diccionario con `?tipo_documento=NOTA_REMISION`; la carga trae `tipo_documento`; el `detalle` de un comprobante NRE trae `fecha`, `receptor`, `remision` (`motivo`, `responsable`, `kilometros`, `fechaFuturaFactura?`, `costoFlete?`), `transporte`, `documentosAsociados`, `informacionFisco` e `items` (sin precio ni IVA), y **no** trae montos, moneda ni condicion. Inutilizar desde la carga igual que facturas.
+
+- **RN-05.** "Nueva carga" ofrece el tipo de documento del catalogo fijo de FE (`CARGA_TIPO_DOCUMENTO`): Factura (por defecto) y Nota de remision habilitadas; Nota de credito, Nota de debito y Autofactura "Próximamente", deshabilitadas. El tipo viaja al subir. "Descargar planilla" baja la del tipo elegido.
+- **RN-06.** La lista de cargas y su detalle muestran el tipo de cada carga.
+- **RN-07.** Un comprobante NRE aprobado o rechazado de una carga crea un documento `NOTA_REMISION` en FS, sin montos ni condicion de venta, con sus lineas (cantidad y descripcion) y el detalle de FE guardado.
+- **RN-08.** La pestaña "Notas de remision" de Documentos se habilita y lista esos documentos. En escritorio, columnas: Fecha, Numero, Destinatario, RUC o CI, Motivo, Estado, CDC y Acciones; sin Total. La ficha muestra destinatario, motivo, traslado (inicio y fin), transportista y vehiculo, y las lineas con cantidad.
+- **RN-09.** Acciones de una nota de remision en FS: ver detalle, KUDE y compartir. Anular, nota de credito y correccion no se ofrecen en esta fase.
+
 ## Fuera de alcance
 
 - **Saldo**: FS no calcula saldos de credito (FS-45); la columna llega con cobranzas.
