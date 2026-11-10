@@ -113,6 +113,9 @@ La fuente de verdad de este proyecto es:
 - `docs/SPEC_TOTALES_FE_EN_CARGA_v0.1.md`
 - `docs/PLAN_TOTALES_FE_EN_CARGA_v0.1.md`
 - `docs/TASKS_TOTALES_FE_EN_CARGA_v0.1.md`
+- `docs/SPEC_DOCUMENTOS_ESCRITORIO_v0.1.md`
+- `docs/PLAN_DOCUMENTOS_ESCRITORIO_v0.1.md`
+- `docs/TASKS_DOCUMENTOS_ESCRITORIO_v0.1.md`
 - `spec/openapi.yaml`
 
 Los documentos bajo `contexto_facturacion_electronica/` y `contexto_pos_graciela/` son antecedentes. No son la especificacion final del nuevo producto.
@@ -143,7 +146,7 @@ Cada tarea de la matriz tecnica debe declarar o dejar evidencia de validacion al
 Validaciones minimas esperadas:
 
 - backend: `npm run test`, `npm run typecheck`, `npm run lint` y pruebas unitarias/integracion del modulo tocado;
-- frontend: `npm run typecheck`, `npm run build` y verificacion visual con Playwright en mobile primero y al menos un viewport desktop/tablet cuando sea visible al operador;
+- frontend: `npm run typecheck`, `npm run build` y verificacion visual con Playwright en escritorio primero (1280 y 1440 px) y al menos un viewport mobile (390 px) cuando sea visible al operador. Decision del usuario del 2026-11-09: la app es escritorio primero (PC first) y sigue siendo responsive (`docs/SPEC_DOCUMENTOS_ESCRITORIO_v0.1.md`);
 - cambios que afecten la aplicacion desplegada: ejecutar `bash scripts/deploy.sh` para reconstruir y redeployar los contenedores antes de validar el flujo operativo;
 - validaciones end-to-end, smoke, UI visible, healthchecks y pruebas contra servicios HTTP deben ejecutarse contra los contenedores levantados por `bash scripts/deploy.sh`, no solo contra procesos locales de desarrollo;
 - flujos completos: usar la UI operativa con Playwright contra el backend local/mock para probar el circuito real de usuario cuando la tarea conecte frontend y backend;
