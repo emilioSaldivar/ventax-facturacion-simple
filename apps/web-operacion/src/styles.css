@@ -3071,3 +3071,69 @@ dd {
   grid-column: 1 / -1;
   margin: 4px 0 0;
 }
+
+/* SPEC_NOTA_CREDITO_PARCIAL_v0.1: ventana de nota de credito total o parcial. */
+.nc-parcial {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.nc-parcial .segmented {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0;
+}
+
+.nc-parcial .segmented button {
+  padding: 8px 12px;
+  border: 1px solid var(--border, #d0d5dd);
+  background: transparent;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.nc-parcial .segmented button.active {
+  background: var(--accent, #c8102e);
+  border-color: var(--accent, #c8102e);
+  color: #fff;
+}
+
+.nc-parcial .segmented button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.nc-parcial-tabla-wrap {
+  max-height: 280px;
+  overflow: auto;
+}
+
+.nc-parcial-tabla {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.nc-parcial-tabla th,
+.nc-parcial-tabla td {
+  padding: 6px;
+  border-bottom: 1px solid var(--border, #e4e7ec);
+  text-align: left;
+}
+
+.nc-parcial-tabla td:nth-child(n + 2),
+.nc-parcial-tabla th:nth-child(n + 2) {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.nc-parcial-tabla input {
+  width: 96px;
+  text-align: right;
+}
+
+.nc-parcial-total {
+  margin: 0;
+  text-align: right;
+}
