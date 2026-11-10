@@ -37,3 +37,7 @@ Stack local con FS `a7a6e43` y FE `segel-rc4.25` (`fbc9cfc`, sin migraciones nue
 
 Primera corrida 10/11: la prueba leia el menu antes de que llegara la lista y comparaba los titulos sin tener en cuenta que se ven en mayusculas. Corregido en la prueba.
 
+
+### E-2. Regresion de FS sobre el corte `segel-rc4.25` (2026-11-10)
+
+Mismo stack (FS `a7a6e43`, FE `segel-rc4.25`): `playwright-documentos-escritorio.cjs` **31/31** (tabla, pestañas, notas de remision, selector de tipo; 1440, 1280 y 390) y `playwright-atencion-comprobantes.cjs` **21/21** (1010567 rechazado con `1306` e inutilizado; carga invalida cerrada sola; estado "Requiere atención"). Con esto, lo implementado en FS para el corte (FS-45, FS-47, documentos en escritorio, notas de remision por carga y planillas de ejemplo) queda probado junto con FE en SIFEN test. Paso 4 (produccion) a decision del usuario, con su confirmacion del aviso a los facturadores que pide FE.
