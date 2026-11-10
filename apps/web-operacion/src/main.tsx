@@ -134,6 +134,7 @@ interface OperationalContextResponse {
     batch_enabled?: boolean | null;
   };
   carga_masiva_habilitada?: boolean;
+  nc_moneda_extranjera_habilitada?: boolean;
   display?: {
     titulo_operativo: string;
   };
@@ -2881,7 +2882,7 @@ function DocumentsView({
                         </button>
                       ) : null}
                       {selected.accion_detalle.acciones_sugeridas.includes("CREAR_NCE") ? (
-                        <button className="secondary-action" disabled={actionLoading || !canEmitNotaCredito(selected, documents)} onClick={() => void emitSelectedNotaCredito()} type="button">
+                        <button className="secondary-action" disabled={actionLoading || !canEmitNotaCredito(selected, documents, Boolean(context?.nc_moneda_extranjera_habilitada))} onClick={() => void emitSelectedNotaCredito()} type="button">
                           Crear nota de credito
                         </button>
                       ) : null}
@@ -2949,12 +2950,12 @@ function DocumentsView({
                   </button>
                 ) : null}
                 {selected.tipo !== "NOTA_REMISION" ? (
-                <button className="secondary-action" disabled={actionLoading || !canEmitNotaCredito(selected, documents)} onClick={() => void emitSelectedNotaCredito()} type="button">
+                <button className="secondary-action" disabled={actionLoading || !canEmitNotaCredito(selected, documents, Boolean(context?.nc_moneda_extranjera_habilitada))} onClick={() => void emitSelectedNotaCredito()} type="button">
                   ↩ Crear nota de credito
                 </button>
                 ) : null}
                 {(selected.totals?.anticipo ?? 0) > 0 ? <small className="muted">{AVISO_NOTA_CREDITO_CON_ANTICIPO}</small> : null}
-                {selected.moneda && selected.moneda !== "PYG" ? <small className="muted">La nota de crédito de una factura en moneda extranjera se gestiona con soporte.</small> : null}
+                {selected.moneda && selected.moneda !== "PYG" && !context?.nc_moneda_extranjera_habilitada ? <small className="muted">La nota de crédito de una factura en moneda extranjera se gestiona con soporte.</small> : null}
                 {/* SPEC_DOCUMENTOS_ESCRITORIO_v0.1, RN-09: la nota de remision no se anula desde FS en esta fase. */}
                 {selected.tipo !== "NOTA_REMISION" ? (
                 <button className="secondary-action" disabled={actionLoading || !canCancelDocumento(selected)} onClick={() => void cancelSelectedDocumento()} type="button">
@@ -6128,15 +6129,15 @@ function canCancelDocumento(documento: DocumentoResponse): boolean {
 /** SPEC_TOTALES_FE_EN_CARGA_v0.1, RN-08. */
 const AVISO_NOTA_CREDITO_CON_ANTICIPO = "Esta factura tiene anticipo: la nota de crédito se gestiona con soporte.";
 
-function canEmitNotaCredito(documento: DocumentoResponse, documents: DocumentoResponse[]): boolean {
+function canEmitNotaCredito(documento: DocumentoResponse, documents: DocumentoResponse[], ncMonedaExtranjera = false): boolean {
   if (documento.tipo !== "FACTURA" || documento.estado !== "EMITIDA" || !documento.cdc) {
     return false;
   }
   if ((documento.totals?.anticipo ?? 0) > 0) {
     return false;
   }
-  // SPEC_MONEDA_EXTRANJERA_v0.1, D-1.
-  if (documento.moneda && documento.moneda !== "PYG") {
+  // SPEC_MONEDA_EXTRANJERA_v0.1, D-1: solo con FE que emite la nota en la moneda de la factura.
+  if (documento.moneda && documento.moneda !== "PYG" && !ncMonedaExtranjera) {
     return false;
   }
 

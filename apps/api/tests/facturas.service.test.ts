@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { env } from "../src/config/env";
 import { MockFiscalGateway, llamadasMockNotaCreditoPorClave } from "../src/modules/fiscal-gateway/fiscal-gateway.client";
 import { reintentarNotaCreditoPorId } from "../src/modules/facturas/facturas.service";
 import {
@@ -1415,6 +1416,24 @@ describe("facturas service", () => {
       repo.list = async () => ({ total: 1, items: [repo.findByIdResponse!] });
       const candidates = await listNotaCreditoCandidates(context, { limit: 30, offset: 0 }, repo);
       expect(candidates.items[0]).toMatchObject({ elegible: false, motivo_no_elegible: MENSAJE_NOTA_CREDITO_MONEDA_EXTRANJERA });
+    });
+
+    it("D-1 con FE_NC_MONEDA_EXTRANJERA: la nota de una factura en USD va por referencia y guarda la moneda", async () => {
+      const previo = env.FE_NC_MONEDA_EXTRANJERA;
+      env.FE_NC_MONEDA_EXTRANJERA = true;
+      try {
+        const repo = new FakeFacturaRepository();
+        repo.findByIdResponse = { ...buildDocumento({ estado: "EMITIDA", cdc: "A".repeat(44) }), moneda: "USD", tipo_cambio: 7350.5 };
+        const gateway = new FakeFiscalGateway(new FiscalGatewayError("UPSTREAM_ERROR", "Should not emit"));
+        await emitNotaCreditoTotal(context, "66666666-6666-4666-8666-666666666666", { motivo: "Error" }, repo, gateway, { idempotencyKey: "x" });
+        expect(gateway.lastNotaCreditoRequest?.por_referencia).toBe(true);
+        expect(repo.lastNotaCreditoInput?.original).toMatchObject({ moneda: "USD", tipo_cambio: 7350.5 });
+        repo.list = async () => ({ total: 1, items: [repo.findByIdResponse!] });
+        const candidates = await listNotaCreditoCandidates(context, { limit: 30, offset: 0 }, repo);
+        expect(candidates.items[0]).toMatchObject({ elegible: true });
+      } finally {
+        env.FE_NC_MONEDA_EXTRANJERA = previo;
+      }
     });
   });
 

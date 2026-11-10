@@ -2588,6 +2588,9 @@ components:
         carga_masiva_habilitada:
           type: boolean
           description: La instancia tiene encendida la carga masiva (`CARGA_MASIVA_ENABLED`).
+        nc_moneda_extranjera_habilitada:
+          type: boolean
+          description: FE admite la nota de credito de una factura en moneda extranjera, en la moneda de la factura (`FE_NC_MONEDA_EXTRANJERA`). Apagada, esa nota se bloquea con el motivo `NOTA_CREDITO_MONEDA_EXTRANJERA`.
 
     TenantSummary:
       type: object

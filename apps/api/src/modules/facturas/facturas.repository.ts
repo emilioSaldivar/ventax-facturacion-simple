@@ -728,14 +728,17 @@ export class PgFacturaRepository implements FacturaRepository {
             sifen_result_message,
             sifen_last_checked_at,
             verificacion_next_at,
-            emitted_at
+            emitted_at,
+            moneda,
+            tipo_cambio
           )
           values (
             $1, $2, $3, 'NOTA_CREDITO', $4, $5, $6, $7, $8, $9, $10::jsonb, $11::jsonb, $12::jsonb,
             $13::jsonb, $14, $15, $16, $17, $18, $19, $20, $21,
             case when $19::text is not null then now() end,
             case when $22::boolean then null when $5 in ('PENDIENTE_SIFEN', 'EMITIENDO') and $15::text is not null then now() + interval '5 minutes' end,
-            now()
+            now(),
+            $23, $24
           )
           returning
             ${COLUMNAS_DOCUMENTO}
@@ -762,7 +765,10 @@ export class PgFacturaRepository implements FacturaRepository {
           input.fiscalResponse?.status_raw ?? null,
           input.fiscalResponse?.result_code ?? null,
           input.fiscalResponse?.result_message ?? null,
-          input.trabada ?? false
+          input.trabada ?? false,
+          // SPEC_MONEDA_EXTRANJERA_v0.1, D-1: la NC esta en la moneda de su factura.
+          input.original.moneda ?? "PYG",
+          input.original.moneda && input.original.moneda !== "PYG" ? input.original.tipo_cambio ?? null : null
         ]
       );
 

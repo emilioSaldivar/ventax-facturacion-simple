@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { env } from "../../config/env";
 import { calculateDocumentTotalsMoneda, type TaxInputLine } from "@facturacion-simple/shared";
 import { HttpError } from "../../shared/errors/http-error";
 import { logger } from "../../shared/logging/logger";
@@ -205,7 +206,7 @@ function getNotaCreditoIneligibility(documento: DocumentoResponse, creditedFactu
   if ((documento.totals?.anticipo ?? 0) > 0) {
     return MENSAJE_NOTA_CREDITO_CON_ANTICIPO;
   }
-  if (documento.moneda && documento.moneda !== "PYG") {
+  if (documento.moneda && documento.moneda !== "PYG" && !env.FE_NC_MONEDA_EXTRANJERA) {
     return MENSAJE_NOTA_CREDITO_MONEDA_EXTRANJERA;
   }
   return null;
@@ -1184,8 +1185,8 @@ export async function emitNotaCreditoTotal(
   if (original.tipo !== "FACTURA" || original.estado !== "EMITIDA" || !original.cdc) {
     throw new HttpError(409, "CONFLICT", "Factura no elegible para nota de credito.");
   }
-  if (original.moneda && original.moneda !== "PYG") {
-    // D-1: FE saldria en guaranies con los precios en la moneda de la factura y consumiria el numero.
+  if (original.moneda && original.moneda !== "PYG" && !env.FE_NC_MONEDA_EXTRANJERA) {
+    // D-1: FE anterior a rc4.27 saldria en guaranies con los precios en la moneda de la factura y consumiria el numero.
     throw new HttpError(409, "CONFLICT", MENSAJE_NOTA_CREDITO_MONEDA_EXTRANJERA, { reason: "NOTA_CREDITO_MONEDA_EXTRANJERA" });
   }
   if ((original.totals?.anticipo ?? 0) > 0) {
@@ -1562,7 +1563,8 @@ function buildFiscalNotaCreditoRequest(
       cdc: original.cdc,
       numero_fiscal: original.numero_fiscal
     },
-    ...(original.totals?.nota_credito_por_referencia ? { por_referencia: true } : {})
+    // SPEC_MONEDA_EXTRANJERA_v0.1, D-1: en otra moneda va por referencia; FE toma moneda y tipo de cambio de la factura.
+    ...(original.totals?.nota_credito_por_referencia || (original.moneda && original.moneda !== "PYG") ? { por_referencia: true } : {})
   };
 }
 

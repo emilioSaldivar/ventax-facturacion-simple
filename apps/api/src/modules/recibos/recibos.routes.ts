@@ -251,6 +251,7 @@ recibosRouter.post(
           pagador_documento: factura.cliente.documento ?? null,
           concepto: `Cobro de factura N° ${factura.numero_fiscal ?? documentoId}`,
           importe: factura.totals.total,
+          moneda: factura.moneda ?? "PYG",
           referencia_documento_uuid: factura.document_uuid ?? null,
           referencia_documento_numero_display: factura.numero_fiscal ?? null,
         },
