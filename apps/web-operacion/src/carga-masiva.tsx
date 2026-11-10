@@ -326,6 +326,7 @@ export function CargaMasivaView({
           contexto={contexto}
           onCancelar={volver}
           onDescargarPlantilla={(tipo) => void descargar(`/cargas/plantilla?tipo_documento=${tipo}`, PLANTILLA_POR_TIPO[tipo])}
+          onDescargar={(ruta, nombre) => void descargar(ruta, nombre)}
           onError={fallar}
           onLimpiarError={() => setError(null)}
           onSubida={(carga) =>
@@ -492,12 +493,30 @@ function ListadoCargas({
   );
 }
 
+interface EjemploPlanilla {
+  codigo: string;
+  titulo: string;
+  descripcion: string;
+  tipo_cliente: "B2C" | "B2B" | "B2G" | "B2F";
+  condicion: string;
+  temas: string[];
+  procesamiento_disponible?: boolean;
+}
+
+const GRUPO_DE_CLIENTE: Record<EjemploPlanilla["tipo_cliente"], string> = {
+  B2C: "Consumidor final",
+  B2B: "Empresas",
+  B2G: "Estado",
+  B2F: "Exterior"
+};
+
 function NuevaCarga({
   api,
   contexto,
   onSubida,
   onCancelar,
   onDescargarPlantilla,
+  onDescargar,
   onError,
   onLimpiarError
 }: {
@@ -506,10 +525,22 @@ function NuevaCarga({
   onSubida: (carga: Carga) => void;
   onCancelar: () => void;
   onDescargarPlantilla: (tipo: TipoDeCarga) => void;
+  onDescargar: (ruta: string, nombre: string) => void;
   onError: (causa: unknown) => void;
   onLimpiarError: () => void;
 }) {
   const [tipo, setTipo] = useState<TipoDeCarga>("FACTURA");
+  // SPEC_PLANILLAS_EJEMPLO_v0.1: ejemplos de FE del tipo elegido, con el punto del operador.
+  const [ejemplos, setEjemplos] = useState<EjemploPlanilla[]>([]);
+  const [menuEjemplos, setMenuEjemplos] = useState(false);
+  useEffect(() => {
+    let vigente = true;
+    setMenuEjemplos(false);
+    api.get<{ ejemplos: EjemploPlanilla[] }>(`/cargas/ejemplos?tipo_documento=${tipo}`)
+      .then((r) => { if (vigente) setEjemplos(r.ejemplos); })
+      .catch(() => { if (vigente) setEjemplos([]); });
+    return () => { vigente = false; };
+  }, [api, tipo]);
   const [archivo, setArchivo] = useState<File | null>(null);
   const [encima, setEncima] = useState(false);
   const [subiendo, setSubiendo] = useState(false);
@@ -602,6 +633,45 @@ function NuevaCarga({
 
       <div className="carga-acciones">
         <button className="secondary-action" onClick={() => onDescargarPlantilla(tipo)} type="button">Descargar plantilla de {tipoDeCarga(tipo).plural}</button>
+        <div className="document-row-menu-wrapper">
+          <button aria-expanded={menuEjemplos} className="secondary-action" onClick={() => setMenuEjemplos((abierto) => !abierto)} type="button">
+            Descargar planilla de ejemplo ▾
+          </button>
+          {menuEjemplos ? (
+            <div className="client-row-menu planilla-ejemplos" role="menu" aria-label="Planillas de ejemplo">
+              {(Object.keys(GRUPO_DE_CLIENTE) as Array<EjemploPlanilla["tipo_cliente"]>)
+                .filter((grupo) => ejemplos.some((ejemplo) => ejemplo.tipo_cliente === grupo))
+                .map((grupo) => (
+                  <div className="planilla-ejemplos-grupo" key={grupo}>
+                    <p className="planilla-ejemplos-titulo">{GRUPO_DE_CLIENTE[grupo]}</p>
+                    {ejemplos.filter((ejemplo) => ejemplo.tipo_cliente === grupo).map((ejemplo) => (
+                      <button
+                        key={ejemplo.codigo}
+                        onClick={() => { setMenuEjemplos(false); onDescargar(`/cargas/ejemplos/${ejemplo.codigo}?tipo_documento=${tipo}`, `ejemplo-${ejemplo.codigo.toLowerCase()}.csv`); }}
+                        role="menuitem"
+                        title={ejemplo.descripcion}
+                        type="button"
+                      >
+                        {ejemplo.titulo}
+                        {ejemplo.procesamiento_disponible === false ? <small> · aún no se procesa</small> : null}
+                      </button>
+                    ))}
+                  </div>
+                ))}
+              {ejemplos.length === 0 ? <p className="muted">No hay ejemplos disponibles.</p> : null}
+              <div className="planilla-ejemplos-grupo">
+                <p className="planilla-ejemplos-titulo">Documentación</p>
+                <button onClick={() => { setMenuEjemplos(false); onDescargar(`/cargas/diccionario?tipo_documento=${tipo}&formato=pdf`, `planilla-${tipo === "NOTA_REMISION" ? "notas-remision" : "facturas"}-documentacion.pdf`); }} role="menuitem" type="button">
+                  Documentación de la planilla (PDF)
+                </button>
+                <button onClick={() => { setMenuEjemplos(false); onDescargar(`/cargas/diccionario?tipo_documento=${tipo}&formato=md`, `planilla-${tipo === "NOTA_REMISION" ? "notas-remision" : "facturas"}-documentacion.md`); }} role="menuitem" type="button">
+                  Documentación de la planilla (Markdown)
+                </button>
+              </div>
+              <p className="muted planilla-ejemplos-aviso">Los ejemplos salen con tu punto y tu numeración. Compradores y transportistas son ficticios: reemplazalos por los reales.</p>
+            </div>
+          ) : null}
+        </div>
         <button className="primary-action" disabled={!archivo || subiendo} onClick={() => void subir()} type="button">
           {subiendo ? "Subiendo..." : "Subir archivo"}
         </button>

@@ -1871,6 +1871,66 @@ paths:
           content:
             text/csv:
               schema: { type: string }
+  /cargas/ejemplos:
+    get:
+      tags: [Cargas]
+      summary: Ejemplos de planilla del tipo elegido (SPEC_PLANILLAS_EJEMPLO_v0.1)
+      parameters:
+        - { name: tipo_documento, in: query, schema: { type: string, enum: [FACTURA, NOTA_REMISION], default: FACTURA } }
+      responses:
+        '200':
+          description: 'Lista del backend fiscal, ordenada por tipo de cliente, condicion y temas, sin sus rutas internas.'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tipo_documento: { type: string }
+                  ejemplos:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        codigo: { type: string }
+                        titulo: { type: string }
+                        descripcion: { type: string }
+                        tipo_cliente: { type: string, enum: [B2C, B2B, B2G, B2F] }
+                        condicion: { type: string }
+                        temas: { type: array, items: { type: string } }
+                        procesamiento_disponible: { type: boolean }
+  /cargas/ejemplos/{codigo}:
+    parameters:
+      - { name: codigo, in: path, required: true, schema: { type: string, pattern: '^[A-Z0-9_]{1,60}$' } }
+    get:
+      tags: [Cargas]
+      summary: Descarga un ejemplo listo para subir, con el punto y la numeracion del contexto del operador
+      parameters:
+        - { name: tipo_documento, in: query, schema: { type: string, enum: [FACTURA, NOTA_REMISION], default: FACTURA } }
+      responses:
+        '200':
+          description: CSV adjunto
+          content:
+            text/csv:
+              schema: { type: string }
+        '400': { description: 'Codigo invalido.' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { description: 'El backend fiscal no puede armar el ejemplo para este punto (`CARGA_PARAMETROS_INVALIDOS`, con motivos).' }
+  /cargas/diccionario:
+    get:
+      tags: [Cargas]
+      summary: Documentacion de la planilla del tipo elegido, para descargar
+      parameters:
+        - { name: tipo_documento, in: query, schema: { type: string, enum: [FACTURA, NOTA_REMISION], default: FACTURA } }
+        - { name: formato, in: query, schema: { type: string, enum: [pdf, md], default: pdf } }
+      responses:
+        '200':
+          description: PDF o Markdown adjunto
+          content:
+            application/pdf:
+              schema: { type: string, format: binary }
+            text/markdown:
+              schema: { type: string }
+        '400': { description: 'Formato invalido.' }
   /cargas/{cargaId}:
     parameters:
       - { name: cargaId, in: path, required: true, schema: { type: string, format: uuid } }

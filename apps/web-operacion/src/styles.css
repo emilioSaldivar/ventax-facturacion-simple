@@ -3027,3 +3027,31 @@ dd {
     white-space: nowrap;
   }
 }
+
+/* SPEC_PLANILLAS_EJEMPLO_v0.1: menu de planillas de ejemplo en "Nueva carga". */
+.planilla-ejemplos {
+  width: min(360px, 90vw);
+  max-height: 70vh;
+  overflow-y: auto;
+  bottom: auto;
+}
+
+.planilla-ejemplos-grupo {
+  display: grid;
+  gap: 2px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--color-line);
+}
+
+.planilla-ejemplos-titulo {
+  margin: 4px 6px;
+  color: #5b7178;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.planilla-ejemplos-aviso {
+  margin: 6px;
+  font-size: 12px;
+}
