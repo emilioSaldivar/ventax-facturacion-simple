@@ -102,6 +102,7 @@ Que la pantalla principal de facturacion se vea y se use como un sistema de escr
 - **RN-07. Entrega.** "Enviar por WhatsApp", "Copiar enlace" y "Compartir" se habilitan cuando existe `deliveryLink` (como hoy). "Ver KUDE en PDF" apunta a `<public_url>/kude.pdf` solo con `kude_pdf.available`.
 - **RN-08. Teclado y foco.** Se conservan Tab, Enter y Supr de la grilla (SPEC editor PC RN-06). "Agregar linea" agrega una fila y enfoca su Descripcion. Todo control tiene `aria-label` o `<label>`; los botones de icono llevan `aria-label`.
 - **RN-09. Contraste.** Texto secundario a 4,5:1 minimo sobre su fondo; los estados se distinguen por color y por texto o icono, nunca solo por color.
+- **RN-11. El resultado se actualiza solo.** Mientras el documento no esta en un estado final para el operador, la pantalla de resultado relee `GET /facturas/{documentoId}` cada 15 s (el estado que el worker de verificacion de FS ya guarda; no llama a FE) y deja de hacerlo al llegar a un estado final o al salir de la pantalla. Hallazgo de la corrida del 2026-11-10: en envio por lote la respuesta de creacion no trae `document_uuid` ni CDC, "Verificar estado fiscal" no aparece y la pantalla quedaba en "Enviada a SIFEN" aunque SIFEN aprobaba a los 5 minutos.
 - **RN-10. Sin secretos ni datos reales en guiones.** Los guiones nuevos leen la clave del operador de `ENSAYO_PASSWORD_FILE`, como `playwright-editor-pc.cjs`.
 
 ## Criterios de aceptacion

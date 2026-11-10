@@ -4879,6 +4879,26 @@ function InvoiceEditor({
     void loadDeliveryData(emittedDocumento.id);
   }, [emittedDocumento?.id, emittedDocumento?.cdc, emittedDocumento?.estado]);
 
+  // SPEC_UX_NUEVA_FACTURA_v0.1, RN-11: el resultado relee el estado guardado por FS hasta llegar a un estado final.
+  useEffect(() => {
+    if (!emittedDocumento || esEstadoFinalOperador(emittedDocumento.estado)) return;
+    const id = emittedDocumento.id;
+    const intervalo = window.setInterval(() => {
+      api
+        .get<DocumentoResponse>(`/facturas/${id}`)
+        .then((actual) => {
+          setEmittedDocumento((previo) =>
+            previo && previo.id === actual.id &&
+            (previo.estado !== actual.estado || previo.numero_fiscal !== actual.numero_fiscal || previo.cdc !== actual.cdc || previo.accion !== actual.accion)
+              ? actual
+              : previo
+          );
+        })
+        .catch(() => undefined);
+    }, 15000);
+    return () => window.clearInterval(intervalo);
+  }, [api, emittedDocumento?.id, emittedDocumento?.estado]);
+
   // SPEC_UX_NUEVA_FACTURA_v0.1, D-4: con el resultado en pantalla el formulario no se edita, asi que ya no hace falta
   // descartar el documento creado cuando cambia el pedido (ademas, guardar el cliente al emitir cambia el cliente_id).
   // "Crear nueva factura" es el unico camino de vuelta al formulario y renueva la clave de idempotencia.
