@@ -2,7 +2,7 @@
 // Sube ejemplos de la planilla CSV v1 de FE por el panel de FS, los confirma y los sigue hasta "Finalizada".
 // Solo contra el stack local de Segel con SIFEN test, nunca segel-fs. Un archivo por carga, en orden.
 //
-//   ENSAYO_PASSWORD_FILE=/ruta/operador.pass node scripts/segel-fs/playwright-ejemplos-planilla.cjs <csv>...
+//   ENSAYO_PASSWORD_FILE=/ruta/operador.pass [ENSAYO_TIPO=NOTA_REMISION] node scripts/segel-fs/playwright-ejemplos-planilla.cjs <csv>...
 //
 // Por archivo registra: estado final, aprobados, rechazados, invalidos y los motivos de cada comprobante.
 // Escribe test-results/ejemplos-planilla/.
@@ -45,6 +45,8 @@ const total = (texto, etiqueta) => Number(new RegExp(`${etiqueta}\\s*\\n?\\s*(\\
 async function probar(page, ruta) {
   const nombre = path.basename(ruta, ".csv");
   await page.getByRole("button", { name: "Nueva carga" }).click();
+  // SPEC_DOCUMENTOS_ESCRITORIO_v0.1, fase B1: ENSAYO_TIPO=NOTA_REMISION elige el tipo de la carga.
+  if (process.env.ENSAYO_TIPO) await page.locator('select[aria-label="Tipo de documento"]').selectOption(process.env.ENSAYO_TIPO);
   await page.locator('input[type="file"]').setInputFiles(ruta);
   await page.getByRole("button", { name: "Subir archivo" }).click();
   await page.locator('.carga-encabezado .status-pill:not(:has-text("Recibida")):not(:has-text("Validando"))').first().waitFor({ timeout: 120000 });
@@ -59,7 +61,7 @@ async function probar(page, ruta) {
   }
   check(`${nombre}: validado sin errores`, total(informe, "Con errores") === 0, informe.slice(0, 300));
   await page.getByRole("button", { name: "Confirmar y emitir" }).click();
-  await page.getByRole("button", { name: /^Sí, emitir \d+ facturas$/ }).click();
+  await page.getByRole("button", { name: /^Sí, emitir \d+ / }).click();
 
   const fin = Date.now() + LIMITE_MS;
   let final = "";

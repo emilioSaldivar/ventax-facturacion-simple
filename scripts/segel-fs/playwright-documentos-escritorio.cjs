@@ -48,7 +48,26 @@ async function escritorio(browser, ancho) {
   check(`CA-01 ${v}: sin desplazamiento horizontal`, await sinDesborde(page));
   check(`CA-01 ${v}: sin tarjetas de celular`, (await page.locator(".document-row").count()) === 0);
   const proximamente = page.locator("button.pestana-proximamente");
-  check(`CA-04 ${v}: tres pestañas Próximamente deshabilitadas`, (await proximamente.count()) === 3 && (await proximamente.evaluateAll((bs) => bs.every((b) => b.disabled))), (await proximamente.allInnerTexts()).join(" | "));
+  check(`CA-04 ${v}: Notas de debito y Autofacturas Próximamente, deshabilitadas`, (await proximamente.count()) === 2 && (await proximamente.evaluateAll((bs) => bs.every((b) => b.disabled))), (await proximamente.allInnerTexts()).join(" | "));
+  // Fase B1: la pestaña de notas de remision esta habilitada y cambia las columnas.
+  await page.locator('.filter-tabs button:has-text("Notas de remision")').first().click();
+  await page.waitForTimeout(1500);
+  const columnasNre = (await page.locator("table.documents-tabla thead th").allInnerTexts().catch(() => [])).map((t) => t.trim()).filter(Boolean);
+  const vacia = await page.getByText("Sin documentos para los filtros actuales.").isVisible().catch(() => false);
+  check(`B1 ${v}: pestaña Notas de remision habilitada (Motivo y sin Total, o lista vacia)`, vacia || (columnasNre.includes("Motivo") && !columnasNre.includes("Total")), vacia ? "lista vacia" : columnasNre.join(", "));
+  await page.screenshot({ path: path.join(outDir, `${v}-notas-remision.png`), fullPage: true });
+  if (!vacia) {
+    // RN-08 y RN-09: ficha de la nota de remision.
+    await page.locator("table.documents-tabla tbody tr td").nth(2).click();
+    await page.getByRole("button", { name: /Volver a resultados/ }).waitFor({ timeout: 20000 });
+    const ficha = await page.locator(".document-detail").innerText();
+    check(`B1 ${v}: ficha de remision con motivo, transportista y mercaderia`, ["Motivo", "Transportista", "Vehículo", "Mercadería trasladada"].every((t) => ficha.includes(t)), ficha.slice(0, 200).replace(/\n+/g, " | "));
+    check(`B1 ${v}: la ficha de remision no ofrece nota de credito ni anular`, !ficha.includes("Crear nota de credito") && !ficha.includes("Anular nota"), "");
+    await page.screenshot({ path: path.join(outDir, `${v}-ficha-remision.png`), fullPage: true });
+    await page.getByRole("button", { name: /Volver a resultados/ }).click();
+  }
+  await page.locator('.filter-tabs button:has-text("Facturas")').first().click();
+  await page.locator("table.documents-tabla").waitFor({ timeout: 20000 });
   check(`CA-05 ${v}: filtros a la vista sin "Mas filtros"`, await page.locator(".documents-advanced-filters select").first().isVisible());
   await page.screenshot({ path: path.join(outDir, `${v}-tabla.png`), fullPage: true });
 
@@ -75,6 +94,17 @@ async function escritorio(browser, ancho) {
     check(`CA-05 ${v}: paginacion avanza`, (await pager.innerText()).includes("Página 2"), await pager.innerText());
   } else {
     check(`CA-05 ${v}: paginacion (menos de 30 documentos, sin paginas)`, true, "sin paginador");
+  }
+  // Fase B1: selector de tipo de documento en "Nueva carga".
+  if (ancho === 1440) {
+    await page.locator('.filter-tabs button:has-text("Carga masiva")').first().click();
+    await page.getByRole("button", { name: "Nueva carga" }).click();
+    const selector = page.locator('select[aria-label="Tipo de documento"]');
+    const opciones = await selector.locator("option").evaluateAll((os) => os.map((o) => `${o.textContent}${o.disabled ? " [deshabilitada]" : ""}`));
+    check("B1 1440: selector con Factura y Nota de remision habilitadas y el resto proximamente", opciones.length === 5 && !opciones[0].includes("deshabilitada") && !opciones[1].includes("deshabilitada") && opciones.slice(2).every((o) => o.includes("deshabilitada")), opciones.join(" | "));
+    await selector.selectOption("NOTA_REMISION");
+    check("B1 1440: la planilla y el aviso se adaptan al tipo", (await page.getByRole("button", { name: "Descargar plantilla de notas de remisión" }).count()) === 1);
+    await page.screenshot({ path: path.join(outDir, "1440-nueva-carga-tipo.png"), fullPage: true });
   }
   await ctx.close();
 }
