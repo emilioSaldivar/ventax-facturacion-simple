@@ -1,4 +1,4 @@
-import React, { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import React, { FormEvent, KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./styles.css";
 
@@ -4388,6 +4388,15 @@ function InvoiceEditor({
   const [clienteNaturalezaTouched, setClienteNaturalezaTouched] = useState(false);
   const [lines, setLines] = useState<InvoiceLineDraft[]>(() => []);
   const [activeLineId, setActiveLineId] = useState<string | null>(null);
+  // SPEC_EDITOR_FACTURA_PC_v0.1: modo completo en >= 1024 px salvo que el operador elija el simple en este navegador.
+  const esEscritorio = useEsEscritorio();
+  const [modoPreferido, setModoPreferido] = useState<"simple" | "completo">(() => leerModoEditor());
+  const modoCompleto = esEscritorio && modoPreferido === "completo";
+  function cambiarModoEditor(modo: "simple" | "completo") {
+    setModoPreferido(modo);
+    guardarModoEditor(modo);
+    setLineSheetOpen(false);
+  }
   const [expandedLineIds, setExpandedLineIds] = useState<Set<string>>(() => new Set());
   const [lineSheetOpen, setLineSheetOpen] = useState(false);
   const [lineCodeOpen, setLineCodeOpen] = useState(false);
@@ -4431,10 +4440,18 @@ function InvoiceEditor({
 
   // SPEC_MONEDA_EXTRANJERA_v0.1, RN-08: cambiar la moneda no convierte montos; las lineas que dejan de ser validas
   // se marcan y bloquean la emision hasta corregirlas (antes la vista previa las omitia en silencio).
+  // SPEC_EDITOR_FACTURA_PC_v0.1, RN-02: una linea con algo cargado pero incompleta tambien bloquea; antes la vista
+  // previa la omitia y la factura salia sin ella.
   const lineasInvalidasIds = new Set(
     lines
-      .filter((line) => line.descripcion.trim() && line.precio_unitario.trim())
-      .filter((line) => !cantidadValida(Number(line.cantidad)) || !precioValido(Number(line.precio_unitario), moneda) || Number(line.precio_unitario) <= 0)
+      .filter((line) => line.descripcion.trim() || line.codigo.trim() || line.precio_unitario.trim())
+      .filter(
+        (line) =>
+          !line.descripcion.trim() ||
+          !cantidadValida(Number(line.cantidad)) ||
+          !precioValido(Number(line.precio_unitario), moneda) ||
+          Number(line.precio_unitario) <= 0
+      )
       .map((line) => line.id)
   );
   const request = useMemo<FacturaPreviewRequest | null>(() => {
@@ -4885,6 +4902,14 @@ function InvoiceEditor({
     }
   }
 
+  useEffect(() => {
+    if (!modoCompleto) return;
+    const ultima = lines[lines.length - 1];
+    if (!ultima || ultima.descripcion.trim() || ultima.codigo.trim() || ultima.precio_unitario.trim()) {
+      setLines((current) => [...current, createInvoiceLine()]);
+    }
+  }, [modoCompleto, lines]);
+
   function updateLine(lineId: string, patch: Partial<InvoiceLineDraft>) {
     setLines((current) => current.map((line) => (line.id === lineId ? { ...line, ...patch } : line)));
   }
@@ -5155,7 +5180,7 @@ function InvoiceEditor({
   }
 
   return (
-    <section className="invoice-editor" aria-labelledby="invoice-title">
+    <section className={modoCompleto ? "invoice-editor completo" : "invoice-editor"} aria-labelledby="invoice-title">
       <div className="editor-heading">
         <div>
           <p className="eyebrow">Nueva factura</p>
@@ -5170,6 +5195,16 @@ function InvoiceEditor({
           >
             {headerDetailsOpen ? "🙈 Ocultar datos" : "👁 Mostrar datos"}
           </button>
+          {esEscritorio ? (
+            <div className="modo-editor-toggle" role="group" aria-label="Modo del editor">
+              <button aria-pressed={!modoCompleto} className={!modoCompleto ? "active" : ""} onClick={() => cambiarModoEditor("simple")} type="button">
+                Modo simple
+              </button>
+              <button aria-pressed={modoCompleto} className={modoCompleto ? "active" : ""} onClick={() => cambiarModoEditor("completo")} type="button">
+                Modo completo
+              </button>
+            </div>
+          ) : null}
           <button className="ghost-action" onClick={onBack} type="button">
             Volver
           </button>
@@ -5280,7 +5315,7 @@ function InvoiceEditor({
             ) : null}
             {lineasInvalidasIds.size > 0 ? (
               <p className="field-hint moneda-aviso" role="alert">
-                Los montos no se convierten al cambiar la moneda: {lineasInvalidasIds.size === 1 ? "1 producto tiene" : `${lineasInvalidasIds.size} productos tienen`} un precio o una cantidad no válidos en {moneda}. Corregilos para crear la factura.
+                {lineasInvalidasIds.size === 1 ? "1 producto tiene" : `${lineasInvalidasIds.size} productos tienen`} datos incompletos o no válidos en {moneda} (los montos no se convierten al cambiar la moneda). Corregilos para crear la factura.
               </p>
             ) : null}
           </div>
@@ -5409,6 +5444,22 @@ function InvoiceEditor({
           </div>
         </div>
 
+        {modoCompleto ? (
+          <GrillaLineas
+            catalogSuggestions={catalogSuggestions}
+            catalogSearching={catalogSearching}
+            catalogSaving={catalogSaving}
+            catalogMessage={catalogMessage}
+            invalidas={lineasInvalidasIds}
+            lines={lines}
+            moneda={moneda}
+            onAplicarCatalogo={applyCatalogItem}
+            onGuardarCatalogo={(line) => void saveQuickCatalogItem(line)}
+            onQuitar={removeLine}
+            onUpdate={updateLine}
+            subtotales={previewSubtotalsByLineId}
+          />
+        ) : (
         <div className="sale-list" aria-label="Productos o servicios agregados">
           {visibleLines.length === 0 ? (
             <button className="empty-sale-list" onClick={addLineAndEdit} type="button">
@@ -5451,7 +5502,7 @@ function InvoiceEditor({
                   <span>{formatCantidad(quantity)} x {formatMonto(price, moneda)}</span>
                   {lineasInvalidasIds.has(line.id) ? (
                     <small className="line-invalid-hint">
-                      {!precioValido(price, moneda) ? (moneda === "PYG" ? "Precio con decimales: no válido en guaraníes" : "Precio con más de 2 decimales") : "Cantidad no válida"}
+                      {motivoLineaInvalida(line, moneda)}
                     </small>
                   ) : null}
                   <b>{formatMonto(subtotal, moneda)}</b>
@@ -5473,9 +5524,10 @@ function InvoiceEditor({
             </button>
           ) : null}
         </div>
+        )}
       </section>
 
-      {lineSheetOpen && activeLine ? (
+      {lineSheetOpen && activeLine && !modoCompleto ? (
         <div className="bottom-sheet-backdrop" role="presentation" onClick={closeLineSheet}>
           <section
             aria-label="Agregar producto"
@@ -5665,9 +5717,11 @@ function InvoiceEditor({
         </div>
         {previewError ? <p className="form-error">{previewError}</p> : null}
         <div className="editor-actions">
-          <button className="secondary-action wide" disabled={previewing} onClick={() => void runPreview()} type="button">
-            {previewing ? "Calculando..." : "Calcular"}
-          </button>
+          {modoCompleto ? null : (
+            <button className="secondary-action wide" disabled={previewing} onClick={() => void runPreview()} type="button">
+              {previewing ? "Calculando..." : "Calcular"}
+            </button>
+          )}
           <button
             className="primary-action wide"
             disabled={!canEmit || !preview || emitting || hasEmissionResult || lineasInvalidasIds.size > 0}
@@ -5852,6 +5906,227 @@ function BrandMark({ compact = false }: { compact?: boolean }) {
         className="brand-logo"
         src={compact ? "/app/brand/segel-isotipo.svg" : "/app/brand/segel-logo-fondo-claro.svg"}
       />
+    </div>
+  );
+}
+
+/** SPEC_EDITOR_FACTURA_PC_v0.1, D-1: preferencia del modo del editor en este navegador. */
+const CLAVE_MODO_EDITOR = "fs.editor.modo";
+
+function leerModoEditor(): "simple" | "completo" {
+  try {
+    return window.localStorage.getItem(CLAVE_MODO_EDITOR) === "simple" ? "simple" : "completo";
+  } catch {
+    return "completo";
+  }
+}
+
+function guardarModoEditor(modo: "simple" | "completo"): void {
+  try {
+    window.localStorage.setItem(CLAVE_MODO_EDITOR, modo);
+  } catch {
+    // Sin almacenamiento (ventana privada): el modo vale solo para esta pantalla.
+  }
+}
+
+function lineaTieneDatos(line: InvoiceLineDraft): boolean {
+  return Boolean(line.descripcion.trim() || line.codigo.trim() || line.precio_unitario.trim());
+}
+
+function motivoLineaInvalida(line: InvoiceLineDraft, moneda: string): string {
+  if (!line.descripcion.trim()) return "Falta la descripción";
+  if (!cantidadValida(Number(line.cantidad))) return "Cantidad no válida (hasta 4 decimales)";
+  if (!line.precio_unitario.trim() || Number(line.precio_unitario) <= 0) return "Falta el precio";
+  if (!precioValido(Number(line.precio_unitario), moneda)) {
+    return moneda === "PYG" ? "Precio con decimales: no válido en guaraníes" : "Precio con más de 2 decimales";
+  }
+  return "Línea no válida";
+}
+
+/**
+ * SPEC_EDITOR_FACTURA_PC_v0.1: grilla de lineas del modo completo. Edita el mismo estado que el modo simple
+ * (RN-02); la ultima fila vacia sirve para agregar. Enter pasa a la descripcion de la fila siguiente (RN-06).
+ */
+function GrillaLineas({
+  lines,
+  moneda,
+  invalidas,
+  subtotales,
+  catalogSuggestions,
+  catalogSearching,
+  catalogSaving,
+  catalogMessage,
+  onUpdate,
+  onQuitar,
+  onAplicarCatalogo,
+  onGuardarCatalogo
+}: {
+  lines: InvoiceLineDraft[];
+  moneda: MonedaFactura;
+  invalidas: Set<string>;
+  subtotales: Map<string, number>;
+  catalogSuggestions: Record<string, CatalogoItem[]>;
+  catalogSearching: Record<string, boolean>;
+  catalogSaving: Record<string, boolean>;
+  catalogMessage: Record<string, string | null>;
+  onUpdate: (lineId: string, patch: Partial<InvoiceLineDraft>) => void;
+  onQuitar: (lineId: string) => void;
+  onAplicarCatalogo: (lineId: string, item: CatalogoItem) => void;
+  onGuardarCatalogo: (line: InvoiceLineDraft) => void;
+}) {
+  const [filaConFoco, setFilaConFoco] = useState<string | null>(null);
+  const enMonedaExtranjera = moneda !== "PYG";
+
+  function enfocarDescripcion(indice: number) {
+    window.setTimeout(() => {
+      document.querySelector<HTMLInputElement>(`[data-grilla-fila="${indice}"] input[data-celda="descripcion"]`)?.focus();
+    }, 0);
+  }
+
+  function alPresionar(event: KeyboardEvent<HTMLElement>, indice: number) {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      enfocarDescripcion(indice + 1);
+    }
+  }
+
+  function quitar(line: InvoiceLineDraft) {
+    if (lineaTieneDatos(line) && !window.confirm("¿Quitar esta línea?")) return;
+    onQuitar(line.id);
+  }
+
+  return (
+    <div className="grilla-lineas-wrap">
+      <table className="grilla-lineas" aria-label="Productos o servicios">
+        <thead>
+          <tr>
+            <th className="col-codigo">Código</th>
+            <th className="col-descripcion">Descripción</th>
+            <th className="col-cantidad">Cantidad</th>
+            <th className="col-precio">Precio ({moneda === "PYG" ? "Gs." : moneda})</th>
+            <th className="col-iva">IVA</th>
+            <th className="col-subtotal">Subtotal</th>
+            <th className="col-acciones"><span className="sr-only">Acciones</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          {lines.map((line, indice) => {
+            const conDatos = lineaTieneDatos(line);
+            const invalida = invalidas.has(line.id);
+            const cantidad = Number(line.cantidad) || 0;
+            const precio = Number(line.precio_unitario) || 0;
+            const subtotal = subtotales.get(line.id) ?? (enMonedaExtranjera ? Math.round(cantidad * precio * 100) / 100 : Math.round(cantidad * precio));
+            const sugerencias = filaConFoco === line.id ? catalogSuggestions[line.id] ?? [] : [];
+            const puedeGuardar =
+              !enMonedaExtranjera && !line.catalogo_item_id && !line.lockedFromCatalog && conDatos && !invalida && Number.isInteger(precio);
+            return (
+              <tr className={invalida ? "fila-invalida" : undefined} data-grilla-fila={indice} key={line.id}>
+                <td className="col-codigo">
+                  <input
+                    aria-label={`Código, línea ${indice + 1}`}
+                    onChange={(event) => onUpdate(line.id, { codigo: event.target.value, catalogo_item_id: null, lockedFromCatalog: false })}
+                    onFocus={() => setFilaConFoco(line.id)}
+                    onKeyDown={(event) => alPresionar(event, indice)}
+                    value={line.codigo}
+                  />
+                </td>
+                <td className="col-descripcion">
+                  <input
+                    aria-label={`Descripción, línea ${indice + 1}`}
+                    data-celda="descripcion"
+                    onBlur={() => window.setTimeout(() => setFilaConFoco((actual) => (actual === line.id ? null : actual)), 200)}
+                    onChange={(event) => onUpdate(line.id, { descripcion: event.target.value, catalogo_item_id: null, lockedFromCatalog: false })}
+                    onFocus={() => setFilaConFoco(line.id)}
+                    onKeyDown={(event) => alPresionar(event, indice)}
+                    placeholder={conDatos ? undefined : "Escribí o buscá en el catálogo"}
+                    value={line.descripcion}
+                  />
+                  {sugerencias.length > 0 ? (
+                    <ul className="grilla-sugerencias" role="listbox" aria-label="Catálogo">
+                      {sugerencias.map((item) => (
+                        <li key={item.id}>
+                          <button
+                            onMouseDown={(event) => {
+                              event.preventDefault();
+                              onAplicarCatalogo(line.id, item);
+                              setFilaConFoco(null);
+                            }}
+                            type="button"
+                          >
+                            {item.codigo ? <small>{item.codigo}</small> : null} {item.descripcion}
+                            {enMonedaExtranjera ? null : <small> · {formatGuaranies(item.precio_unitario)}</small>}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                  {catalogSearching[line.id] && filaConFoco === line.id ? <small className="field-hint">Buscando…</small> : null}
+                  {invalida ? <small className="line-invalid-hint">{motivoLineaInvalida(line, moneda)}</small> : null}
+                  {catalogMessage[line.id] ? <small className="field-hint">{catalogMessage[line.id]}</small> : null}
+                </td>
+                <td className="col-cantidad">
+                  <input
+                    aria-label={`Cantidad, línea ${indice + 1}`}
+                    inputMode="decimal"
+                    onChange={(event) => onUpdate(line.id, { cantidad: normalizeDecimalInput(event.target.value, 4) })}
+                    onKeyDown={(event) => alPresionar(event, indice)}
+                    value={line.cantidad.replace(".", ",")}
+                  />
+                </td>
+                <td className="col-precio">
+                  <input
+                    aria-label={`Precio, línea ${indice + 1}`}
+                    disabled={line.lockedFromCatalog}
+                    inputMode={enMonedaExtranjera ? "decimal" : "numeric"}
+                    onChange={(event) =>
+                      onUpdate(line.id, {
+                        precio_unitario: enMonedaExtranjera ? normalizeDecimalInput(event.target.value) : normalizeIntegerInput(event.target.value)
+                      })
+                    }
+                    onKeyDown={(event) => alPresionar(event, indice)}
+                    value={enMonedaExtranjera ? line.precio_unitario.replace(".", ",") : formatIntegerInput(line.precio_unitario)}
+                  />
+                </td>
+                <td className="col-iva">
+                  <select
+                    aria-label={`IVA, línea ${indice + 1}`}
+                    disabled={line.lockedFromCatalog}
+                    onChange={(event) => onUpdate(line.id, { iva_tipo: event.target.value as TipoIva })}
+                    onKeyDown={(event) => alPresionar(event, indice)}
+                    value={line.iva_tipo}
+                  >
+                    <option value="IVA_10">10%</option>
+                    <option value="IVA_5">5%</option>
+                    <option value="EXENTA">Exenta</option>
+                  </select>
+                </td>
+                <td className="col-subtotal">{conDatos && !invalida ? formatMonto(subtotal, moneda) : "—"}</td>
+                <td className="col-acciones">
+                  {conDatos ? (
+                    <div className="grilla-acciones">
+                      {puedeGuardar ? (
+                        <button
+                          aria-label={`Guardar en catálogo, línea ${indice + 1}`}
+                          className="ghost-action compact"
+                          disabled={catalogSaving[line.id]}
+                          onClick={() => onGuardarCatalogo(line)}
+                          title="Guardar en catálogo"
+                          type="button"
+                        >
+                          {catalogSaving[line.id] ? "…" : "💾"}
+                        </button>
+                      ) : null}
+                      <button aria-label={`Quitar línea ${indice + 1}`} className="ghost-action compact" onClick={() => quitar(line)} title="Quitar" type="button">
+                        ✖
+                      </button>
+                    </div>
+                  ) : null}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
     </div>
   );
 }
