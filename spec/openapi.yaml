@@ -2940,6 +2940,15 @@ components:
       type: object
       required: [condicion_venta, tipo_transaccion, cliente, items]
       properties:
+        moneda:
+          type: string
+          enum: [PYG, USD, EUR, BRL]
+          default: PYG
+          description: 'SPEC_MONEDA_EXTRANJERA_v0.1. Fuera de PYG los precios admiten hasta 2 decimales; en PYG son enteros.'
+        tipo_cambio:
+          type: number
+          nullable: true
+          description: 'Cotizacion a guaranies de toda la factura, hasta 4 decimales. Obligatoria fuera de PYG.'
         condicion_venta:
           $ref: "#/components/schemas/CondicionVenta"
         tipo_transaccion:
@@ -3078,7 +3087,7 @@ components:
           description: 'Factura de carga con descuentos, anticipos o IVA exonerado: su nota de credito total se emite por referencia en el backend fiscal, sin lineas.'
         anticipo:
           type: integer
-          description: 'Anticipo aplicado. Con anticipo no se admite la nota de credito total desde FS (`409` con `reason: NOTA_CREDITO_CON_ANTICIPO`).'
+          description: 'Anticipo aplicado. Con anticipo no se admite la nota de credito total desde FS (`409` con `reason: NOTA_CREDITO_CON_ANTICIPO`). Una factura en moneda extranjera tampoco (`409` con `reason: NOTA_CREDITO_MONEDA_EXTRANJERA`).'
 
     DocumentoResponse:
       type: object
@@ -3102,6 +3111,12 @@ components:
             - $ref: "#/components/schemas/CondicionVenta"
           nullable: true
           description: Null en una nota de remision.
+        moneda:
+          type: string
+          description: 'Moneda de todos los montos del documento (ISO 4217); PYG por omision.'
+        tipo_cambio:
+          type: number
+          nullable: true
         remision:
           type: object
           nullable: true

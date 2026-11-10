@@ -210,6 +210,9 @@ interface FacturaItemInput {
 
 interface FacturaPreviewRequest {
   condicion_venta: CondicionVenta;
+  /** SPEC_MONEDA_EXTRANJERA_v0.1. Sin el campo, PYG. */
+  moneda?: MonedaFactura;
+  tipo_cambio?: number | null;
   tipo_transaccion: TipoTransaccionServicio;
   credito_plazo_dias?: number | null;
   cliente: FacturaClienteInput;
@@ -279,6 +282,9 @@ interface DocumentoResponse {
   cancelacion?: DocumentoCancelacion | null;
   /** Null en una nota de remision. */
   condicion_venta: CondicionVenta | null;
+  /** SPEC_MONEDA_EXTRANJERA_v0.1: moneda de todos los montos del documento. */
+  moneda?: string;
+  tipo_cambio?: number | null;
   /** SPEC_DOCUMENTOS_ESCRITORIO_v0.1, fase B1: solo en una nota de remision. */
   remision?: {
     motivo: number | null;
@@ -2665,8 +2671,8 @@ function DocumentsView({
                     )}
                     <td><EstadoDocumentoPill documento={documento} /></td>
                     <td className="documents-tabla-cdc" title={documento.cdc ?? undefined}>{documento.cdc ? `${documento.cdc.slice(0, 8)}…${documento.cdc.slice(-4)}` : "-"}</td>
-                    {esRemision ? null : <td>PYG</td>}
-                    {esRemision ? null : <td className="numero"><strong>{formatGuaranies(documento.totals.total)}</strong></td>}
+                    {esRemision ? null : <td>{documento.moneda ?? "PYG"}</td>}
+                    {esRemision ? null : <td className="numero"><strong>{formatMonto(documento.totals.total, documento.moneda)}</strong></td>}
                     <td className="documents-tabla-acciones" onClick={(event) => event.stopPropagation()}>
                       <div className="document-row-menu-wrapper">
                         <button aria-label="Acciones" className="icon-menu-action" onClick={() => setQuickMenuDocId((current) => current === documento.id ? null : documento.id)} type="button">⋮</button>
@@ -2713,7 +2719,7 @@ function DocumentsView({
                   {formatEmisor(documento) ? <small className="document-row-emisor">Emitio {formatEmisor(documento)}</small> : null}
                 </span>
                 <span>
-                  <strong>{documento.tipo === "NOTA_REMISION" ? documento.remision?.motivo_descripcion ?? "Nota de remisión" : formatGuaranies(documento.totals.total)}</strong>
+                  <strong>{documento.tipo === "NOTA_REMISION" ? documento.remision?.motivo_descripcion ?? "Nota de remisión" : formatMonto(documento.totals.total, documento.moneda)}</strong>
                   <EstadoDocumentoPill documento={documento} />
                   <small>{formatShortDate(documento.created_at)}</small>
                 </span>
@@ -2738,7 +2744,7 @@ function DocumentsView({
                 {formatEmisor(documento) ? <small className="document-row-emisor">Emitio {formatEmisor(documento)}</small> : null}
               </span>
               <span>
-                <strong>{documento.tipo === "NOTA_REMISION" ? documento.remision?.motivo_descripcion ?? "Nota de remisión" : formatGuaranies(documento.totals.total)}</strong>
+                <strong>{documento.tipo === "NOTA_REMISION" ? documento.remision?.motivo_descripcion ?? "Nota de remisión" : formatMonto(documento.totals.total, documento.moneda)}</strong>
                 <EstadoDocumentoPill documento={documento} />
                 <small>{formatShortDate(documento.created_at)}</small>
               </span>
@@ -2809,7 +2815,7 @@ function DocumentsView({
                 ) : (
                   <div>
                     <dt>Total</dt>
-                    <dd>{formatGuaranies(selected.totals.total)}</dd>
+                    <dd>{formatMonto(selected.totals.total, selected.moneda)}{selected.moneda && selected.moneda !== "PYG" && selected.tipo_cambio ? <small className="muted"> · Tipo de cambio {selected.tipo_cambio.toLocaleString("es-PY")}</small> : null}</dd>
                   </div>
                 )}
                 <div>
@@ -2832,7 +2838,7 @@ function DocumentsView({
                       <strong>
                         {item.cantidad} x {item.descripcion}
                       </strong>
-                      {selected.tipo === "NOTA_REMISION" ? null : <small>{formatGuaranies(item.subtotal)}</small>}
+                      {selected.tipo === "NOTA_REMISION" ? null : <small>{formatMonto(item.subtotal, selected.moneda)}</small>}
                     </article>
                   ))}
                 </div>
@@ -2948,6 +2954,7 @@ function DocumentsView({
                 </button>
                 ) : null}
                 {(selected.totals?.anticipo ?? 0) > 0 ? <small className="muted">{AVISO_NOTA_CREDITO_CON_ANTICIPO}</small> : null}
+                {selected.moneda && selected.moneda !== "PYG" ? <small className="muted">La nota de crédito de una factura en moneda extranjera se gestiona con soporte.</small> : null}
                 {/* SPEC_DOCUMENTOS_ESCRITORIO_v0.1, RN-09: la nota de remision no se anula desde FS en esta fase. */}
                 {selected.tipo !== "NOTA_REMISION" ? (
                 <button className="secondary-action" disabled={actionLoading || !canCancelDocumento(selected)} onClick={() => void cancelSelectedDocumento()} type="button">
@@ -3730,7 +3737,7 @@ function CreditNoteView({
                 <small>{candidate.documento.cliente.razon_social}</small>
               </span>
               <span>
-                <strong>{formatGuaranies(candidate.documento.totals.total)}</strong>
+                <strong>{formatMonto(candidate.documento.totals.total, candidate.documento.moneda)}</strong>
                 <small>{candidate.elegible ? "Elegible" : candidate.motivo_no_elegible}</small>
               </span>
             </button>
@@ -3759,7 +3766,7 @@ function CreditNoteView({
                 </div>
                 <div>
                   <dt>Total</dt>
-                  <dd>{formatGuaranies(selected.documento.totals.total)}</dd>
+                  <dd>{formatMonto(selected.documento.totals.total, selected.documento.moneda)}</dd>
                 </div>
               </div>
               {!selected.elegible ? <p className="editor-alert blocked">{selected.motivo_no_elegible}</p> : null}
@@ -4181,6 +4188,11 @@ function InvoiceEditor({
   onBack: () => void;
 }) {
   const [condicionVenta, setCondicionVenta] = useState<CondicionVenta>("CONTADO");
+  // SPEC_MONEDA_EXTRANJERA_v0.1: moneda y tipo de cambio global de la factura.
+  const [moneda, setMoneda] = useState<MonedaFactura>("PYG");
+  const [tipoCambio, setTipoCambio] = useState("");
+  const enMonedaExtranjera = moneda !== "PYG";
+  const tipoCambioValido = !enMonedaExtranjera || (Number(tipoCambio) > 0 && /^\d+(\.\d{1,4})?$/.test(tipoCambio));
   const [tipoTransaccion, setTipoTransaccion] = useState<TipoTransaccionServicio>(
     context?.fiscal_context.tipo_transaccion_default ?? 2
   );
@@ -4253,15 +4265,16 @@ function InvoiceEditor({
           line.descripcion &&
           Number.isInteger(line.cantidad) &&
           line.cantidad > 0 &&
-          Number.isInteger(line.precio_unitario) &&
+          precioValido(line.precio_unitario, moneda) &&
           line.precio_unitario > 0
       );
 
-    if (!cliente.documento.trim() || !cliente.razon_social.trim() || items.length === 0) {
+    if (!cliente.documento.trim() || !cliente.razon_social.trim() || items.length === 0 || !tipoCambioValido) {
       return null;
     }
 
     return {
+      ...(enMonedaExtranjera ? { moneda, tipo_cambio: Number(tipoCambio) } : {}),
       condicion_venta: condicionVenta,
       tipo_transaccion: tipoTransaccion,
       credito_plazo_dias: condicionVenta === "CREDITO" ? creditoPlazoDias : null,
@@ -4275,7 +4288,7 @@ function InvoiceEditor({
       },
       items
     };
-  }, [cliente, condicionVenta, creditoPlazoDias, lines, tipoTransaccion]);
+  }, [cliente, condicionVenta, creditoPlazoDias, lines, tipoTransaccion, moneda, tipoCambio, enMonedaExtranjera, tipoCambioValido]);
   const requestFingerprint = useMemo(() => (request ? JSON.stringify(request) : null), [request]);
 
   useEffect(() => {
@@ -4831,16 +4844,20 @@ function InvoiceEditor({
   }
 
   function applyCatalogItem(lineId: string, item: CatalogoItem) {
+    // SPEC_MONEDA_EXTRANJERA_v0.1: el catalogo esta en guaranies; en otra moneda el precio se carga a mano.
     updateLine(lineId, {
       catalogo_item_id: item.id,
       codigo: item.codigo,
       descripcion: item.descripcion,
-      precio_unitario: String(item.precio_unitario),
+      precio_unitario: enMonedaExtranjera ? "" : String(item.precio_unitario),
       iva_tipo: item.iva_tipo,
-      lockedFromCatalog: true
+      lockedFromCatalog: !enMonedaExtranjera
     });
     setCatalogSuggestions((current) => ({ ...current, [lineId]: [] }));
-    setCatalogMessage((current) => ({ ...current, [lineId]: "Item seleccionado del catalogo." }));
+    setCatalogMessage((current) => ({
+      ...current,
+      [lineId]: enMonedaExtranjera ? `Item del catálogo: el precio del catálogo está en guaraníes, cargá el precio en ${moneda}.` : "Item seleccionado del catalogo."
+    }));
   }
 
   async function saveQuickCatalogItem(line: InvoiceLineDraft): Promise<boolean> {
@@ -5055,6 +5072,27 @@ function InvoiceEditor({
                 <option value={3}>3 - Mixto (mercadería + servicios)</option>
               </select>
             </label>
+            <label className="credit-term-field">
+              Moneda
+              <select aria-label="Moneda" onChange={(event) => setMoneda(event.target.value as MonedaFactura)} value={moneda}>
+                {MONEDAS_FACTURA.map((opcion) => (
+                  <option key={opcion.codigo} value={opcion.codigo}>{opcion.codigo} - {opcion.nombre}</option>
+                ))}
+              </select>
+            </label>
+            {enMonedaExtranjera ? (
+              <label className="credit-term-field">
+                Tipo de cambio (Gs. por {moneda})
+                <input
+                  aria-label="Tipo de cambio"
+                  inputMode="decimal"
+                  onChange={(event) => setTipoCambio(event.target.value.replace(/[^\d.,]/g, "").replace(",", "."))}
+                  placeholder="Ej.: 7350,50"
+                  value={tipoCambio.replace(".", ",")}
+                />
+                {!tipoCambioValido ? <small className="field-hint">Obligatorio en {moneda}: mayor que cero, hasta 4 decimales.</small> : null}
+              </label>
+            ) : null}
           </div>
         </div>
       </section>
@@ -5220,8 +5258,8 @@ function InvoiceEditor({
                       </small>
                     ) : null}
                   </strong>
-                  <span>{quantity} x {formatGuaranies(price)}</span>
-                  <b>{formatGuaranies(subtotal)}</b>
+                  <span>{quantity} x {formatMonto(price, moneda)}</span>
+                  <b>{formatMonto(subtotal, moneda)}</b>
                 </button>
                 <div className="sale-item-actions">
                   <button aria-label={`Editar producto ${index + 1}`} className="icon-action" onClick={() => editLine(line.id)} type="button">
@@ -5308,12 +5346,12 @@ function InvoiceEditor({
                     onChange={(event) =>
                       updateLine(activeLine.id, {
                         catalogo_item_id: null,
-                        precio_unitario: normalizeIntegerInput(event.target.value),
+                        precio_unitario: enMonedaExtranjera ? normalizeDecimalInput(event.target.value) : normalizeIntegerInput(event.target.value),
                         lockedFromCatalog: false
                       })
                     }
-                    placeholder="0"
-                    value={formatIntegerInput(activeLine.precio_unitario)}
+                    placeholder={enMonedaExtranjera ? "0,00" : "0"}
+                    value={enMonedaExtranjera ? activeLine.precio_unitario.replace(".", ",") : formatIntegerInput(activeLine.precio_unitario)}
                   />
                 </label>
               </div>
@@ -5370,7 +5408,7 @@ function InvoiceEditor({
 
               <div className="sheet-total-row">
                 <span>Total</span>
-                <strong>{formatGuaranies(previewSubtotalsByLineId.get(activeLine.id) ?? (Number(activeLine.cantidad) || 1) * (Number(activeLine.precio_unitario) || 0))}</strong>
+                <strong>{formatMonto(previewSubtotalsByLineId.get(activeLine.id) ?? (Number(activeLine.cantidad) || 1) * (Number(activeLine.precio_unitario) || 0), moneda)}</strong>
               </div>
 
               {activeLine.lockedFromCatalog ? (
@@ -5417,12 +5455,12 @@ function InvoiceEditor({
       ) : null}
       <section className="totals-section" aria-live="polite" ref={sendSectionRef}>
         <div className="totals-grid">
-          <TotalRow label="Subtotal" value={preview?.totals.subtotal ?? 0} />
-          <TotalRow label="Total sin IVA" value={preview?.totals.total_sin_iva ?? 0} />
-          <TotalRow label="IVA 5%" value={preview?.totals.iva_5 ?? 0} />
-          <TotalRow label="IVA 10%" value={preview?.totals.iva_10 ?? 0} />
-          <TotalRow label="Total IVA" value={preview?.totals.total_iva ?? 0} />
-          <TotalRow strong label="Total a pagar" value={preview?.totals.total ?? 0} />
+          <TotalRow label="Subtotal" moneda={moneda} value={preview?.totals.subtotal ?? 0} />
+          <TotalRow label="Total sin IVA" moneda={moneda} value={preview?.totals.total_sin_iva ?? 0} />
+          <TotalRow label="IVA 5%" moneda={moneda} value={preview?.totals.iva_5 ?? 0} />
+          <TotalRow label="IVA 10%" moneda={moneda} value={preview?.totals.iva_10 ?? 0} />
+          <TotalRow label="Total IVA" moneda={moneda} value={preview?.totals.total_iva ?? 0} />
+          <TotalRow strong label="Total a pagar" moneda={moneda} value={preview?.totals.total ?? 0} />
         </div>
         {previewError ? <p className="form-error">{previewError}</p> : null}
         <div className="editor-actions">
@@ -5465,7 +5503,7 @@ function InvoiceEditor({
             </div>
             <div>
               <dt>Total</dt>
-              <dd>{formatGuaranies(emittedDocumento.totals.total)}</dd>
+              <dd>{formatMonto(emittedDocumento.totals.total, emittedDocumento.moneda)}</dd>
             </div>
             <div>
               <dt>Email</dt>
@@ -5584,11 +5622,11 @@ function InvoiceEditor({
   );
 }
 
-function TotalRow({ label, value, strong = false }: { label: string; value: number; strong?: boolean }) {
+function TotalRow({ label, value, strong = false, moneda = "PYG" }: { label: string; value: number; strong?: boolean; moneda?: string }) {
   return (
     <div className={strong ? "total-row strong" : "total-row"}>
       <span>{label}</span>
-      <strong>{formatGuaranies(value)}</strong>
+      <strong>{formatMonto(value, moneda)}</strong>
     </div>
   );
 }
@@ -5741,6 +5779,36 @@ function mapBusinessReadinessChecks(
           : "Conexion con facturacion-electronica no disponible. Intente nuevamente o contacte a soporte."
     }
   ];
+}
+
+/** SPEC_MONEDA_EXTRANJERA_v0.1: monedas del editor de factura (las del paquete compartido). */
+type MonedaFactura = "PYG" | "USD" | "EUR" | "BRL";
+const MONEDAS_FACTURA: Array<{ codigo: MonedaFactura; nombre: string }> = [
+  { codigo: "PYG", nombre: "Guaraní" },
+  { codigo: "USD", nombre: "Dólar estadounidense" },
+  { codigo: "EUR", nombre: "Euro" },
+  { codigo: "BRL", nombre: "Real brasileño" }
+];
+
+/** RN-04: guaranies sin decimales; otra moneda con su codigo y 2 decimales ("USD 1.234,50"). */
+function formatMonto(value: number, moneda: string | undefined | null): string {
+  if (!moneda || moneda === "PYG") return formatGuaranies(value);
+  return `${moneda} ${new Intl.NumberFormat("es-PY", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value)}`;
+}
+
+/** RN-02: guaranies enteros; otra moneda hasta 2 decimales. */
+function precioValido(valor: number, moneda: string): boolean {
+  if (!Number.isFinite(valor)) return false;
+  if (moneda === "PYG") return Number.isInteger(valor);
+  return Math.abs(valor * 100 - Math.round(valor * 100)) < 1e-6;
+}
+
+/** Precio en moneda extranjera: digitos y un separador decimal (coma o punto), hasta 2 decimales; se guarda con punto. */
+function normalizeDecimalInput(value: string): string {
+  const limpio = value.replace(/[^\d.,]/g, "").replace(",", ".");
+  const [entero, ...resto] = limpio.split(".");
+  if (resto.length === 0) return entero ?? "";
+  return `${entero ?? ""}.${resto.join("").replace(/\./g, "").slice(0, 2)}`;
 }
 
 function formatGuaranies(value: number): string {
@@ -6062,6 +6130,10 @@ function canEmitNotaCredito(documento: DocumentoResponse, documents: DocumentoRe
     return false;
   }
   if ((documento.totals?.anticipo ?? 0) > 0) {
+    return false;
+  }
+  // SPEC_MONEDA_EXTRANJERA_v0.1, D-1.
+  if (documento.moneda && documento.moneda !== "PYG") {
     return false;
   }
 
