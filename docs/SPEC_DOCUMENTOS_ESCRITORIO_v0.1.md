@@ -29,7 +29,7 @@ Que en PC la app se use como un sistema de facturacion de escritorio: navegacion
 ### Fase B (cuando FE publique los contratos de VE-F01 y VE-F04)
 
 - Tipos `NOTA_REMISION`, `NOTA_DEBITO` y `AUTOFACTURA` en FS (migracion de `facturas_operativas_tipo_check`), incorporacion desde la carga (hoy RN-05 de `SPEC_TOTALES_FE_EN_CARGA_v0.1` los descarta) y su listado propio. La nota de remision lleva columnas propias (sin total ni IVA; transporte y rastreo).
-- Disponibilidad de cada pestaña segun el estado que publique FE (`DISPONIBLE` o `PROXIMAMENTE`).
+- Disponibilidad de cada pestaña y del selector de "Nueva carga" segun el catalogo fijo `CARGA_TIPO_DOCUMENTO` de FE (`segel-rc4.18`, `habilitado_api`), fijado en el codigo de FS o cacheado; el tipo elegido viaja en `POST /v1/cargas` como `tipo_documento` (BACKLOG FS-50).
 
 ## Fuera de alcance
 
