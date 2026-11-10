@@ -5145,6 +5145,9 @@ function InvoiceEditor({
 
   function createNuevaFactura() {
     setCondicionVenta("CONTADO");
+    // SPEC_MONEDA_EXTRANJERA_v0.1, RN-01: la factura nueva arranca en guaranies, como el resto de sus datos.
+    setMoneda("PYG");
+    setTipoCambio("");
     setTipoTransaccion(context?.fiscal_context.tipo_transaccion_default ?? 2);
     setCreditoPlazoDias(context?.fiscal_context.credito_plazo_dias ?? 30);
     setCliente({

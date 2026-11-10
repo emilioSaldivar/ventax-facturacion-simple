@@ -856,7 +856,7 @@ export class PgFacturaRepository implements FacturaRepository {
 
       await client.query("commit");
 
-      return this.toResponse(notaCredito, input.original.items);
+      return this.toResponse(notaCredito, input.items ?? input.original.items);
     } catch (error) {
       await client.query("rollback");
       if (isUniqueViolation(error)) {
@@ -871,16 +871,8 @@ export class PgFacturaRepository implements FacturaRepository {
           return existingByIdempotency;
         }
 
-        // SPEC_NOTA_CREDITO_TRABADA_v0.1, RN-02: el indice por factura excluye las rechazadas; se devuelve la viva.
-        const notas = await this.findNotasCreditoByOriginal({
-          facturadorId: input.facturadorId,
-          documentoId: input.original.id
-        });
-        const existingByOriginal = notas.find((nota) => nota.estado !== "RECHAZADA");
-
-        if (existingByOriginal) {
-          return existingByOriginal;
-        }
+        // SPEC_NOTA_CREDITO_PARCIAL_v0.1: ya no hay indice unico por factura (0043). Solo la clave de idempotencia
+        // puede chocar; devolver otra nota de la factura escondia una nota emitida en FE.
       }
       throw error;
     } finally {

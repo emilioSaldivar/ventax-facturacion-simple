@@ -28,8 +28,14 @@ function check(escenario, ok, detalle = "") {
   console.log(`${ok ? "OK  " : "FALLA"} ${escenario}${detalle ? ` :: ${String(detalle).slice(0, 400)}` : ""}`);
 }
 
-async function entrar(browser, ancho, alto) {
+async function entrar(browser, ancho, alto, modo = "simple") {
   const ctx = await browser.newContext({ viewport: { width: ancho, height: alto } });
+  // SPEC_EDITOR_FACTURA_PC_v0.1: este script prueba el modo simple tambien en escritorio; el completo tiene su script.
+  await ctx.addInitScript((m) => {
+    try {
+      window.localStorage.setItem("fs.editor.modo", m);
+    } catch {}
+  }, modo);
   const page = await ctx.newPage();
   paginaActual = page;
   page.setDefaultTimeout(30000);
@@ -42,7 +48,7 @@ async function entrar(browser, ancho, alto) {
 }
 
 /** Arma una factura en el editor y la emite. Devuelve el texto del resultado. */
-async function emitir(page, { moneda, tipoCambio, credito, precio, etiqueta }) {
+async function emitir(page, { moneda, tipoCambio, credito, precio, etiqueta, cantidad = "2" }) {
   await abrirVista(page, "Nueva factura");
   await page.locator('select[aria-label="Moneda"]').waitFor();
   if (credito) await page.getByRole("button", { name: "Credito", exact: true }).click();
@@ -51,7 +57,7 @@ async function emitir(page, { moneda, tipoCambio, credito, precio, etiqueta }) {
   await page.getByLabel("Nombre o razon social").fill(NOMBRE);
   await page.getByRole("button", { name: /Agregar producto/ }).click();
   await page.getByPlaceholder("Ingrese descripcion").fill(`Consultoria en informatica ${etiqueta}`);
-  await page.locator('label:has-text("Cantidad") input').first().fill("2");
+  await page.locator('label:has-text("Cantidad") input').first().fill(cantidad);
   await page.locator('label:has-text("Precio") input').first().fill(precio);
   await page.getByRole("button", { name: "AGREGAR Y NO GUARDAR" }).click();
   const crear = page.getByRole("button", { name: "Crear factura" });
@@ -80,6 +86,39 @@ async function emitir(page, { moneda, tipoCambio, credito, precio, etiqueta }) {
   const browser = await chromium.launch();
   try {
     const { ctx, page } = await entrar(browser, 1440, 900);
+
+    // CA-12: el selector ofrece Guarani y Dolar.
+    await abrirVista(page, "Nueva factura");
+    const opciones = await page.locator('select[aria-label="Moneda"] option').allInnerTexts();
+    check("CA-12 1440: el selector tiene solo Guarani y Dolar", opciones.length === 2 && opciones[0].includes("PYG") && opciones[1].includes("USD"), opciones.join(" | "));
+
+    // CA-11 (RN-08): una linea USD con centavos deja de valer al volver a PYG; corregida, se puede crear.
+    await page.locator('select[aria-label="Moneda"]').selectOption("USD");
+    await page.getByLabel("Tipo de cambio").fill("7350,5");
+    await page.getByPlaceholder("Ingrese numero de documento").fill(RUC);
+    await page.getByLabel("Nombre o razon social").fill(NOMBRE);
+    await page.getByRole("button", { name: /Agregar producto/ }).click();
+    await page.getByPlaceholder("Ingrese descripcion").fill("Prueba de cambio de moneda");
+    await page.locator('label:has-text("Precio") input').first().fill("150,25");
+    await page.getByRole("button", { name: "AGREGAR Y NO GUARDAR" }).click();
+    await page.locator('select[aria-label="Moneda"]').selectOption("PYG");
+    await page.waitForTimeout(800);
+    const aviso = await page.locator(".moneda-aviso").innerText().catch(() => "");
+    const crearBloqueado = await page.getByRole("button", { name: "Crear factura" }).isDisabled();
+    check("CA-11 1440: al volver a PYG la linea con centavos se marca y no deja crear", aviso.includes("no se convierten") && crearBloqueado && (await page.locator(".sale-item-card.line-invalid").count()) === 1, aviso);
+    await page.screenshot({ path: path.join(outDir, "1440-cambio-moneda.png"), fullPage: true });
+    await page.locator(".sale-item-card.line-invalid .sale-item-main").click();
+    await page.locator('label:has-text("Precio") input').first().fill("150000");
+    await page.getByRole("button", { name: "AGREGAR Y NO GUARDAR" }).click();
+    await page.waitForTimeout(1500);
+    check("CA-11 1440: corregida la linea, el aviso desaparece", (await page.locator(".moneda-aviso").count()) === 0 && !(await page.getByRole("button", { name: "Crear factura" }).isDisabled()), "");
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await esperarSesion(page);
+
+    // CA-08: cantidad con decimales (1,5 x 150,25 = 225,38) en USD.
+    const decimal = await emitir(page, { moneda: "USD", tipoCambio: "7350,5", credito: false, precio: "150,25", etiqueta: "usd-cantidad-decimal", cantidad: "1,5" });
+    check("CA-08 1440: cantidad 1,5 en USD: total 225,38", decimal.totales.includes("USD 225,38"), decimal.totales);
+
     const usd = await emitir(page, { moneda: "USD", tipoCambio: "7350,5", credito: false, precio: "150,25", etiqueta: "usd-contado" });
     check("CA-01 usd-contado: total en USD con 2 decimales en el editor", usd.totales.includes("USD 300,50"), usd.totales);
     check("CA-01 usd-contado: la factura se crea", /USD 300,50/.test(usd.resultado), usd.resultado.slice(0, 200).replace(/\n+/g, " | "));
@@ -115,11 +154,15 @@ async function emitir(page, { moneda, tipoCambio, credito, precio, etiqueta }) {
       }
       check("1440: la factura contado USD sale de Procesando", !fila.includes("Procesando"), fila);
     }
-    // Ficha de la factura en USD: tipo de cambio y nota de credito (D-1).
+    // Ficha de la factura en USD: tipo de cambio, totales de FE (CA-09) y nota de credito (D-1).
     await page.locator("table.documents-tabla tbody tr", { hasText: "USD 300,50" }).first().locator("td").nth(2).click();
     await page.getByRole("button", { name: /Volver a resultados/ }).waitFor({ timeout: 20000 });
     const ficha = await page.locator(".document-detail").innerText();
     check("CA-03 1440: la ficha muestra el total en USD y el tipo de cambio", ficha.includes("USD 300,50") && ficha.includes("Tipo de cambio"), ficha.slice(0, 300).replace(/\n+/g, " | "));
+    if (NC_MONEDA) {
+      // 300,50 x 7350,5 = 2.208.825,25 -> Gs. 2.208.825 (dTotalGs de FE).
+      check("CA-09 1440: con la factura aprobada, la ficha muestra el equivalente en Gs. de FE", /Equivale a Gs\.?\s*2\.208\.825/.test(ficha), ficha.slice(0, 300).replace(/\n+/g, " | "));
+    }
     await page.screenshot({ path: path.join(outDir, "1440-ficha-usd.png"), fullPage: true });
     const nc = page.getByRole("button", { name: /Crear nota de credito/ }).first();
     if (!NC_MONEDA) {
@@ -128,6 +171,7 @@ async function emitir(page, { moneda, tipoCambio, credito, precio, etiqueta }) {
       const habilitado = await page.waitForFunction((b) => b && !b.disabled, await nc.elementHandle(), { timeout: 20000 }).then(() => true, () => false);
       check("CA-06 1440: con FE rc4.27 la nota de credito de la factura en USD esta habilitada y sin aviso", habilitado && !ficha.includes("moneda extranjera se gestiona con soporte"), "");
       await nc.click();
+      await page.getByRole("group", { name: "Tipo de nota de credito" }).getByRole("button", { name: "Total" }).waitFor({ timeout: 15000 });
       await page.locator(".modal-panel textarea").fill("Prueba de nota de credito en dolares");
       await page.getByRole("button", { name: "Confirmar" }).click();
       const popup = page.locator('section[aria-labelledby="nc-success-title"]');
