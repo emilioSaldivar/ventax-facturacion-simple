@@ -24,7 +24,8 @@
 4. **Guardado:** moneda y tipo de cambio en la factura; montos de las lineas con 2 decimales (migracion).
 5. **Pantallas:** todos los montos de un documento en su moneda ("USD 1.234,50"); la columna Moneda de Documentos con la real.
 6. **Recibos** de una factura a credito en moneda extranjera, en la misma moneda (D-2).
-7. **Nota de credito** de una factura en moneda extranjera: **bloqueada** con "La nota de crédito de una factura en moneda extranjera se gestiona con soporte" (D-1).
+7. **Nota de credito** de una factura en moneda extranjera: total, por referencia, en la moneda de la factura (D-1, FE `segel-rc4.27`).
+8. **Totales de FE** (`GET /v1/documentos/{uuid}/totales`, FE `segel-rc4.27`): disponible; FS lo usa en una version siguiente para reemplazar su calculo de presentacion por los totales oficiales.
 
 ## Respuestas de FE (2026-11-10, codigo de `segel-rc4.25`; sin cambios en `rc4.26`)
 
@@ -36,8 +37,8 @@
 
 | ID | Tema | Decision |
 |---|---|---|
-| D-1 | Nota de credito en moneda extranjera | Bloqueada en FS hasta que FE la soporte; pedir a FE el cambio (decision del usuario) |
-| D-2 | Recibo en moneda extranjera | Pendiente del usuario: habilitarlo ya (el PDF pierde los centavos en letras hasta que FE lo corrija) o bloquearlo hasta la correccion |
+| D-1 | Nota de credito en moneda extranjera | El usuario pidio a FE completarla (2026-11-10). **FE `segel-rc4.27`:** la nota total por referencia toma moneda y tipo de cambio de la factura; la nota con lineas acepta `moneda` y `tipoCambio`; FE compara la moneda antes de numerar (`422 INVALID_REFERENCED_DOCUMENT`). En FS: la NC de una factura en moneda extranjera va siempre por referencia y guarda la moneda de su factura. Con FE anterior a `rc4.27` la NC queda bloqueada |
+| D-2 | Recibo en moneda extranjera | **FE `segel-rc4.27`** imprime los centavos y el nombre de la moneda ("CIENTO CINCUENTA DÓLARES ESTADOUNIDENSES CON 50/100"). En FS: el recibo de una factura en moneda extranjera sale en esa moneda (codigo ISO en mayusculas) |
 | D-3 | Despliegue | El cliente en dolares necesita FE `segel-rc4.25` o posterior en produccion (hoy `segel-rc4.6.1`); decision del usuario |
 
 ## Fuera de alcance

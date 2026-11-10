@@ -20,8 +20,8 @@ Se implementa despues del commit de FS-51 (sesion `nuevo-repo-11`), que toca los
 - `previewFactura` usa el calculo de 1 segun la moneda.
 - Persistencia de `moneda` y `tipo_cambio`; `DocumentoResponse` los expone.
 - Gateway real: `moneda` y `tipoCambio` en `POST /v1/factura` solo fuera de PYG; pago contado por el total en la moneda.
-- NC: `getNotaCreditoIneligibility` y `emitNotaCreditoTotal` bloquean `moneda <> 'PYG'` (`409`, `reason: NOTA_CREDITO_MONEDA_EXTRANJERA`), antes de llamar a FE (D-1).
-- Recibo: segun D-2; si se habilita, el recibo de una factura en moneda extranjera viaja con su moneda en mayusculas.
+- NC (D-1, FE `segel-rc4.27`): con `moneda <> 'PYG'` el pedido va por referencia (`por_referencia`, `POST /v1/nota-credito/total`), FE toma moneda y tipo de cambio de la factura; la NC se guarda con la `moneda` y el `tipo_cambio` de su factura. Variable `FE_NC_MONEDA_EXTRANJERA` (por omision `false`): con FE anterior a `rc4.27` sigue el bloqueo (`409`, `reason: NOTA_CREDITO_MONEDA_EXTRANJERA`).
+- Recibo (D-2): el recibo creado desde una factura en moneda extranjera lleva su moneda en mayusculas.
 
 ## 4. Pantalla (`main.tsx`)
 
