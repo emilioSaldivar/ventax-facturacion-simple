@@ -40,6 +40,7 @@
 - Sin filtro nuevo: FE no filtra por `atencion`, y filtrar en la pagina rompe la paginacion. Los filtros "Con errores" y "Rechazados" ya los reunen.
 - Columna "Detalle": con `atencion`, una linea "Número sin resolver: 001-001-0000007 (sin usar | rechazado por SIFEN)"; con `inutilizacion`, "Inutilización: Aceptada | En curso | Rechazada | Falló" y el numero.
 - Acciones por comprobante con atencion: "Inutilizar número" (si `puede_inutilizar`) abre un dialogo en linea con el motivo (contador 5..150) y la advertencia "SIFEN registra el número como inutilizado. No se puede deshacer." Confirmar llama a la ruta, muestra "Inutilización enviada: <estado>." y vuelve a leer la carga y los comprobantes. "Editar" deshabilitado con `title` y texto "Edición no disponible todavía" (RN-03).
+- RN-10: funcion `estadoVisible(carga)` en `carga-masiva.tsx`: con `requieren_atencion > 0` y `pendientes + preparados + enviados + con_error = 0`, etiqueta "Requiere atención" y clase `rechazado`; la usan la fila de la lista y el encabezado del detalle. La barra y el texto de espera se ocultan en ese caso.
 - Refresco automatico: tambien con `VALIDADA` y `puede_confirmar === false`, cada 15 s.
 - El texto de confirmar ("Inutilizarlos es responsabilidad del cliente") pasa a "Podrás inutilizarlos desde esta pantalla." solo si FE trae `requieren_atencion` en los totales.
 

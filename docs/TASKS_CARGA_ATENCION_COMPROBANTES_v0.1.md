@@ -22,6 +22,7 @@
 | CAC-006 | 3 | Pantalla (PLAN 6) | `typecheck` y `build` de `web-operacion` | DONE: `145e318`; `typecheck` y `build` de `web-operacion` sin errores |
 | CAC-007 | 4 | Stack local: `fe-segel` desde `feat/carga-atencion-comprobantes`, FS desde esta rama, linea base de numeracion (PLAN 9) | Salud de los servicios; imagen anterior anotada | DONE: E-1 |
 | CAC-008 | 4 | Playwright CA-01 a CA-07 contra el stack local, 390 y 1280 (PLAN 8) | Resultado de Playwright con capturas | DONE: E-2, 19/19 |
+| CAC-010 | 6 | RN-10: estado "Requiere atención" sin barra de espera (decision del usuario) | `typecheck`, `build`; Playwright sobre la carga de anticipo del stack local, 390 y 1280 | TODO |
 | CAC-009 | 5 | Repaso de SPEC, PLAN y TASKS; BACKLOG FS-47; aviso a FE con `FE_REF` | Lectura cruzada | DONE: SPEC y PLAN repasados (ver E-3); BACKLOG FS-47 cerrado; aviso a FE |
 
 ## Evidencia

@@ -141,6 +141,23 @@ const POR_PAGINA = 50;
 /** FS-35: comprobantes que pueden necesitar ayuda de soporte. */
 const CON_AYUDA: EstadoComprobante[] = ["INVALIDO", "RECHAZADO", "ERROR"];
 
+/**
+ * SPEC_CARGA_ATENCION_COMPROBANTES_v0.1, RN-10: sin nada en proceso y con numeros por resolver, la carga solo
+ * espera al operador. El estado de FE no cambia; cambia lo que se muestra.
+ */
+function soloRequiereAtencion(carga: Pick<Carga, "totales">): boolean {
+  const t = carga.totales;
+  const enProceso = (t.pendientes ?? 0) + (t.preparados ?? 0) + (t.enviados ?? 0) + (t.con_error ?? 0);
+  return (t.requieren_atencion ?? 0) > 0 && enProceso === 0;
+}
+
+function estadoVisible(carga: Pick<Carga, "estado" | "totales">): { etiqueta: string; clase: string } {
+  if (soloRequiereAtencion(carga) && carga.estado !== "FINALIZADA" && carga.estado !== "CANCELADA") {
+    return { etiqueta: "Requiere atención", clase: "rechazado" };
+  }
+  return { etiqueta: ETIQUETA_CARGA[carga.estado], clase: claseEstado(carga.estado) };
+}
+
 function claseEstado(estado: EstadoCarga | EstadoComprobante): string {
   if (["FINALIZADA", "APROBADO", "APROBADO_CON_OBS", "VALIDADA"].includes(estado)) return "ready";
   if (["RECHAZADA", "RECHAZADO", "INVALIDO", "ERROR"].includes(estado)) return "rechazado";
@@ -431,7 +448,7 @@ function ListadoCargas({
                   <button className="carga-enlace" onClick={() => onAbrir(carga.id)} type="button">{carga.nombre_archivo ?? "Sin nombre"}</button>
                 </td>
                 <td data-label="Fecha">{formatoFecha(carga.created_at)}</td>
-                <td data-label="Estado"><span className={`status-pill ${claseEstado(carga.estado)}`}>{ETIQUETA_CARGA[carga.estado]}</span></td>
+                <td data-label="Estado"><span className={`status-pill ${estadoVisible(carga).clase}`}>{estadoVisible(carga).etiqueta}</span></td>
                 <td data-label="Comprobantes">{carga.totales.comprobantes ?? "-"}</td>
                 <td data-label="Aprobados">{(carga.totales.aprobados ?? 0) + (carga.totales.aprobados_con_obs ?? 0)}</td>
                 <td data-label="Con problemas">{(carga.totales.invalidos ?? 0) + (carga.totales.rechazados ?? 0) + (carga.totales.con_error ?? 0)}</td>
@@ -771,7 +788,7 @@ function DetalleCarga({
         <div>
           <h3>{carga.nombre_archivo ?? "Carga sin nombre"}</h3>
           <p className="muted">
-            <span className={`status-pill ${claseEstado(carga.estado)}`}>{ETIQUETA_CARGA[carga.estado]}</span>{" "}
+            <span className={`status-pill ${estadoVisible(carga).clase}`}>{estadoVisible(carga).etiqueta}</span>{" "}
             Subida el {formatoFecha(carga.created_at)} por {carga.subida_por.display_name ?? "-"}
           </p>
         </div>
@@ -801,7 +818,7 @@ function DetalleCarga({
 
       <Totales carga={carga} />
 
-      {carga.estado === "EN_COLA" || carga.estado === "EN_PREPARACION" || carga.estado === "EN_SIFEN" ? (
+      {(carga.estado === "EN_COLA" || carga.estado === "EN_PREPARACION" || carga.estado === "EN_SIFEN") && !soloRequiereAtencion(carga) ? (
         <div className="carga-avance">
           <div className="carga-barra" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={avance}>
             <span style={{ width: `${avance}%` }} />

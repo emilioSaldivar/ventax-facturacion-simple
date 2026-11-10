@@ -40,6 +40,7 @@ Comportamiento: no hay estado nuevo de carga. Mientras espera una inutilizacion,
 - **RN-06.** La sincronizacion de FS consulta tambien las cargas `VALIDADA` sin acciones pendientes del operador, para mostrar su cierre: una `VALIDADA` con `requieren_atencion > 0` o sin nada que confirmar.
 - **RN-07.** Los totales de la carga muestran "Requieren atención" cuando es mayor que cero, con un aviso que explica que la carga no termina hasta resolverlos.
 - **RN-08.** Permiso: el mismo que cancelar o reintentar una carga (quien ve la carga en su contexto, o un rol interno). No exige contexto listo para emitir: inutilizar no emite.
+- **RN-10.** Decision del usuario (2026-11-09): si la carga no tiene nada en proceso (sin pendientes, preparados, enviados ni fallas) y `requieren_atencion > 0`, su estado se muestra como "Requiere atención" en la lista y en el detalle, sin la barra de avance ni el texto "Esperando la respuesta de SIFEN". El estado de FE no cambia (sigue `EN_SIFEN` o `VALIDADA`).
 - **RN-09.** Con FE sin esta version (por ejemplo `segel-rc4.3` en `segel-fs`), los campos no vienen: la pantalla se ve como hoy y no hay boton.
 
 ## Decisiones
