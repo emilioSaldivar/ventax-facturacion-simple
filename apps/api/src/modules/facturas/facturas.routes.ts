@@ -17,7 +17,8 @@ import {
   cancelDocumentoSend,
   createDocumentoDerived,
   enqueueFacturaEmission,
-  emitNotaCreditoTotal,
+  emitNotaCredito,
+  getNotaCreditoSaldo,
   reintentarNotaCreditoPorId,
   getBatchPendientesGestion,
   getDocumentoDecision,
@@ -152,9 +153,28 @@ const voidNumberSchema = z.object({
   motivo: z.string().trim().min(1).max(150)
 });
 
-const notaCreditoSchema = z.object({
-  motivo: z.string().trim().min(1).max(300)
-});
+const notaCreditoSchema = z
+  .object({
+    motivo: z.string().trim().min(1).max(300),
+    // SPEC_NOTA_CREDITO_PARCIAL_v0.1: con lineas, nota parcial; sin ellas, la total de siempre.
+    lineas: z
+      .array(z.object({ line_no: z.number().int().positive(), cantidad: z.number().positive() }))
+      .min(1)
+      .max(200)
+      .optional()
+  })
+  .superRefine((input, ctx) => {
+    const vistas = new Set<number>();
+    input.lineas?.forEach((linea, indice) => {
+      if (cantidadEscalada(linea.cantidad) === null) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["lineas", indice, "cantidad"], message: "La cantidad admite hasta 4 decimales." });
+      }
+      if (vistas.has(linea.line_no)) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["lineas", indice, "line_no"], message: "Linea repetida." });
+      }
+      vistas.add(linea.line_no);
+    });
+  });
 
 /**
  * `/conciliacion/idempotency` exige la clave de consumidor del facturador, a diferencia de
@@ -490,7 +510,7 @@ facturasRouter.post(
     try {
       const context = await getOperationalContext(req.user!.id, operationalContextRepository);
       // SPEC_NOTA_CREDITO_TRABADA_v0.1, RN-01: la clave la deriva el servidor; el encabezado se ignora.
-      const { documento, reintento } = await emitNotaCreditoTotal(
+      const { documento, reintento } = await emitNotaCredito(
         context,
         String(req.params.documentoId),
         req.body,
@@ -498,6 +518,21 @@ facturasRouter.post(
         fiscalGateway
       );
       res.status(reintento ? 200 : 201).json(documento);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// SPEC_NOTA_CREDITO_PARCIAL_v0.1: saldo acreditable por linea y que admite la factura (total o parcial).
+facturasRouter.get(
+  "/facturas/:documentoId/nota-credito/saldo",
+  requireAuth,
+  validateRequest("params", documentoParamsSchema),
+  async (req, res, next) => {
+    try {
+      const context = await getOperationalContext(req.user!.id, operationalContextRepository);
+      res.json(await getNotaCreditoSaldo(context, String(req.params.documentoId), facturasRepository));
     } catch (error) {
       next(error);
     }

@@ -65,6 +65,12 @@ export interface FiscalEmitNotaCreditoRequest {
   };
   /** SPEC_TOTALES_FE_EN_CARGA_v0.1, RN-07: `POST /v1/nota-credito/total`, sin receptor ni items (FE `rc4.13`). */
   por_referencia?: boolean;
+  /**
+   * SPEC_NOTA_CREDITO_PARCIAL_v0.1: la nota con lineas lleva la moneda y el tipo de cambio de su factura fuera de
+   * PYG (FE `rc4.27`). En la nota por referencia FE los toma de la factura y no se mandan.
+   */
+  moneda?: string;
+  tipo_cambio?: number | null;
 }
 
 export interface FiscalEmitFacturaResponse {

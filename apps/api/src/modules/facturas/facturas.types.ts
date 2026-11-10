@@ -371,6 +371,9 @@ export interface NotaCreditoPersistInput {
   motivo: string;
   externalRef: string;
   idempotencyKey?: string;
+  /** SPEC_NOTA_CREDITO_PARCIAL_v0.1: lineas y totales propios de la nota. Sin ellos, los de la factura (nota total). */
+  items?: FacturaItemPreview[];
+  totals?: TaxTotals;
   fiscalRequest: FiscalEmitNotaCreditoRequest;
   fiscalResponse: FiscalEmitNotaCreditoResponse | null;
   fiscalError: Record<string, unknown> | null;

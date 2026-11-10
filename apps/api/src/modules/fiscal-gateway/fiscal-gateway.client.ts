@@ -818,6 +818,8 @@ export class RealFiscalGateway implements FiscalGateway {
     if (request.por_referencia) {
       delete payload.receptor;
       delete payload.items;
+      delete payload.moneda;
+      delete payload.tipoCambio;
     }
 
     const response = await this.fetchWithTimeout(`${this.config.baseUrl}/nota-credito${request.por_referencia ? "/total" : ""}`, {
@@ -1650,6 +1652,12 @@ export class RealFiscalGateway implements FiscalGateway {
       })),
       envio: buildEnvio(request.fiscal_context.fiscal_envio_modo)
     };
+
+    // SPEC_NOTA_CREDITO_PARCIAL_v0.1: la nota con lineas en moneda extranjera lleva moneda y tipo de cambio.
+    if (request.moneda && request.moneda !== "PYG") {
+      payload.moneda = request.moneda;
+      payload.tipoCambio = request.tipo_cambio ?? null;
+    }
 
     const profileCode = request.fiscal_context.perfil_emision_codigo;
     if (this.config.sendEmissionProfileCode !== false && profileCode !== "NO_REQUERIDO") {

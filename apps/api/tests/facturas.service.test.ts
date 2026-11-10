@@ -957,7 +957,8 @@ describe("facturas service", () => {
     expect(candidates.items[0]).toMatchObject({
       documento: { id: facturaEmitida.id },
       elegible: false,
-      motivo_no_elegible: "La factura ya tiene una nota de credito total."
+      // SPEC_NOTA_CREDITO_PARCIAL_v0.1: la nota total copia todas las lineas; no queda saldo.
+      motivo_no_elegible: "La factura ya esta acreditada por completo."
     });
     expect(candidates.items[1]).toMatchObject({
       documento: { id: facturaPendiente.id },

@@ -769,7 +769,7 @@ export class PgFacturaRepository implements FacturaRepository {
           input.original.id,
           input.motivo,
           JSON.stringify(input.original.cliente),
-          JSON.stringify(input.original.totals),
+          JSON.stringify(input.totals ?? input.original.totals),
           JSON.stringify(input.fiscalRequest),
           JSON.stringify(input.fiscalResponse?.raw ?? input.fiscalError ?? {}),
           input.fiscalResponse?.fiscal_document_id ?? null,
@@ -789,7 +789,7 @@ export class PgFacturaRepository implements FacturaRepository {
 
       const notaCredito = inserted.rows[0]!;
 
-      for (const item of input.original.items) {
+      for (const item of input.items ?? input.original.items) {
         await client.query(
           `
             insert into factura_items_snapshot (
