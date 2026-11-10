@@ -21,6 +21,8 @@ const pgFe = process.env.ENSAYO_PG_FE ?? "fe-segel-postgres-1";
 const RUC_INEXISTENTE = "80000000-5";
 const RUC_VALIDO = process.env.ENSAYO_RUC ?? "80026570-0";
 const NOMBRE_VALIDO = process.env.ENSAYO_NOMBRE ?? "SEGEL SA";
+// SIFEN test puede tardar mas de 30 minutos en procesar un lote.
+const LIMITE_MS = Number(process.env.ENSAYO_LIMITE_MIN ?? 50) * 60_000;
 const marca = `FS51-FE-${Date.now().toString(36).slice(-5)}`;
 const outDir = path.join(process.cwd(), "test-results", "correccion-inutilizacion-fe");
 fs.mkdirSync(outDir, { recursive: true });
@@ -94,10 +96,10 @@ async function abrirDocumento(page, numero) {
     const [rechazadaId, numero] = fila.split("|");
     check("emitida la factura al RUC inexistente", Boolean(rechazadaId && numero), fila);
 
-    // Esperar el rechazo confirmado (hasta 12 min: lote).
+    // Esperar el rechazo confirmado (lote).
     let estado = "";
     let codigo = "";
-    const limite = Date.now() + 12 * 60 * 1000;
+    const limite = Date.now() + LIMITE_MS;
     while (Date.now() < limite) {
       [estado, codigo] = psql(pgFs, `select estado || '|' || coalesce(sifen_result_code,'') from facturas_operativas where id='${rechazadaId}'`).split("|");
       if (estado === "RECHAZADA") break;
@@ -132,7 +134,7 @@ async function abrirDocumento(page, numero) {
     const [correccionId, numeroCorreccion] = correccion.split("|");
     check("CA-01: la correccion queda vinculada a la rechazada", Boolean(correccionId), correccion);
     let estadoCorreccion = "";
-    const limite2 = Date.now() + 12 * 60 * 1000;
+    const limite2 = Date.now() + LIMITE_MS;
     while (Date.now() < limite2) {
       estadoCorreccion = psql(pgFs, `select estado from facturas_operativas where id='${correccionId}'`);
       if (estadoCorreccion !== "PENDIENTE_SIFEN" && estadoCorreccion !== "EMITIENDO") break;
