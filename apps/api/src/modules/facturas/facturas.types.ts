@@ -62,7 +62,8 @@ export type DocumentoEstado =
   | "ANULADA"
   | "CANCELADO_LOCAL";
 
-export type DocumentoTipo = "FACTURA" | "NOTA_CREDITO";
+/** SPEC_DOCUMENTOS_ESCRITORIO_v0.1, fase B1: la nota de remision llega por la carga masiva. */
+export type DocumentoTipo = "FACTURA" | "NOTA_CREDITO" | "NOTA_REMISION";
 export type DocumentoTipoOperativo = CondicionVenta | "NOTA_CREDITO";
 export type EmailStatus = "NOT_APPLICABLE" | "DELEGATED" | "PENDING" | "SENT" | "FAILED" | "UNKNOWN";
 export type { FiscalBatchTransmissionInfo, FiscalEnvioModo };
@@ -129,12 +130,25 @@ export interface DocumentoEmisor {
   display_name: string | null;
 }
 
+export interface DocumentoRemision {
+  motivo: number | null;
+  motivo_descripcion: string | null;
+  inicio_traslado: string | null;
+  fin_traslado: string | null;
+  kilometros: number | null;
+  transportista: string | null;
+  vehiculo: string | null;
+}
+
 export interface DocumentoResponse {
   id: string;
   document_uuid: string | null;
   tipo: DocumentoTipo;
   estado: DocumentoEstado;
-  condicion_venta: CondicionVenta;
+  /** Null en una nota de remision. */
+  condicion_venta: CondicionVenta | null;
+  /** Solo en una nota de remision: resumen del detalle que informo FE. */
+  remision?: DocumentoRemision | null;
   numero_fiscal: string | null;
   cdc: string | null;
   fiscal_document_id: string | null;

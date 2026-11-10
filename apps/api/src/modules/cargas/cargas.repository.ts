@@ -46,9 +46,9 @@ export class PgCargaRepository implements CargaRepository {
     await pool.query(
       `insert into cargas_masivas (
          tenant_id, facturador_id, actividad_punto_perfil_id, fe_carga_id, nombre_archivo, tamano_bytes, sha256,
-         numeracion, estado, totales, acciones, motivos, fe_snapshot, subida_por, sync_next_at
+         numeracion, estado, totales, acciones, motivos, fe_snapshot, subida_por, sync_next_at, tipo_documento
        )
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11::jsonb, $12::jsonb, $13::jsonb, $14, $15)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11::jsonb, $12::jsonb, $13::jsonb, $14, $15, $16)
        on conflict (facturador_id, fe_carga_id) do nothing`,
       [
         input.tenantId,
@@ -65,7 +65,8 @@ export class PgCargaRepository implements CargaRepository {
         JSON.stringify(feCarga.motivos ?? []),
         JSON.stringify(feCarga),
         input.subidaPor,
-        input.syncNextAt
+        input.syncNextAt,
+        input.tipoDocumento
       ]
     );
     const creada = await this.findByFeCargaId(input.facturadorId, feCarga.carga_id);
@@ -260,7 +261,7 @@ export class PgCargaRepository implements CargaRepository {
              document_uuid, cdc, numero_fiscal, email_estado, fiscal_status_raw, sifen_result_code, sifen_result_message,
              sifen_last_checked_at, emitted_at, carga_masiva_id, carga_numero_archivo
            )
-           values ($1, $2, $3, $4, 'FACTURA', $5, $6, $7, $8::jsonb, $9::jsonb, $10::jsonb, $11::jsonb, $12, $13, $14, $15, $16, $17, $18, $19::timestamptz, $20::timestamptz, $21, $22)
+           values ($1, $2, $3, $4, $23, $5, $6, $7, $8::jsonb, $9::jsonb, $10::jsonb, $11::jsonb, $12, $13, $14, $15, $16, $17, $18, $19::timestamptz, $20::timestamptz, $21, $22)
            returning id`,
           [
             carga.tenant_id,
@@ -284,7 +285,8 @@ export class PgCargaRepository implements CargaRepository {
             factura.actualizadoEn,
             factura.estado === "EMITIDA" ? factura.aprobadoEn : null,
             carga.id,
-            factura.numeroArchivo
+            factura.numeroArchivo,
+            factura.tipo
           ]
         );
         const facturaId = insertada.rows[0]!.id;

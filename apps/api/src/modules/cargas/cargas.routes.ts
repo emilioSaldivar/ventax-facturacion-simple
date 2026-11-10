@@ -25,6 +25,14 @@ import {
 } from "./cargas.service";
 
 const TIPOS_DE_ARCHIVO = new Set(["text/csv", "application/zip"]);
+/** SPEC_DOCUMENTOS_ESCRITORIO_v0.1, fase B1 (RN-05): tipos habilitados del catalogo `CARGA_TIPO_DOCUMENTO` de FE. */
+const TIPOS_DE_DOCUMENTO = ["FACTURA", "NOTA_REMISION"] as const;
+
+function tipoDeDocumento(valor: unknown): (typeof TIPOS_DE_DOCUMENTO)[number] {
+  if (valor === undefined || valor === "") return "FACTURA";
+  if (typeof valor === "string" && (TIPOS_DE_DOCUMENTO as readonly string[]).includes(valor)) return valor as (typeof TIPOS_DE_DOCUMENTO)[number];
+  throw new HttpError(400, "VALIDATION_ERROR", "Tipo de documento no habilitado para la carga.", { reason: "TIPO_NO_HABILITADO", tipos: TIPOS_DE_DOCUMENTO });
+}
 
 export interface CargasRouterDeps extends CargasDeps {
   requireAuth: RequestHandler;
@@ -134,7 +142,7 @@ export function createCargasRouter(deps: CargasRouterDeps): Router {
 
   router.get("/cargas/plantilla", async (req, res, next) => {
     try {
-      enviarArchivo(res, await descargarPlantilla(await deps.getContext(req.user!.id), deps));
+      enviarArchivo(res, await descargarPlantilla(await deps.getContext(req.user!.id), deps, tipoDeDocumento(req.query.tipo_documento)));
     } catch (error) {
       fallar(res, next, error);
     }
@@ -142,6 +150,7 @@ export function createCargasRouter(deps: CargasRouterDeps): Router {
 
   router.post("/cargas", prepararSubida, async (req, res, next) => {
     try {
+      const tipoDocumento = tipoDeDocumento(req.query.tipo_documento);
       const contenido = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
       if (contenido.length === 0) {
         throw new HttpError(422, "VALIDATION_ERROR", "El archivo esta vacio.", { reason: "ARCHIVO_VACIO" });
@@ -149,7 +158,7 @@ export function createCargasRouter(deps: CargasRouterDeps): Router {
       const context = await contextoListo(req);
       const nombre = typeof req.query.nombre_archivo === "string" ? req.query.nombre_archivo.slice(0, 200) : undefined;
       const contentType = (req.get("content-type") ?? "").split(";")[0]!.trim().toLowerCase() as "text/csv" | "application/zip";
-      const carga = await subirCarga(context, { contenido, contentType, nombreArchivo: nombre }, deps);
+      const carga = await subirCarga(context, { contenido, contentType, nombreArchivo: nombre, tipoDocumento }, deps);
       res.status(carga.repetida ? 200 : 201).json(carga);
     } catch (error) {
       fallar(res, next, error);

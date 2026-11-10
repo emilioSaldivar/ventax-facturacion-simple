@@ -470,7 +470,7 @@ export interface FiscalGateway {
   verificarReciboPdf(token: string): Promise<FiscalArtifactResponse>;
   verificarReciboXml(token: string): Promise<FiscalArtifactResponse>;
   crearCarga(input: FeCrearCargaInput): Promise<FeCrearCargaResult>;
-  getPlantillaCarga(): Promise<FiscalArtifactResponse>;
+  getPlantillaCarga(tipoDocumento?: FeCargaTipoDocumento): Promise<FiscalArtifactResponse>;
   getCarga(cargaId: string): Promise<FeCarga>;
   listCargaComprobantes(cargaId: string, filtros: FeCargaComprobanteFiltros): Promise<FeCargaComprobanteLista>;
   confirmarCarga(cargaId: string): Promise<FeCarga>;
@@ -487,6 +487,8 @@ export interface FiscalGateway {
 export type FeCargaEstado = "RECIBIDA" | "VALIDANDO" | "RECHAZADA" | "VALIDADA" | "EN_COLA" | "EN_PREPARACION" | "EN_SIFEN" | "FINALIZADA" | "CANCELADA";
 export type FeComprobanteEstado = "PENDIENTE" | "INVALIDO" | "DUPLICADO" | "PREPARADO" | "ENVIADO" | "APROBADO" | "APROBADO_CON_OBS" | "RECHAZADO" | "ERROR" | "CANCELADO";
 export type FeNumeracion = "SERVICIO" | "CLIENTE";
+/** SPEC_DOCUMENTOS_ESCRITORIO_v0.1, fase B1: una carga, un tipo (FE `segel-rc4.21`). */
+export type FeCargaTipoDocumento = "FACTURA" | "NOTA_REMISION";
 
 export interface FeCargaProblema {
   codigo: string;
@@ -538,6 +540,8 @@ export interface FeCarga {
   punto: string | null;
   actividad: string | null;
   numeracion: FeNumeracion;
+  /** FE `segel-rc4.21`. Ausente con FE anterior: FACTURA. */
+  tipo_documento?: FeCargaTipoDocumento;
   recibida_en: string | null;
   validada_en: string | null;
   confirmada_en: string | null;
@@ -580,6 +584,20 @@ export interface FeCargaComprobanteDetalle {
   total: number;
   /** SPEC_TOTALES_FE_EN_CARGA_v0.1: montos del DE generado. Ausente con FE anterior; null antes de PREPARADO. */
   totales?: FeDetalleTotales | null;
+}
+
+/**
+ * `detalle` de un comprobante de nota de remision (FE `segel-rc4.21`): los nombres de `POST /v1/nota-remision`.
+ * Llega en el mismo campo `detalle` que el de una factura; se lee con este tipo cuando `tipo_documento` es NOTA_REMISION.
+ */
+export interface FeCargaDetalleRemision {
+  fecha: string | null;
+  receptor: FeCargaComprobanteDetalle["receptor"];
+  remision: { motivo?: number; descripcion?: string; responsable?: number; kilometros?: number; fechaFuturaFactura?: string; costoFlete?: number } | null;
+  transporte: Record<string, unknown> | null;
+  documentosAsociados?: Array<{ tipo?: string; cdc?: string }>;
+  informacionFisco?: string | null;
+  items: Array<{ codigo?: string | null; descripcion?: string; cantidad?: number; unidadMedida?: string; rastreo?: Record<string, unknown> }>;
 }
 
 export interface FeDetalleTotales {
@@ -695,6 +713,8 @@ export interface FeCrearCargaInput {
   establecimiento?: string;
   punto?: string;
   nombreArchivo?: string;
+  /** Va como `tipo_documento`; sin el, FE toma FACTURA. */
+  tipoDocumento?: FeCargaTipoDocumento;
 }
 
 /** `creada` es false con el 200 de FE: archivo ya subido. */

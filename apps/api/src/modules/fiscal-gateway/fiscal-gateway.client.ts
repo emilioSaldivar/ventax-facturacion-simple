@@ -46,6 +46,7 @@ import {
   type FeCargaComprobanteLista,
   type FeCargaErrorDetails,
   type FeCargaLoteLista,
+  type FeCargaTipoDocumento,
   type FeCrearCargaInput,
   type FeCrearCargaResult,
   type FeInutilizarComprobanteResult
@@ -652,8 +653,8 @@ export class MockFiscalGateway implements FiscalGateway {
     return mockCargas.crear(input);
   }
 
-  async getPlantillaCarga(): Promise<FiscalArtifactResponse> {
-    return mockCargas.plantilla();
+  async getPlantillaCarga(tipoDocumento?: FeCargaTipoDocumento): Promise<FiscalArtifactResponse> {
+    return mockCargas.plantilla(tipoDocumento);
   }
 
   async getCarga(cargaId: string): Promise<FeCarga> {
@@ -1344,6 +1345,7 @@ export class RealFiscalGateway implements FiscalGateway {
     if (input.establecimiento) url.searchParams.set("establecimiento", input.establecimiento);
     if (input.punto) url.searchParams.set("punto", input.punto);
     if (input.nombreArchivo) url.searchParams.set("nombre_archivo", input.nombreArchivo);
+    if (input.tipoDocumento) url.searchParams.set("tipo_documento", input.tipoDocumento);
 
     const response = await this.fetchWithTimeout(
       url.toString(),
@@ -1358,8 +1360,9 @@ export class RealFiscalGateway implements FiscalGateway {
     return { carga, creada: response.status !== 200 };
   }
 
-  async getPlantillaCarga(): Promise<FiscalArtifactResponse> {
-    return this.descargarCarga(`${this.config.baseUrl}/cargas/formatos/csv/1`, "carga-csv-v1.csv");
+  async getPlantillaCarga(tipoDocumento?: FeCargaTipoDocumento): Promise<FiscalArtifactResponse> {
+    const sufijo = tipoDocumento && tipoDocumento !== "FACTURA" ? `?tipo_documento=${encodeURIComponent(tipoDocumento)}` : "";
+    return this.descargarCarga(`${this.config.baseUrl}/cargas/formatos/csv/1${sufijo}`, "carga-csv-v1.csv");
   }
 
   async getCarga(cargaId: string): Promise<FeCarga> {

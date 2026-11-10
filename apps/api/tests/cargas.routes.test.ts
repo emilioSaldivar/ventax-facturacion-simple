@@ -192,6 +192,16 @@ describe("rutas de cargas", () => {
     expect(await otra.json()).toMatchObject({ error: { details: { reason: "COMPROBANTE_SIN_ATENCION" } } });
   });
 
+  it("SPEC_DOCUMENTOS_ESCRITORIO_v0.1 fase B1: la subida acepta FACTURA y NOTA_REMISION; otro tipo es 400", async () => {
+    await levantar();
+    expect((await subir(csv("001-002-0000001;PED-1;;A"), "text/csv", "?tipo_documento=NOTA_DEBITO")).status).toBe(400);
+    const nre = await subir(csv("001-002-0000002;NRE-1;;A"), "text/csv", "?tipo_documento=NOTA_REMISION");
+    expect(nre.status).toBe(201);
+    expect(await nre.json()).toMatchObject({ tipo_documento: "NOTA_REMISION" });
+    const plantilla = await fetch(`${base}/cargas/plantilla?tipo_documento=NOTA_REMISION`);
+    expect(plantilla.headers.get("content-disposition")).toContain("plantilla-carga-notas-remision.csv");
+  });
+
   it("los lotes responden 403 a un operador", async () => {
     await levantar();
     const creada = (await (await subir(csv("001-002-0000001;PED-1;;A"))).json()) as { id: string };

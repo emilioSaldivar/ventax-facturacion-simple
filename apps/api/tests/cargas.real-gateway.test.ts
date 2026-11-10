@@ -164,6 +164,19 @@ describe("RealFiscalGateway: carga masiva", () => {
     expect((capturado as FiscalGatewayError).details).toMatchObject({ status: 409, fe_code: "EVENT_IN_PROGRESS" });
   });
 
+  it("SPEC_DOCUMENTOS_ESCRITORIO_v0.1 fase B1: tipo_documento en la subida y en la plantilla", async () => {
+    fetchMock.mockImplementation(async () => respuesta(201, { carga_id: "c1", estado: "RECIBIDA" }));
+    await gateway.crearCarga({ ...pedido, tipoDocumento: "NOTA_REMISION" });
+    expect(llamada().url.searchParams.get("tipo_documento")).toBe("NOTA_REMISION");
+    fetchMock.mockClear();
+    await gateway.crearCarga(pedido);
+    expect(llamada().url.searchParams.get("tipo_documento")).toBeNull();
+    fetchMock.mockClear();
+    fetchMock.mockResolvedValue(respuesta(200, "a;b\n"));
+    await gateway.getPlantillaCarga("NOTA_REMISION");
+    expect(llamada().url.search).toBe("?tipo_documento=NOTA_REMISION");
+  });
+
   it("los lotes consultan su ruta", async () => {
     fetchMock.mockResolvedValue(respuesta(200, { carga_id: "c1", items: [] }));
     await gateway.getCargaLotes("c1");

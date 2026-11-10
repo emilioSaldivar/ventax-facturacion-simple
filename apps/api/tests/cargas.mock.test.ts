@@ -89,6 +89,21 @@ describe("mock de carga masiva", () => {
     expect(final.totales.requieren_atencion).toBe(0);
   });
 
+  it("SPEC_DOCUMENTOS_ESCRITORIO_v0.1 fase B1: una carga de notas de remision marca sus comprobantes y trae detalle sin montos", async () => {
+    const gateway = nuevoGateway();
+    const { carga } = await gateway.crearCarga(pedido(csv("001-002-0000001;NRE-1;;A"), { tipoDocumento: "NOTA_REMISION" }));
+    expect(carga.tipo_documento).toBe("NOTA_REMISION");
+    await gateway.getCarga(carga.carga_id);
+    await gateway.confirmarCarga(carga.carga_id);
+    await gateway.getCarga(carga.carga_id);
+    const { items } = await gateway.listCargaComprobantes(carga.carga_id, { detalle: true });
+    expect(items[0]!.tipo_documento).toBe("NOTA_REMISION");
+    const detalle = items[0]!.detalle as unknown as Record<string, unknown>;
+    expect(detalle.remision).toMatchObject({ motivo: 1 });
+    expect(detalle.total).toBeUndefined();
+    expect((await gateway.getPlantillaCarga("NOTA_REMISION")).body.toString()).toContain("remision_motivo");
+  });
+
   describe("comprobantes que requieren atencion", () => {
     it("con numeracion del cliente, un invalido requiere atencion y la VALIDADA sin pendientes cierra al inutilizar", async () => {
       const gateway = nuevoGateway();

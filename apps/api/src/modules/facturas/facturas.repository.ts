@@ -1,4 +1,5 @@
 import type { FiscalCancelStatus } from "../fiscal-gateway/fiscal-gateway.types";
+import { resumenRemision } from "./nota-remision.resumen";
 import { pool } from "../../db/pool";
 import type {
   DocumentoListFilters,
@@ -28,6 +29,8 @@ interface FacturaRow {
   cliente_snapshot: unknown;
   totals_snapshot: unknown;
   fiscal_response_snapshot: unknown;
+  /** SPEC_DOCUMENTOS_ESCRITORIO_v0.1, fase B1: solo en notas de remision. */
+  remision_snapshot?: unknown;
   fiscal_document_id: string | null;
   cdc: string | null;
   numero_fiscal: string | null;
@@ -87,6 +90,9 @@ const COLUMNAS_DOCUMENTO = `
           cliente_snapshot,
           totals_snapshot,
           fiscal_response_snapshot,
+          case when tipo = 'NOTA_REMISION'
+               then jsonb_build_object('remision', fiscal_request_snapshot -> 'remision', 'transporte', fiscal_request_snapshot -> 'transporte')
+          end as remision_snapshot,
           fiscal_document_id,
           cdc,
           numero_fiscal,
@@ -1690,6 +1696,7 @@ function mapFacturaRow(
     tipo: row.tipo,
     estado: row.estado,
     condicion_venta: row.condicion_venta,
+    ...(row.tipo === "NOTA_REMISION" ? { remision: resumenRemision(row.remision_snapshot) } : {}),
     numero_fiscal: row.numero_fiscal,
     cdc,
     fiscal_document_id: row.fiscal_document_id,

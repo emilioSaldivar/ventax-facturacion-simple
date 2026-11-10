@@ -36,7 +36,7 @@ import { condicionesVenta, type DocumentoListFilters } from "./facturas.types";
 import { HttpError } from "../../shared/errors/http-error";
 
 const ivaTipos = ["IVA_10", "IVA_5", "EXENTA"] as const;
-const documentoTipos = ["FACTURA", "NOTA_CREDITO"] as const;
+const documentoTipos = ["FACTURA", "NOTA_CREDITO", "NOTA_REMISION"] as const;
 const documentoTiposOperativos = ["CONTADO", "CREDITO", "NOTA_CREDITO"] as const;
 const documentoEstados = ["EMITIENDO", "EMITIDA", "PENDIENTE_SIFEN", "RECHAZADA", "ERROR_OPERATIVO", "ERROR_TEMPORAL", "ANULADA", "CANCELADO_LOCAL"] as const;
 

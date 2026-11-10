@@ -3,7 +3,7 @@ import { logger } from "../../shared/logging/logger";
 import { documentoIdentidadTipos, type DocumentoIdentidadTipo } from "../clientes/clientes.types";
 import type { DocumentoEstado, FacturaClienteInput, FacturaItemPreview } from "../facturas/facturas.types";
 import { mapDocumentStatusCanonico } from "../fiscal-gateway/fiscal-gateway.client";
-import type { FeCargaAcciones, FeCargaComprobante, FeCargaEstado } from "../fiscal-gateway/fiscal-gateway.types";
+import type { FeCargaAcciones, FeCargaComprobante, FeCargaDetalleRemision, FeCargaEstado } from "../fiscal-gateway/fiscal-gateway.types";
 import type { CargaMasivaRecord, FacturaDeCarga } from "./cargas.types";
 
 const MINUTO = 60_000;
@@ -151,9 +151,70 @@ function requiereNotaCreditoPorReferencia(detalle: NonNullable<FeCargaComprobant
   );
 }
 
+/** Lo que comparten la factura y la nota de remision: identidad, estado y fechas del comprobante. */
+function identidadDeComprobante(carga: Pick<CargaMasivaRecord, "fe_carga_id">, comprobante: FeCargaComprobante) {
+  const desdeEmision = estadoDesdeComprobante(comprobante);
+  const vigente = mapDocumentStatusCanonico(comprobante.documento_estado);
+  return {
+    externalRef: externalRefDeCarga(carga.fe_carga_id, comprobante.orden),
+    // Solo se llama con comprobantes que ya tienen documento (ver comprobanteAFactura).
+    documentUuid: comprobante.document_uuid!,
+    estado: vigente ?? desdeEmision.estado,
+    estadoVigente: vigente !== null,
+    fiscalStatusRaw: comprobante.documento_estado ?? desdeEmision.raw,
+    sifenCodigo: comprobante.sifen?.codigo ?? null,
+    sifenMensaje: comprobante.sifen?.mensaje ?? null,
+    cdc: comprobante.cdc,
+    numeroFiscal: numeroSinPunto(comprobante.numero_asignado),
+    numeroArchivo: comprobante.numero_archivo,
+    emailEstado: comprobante.correo,
+    aprobadoEn: comprobante.aprobado_en,
+    actualizadoEn: comprobante.actualizado_en
+  };
+}
+
+const SIN_MONTOS: FacturaDeCarga["totals"] = { subtotal: 0, total_sin_iva: 0, iva_5: 0, iva_10: 0, total_iva: 0, total: 0 };
+
+/**
+ * SPEC_DOCUMENTOS_ESCRITORIO_v0.1, fase B1 (RN-07). Una nota de remision no tiene precio, IVA, total ni condicion:
+ * las lineas guardan cantidad y descripcion (precio 0; `EXENTA` solo por la restriccion de la tabla, no se muestra).
+ */
+function comprobanteANotaRemision(carga: Pick<CargaMasivaRecord, "fe_carga_id">, comprobante: FeCargaComprobante): FacturaDeCarga | null {
+  const detalle = comprobante.detalle as unknown as FeCargaDetalleRemision | null | undefined;
+  if (!detalle || !detalle.receptor || detalle.items.length === 0) {
+    logger.warn({ fe_carga_id: carga.fe_carga_id, orden: comprobante.orden }, "carga masiva: nota de remision sin detalle, no se incorpora");
+    return null;
+  }
+  const { detalle: _detalle, ...sinDetalle } = comprobante;
+  const items: FacturaItemPreview[] = detalle.items.map((item, indice) => ({
+    line_no: indice + 1,
+    codigo: item.codigo?.trim() || null,
+    descripcion: item.descripcion ?? "",
+    cantidad: Number(item.cantidad ?? 0),
+    precio_unitario: 0,
+    iva_tipo: "EXENTA",
+    subtotal: 0,
+    base_imponible: 0,
+    iva_monto: 0,
+    catalogo_item_id: null
+  }));
+  return {
+    tipo: "NOTA_REMISION",
+    ...identidadDeComprobante(carga, comprobante),
+    condicionVenta: null,
+    cliente: clienteDeFe(detalle.receptor),
+    items,
+    totals: { ...SIN_MONTOS },
+    requestSnapshot: detalle,
+    responseSnapshot: { ...sinDetalle }
+  };
+}
+
 export function comprobanteAFactura(carga: Pick<CargaMasivaRecord, "fe_carga_id">, comprobante: FeCargaComprobante): FacturaDeCarga | null {
   if (!comprobante.document_uuid || !ESTADOS_CON_DOCUMENTO.has(comprobante.estado)) return null;
-  // RN-05: la nota de remision y los demas tipos no son facturas de FS.
+  // SPEC_DOCUMENTOS_ESCRITORIO_v0.1, fase B1: la nota de remision es su propio documento.
+  if (comprobante.tipo_documento === "NOTA_REMISION") return comprobanteANotaRemision(carga, comprobante);
+  // RN-05 (SPEC_TOTALES_FE_EN_CARGA_v0.1): los demas tipos todavia no son documentos de FS.
   if (comprobante.tipo_documento && comprobante.tipo_documento !== "FACTURA") {
     logger.warn({ fe_carga_id: carga.fe_carga_id, orden: comprobante.orden, tipo_documento: comprobante.tipo_documento }, "carga masiva: comprobante que no es factura, no se incorpora");
     return null;
@@ -165,8 +226,6 @@ export function comprobanteAFactura(carga: Pick<CargaMasivaRecord, "fe_carga_id"
     return null;
   }
 
-  const desdeEmision = estadoDesdeComprobante(comprobante);
-  const vigente = mapDocumentStatusCanonico(comprobante.documento_estado);
   const calculado = itemsYTotales(detalle);
   const { items } = calculado;
   const { detalle: _detalle, ...sinDetalle } = comprobante;
@@ -196,19 +255,8 @@ export function comprobanteAFactura(carga: Pick<CargaMasivaRecord, "fe_carga_id"
   }
 
   return {
-    externalRef: externalRefDeCarga(carga.fe_carga_id, comprobante.orden),
-    documentUuid: comprobante.document_uuid,
-    estado: vigente ?? desdeEmision.estado,
-    estadoVigente: vigente !== null,
-    fiscalStatusRaw: comprobante.documento_estado ?? desdeEmision.raw,
-    sifenCodigo: comprobante.sifen?.codigo ?? null,
-    sifenMensaje: comprobante.sifen?.mensaje ?? null,
-    cdc: comprobante.cdc,
-    numeroFiscal: numeroSinPunto(comprobante.numero_asignado),
-    numeroArchivo: comprobante.numero_archivo,
-    emailEstado: comprobante.correo,
-    aprobadoEn: comprobante.aprobado_en,
-    actualizadoEn: comprobante.actualizado_en,
+    tipo: "FACTURA",
+    ...identidadDeComprobante(carga, comprobante),
     condicionVenta: detalle.condicionOperacion?.tipo === "CREDITO" ? "CREDITO" : "CONTADO",
     cliente: clienteDeFe(detalle.receptor),
     items,

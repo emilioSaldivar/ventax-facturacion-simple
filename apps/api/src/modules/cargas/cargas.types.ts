@@ -1,4 +1,4 @@
-import type { FeCarga, FeCargaAcciones, FeCargaComprobante, FeCargaEstado, FeCargaProblema, FeCargaTotales, FeNumeracion } from "../fiscal-gateway/fiscal-gateway.types";
+import type { FeCarga, FeCargaAcciones, FeCargaComprobante, FeCargaEstado, FeCargaProblema, FeCargaTipoDocumento, FeCargaTotales, FeNumeracion } from "../fiscal-gateway/fiscal-gateway.types";
 import type { DocumentoEstado, FacturaClienteInput, FacturaItemPreview } from "../facturas/facturas.types";
 import type { TaxTotals } from "@facturacion-simple/shared";
 
@@ -12,6 +12,8 @@ export interface CargaMasivaRecord {
   tamano_bytes: number;
   sha256: string;
   numeracion: FeNumeracion;
+  /** SPEC_DOCUMENTOS_ESCRITORIO_v0.1, fase B1. */
+  tipo_documento: FeCargaTipoDocumento;
   estado: FeCargaEstado;
   totales: FeCargaTotales | Record<string, never>;
   acciones: FeCargaAcciones | Record<string, never>;
@@ -42,6 +44,8 @@ export interface CargaMasivaResponse {
   nombre_archivo: string | null;
   tamano_bytes: number;
   numeracion: FeNumeracion;
+  /** SPEC_DOCUMENTOS_ESCRITORIO_v0.1, fase B1. */
+  tipo_documento: FeCargaTipoDocumento;
   totales: FeCargaTotales | Record<string, never>;
   acciones: FeCargaAcciones | Record<string, never>;
   motivos: FeCargaProblema[];
@@ -114,10 +118,13 @@ export interface NuevaCargaInput {
   sha256: string;
   subidaPor: string;
   syncNextAt: Date | null;
+  tipoDocumento: FeCargaTipoDocumento;
 }
 
 /** Comprobante listo para `facturas_operativas` (PLAN seccion 6). */
 export interface FacturaDeCarga {
+  /** SPEC_DOCUMENTOS_ESCRITORIO_v0.1, fase B1: la nota de remision no tiene montos ni condicion de venta. */
+  tipo: "FACTURA" | "NOTA_REMISION";
   externalRef: string;
   documentUuid: string;
   estado: Extract<DocumentoEstado, "PENDIENTE_SIFEN" | "EMITIDA" | "RECHAZADA" | "ANULADA">;
@@ -132,7 +139,7 @@ export interface FacturaDeCarga {
   emailEstado: "PENDING" | "SENT" | "FAILED" | null;
   aprobadoEn: string | null;
   actualizadoEn: string;
-  condicionVenta: "CONTADO" | "CREDITO";
+  condicionVenta: "CONTADO" | "CREDITO" | null;
   cliente: FacturaClienteInput;
   items: FacturaItemPreview[];
   totals: TaxTotals;

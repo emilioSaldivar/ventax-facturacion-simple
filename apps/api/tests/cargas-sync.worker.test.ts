@@ -101,8 +101,24 @@ describe("mapeo de comprobantes", () => {
       expect(factura.totals).toMatchObject({ total: 60000, anticipo: 40000, nota_credito_por_referencia: true });
     });
 
-    it("CA-04: un comprobante que no es factura no crea factura", () => {
-      expect(comprobanteAFactura(carga, comprobante({ tipo_documento: "NOTA_REMISION" }))).toBeNull();
+    it("CA-04: un comprobante de un tipo que FS aun no incorpora no crea documento", () => {
+      expect(comprobanteAFactura(carga, comprobante({ tipo_documento: "NOTA_DEBITO" }))).toBeNull();
+    });
+
+    it("SPEC_DOCUMENTOS_ESCRITORIO_v0.1 RN-07: una nota de remision crea su documento sin montos ni condicion", () => {
+      const detalle = {
+        fecha: "2026-11-10T09:00:00",
+        receptor: { tipoDocumento: "RUC", docNro: "80026570", dv: "0", razonSocial: "SEGEL SA", naturaleza: "JURIDICA" },
+        remision: { motivo: 7, responsable: 1, kilometros: 12 },
+        transporte: { inicioTraslado: "2026-11-10", finTraslado: "2026-11-11", transportista: { nombre: "Transportes X" }, vehiculos: [{ tipo: "Camion", marca: "Volvo", matricula: "ABC123" }] },
+        items: [{ codigo: "A", descripcion: "Caja", cantidad: 2.5 }]
+      };
+      const nota = comprobanteAFactura(carga, comprobante({ tipo_documento: "NOTA_REMISION", detalle: detalle as never }))!;
+      expect(nota).toMatchObject({ tipo: "NOTA_REMISION", condicionVenta: null, externalRef: "carga:carga-fe:3", estado: "EMITIDA" });
+      expect(nota.totals).toEqual({ subtotal: 0, total_sin_iva: 0, iva_5: 0, iva_10: 0, total_iva: 0, total: 0 });
+      expect(nota.items[0]).toMatchObject({ descripcion: "Caja", cantidad: 2.5, precio_unitario: 0, subtotal: 0 });
+      expect(nota.cliente).toMatchObject({ razon_social: "SEGEL SA" });
+      expect(nota.requestSnapshot).toEqual(detalle);
     });
   });
 

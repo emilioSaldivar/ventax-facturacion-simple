@@ -28,6 +28,8 @@ import {
   type FeCargaEstado,
   type FeCargaLoteLista,
   type FeCargaProblema,
+  type FeCargaDetalleRemision,
+  type FeCargaTipoDocumento,
   type FeCargaTotales,
   type FeCrearCargaInput,
   type FeCrearCargaResult,
@@ -80,7 +82,7 @@ function leerFilas(contenido: Buffer): { titulos: string[]; filas: Array<Record<
   return { titulos, filas };
 }
 
-function armarComprobantes(filas: Array<Record<string, string>>): MockComprobante[] {
+function armarComprobantes(filas: Array<Record<string, string>>, tipoDocumento: FeCargaTipoDocumento = "FACTURA"): MockComprobante[] {
   const comprobantes: MockComprobante[] = [];
   let actual: string | null = null;
   let filaArchivo = 1;
@@ -94,7 +96,9 @@ function armarComprobantes(filas: Array<Record<string, string>>): MockComprobant
     }
     actual = numero;
     const referencia = fila.referencia_venta ?? "";
-    comprobantes.push(armarComprobante(comprobantes.length + 1, filaArchivo, numero, referencia, Boolean(fila.receptor_email)));
+    const comprobante = armarComprobante(comprobantes.length + 1, filaArchivo, numero, referencia, Boolean(fila.receptor_email));
+    comprobante.tipo_documento = tipoDocumento;
+    comprobantes.push(comprobante);
   }
   return comprobantes;
 }
@@ -338,6 +342,26 @@ function accionNoAdmitida(mock: MockCarga): FiscalGatewayError {
   });
 }
 
+/** Detalle de una nota de remision: los nombres de `POST /v1/nota-remision`, sin montos (FE `segel-rc4.21`). */
+function detalleRemisionMock(): NonNullable<FeCargaComprobante["detalle"]> {
+  const detalle: FeCargaDetalleRemision = {
+    fecha: new Date().toISOString().slice(0, 19),
+    receptor: { tipoDocumento: "RUC", docNro: "80000000", dv: "1", razonSocial: "Cliente de remision", naturaleza: "JURIDICA" },
+    remision: { motivo: 1, responsable: 1, kilometros: 12 },
+    transporte: {
+      tipo: 1,
+      modalidad: 1,
+      inicioTraslado: "2026-11-10",
+      finTraslado: "2026-11-10",
+      vehiculos: [{ tipo: "Camion", marca: "Volvo", matricula: "ABC123" }],
+      transportista: { nombre: "Transportes Ejemplo", chofer: { docNro: "1234567", nombre: "Chofer Ejemplo", direccion: "Calle 1" } }
+    },
+    items: [{ codigo: "ITEM-1", descripcion: "Mercaderia trasladada", cantidad: 3 }]
+  };
+  // Viaja en el mismo campo `detalle` que el de una factura (ver FeCargaDetalleRemision).
+  return detalle as unknown as NonNullable<FeCargaComprobante["detalle"]>;
+}
+
 const SIN_MONTOS = { anticipo: 0, redondeo: 0, gravada_5: 0, exenta: 0, exonerada: 0, iva_5: 0 };
 
 function detalleMock(referencia: string | null): NonNullable<FeCargaComprobante["detalle"]> {
@@ -400,7 +424,7 @@ export const mockCargas = {
     const mock: MockCarga = {
       sha256,
       emisorId: input.emisorId,
-      comprobantes: titulos.includes("numero_comprobante") ? armarComprobantes(filas) : [],
+      comprobantes: titulos.includes("numero_comprobante") ? armarComprobantes(filas, input.tipoDocumento ?? "FACTURA") : [],
       lineas: filas.length,
       titulosValidos: titulos.includes("numero_comprobante"),
       carga: {
@@ -417,6 +441,7 @@ export const mockCargas = {
         punto: input.punto ?? null,
         actividad: input.actividadEconomicaCodigo,
         numeracion: input.numeracion,
+        tipo_documento: input.tipoDocumento ?? "FACTURA",
         recibida_en: instante(),
         validada_en: null,
         confirmada_en: null,
@@ -430,7 +455,11 @@ export const mockCargas = {
     return { carga: presentar(mock), creada: true };
   },
 
-  plantilla(): FiscalArtifactResponse {
+  plantilla(tipoDocumento?: FeCargaTipoDocumento): FiscalArtifactResponse {
+    if (tipoDocumento === "NOTA_REMISION") {
+      const csv = "tipo_documento;numero_comprobante;fecha_emision;referencia_venta;receptor_tipo_documento;receptor_documento;receptor_nombre;remision_motivo;item_codigo;item_descripcion;item_cantidad\n";
+      return { body: Buffer.from(csv, "utf8"), content_type: "text/csv; charset=utf-8", filename: "carga-nre-csv-v1.csv" };
+    }
     const titulos = "tipo_documento;numero_comprobante;fecha_emision;referencia_venta;receptor_tipo_documento;receptor_documento;receptor_nombre;receptor_email;condicion;pago_1_medio;pago_1_monto;total_comprobante;item_codigo;item_descripcion;item_cantidad;item_precio_unitario;item_iva";
     const ejemplo = "FACTURA;001-001-0000001;2026-11-07T09:15:00;PED-1;RUC;80000000-1;EMPRESA EJEMPLO S.A.;compras@ejemplo.com.py;CONTADO;EFECTIVO;100000;100000;SRV-1;Servicio;1;100000;IVA10";
     return { body: Buffer.from(`${titulos}\n${ejemplo}\n`, "utf8"), content_type: "text/csv; charset=utf-8", filename: "carga-csv-v1.csv" };
@@ -455,7 +484,8 @@ export const mockCargas = {
     const limit = filtros.limit ?? 50;
     const items = filtrados.slice((page - 1) * limit, page * limit).map((comprobante) => {
       const publico = presentarComprobante(mock, comprobante);
-      return filtros.detalle ? { ...publico, detalle: comprobante.document_uuid ? detalleMock(comprobante.referencia_venta) : null } : publico;
+      const detalle = !comprobante.document_uuid ? null : comprobante.tipo_documento === "NOTA_REMISION" ? detalleRemisionMock() : detalleMock(comprobante.referencia_venta);
+      return filtros.detalle ? { ...publico, detalle } : publico;
     });
     return { carga_id: cargaId, estado: mock.carga.estado, items, page, limit, total: filtrados.length };
   },

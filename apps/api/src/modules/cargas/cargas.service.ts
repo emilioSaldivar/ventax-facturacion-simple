@@ -8,6 +8,7 @@ import {
   type FeCargaErrorDetails,
   type FiscalArtifactResponse,
   type FeCargaLoteLista,
+  type FeCargaTipoDocumento,
   type FiscalGateway
 } from "../fiscal-gateway/fiscal-gateway.types";
 import { proximaSincronizacionMs } from "./cargas.mapeo";
@@ -81,6 +82,7 @@ export function toCargaResponse(row: CargaMasivaRecord): CargaMasivaResponse {
     nombre_archivo: row.nombre_archivo,
     tamano_bytes: row.tamano_bytes,
     numeracion: row.numeracion,
+    tipo_documento: row.tipo_documento ?? "FACTURA",
     totales: row.totales,
     acciones: row.acciones,
     motivos: row.motivos ?? [],
@@ -139,6 +141,8 @@ export interface SubirCargaInput {
   contenido: Buffer;
   contentType: "text/csv" | "application/zip";
   nombreArchivo?: string;
+  /** SPEC_DOCUMENTOS_ESCRITORIO_v0.1, fase B1 (RN-05): por omision FACTURA. */
+  tipoDocumento?: FeCargaTipoDocumento;
 }
 
 export async function subirCarga(context: OperationalContextResponse, input: SubirCargaInput, deps: CargasDeps): Promise<CargaMasivaResponse> {
@@ -170,6 +174,7 @@ export async function subirCarga(context: OperationalContextResponse, input: Sub
     numeracion: context.fiscal_context.numeracion_facturas ?? "SERVICIO",
     actividadEconomicaCodigo: context.fiscal_context.actividad_economica_codigo,
     nombreArchivo: input.nombreArchivo,
+    ...(input.tipoDocumento && input.tipoDocumento !== "FACTURA" ? { tipoDocumento: input.tipoDocumento } : {}),
     ...(conPerfil
       ? { emissionProfileCode: perfil }
       : { establecimiento: context.fiscal_context.establecimiento, punto: context.fiscal_context.punto_expedicion })
@@ -202,7 +207,8 @@ export async function subirCarga(context: OperationalContextResponse, input: Sub
       tamanoBytes: input.contenido.length,
       sha256,
       subidaPor: context.user.id,
-      syncNextAt: primerSync(feCarga)
+      syncNextAt: primerSync(feCarga),
+      tipoDocumento: feCarga.tipo_documento ?? input.tipoDocumento ?? "FACTURA"
     }));
 
   await repository.registrarEvento(fila, context.user.id, "CARGA_SUBIDA", {
@@ -380,11 +386,15 @@ export async function inutilizarComprobante(
   };
 }
 
-export async function descargarPlantilla(context: OperationalContextResponse, deps: CargasDeps): Promise<FiscalArtifactResponse> {
+export async function descargarPlantilla(
+  context: OperationalContextResponse,
+  deps: CargasDeps,
+  tipoDocumento: FeCargaTipoDocumento = "FACTURA"
+): Promise<FiscalArtifactResponse> {
   const gateway = await deps.gatewayFor(context.facturador.id);
   try {
-    const plantilla = await gateway.getPlantillaCarga();
-    return { ...plantilla, filename: "plantilla-carga-facturas.csv" };
+    const plantilla = await gateway.getPlantillaCarga(tipoDocumento);
+    return { ...plantilla, filename: tipoDocumento === "NOTA_REMISION" ? "plantilla-carga-notas-remision.csv" : "plantilla-carga-facturas.csv" };
   } catch (error) {
     throw traducirErrorFe(error);
   }

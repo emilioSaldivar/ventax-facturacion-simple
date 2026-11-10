@@ -191,8 +191,14 @@ export function adminEmailRequiredTemplate(username: string, displayName: string
   };
 }
 
+function nombreDocumento(tipo: AccionFiscalEmailContext["documentoTipo"]): string {
+  if (tipo === "NOTA_CREDITO") return "Nota de crédito";
+  if (tipo === "NOTA_REMISION") return "Nota de remisión";
+  return "Factura";
+}
+
 export interface AccionFiscalEmailContext {
-  documentoTipo: "FACTURA" | "NOTA_CREDITO";
+  documentoTipo: "FACTURA" | "NOTA_CREDITO" | "NOTA_REMISION";
   numeroFiscal: string | null;
   titulo: string;
   descripcion: string;
@@ -211,7 +217,7 @@ export interface AccionFiscalEmailContext {
 const AVISO_PARA_FACTURADOR = "Este aviso es para el equipo de facturacion. Su cliente no recibio esta factura por correo.";
 
 export function accionRequeridaTemplate(ctx: AccionFiscalEmailContext): EmailTemplate {
-  const nombreDoc = ctx.documentoTipo === "NOTA_CREDITO" ? "Nota de crédito" : "Factura";
+  const nombreDoc = nombreDocumento(ctx.documentoTipo);
   const safeTitulo = escapeHtml(ctx.titulo);
   const safeDescripcion = escapeHtml(ctx.descripcion);
   const safeNumero = ctx.numeroFiscal ? escapeHtml(ctx.numeroFiscal) : "sin número asignado";
@@ -271,7 +277,7 @@ export interface SoportePayloadContext {
 export function requiereSoporteTemplate(
   ctx: AccionFiscalEmailContext & { soportePayload: SoportePayloadContext }
 ): EmailTemplate {
-  const nombreDoc = ctx.documentoTipo === "NOTA_CREDITO" ? "Nota de crédito" : "Factura";
+  const nombreDoc = nombreDocumento(ctx.documentoTipo);
   const safeTitulo = escapeHtml(ctx.titulo);
   const safeDescripcion = escapeHtml(ctx.descripcion);
   const safeNumero = ctx.numeroFiscal ? escapeHtml(ctx.numeroFiscal) : "sin número asignado";

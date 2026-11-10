@@ -62,6 +62,7 @@ export class FakeCargaRepository implements CargaRepository {
       tamano_bytes: input.tamanoBytes,
       sha256: input.sha256,
       numeracion: input.feCarga.numeracion,
+      tipo_documento: input.tipoDocumento,
       estado: input.feCarga.estado,
       totales: input.feCarga.totales,
       acciones: input.feCarga.acciones,
