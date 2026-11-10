@@ -1,6 +1,6 @@
 # SPEC Nota De Credito Parcial Con Lineas v0.1
 
-**Fecha:** 2026-11-10 · **Decision del usuario:** entra, al menos en USD (`SPEC_MONEDA_EXTRANJERA_v0.1` D-7). · **Estado:** refinada para implementar; decisiones D-1 a D-4 propuestas, a confirmar antes de empezar.
+**Fecha:** 2026-11-10 · **Decision del usuario:** entra, al menos en USD (`SPEC_MONEDA_EXTRANJERA_v0.1` D-7). · **Estado:** refinada para implementar. D-1 a D-4 son decisiones tecnicas tomadas en el refinamiento (2026-11-10), con su motivo; el usuario no tiene nada que confirmar en esta SPEC salvo el alcance ya decidido (entra; cuotas no).
 
 ## Alineacion
 
@@ -35,12 +35,13 @@ Que el operador pueda devolver o ajustar **parte** de una factura: elegir lineas
 
 ## Decisiones
 
-| ID | Tema | Decision propuesta |
-|---|---|---|
-| D-1 | Clave de idempotencia por nota | Se mantiene `buildNotaCreditoExternalRef(context, facturaId, intento)` con `intento = notas.length + 1` (cuenta todas las notas previas de la factura, incluidas las rechazadas, como hoy). Una nota trabada se reintenta con su clave guardada; dos notas parciales distintas llevan claves distintas porque cambia `intento`. **Confirmar** |
-| D-2 | Varias notas en curso | Mientras una nota de la factura este trabada (`esNotaTrabada`) no se emite otra: primero se reintenta o se resuelve. Con una nota aprobada o pendiente en SIFEN si se puede emitir otra parcial, dentro del saldo. **Confirmar** |
-| D-3 | Redondeo del saldo | El tope lo controla FE en la moneda de la factura (2417); FS valida por cantidades, no por importe, y muestra el error de FE si lo hubiera (RN-05). **Confirmar** |
-| D-4 | Bandera para moneda extranjera | La parcial fuera de PYG usa la misma `FE_NC_MONEDA_EXTRANJERA` que la total; no se agrega otra bandera. **Confirmar** |
+| ID | Tema | Decision (tecnica, tomada) | Motivo |
+|---|---|---|---|
+| D-1 | Clave de idempotencia por nota | Se mantiene `buildNotaCreditoExternalRef(context, facturaId, intento)` con `intento = notas.length + 1`, contando todas las notas previas de la factura, rechazadas incluidas. Una nota trabada se reintenta con su clave guardada (como hoy, `SPEC_NOTA_CREDITO_TRABADA_v0.1`) | Dos notas parciales distintas llevan claves distintas porque cambia `intento`; un reintento de la misma nota conserva la suya. No hace falta un formato de clave nuevo ni un cambio en FE |
+| D-2 | Varias notas en curso | Mientras la factura tenga una nota trabada (`esNotaTrabada`) no se emite otra: primero se reintenta o se resuelve. Con notas aprobadas o pendientes en SIFEN si se puede emitir otra parcial, dentro del saldo (las pendientes descuentan saldo) | Una trabada puede terminar aprobada o rechazada: emitir otra encima podria superar el total o duplicar. Una pendiente en SIFEN ya tiene numero y CDC: cuenta como emitida para el saldo |
+| D-3 | Control del tope | FS valida por cantidades contra el saldo de cada linea (RN-01, RN-06). El tope por importe en la moneda de la factura lo controla FE (`CREDIT_NOTE_TOTAL_EXCEEDED`, SIFEN 2417) y FS lo muestra (RN-05) | Evita duplicar en FS una regla fiscal que vive en FE (limite de dominio de `AGENTS.md`); el control por cantidades alcanza para que el operador no pueda pedir mas de lo facturado |
+| D-4 | Bandera para moneda extranjera | La parcial fuera de PYG usa la misma `FE_NC_MONEDA_EXTRANJERA` que la total; no se agrega otra | Es la misma capacidad de FE (`rc4.27`); una segunda bandera solo sumaria configuracion |
+| D-5 | Precio de la linea | El precio unitario y el IVA de la nota son los de la factura; no se editan | El ajuste de precio por importe (motivo 8) es otro caso de uso; si el usuario lo pide va en v0.2 |
 
 ## Reglas
 

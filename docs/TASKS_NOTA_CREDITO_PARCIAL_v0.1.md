@@ -7,7 +7,7 @@
 
 ## Estado
 
-Documentada el 2026-11-10 por decision del usuario (entra, al menos en USD). Lista para implementar por otro agente despues de MON-008 y MON-009, en la rama `feat/moneda-extranjera`, una vez confirmadas D-1 a D-4 del SPEC. Misma regla de validacion por commit que `TASKS_MONEDA_EXTRANJERA_v0.1.md`.
+Documentada el 2026-11-10 por decision del usuario (entra, al menos en USD). Lista para implementar por otro agente despues de MON-008 y MON-009, en la rama `feat/moneda-extranjera`. D-1 a D-5 del SPEC son decisiones tecnicas ya tomadas. **Instruccion del usuario (2026-11-10):** la implementacion de esta cadena y de las demas arranca recien cuando se cierre la matriz RAJ (MON-010 de `TASKS_MONEDA_EXTRANJERA_v0.1.md`, faltan los casos 10 y 11); el despliegue, solo cuando el usuario confirme todo. Misma regla de validacion por commit que `TASKS_MONEDA_EXTRANJERA_v0.1.md`.
 
 ## Matriz
 
