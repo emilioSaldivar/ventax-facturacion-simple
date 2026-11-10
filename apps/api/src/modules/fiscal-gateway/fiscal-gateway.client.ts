@@ -46,7 +46,9 @@ import {
   type FeCargaComprobanteLista,
   type FeCargaErrorDetails,
   type FeCargaLoteLista,
+  type FeCargaEjemplos,
   type FeCargaTipoDocumento,
+  type FeParametrosPlanilla,
   type FeCrearCargaInput,
   type FeCrearCargaResult,
   type FeInutilizarComprobanteResult
@@ -653,8 +655,20 @@ export class MockFiscalGateway implements FiscalGateway {
     return mockCargas.crear(input);
   }
 
-  async getPlantillaCarga(tipoDocumento?: FeCargaTipoDocumento): Promise<FiscalArtifactResponse> {
-    return mockCargas.plantilla(tipoDocumento);
+  async getPlantillaCarga(parametros?: FeParametrosPlanilla): Promise<FiscalArtifactResponse> {
+    return mockCargas.plantilla(parametros?.tipoDocumento);
+  }
+
+  async listEjemplosCarga(tipoDocumento: FeCargaTipoDocumento): Promise<FeCargaEjemplos> {
+    return mockCargas.ejemplos(tipoDocumento);
+  }
+
+  async getEjemploCarga(codigo: string, parametros: FeParametrosPlanilla): Promise<FiscalArtifactResponse> {
+    return mockCargas.ejemplo(codigo, parametros);
+  }
+
+  async getDiccionarioCarga(tipoDocumento: FeCargaTipoDocumento, formato: "pdf" | "md"): Promise<FiscalArtifactResponse> {
+    return mockCargas.diccionario(tipoDocumento, formato);
   }
 
   async getCarga(cargaId: string): Promise<FeCarga> {
@@ -1360,9 +1374,22 @@ export class RealFiscalGateway implements FiscalGateway {
     return { carga, creada: response.status !== 200 };
   }
 
-  async getPlantillaCarga(tipoDocumento?: FeCargaTipoDocumento): Promise<FiscalArtifactResponse> {
-    const sufijo = tipoDocumento && tipoDocumento !== "FACTURA" ? `?tipo_documento=${encodeURIComponent(tipoDocumento)}` : "";
-    return this.descargarCarga(`${this.config.baseUrl}/cargas/formatos/csv/1${sufijo}`, "carga-csv-v1.csv");
+  async getPlantillaCarga(parametros?: FeParametrosPlanilla): Promise<FiscalArtifactResponse> {
+    return this.descargarCarga(urlDePlanilla(`${this.config.baseUrl}/cargas/formatos/csv/1`, parametros), "carga-csv-v1.csv");
+  }
+
+  async listEjemplosCarga(tipoDocumento: FeCargaTipoDocumento): Promise<FeCargaEjemplos> {
+    return this.pedirCarga<FeCargaEjemplos>(`/cargas/formatos/csv/1/ejemplos?tipo_documento=${encodeURIComponent(tipoDocumento)}`, "GET");
+  }
+
+  async getEjemploCarga(codigo: string, parametros: FeParametrosPlanilla): Promise<FiscalArtifactResponse> {
+    const url = urlDePlanilla(`${this.config.baseUrl}/cargas/formatos/csv/1/ejemplos/${encodeURIComponent(codigo)}`, parametros);
+    return this.descargarCarga(url, `ejemplo-${codigo}.csv`);
+  }
+
+  async getDiccionarioCarga(tipoDocumento: FeCargaTipoDocumento, formato: "pdf" | "md"): Promise<FiscalArtifactResponse> {
+    const url = `${this.config.baseUrl}/cargas/formatos/csv/1/diccionario?tipo_documento=${encodeURIComponent(tipoDocumento)}&formato=${formato}`;
+    return this.descargarCarga(url, `diccionario.${formato}`, formato === "pdf" ? "application/pdf" : "text/markdown");
   }
 
   async getCarga(cargaId: string): Promise<FeCarga> {
@@ -1422,12 +1449,12 @@ export class RealFiscalGateway implements FiscalGateway {
     return body as T;
   }
 
-  private async descargarCarga(url: string, filename: string): Promise<FiscalArtifactResponse> {
-    const response = await this.fetchWithTimeout(url, { method: "GET", headers: { ...this.buildHeaders(), accept: "text/csv" } });
+  private async descargarCarga(url: string, filename: string, accept = "text/csv"): Promise<FiscalArtifactResponse> {
+    const response = await this.fetchWithTimeout(url, { method: "GET", headers: { ...this.buildHeaders(), accept } });
     if (!response.ok) throw errorDeCarga(response, await readJson(response));
     return {
       body: Buffer.from(await response.arrayBuffer()),
-      content_type: response.headers.get("content-type") ?? "text/csv; charset=utf-8",
+      content_type: response.headers.get("content-type") ?? (accept === "text/csv" ? "text/csv; charset=utf-8" : accept),
       filename
     };
   }
@@ -2061,6 +2088,23 @@ function mapCancelStatus(value: string | null): FiscalCancelStatus {
     default:
       return "UNKNOWN";
   }
+}
+
+/**
+ * SPEC_PLANILLAS_EJEMPLO_v0.1, RN-01: la plantilla y los ejemplos van con los mismos parametros de la subida,
+ * asi salen con el punto y la numeracion del cliente (guia 57 de FE). Sin parametros, el ejemplo generico.
+ */
+function urlDePlanilla(base: string, parametros?: FeParametrosPlanilla): string {
+  const url = new URL(base);
+  if (!parametros) return url.toString();
+  url.searchParams.set("emisor_id", parametros.emisorId);
+  url.searchParams.set("numeracion", parametros.numeracion);
+  url.searchParams.set("actividadEconomicaCodigo", parametros.actividadEconomicaCodigo);
+  if (parametros.emissionProfileCode) url.searchParams.set("emission_profile_code", parametros.emissionProfileCode);
+  if (parametros.establecimiento) url.searchParams.set("establecimiento", parametros.establecimiento);
+  if (parametros.punto) url.searchParams.set("punto", parametros.punto);
+  if (parametros.tipoDocumento) url.searchParams.set("tipo_documento", parametros.tipoDocumento);
+  return url.toString();
 }
 
 /** /v1/cargas responde `{ error, message, details }`, con `error` como codigo de texto. */

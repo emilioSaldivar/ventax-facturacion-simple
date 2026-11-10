@@ -202,6 +202,24 @@ describe("rutas de cargas", () => {
     expect(plantilla.headers.get("content-disposition")).toContain("plantilla-carga-notas-remision.csv");
   });
 
+  it("SPEC_PLANILLAS_EJEMPLO_v0.1: lista de ejemplos sin href, ejemplo con el punto del contexto y diccionario", async () => {
+    await levantar();
+    const lista = await (await fetch(`${base}/cargas/ejemplos?tipo_documento=FACTURA`)).json() as { ejemplos: Array<Record<string, unknown>> };
+    expect(lista.ejemplos.map((e) => e.codigo)).toEqual(["BASICO", "CREDITO_CUOTAS_DETALLE"]);
+    expect(lista.ejemplos[0]!.href).toBeUndefined();
+    const espia = vi.spyOn(gateway, "getEjemploCarga");
+    const ejemplo = await fetch(`${base}/cargas/ejemplos/BASICO?tipo_documento=FACTURA`);
+    expect(ejemplo.status).toBe(200);
+    expect(ejemplo.headers.get("content-disposition")).toContain("ejemplo-basico.csv");
+    expect(espia.mock.calls[0]![1]).toMatchObject({ emisorId: contexto().facturador.emisor_id, tipoDocumento: "FACTURA" });
+    expect((await fetch(`${base}/cargas/ejemplos/NO_EXISTE`)).status).toBe(404);
+    expect((await fetch(`${base}/cargas/ejemplos/mal%20codigo`)).status).toBe(400);
+    const pdf = await fetch(`${base}/cargas/diccionario?tipo_documento=NOTA_REMISION&formato=pdf`);
+    expect(pdf.headers.get("content-type")).toContain("application/pdf");
+    expect(pdf.headers.get("content-disposition")).toContain("planilla-notas-remision-documentacion.pdf");
+    expect((await fetch(`${base}/cargas/diccionario?formato=docx`)).status).toBe(400);
+  });
+
   it("los lotes responden 403 a un operador", async () => {
     await levantar();
     const creada = (await (await subir(csv("001-002-0000001;PED-1;;A"))).json()) as { id: string };

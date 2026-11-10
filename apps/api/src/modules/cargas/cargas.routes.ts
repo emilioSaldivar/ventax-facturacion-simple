@@ -13,7 +13,10 @@ import type { FiscalArtifactResponse } from "../fiscal-gateway/fiscal-gateway.ty
 import { cargaRepository } from "./cargas.repository";
 import {
   accionSobreCarga,
+  descargarDiccionario,
+  descargarEjemplo,
   descargarPlantilla,
+  listarEjemplos,
   descargarResultado,
   inutilizarComprobante,
   listarCargas,
@@ -143,6 +146,35 @@ export function createCargasRouter(deps: CargasRouterDeps): Router {
   router.get("/cargas/plantilla", async (req, res, next) => {
     try {
       enviarArchivo(res, await descargarPlantilla(await deps.getContext(req.user!.id), deps, tipoDeDocumento(req.query.tipo_documento)));
+    } catch (error) {
+      fallar(res, next, error);
+    }
+  });
+
+  // SPEC_PLANILLAS_EJEMPLO_v0.1: ejemplos y documentacion de la planilla del tipo elegido.
+  router.get("/cargas/ejemplos", async (req, res, next) => {
+    try {
+      res.json(await listarEjemplos(await deps.getContext(req.user!.id), deps, tipoDeDocumento(req.query.tipo_documento)));
+    } catch (error) {
+      fallar(res, next, error);
+    }
+  });
+
+  router.get("/cargas/ejemplos/:codigo", async (req, res, next) => {
+    try {
+      const codigo = String(req.params.codigo);
+      if (!/^[A-Z0-9_]{1,60}$/.test(codigo)) throw new HttpError(400, "VALIDATION_ERROR", "Codigo de ejemplo invalido.");
+      enviarArchivo(res, await descargarEjemplo(await deps.getContext(req.user!.id), deps, codigo, tipoDeDocumento(req.query.tipo_documento)));
+    } catch (error) {
+      fallar(res, next, error);
+    }
+  });
+
+  router.get("/cargas/diccionario", async (req, res, next) => {
+    try {
+      const formato = req.query.formato === "md" ? "md" : req.query.formato === undefined || req.query.formato === "pdf" ? "pdf" : null;
+      if (!formato) throw new HttpError(400, "VALIDATION_ERROR", "Formato invalido: pdf o md.");
+      enviarArchivo(res, await descargarDiccionario(await deps.getContext(req.user!.id), deps, tipoDeDocumento(req.query.tipo_documento), formato));
     } catch (error) {
       fallar(res, next, error);
     }

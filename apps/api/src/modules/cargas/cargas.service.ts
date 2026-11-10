@@ -9,6 +9,7 @@ import {
   type FiscalArtifactResponse,
   type FeCargaLoteLista,
   type FeCargaTipoDocumento,
+  type FeParametrosPlanilla,
   type FiscalGateway
 } from "../fiscal-gateway/fiscal-gateway.types";
 import { proximaSincronizacionMs } from "./cargas.mapeo";
@@ -137,6 +138,23 @@ function primerSync(feCarga: Pick<FeCarga, "estado" | "confirmada_en" | "accione
     : new Date(Date.now() + 5000);
 }
 
+/**
+ * Lo que fija el punto y la numeracion de una carga, de su plantilla y de sus ejemplos (SPEC_PLANILLAS_EJEMPLO_v0.1,
+ * RN-01): con perfil, el perfil; sin perfil, establecimiento y punto.
+ */
+export function parametrosDePlanilla(context: OperationalContextResponse, tipoDocumento: FeCargaTipoDocumento = "FACTURA"): FeParametrosPlanilla {
+  const perfil = context.fiscal_context.perfil_emision_codigo;
+  return {
+    emisorId: context.facturador.emisor_id,
+    numeracion: context.fiscal_context.numeracion_facturas ?? "SERVICIO",
+    actividadEconomicaCodigo: context.fiscal_context.actividad_economica_codigo,
+    ...(perfil !== "NO_REQUERIDO"
+      ? { emissionProfileCode: perfil }
+      : { establecimiento: context.fiscal_context.establecimiento, punto: context.fiscal_context.punto_expedicion }),
+    tipoDocumento
+  };
+}
+
 export interface SubirCargaInput {
   contenido: Buffer;
   contentType: "text/csv" | "application/zip";
@@ -165,19 +183,13 @@ export async function subirCarga(context: OperationalContextResponse, input: Sub
   }
 
   const gateway = await deps.gatewayFor(facturadorId);
-  const perfil = context.fiscal_context.perfil_emision_codigo;
-  const conPerfil = perfil !== "NO_REQUERIDO";
+  const { tipoDocumento: _tipo, ...punto } = parametrosDePlanilla(context);
   const pedido = {
     contenido: input.contenido,
     contentType: input.contentType,
-    emisorId: context.facturador.emisor_id,
-    numeracion: context.fiscal_context.numeracion_facturas ?? "SERVICIO",
-    actividadEconomicaCodigo: context.fiscal_context.actividad_economica_codigo,
+    ...punto,
     nombreArchivo: input.nombreArchivo,
-    ...(input.tipoDocumento && input.tipoDocumento !== "FACTURA" ? { tipoDocumento: input.tipoDocumento } : {}),
-    ...(conPerfil
-      ? { emissionProfileCode: perfil }
-      : { establecimiento: context.fiscal_context.establecimiento, punto: context.fiscal_context.punto_expedicion })
+    ...(input.tipoDocumento && input.tipoDocumento !== "FACTURA" ? { tipoDocumento: input.tipoDocumento } : {})
   };
 
   let resultado;
@@ -393,8 +405,54 @@ export async function descargarPlantilla(
 ): Promise<FiscalArtifactResponse> {
   const gateway = await deps.gatewayFor(context.facturador.id);
   try {
-    const plantilla = await gateway.getPlantillaCarga(tipoDocumento);
+    const plantilla = await gateway.getPlantillaCarga(parametrosDePlanilla(context, tipoDocumento));
     return { ...plantilla, filename: tipoDocumento === "NOTA_REMISION" ? "plantilla-carga-notas-remision.csv" : "plantilla-carga-facturas.csv" };
+  } catch (error) {
+    throw traducirErrorFe(error);
+  }
+}
+
+/** SPEC_PLANILLAS_EJEMPLO_v0.1, RN-02: la lista de FE sin sus rutas internas; FS descarga por las suyas. */
+export async function listarEjemplos(context: OperationalContextResponse, deps: CargasDeps, tipoDocumento: FeCargaTipoDocumento) {
+  const gateway = await deps.gatewayFor(context.facturador.id);
+  try {
+    const lista = await gateway.listEjemplosCarga(tipoDocumento);
+    return { tipo_documento: tipoDocumento, ejemplos: lista.ejemplos.map(({ href: _href, ...ejemplo }) => ejemplo) };
+  } catch (error) {
+    throw traducirErrorFe(error);
+  }
+}
+
+/** SPEC_PLANILLAS_EJEMPLO_v0.1, RN-01: el ejemplo sale con el punto y la numeracion del contexto. */
+export async function descargarEjemplo(
+  context: OperationalContextResponse,
+  deps: CargasDeps,
+  codigo: string,
+  tipoDocumento: FeCargaTipoDocumento
+): Promise<FiscalArtifactResponse> {
+  const gateway = await deps.gatewayFor(context.facturador.id);
+  try {
+    const ejemplo = await gateway.getEjemploCarga(codigo, parametrosDePlanilla(context, tipoDocumento));
+    return { ...ejemplo, filename: `ejemplo-${codigo.toLowerCase()}.csv` };
+  } catch (error) {
+    const fe = error instanceof FiscalGatewayError ? detallesFe(error) : null;
+    if (fe?.status === 404 && fe.fe_code === "EJEMPLO_NOT_FOUND") throw new HttpError(404, "NOT_FOUND", "Ejemplo no encontrado.");
+    throw traducirErrorFe(error);
+  }
+}
+
+/** SPEC_PLANILLAS_EJEMPLO_v0.1, RN-03. */
+export async function descargarDiccionario(
+  context: OperationalContextResponse,
+  deps: CargasDeps,
+  tipoDocumento: FeCargaTipoDocumento,
+  formato: "pdf" | "md"
+): Promise<FiscalArtifactResponse> {
+  const gateway = await deps.gatewayFor(context.facturador.id);
+  try {
+    const archivo = await gateway.getDiccionarioCarga(tipoDocumento, formato);
+    const base = tipoDocumento === "NOTA_REMISION" ? "planilla-notas-remision" : "planilla-facturas";
+    return { ...archivo, filename: `${base}-documentacion.${formato}` };
   } catch (error) {
     throw traducirErrorFe(error);
   }

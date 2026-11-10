@@ -173,7 +173,32 @@ describe("RealFiscalGateway: carga masiva", () => {
     expect(llamada().url.searchParams.get("tipo_documento")).toBeNull();
     fetchMock.mockClear();
     fetchMock.mockResolvedValue(respuesta(200, "a;b\n"));
-    await gateway.getPlantillaCarga("NOTA_REMISION");
+    await gateway.getPlantillaCarga({ emisorId: "80136968-1", numeracion: "SERVICIO", actividadEconomicaCodigo: "82110", tipoDocumento: "NOTA_REMISION" });
+    expect(llamada().url.searchParams.get("tipo_documento")).toBe("NOTA_REMISION");
+  });
+
+  it("SPEC_PLANILLAS_EJEMPLO_v0.1: plantilla y ejemplo con el punto del cliente; diccionario con formato", async () => {
+    const parametros = { emisorId: "80136968-1", numeracion: "SERVICIO" as const, actividadEconomicaCodigo: "82110", emissionProfileCode: "SERV", tipoDocumento: "NOTA_REMISION" as const };
+    fetchMock.mockImplementation(async () => respuesta(200, "a;b\n"));
+    await gateway.getEjemploCarga("NRE_VENTA", parametros);
+    let { url } = llamada();
+    expect(url.pathname).toBe("/v1/cargas/formatos/csv/1/ejemplos/NRE_VENTA");
+    expect(Object.fromEntries(url.searchParams)).toEqual({ emisor_id: "80136968-1", numeracion: "SERVICIO", actividadEconomicaCodigo: "82110", emission_profile_code: "SERV", tipo_documento: "NOTA_REMISION" });
+    fetchMock.mockClear();
+    await gateway.getPlantillaCarga({ ...parametros, emissionProfileCode: undefined, establecimiento: "001", punto: "002", tipoDocumento: "FACTURA" });
+    url = llamada().url;
+    expect(url.pathname).toBe("/v1/cargas/formatos/csv/1");
+    expect(url.searchParams.get("punto")).toBe("002");
+    fetchMock.mockClear();
+    fetchMock.mockImplementation(async () => respuesta(200, "%PDF", { "content-type": "application/pdf" }));
+    const pdf = await gateway.getDiccionarioCarga("FACTURA", "pdf");
+    const { url: urlPdf, headers } = llamada();
+    expect(urlPdf.search).toBe("?tipo_documento=FACTURA&formato=pdf");
+    expect(headers.accept).toBe("application/pdf");
+    expect(pdf.content_type).toBe("application/pdf");
+    fetchMock.mockClear();
+    fetchMock.mockImplementation(async () => respuesta(200, { formato: "CSV", version_formato: "1", ejemplos: [], diccionario_href: "/x" }));
+    await gateway.listEjemplosCarga("NOTA_REMISION");
     expect(llamada().url.search).toBe("?tipo_documento=NOTA_REMISION");
   });
 

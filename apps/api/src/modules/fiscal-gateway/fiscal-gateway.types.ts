@@ -470,7 +470,12 @@ export interface FiscalGateway {
   verificarReciboPdf(token: string): Promise<FiscalArtifactResponse>;
   verificarReciboXml(token: string): Promise<FiscalArtifactResponse>;
   crearCarga(input: FeCrearCargaInput): Promise<FeCrearCargaResult>;
-  getPlantillaCarga(tipoDocumento?: FeCargaTipoDocumento): Promise<FiscalArtifactResponse>;
+  /** Con parametros, la plantilla sale con el punto del cliente (guia 57 de FE). */
+  getPlantillaCarga(parametros?: FeParametrosPlanilla): Promise<FiscalArtifactResponse>;
+  /** SPEC_PLANILLAS_EJEMPLO_v0.1. */
+  listEjemplosCarga(tipoDocumento: FeCargaTipoDocumento): Promise<FeCargaEjemplos>;
+  getEjemploCarga(codigo: string, parametros: FeParametrosPlanilla): Promise<FiscalArtifactResponse>;
+  getDiccionarioCarga(tipoDocumento: FeCargaTipoDocumento, formato: "pdf" | "md"): Promise<FiscalArtifactResponse>;
   getCarga(cargaId: string): Promise<FeCarga>;
   listCargaComprobantes(cargaId: string, filtros: FeCargaComprobanteFiltros): Promise<FeCargaComprobanteLista>;
   confirmarCarga(cargaId: string): Promise<FeCarga>;
@@ -598,6 +603,38 @@ export interface FeCargaDetalleRemision {
   documentosAsociados?: Array<{ tipo?: string; cdc?: string }>;
   informacionFisco?: string | null;
   items: Array<{ codigo?: string | null; descripcion?: string; cantidad?: number; unidadMedida?: string; rastreo?: Record<string, unknown> }>;
+}
+
+/** SPEC_PLANILLAS_EJEMPLO_v0.1: lo que fija el punto y la numeracion de una planilla o un ejemplo. */
+export interface FeParametrosPlanilla {
+  emisorId: string;
+  numeracion: FeNumeracion;
+  actividadEconomicaCodigo: string;
+  emissionProfileCode?: string;
+  establecimiento?: string;
+  punto?: string;
+  tipoDocumento?: FeCargaTipoDocumento;
+}
+
+export interface FeCargaEjemplo {
+  codigo: string;
+  titulo: string;
+  descripcion: string;
+  tipo_documento?: string;
+  tipo_cliente: "B2C" | "B2B" | "B2G" | "B2F";
+  condicion: string;
+  temas: string[];
+  columnas_que_muestra: string[];
+  procesamiento_disponible?: boolean;
+  columnas_no_habilitadas?: string[];
+  href?: string;
+}
+
+export interface FeCargaEjemplos {
+  formato: string;
+  version_formato: string;
+  ejemplos: FeCargaEjemplo[];
+  diccionario_href: string;
 }
 
 export interface FeDetalleTotales {

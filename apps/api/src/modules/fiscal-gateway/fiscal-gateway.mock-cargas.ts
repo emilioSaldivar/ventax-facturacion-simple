@@ -29,7 +29,9 @@ import {
   type FeCargaLoteLista,
   type FeCargaProblema,
   type FeCargaDetalleRemision,
+  type FeCargaEjemplos,
   type FeCargaTipoDocumento,
+  type FeParametrosPlanilla,
   type FeCargaTotales,
   type FeCrearCargaInput,
   type FeCrearCargaResult,
@@ -593,6 +595,31 @@ export const mockCargas = {
       },
       comprobante: presentarComprobante(mock, comprobante)
     };
+  },
+
+  ejemplos(tipoDocumento: FeCargaTipoDocumento): FeCargaEjemplos {
+    const todos = tipoDocumento === "NOTA_REMISION"
+      ? [{ codigo: "NRE_VENTA", titulo: "Traslado por venta", descripcion: "Mercaderia que sale por una venta.", tipo_documento: "NOTA_REMISION", tipo_cliente: "B2B" as const, condicion: "CONTADO", temas: [], columnas_que_muestra: ["remision_motivo"], procesamiento_disponible: true, columnas_no_habilitadas: [] }]
+      : [
+          { codigo: "BASICO", titulo: "Venta al contado", descripcion: "Una factura simple.", tipo_documento: "FACTURA", tipo_cliente: "B2C" as const, condicion: "CONTADO", temas: [], columnas_que_muestra: ["total_comprobante"], procesamiento_disponible: true, columnas_no_habilitadas: [] },
+          { codigo: "CREDITO_CUOTAS_DETALLE", titulo: "Credito en cuotas", descripcion: "Cuotas con vencimiento.", tipo_documento: "FACTURA", tipo_cliente: "B2B" as const, condicion: "CREDITO", temas: ["CUOTAS"], columnas_que_muestra: ["credito_cuotas"], procesamiento_disponible: true, columnas_no_habilitadas: [] }
+        ];
+    return { formato: "CSV", version_formato: "1", ejemplos: todos.map((e) => ({ ...e, href: `/v1/cargas/formatos/csv/1/ejemplos/${e.codigo}` })), diccionario_href: "/v1/cargas/formatos/csv/1/diccionario" };
+  },
+
+  ejemplo(codigo: string, parametros: FeParametrosPlanilla): FiscalArtifactResponse {
+    const conocidos = [...this.ejemplos("FACTURA").ejemplos, ...this.ejemplos("NOTA_REMISION").ejemplos].map((e) => e.codigo);
+    if (!conocidos.includes(codigo)) throw errorFe(404, "EJEMPLO_NOT_FOUND", "Ejemplo no encontrado.", { ejemplos: conocidos });
+    const punto = `${parametros.establecimiento ?? "001"}-${parametros.punto ?? "001"}`;
+    const csv = `tipo_documento;numero_comprobante;referencia_venta\n${parametros.tipoDocumento ?? "FACTURA"};${punto}-0000001;${codigo}\n`;
+    return { body: Buffer.from(csv, "utf8"), content_type: "text/csv; charset=utf-8", filename: `ejemplo-${codigo}.csv` };
+  },
+
+  diccionario(tipoDocumento: FeCargaTipoDocumento, formato: "pdf" | "md"): FiscalArtifactResponse {
+    const texto = `# Planilla CSV v1 (${tipoDocumento})\n`;
+    return formato === "pdf"
+      ? { body: Buffer.from(`%PDF-1.4\n${texto}`, "utf8"), content_type: "application/pdf", filename: "diccionario.pdf" }
+      : { body: Buffer.from(texto, "utf8"), content_type: "text/markdown; charset=utf-8", filename: "diccionario.md" };
   },
 
   /** Solo pruebas. */

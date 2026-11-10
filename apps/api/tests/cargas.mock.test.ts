@@ -101,7 +101,7 @@ describe("mock de carga masiva", () => {
     const detalle = items[0]!.detalle as unknown as Record<string, unknown>;
     expect(detalle.remision).toMatchObject({ motivo: 1 });
     expect(detalle.total).toBeUndefined();
-    expect((await gateway.getPlantillaCarga("NOTA_REMISION")).body.toString()).toContain("remision_motivo");
+    expect((await gateway.getPlantillaCarga({ emisorId: "80136968-1", numeracion: "SERVICIO", actividadEconomicaCodigo: "82110", tipoDocumento: "NOTA_REMISION" })).body.toString()).toContain("remision_motivo");
   });
 
   describe("comprobantes que requieren atencion", () => {
