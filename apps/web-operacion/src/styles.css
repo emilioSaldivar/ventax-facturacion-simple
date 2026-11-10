@@ -3021,4 +3021,9 @@ dd {
   .documents-tabla .document-row-emisor {
     display: block;
   }
+
+  .documents-tabla-ruc,
+  .documents-tabla td > strong {
+    white-space: nowrap;
+  }
 }

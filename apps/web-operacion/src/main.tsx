@@ -2470,9 +2470,11 @@ function DocumentsView({
           <button className="secondary-action" disabled={loading} onClick={() => void loadDocuments(query, 1)} type="button">
             {loading ? "Cargando..." : "Buscar"}
           </button>
+          {!esEscritorio ? (
           <button className="secondary-action" onClick={() => setShowAdvancedFilters((current) => !current)} type="button">
             {showAdvancedFilters ? "Ocultar filtros" : "Mas filtros"}
           </button>
+          ) : null}
           {!showAdvancedFilters ? (
             <button
               className="secondary-action"
@@ -2641,7 +2643,7 @@ function DocumentsView({
                       {documento.cliente.razon_social}
                       {formatEmisor(documento) ? <small className="document-row-emisor">Emitio {formatEmisor(documento)}</small> : null}
                     </td>
-                    <td>{documento.cliente.documento}</td>
+                    <td className="documents-tabla-ruc">{documento.cliente.documento}</td>
                     <td>{documento.condicion_venta === "CREDITO" ? "Crédito" : "Contado"}</td>
                     <td><EstadoDocumentoPill documento={documento} /></td>
                     <td className="documents-tabla-cdc" title={documento.cdc ?? undefined}>{documento.cdc ? `${documento.cdc.slice(0, 8)}…${documento.cdc.slice(-4)}` : "-"}</td>
