@@ -12,7 +12,7 @@ SPEC: `docs/SPEC_COMPRADOR_INNOMINADO_v0.1.md` · PLAN: `docs/PLAN_COMPRADOR_INN
 | INN-006 | Web: opcion en el editor, campos bloqueados, sin agenda ni DNIT, motivo del tope | RN-01, RN-02, RN-04 | typecheck, build, Playwright 1280/1440/390 | Hecha |
 | INN-007 | Web: ficha sin nota de credito y aviso; etiqueta "Sin nombre" | RN-06, RN-07 | Playwright | Hecha |
 | INN-008 | Regresion: suites existentes de api y web | CA-04 | `npm run test`, `typecheck`, `lint`, `build` | Hecha |
-| INN-009 | Despliegue solo FS en `segel-fs` con respaldo e imagenes `:antes-innominado` | PLAN | health, `X-App-Version`, 0 errores; sin emitir | Pendiente |
+| INN-009 | Despliegue solo FS en `segel-fs` con respaldo e imagenes `:antes-innominado` | PLAN | health, `X-App-Version`, 0 errores; sin emitir | Hecha |
 | INN-010 | Integrar en `feat/identidad-segel` | PLAN | typecheck/build en la rama | Pendiente |
 
 ## Evidencia
@@ -30,3 +30,13 @@ SPEC: `docs/SPEC_COMPRADOR_INNOMINADO_v0.1.md` · PLAN: `docs/PLAN_COMPRADOR_INN
 - **Ajuste de soporte de pruebas:** `scripts/sql/seed_e2e_carga_masiva.sql` usaba `on conflict (usuario_id)`, que dejo de existir con multiperfil (indice unico `usuario_id, actividad_punto_perfil_id`); se corrigio el `on conflict`.
 - **Sin SIFEN:** no se emitio en `segel-fs` (produccion, sin emisiones de prueba). La forma del receptor es la de la coleccion de FE "Emitir FE SYNC - INNOMINADO".
 - **Pendiente fuera de alcance:** facturas de carga masiva con receptor `INNOMINADO` siguen guardandose como `NO_ESPECIFICADO` en FS (`cargas.mapeo.ts`); FE igual rechaza su nota de credito con 422.
+
+### 2026-11-11 - INN-009, despliegue en `segel-fs` (orden directa del usuario)
+
+- **Contenido:** FS `b252627` -> `ed8b493` (solo este hotfix). FE sin tocar. Sin migraciones nuevas (migrate: 45 omitidas, 0 aplicadas), sin cambios de compose ni variables.
+- **Respaldo:** `pg_dump -Fc` de la base FS sin datos del padron DNIT en `backups/fs/20261111T135840Z` de la VPS (291 KB, permiso 700/600, con `imagenes.txt` y SHA256); `pg_restore --list` lee 35 tablas con datos, incluida `facturas_operativas`.
+- **Imagenes:** construidas en la estacion desde `ed8b493` (`segel-fs-prod-api:ed8b493`, `segel-fs-prod-frontend:ed8b493`; el primer `npm ci` corto por red y el reintento salio bien), transferidas por SSH y etiquetadas como `segel-fs-{api,migrate,frontend}:latest`. Las anteriores quedan como `segel-fs-{api,migrate,frontend}:antes-innominado`.
+- **Arranque:** `migrate`, `api` y `frontend` de FS con `APP_ENV_FILE=.env.segel`, mas `restart frontend` (como `up.sh`).
+- **Verificacion sin emitir:** API y frontend `healthy`; contenedores con los ID de imagen de `ed8b493`; `X-App-Version: ed8b493` y bundle `index-BJdUVv7l.js` (igual al build local); `/app/` 200; `/api/v1/health` OK; FE por la red interna OK; 0 errores (nivel 50/60) en la API en los primeros minutos. No se emitio nada (produccion).
+- **Vuelta atras:** volver a etiquetar `:antes-innominado` como `:latest` y recrear `api` y `frontend` (no hay migraciones que revertir).
+
