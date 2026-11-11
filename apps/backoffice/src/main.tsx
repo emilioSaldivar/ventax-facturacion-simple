@@ -2818,7 +2818,8 @@ function UserDetailView({ userId, onNavigate }: { userId: string; onNavigate: (v
     const ultima = configsActivas.length === 1;
     const texto = ultima
       ? "Quitar este punto de expedicion? El usuario quedara sin configuracion operativa y no podra facturar."
-      : `Quitar el punto ${cfg.establecimiento}-${cfg.punto_expedicion}? Las sesiones abiertas con ese punto se cierran.`;
+      : // SPEC_MULTIPERFIL_USUARIO_v0.2 RN-18 (F-3): quitar un punto no cierra la sesion (D-9 revisada).
+        `Quitar el punto ${cfg.establecimiento}-${cfg.punto_expedicion}? El operador seguira con los puntos que le queden; si estaba usando este, la app le pedira elegir otro.`;
     if (!window.confirm(texto)) return;
     setQuitandoId(cfg.id);
     setError(null);

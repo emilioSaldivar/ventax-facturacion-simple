@@ -98,7 +98,7 @@ export function addOperationConfig(id: string, input: OperationConfigInput): Pro
   return apiPost<{ items: UserOperationConfig[] }>(`/backoffice/users/${id}/operation-config`, input);
 }
 
-/** SPEC_MULTIPERFIL_USUARIO_v0.1 §D.2: quita un punto (revoca las sesiones abiertas con el). */
+/** SPEC_MULTIPERFIL_USUARIO_v0.1 §D.2: quita un punto; la sesion del operador sigue (D-9 revisada). */
 export function removeOperationConfig(id: string, configId: string): Promise<void> {
   return apiDelete(`/backoffice/users/${id}/operation-config/${configId}`);
 }

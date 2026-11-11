@@ -9,19 +9,25 @@ const ACCESS_TOKEN_STORAGE_KEY = "ventax_factura_access_token";
 const BUILD_VERSION = (import.meta.env.VITE_APP_VERSION as string | undefined) ?? "dev";
 
 // ─── SPEC_MULTIPERFIL_USUARIO_v0.1: perfil de emision por sesion ──────────────
-// El cliente HTTP vive en muchos componentes; cuando un refresh devuelve SELECT_PERFIL avisa a App por aca.
-const _perfilRequeridoListeners: Array<(respuesta: AuthResponse) => void> = [];
+// El cliente HTTP vive en muchos componentes; cuando una renovacion cambia o pide el punto avisa a App por aca.
+// SPEC_MULTIPERFIL_USUARIO_v0.2 B.4 (M-1): evento propio, sin valores sinteticos en pending_actions.
+type EventoPerfil = { tipo: "ELEGIR"; respuesta: AuthResponse } | { tipo: "RECARGAR"; respuesta: AuthResponse };
+const _perfilListeners: Array<(evento: EventoPerfil) => void> = [];
+// RN-14: con pedidos concurrentes todos reciben la misma renovacion; se avisa una sola vez por token.
+let _ultimoTokenAvisado: string | null = null;
 
-function onPerfilRequerido(fn: (respuesta: AuthResponse) => void): () => void {
-  _perfilRequeridoListeners.push(fn);
+function onEventoPerfil(fn: (evento: EventoPerfil) => void): () => void {
+  _perfilListeners.push(fn);
   return () => {
-    const i = _perfilRequeridoListeners.indexOf(fn);
-    if (i >= 0) _perfilRequeridoListeners.splice(i, 1);
+    const i = _perfilListeners.indexOf(fn);
+    if (i >= 0) _perfilListeners.splice(i, 1);
   };
 }
 
-function emitirPerfilRequerido(respuesta: AuthResponse): void {
-  for (const fn of [..._perfilRequeridoListeners]) fn(respuesta);
+function emitirEventoPerfil(evento: EventoPerfil): void {
+  if (_ultimoTokenAvisado === evento.respuesta.access_token) return;
+  _ultimoTokenAvisado = evento.respuesta.access_token;
+  for (const fn of [..._perfilListeners]) fn(evento);
 }
 
 function requierePerfil(respuesta: AuthResponse): boolean {
@@ -989,6 +995,9 @@ function App() {
   const [perfilesSesion, setPerfilesSesion] = useState<PerfilDisponible[]>([]);
   const [avisoPerfil, setAvisoPerfil] = useState<string | null>(null);
   const [recargaContexto, setRecargaContexto] = useState(0);
+  // SPEC_MULTIPERFIL_USUARIO_v0.2 B.3 y B.5.
+  const [avisoBloqueante, setAvisoBloqueante] = useState<{ respuesta: AuthResponse } | null>(null);
+  const [perfilesError, setPerfilesError] = useState(false);
 
   const api = useMemo(() => createApiClient(accessToken, setAccessToken), [accessToken]);
 
@@ -1008,18 +1017,27 @@ function App() {
     setAccessToken(respuesta.access_token);
   }
 
+  /** El refresh asigno otro punto (el anterior ya no esta): se recarga todo el contexto. */
+  function recargarConPunto(respuesta: AuthResponse) {
+    setAvisoPerfil("Tu punto de expedicion cambio. Revisa el punto activo antes de continuar.");
+    setView("loading-context");
+    setAccessToken(respuesta.access_token);
+    setRecargaContexto((n) => n + 1);
+  }
+
   useEffect(
     () =>
-      onPerfilRequerido((respuesta) => {
-        if (requierePerfil(respuesta)) {
-          mostrarEleccionPerfil(respuesta);
+      onEventoPerfil((evento) => {
+        if (evento.tipo === "ELEGIR") {
+          mostrarEleccionPerfil(evento.respuesta);
           return;
         }
-        // El refresh asigno otro punto (el anterior ya no esta): se recarga todo el contexto.
-        setAvisoPerfil("Tu punto de expedicion cambio. Revisa el punto activo antes de continuar.");
-        setView("loading-context");
-        setAccessToken(respuesta.access_token);
-        setRecargaContexto((n) => n + 1);
+        // SPEC_MULTIPERFIL_USUARIO_v0.2 RN-16 (F-5): con un documento cargado, avisar antes de descartarlo.
+        if (hayBorradorSinEmitir()) {
+          setAvisoBloqueante({ respuesta: evento.respuesta });
+          return;
+        }
+        recargarConPunto(evento.respuesta);
       }),
     []
   );
@@ -1073,13 +1091,24 @@ function App() {
         return;
       }
 
-      // Si falla, la barra no ofrece cambiar de punto; no bloquea la operacion.
-      setPerfilesSesion(perfilesResult.status === "fulfilled" ? perfilesResult.value.perfiles : []);
-
       if (contextResult.status === "rejected" && esErrorDePerfil(contextResult.reason)) {
-        // El cliente HTTP ya aviso por onPerfilRequerido: eleccion o recarga.
+        // El cliente HTTP ya aviso por onEventoPerfil: eleccion o recarga.
         return;
       }
+
+      // SPEC_MULTIPERFIL_USUARIO_v0.2 B.5 (M-2): un reintento; si sigue fallando, se avisa y la barra no es boton.
+      let perfiles: PerfilDisponible[] | null = perfilesResult.status === "fulfilled" ? perfilesResult.value.perfiles : null;
+      if (!perfiles) {
+        perfiles = await client
+          .get<{ perfiles: PerfilDisponible[] }>("/me/perfiles")
+          .then((r) => r.perfiles)
+          .catch(() => null);
+        if (!active) {
+          return;
+        }
+      }
+      setPerfilesSesion(perfiles ?? []);
+      setPerfilesError(perfiles === null);
 
       if (readinessResult.status === "rejected") {
         throw readinessResult.reason;
@@ -1162,12 +1191,13 @@ function App() {
     }
   }
 
-  function terminarSesionPorBloqueo(mensaje: string) {
+  function terminarSesionConMensaje(mensaje: string) {
     clearSession(setAccessToken);
     setUser(null);
     setContext(null);
     setReadiness(null);
     setPerfilesSesion([]);
+    setPerfilesEleccion(null);
     setErrorMessage(mensaje);
     setView("login");
   }
@@ -1187,6 +1217,8 @@ function App() {
       setPerfilesSesion([]);
       setPerfilesEleccion(null);
       setAvisoPerfil(null);
+      setAvisoBloqueante(null);
+      setPerfilesError(false);
       setView("login");
     }
   }
@@ -1206,6 +1238,8 @@ function App() {
         user={user}
         onElegir={(id) => elegirPerfil(id)}
         onSalir={handleLogout}
+        onVencida={terminarSesionConMensaje}
+        onRefrescarLista={async () => (await api.get<{ perfiles: PerfilDisponible[] }>("/me/perfiles")).perfiles}
       />
     );
   }
@@ -1215,6 +1249,7 @@ function App() {
   }
 
   return (
+    <>
     <OperationHome
       accessToken={accessToken}
       context={context}
@@ -1226,8 +1261,19 @@ function App() {
       avisoPerfil={avisoPerfil}
       onCerrarAvisoPerfil={() => setAvisoPerfil(null)}
       onCambiarPerfil={cambiarPerfil}
-      onBloqueado={terminarSesionPorBloqueo}
+      onBloqueado={terminarSesionConMensaje}
+      perfilesError={perfilesError}
     />
+    {avisoBloqueante ? (
+      <AvisoCambioExterno
+        onEntendido={() => {
+          const { respuesta } = avisoBloqueante;
+          setAvisoBloqueante(null);
+          recargarConPunto(respuesta);
+        }}
+      />
+    ) : null}
+    </>
   );
 }
 
@@ -1341,31 +1387,41 @@ function PerfilOpcionContenido({ perfil }: { perfil: PerfilDisponible }) {
         <small>
           Establecimiento {perfil.establecimiento} · Punto {perfil.punto_expedicion} · Timbrado {perfil.timbrado}
         </small>
-        <small className="perfil-opcion-numero">
-          {perfil.numeracion_facturas === "CLIENTE"
-            ? "Solo carga de archivo"
-            : perfil.documento_nro
-              ? `Ultimo numero ${perfil.documento_nro}`
-              : null}
-        </small>
+        {/* SPEC_MULTIPERFIL_USUARIO_v0.2 D-13: sin "Ultimo numero" (es la referencia local, no el numerador de FE). */}
+        {perfil.numeracion_facturas === "CLIENTE" ? <small className="perfil-opcion-numero">Solo carga de archivo</small> : null}
       </span>
     </>
   );
 }
 
+/** SPEC_MULTIPERFIL_USUARIO_v0.2 RN-15: el token de eleccion dura 10 minutos y no se renueva (D-8, D-15). */
+const PERFIL_SELECT_TTL_MS = 10 * 60 * 1000;
+const MENSAJE_ELECCION_VENCIDA = "La eleccion de punto vencio. Volve a entrar.";
+
 function SeleccionPerfilScreen({
-  perfiles,
+  perfiles: perfilesIniciales,
   user,
   onElegir,
-  onSalir
+  onSalir,
+  onVencida,
+  onRefrescarLista
 }: {
   perfiles: PerfilDisponible[];
   user: UserSummary | null;
   onElegir: (operacionConfigId: string) => Promise<void>;
   onSalir: () => Promise<void>;
+  onVencida: (mensaje: string) => void;
+  onRefrescarLista: () => Promise<PerfilDisponible[]>;
 }) {
+  const [perfiles, setPerfiles] = useState(perfilesIniciales);
   const [eligiendo, setEligiendo] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [vencida, setVencida] = useState(false);
+
+  useEffect(() => {
+    const id = window.setTimeout(() => setVencida(true), PERFIL_SELECT_TTL_MS);
+    return () => window.clearTimeout(id);
+  }, []);
 
   async function elegir(id: string) {
     setEligiendo(id);
@@ -1373,6 +1429,31 @@ function SeleccionPerfilScreen({
     try {
       await onElegir(id);
     } catch (e) {
+      if (e instanceof ApiClientError && e.status === 401) {
+        if (motivoDeError(e) !== "PERFIL_NO_DISPONIBLE") {
+          onVencida(MENSAJE_ELECCION_VENCIDA);
+          return;
+        }
+        // D-16: el backoffice quito ese punto mientras se elegia; se refresca la lista.
+        try {
+          const lista = await onRefrescarLista();
+          if (lista.length === 0) {
+            onVencida("No tenes puntos de expedicion asignados. Contacta con soporte.");
+            return;
+          }
+          if (lista.length === 1) {
+            await elegir(lista[0]!.operacion_config_id);
+            return;
+          }
+          setPerfiles(lista);
+          setError("Ese punto ya no esta disponible. Elegi otro.");
+        } catch {
+          onVencida(MENSAJE_ELECCION_VENCIDA);
+          return;
+        }
+        setEligiendo(null);
+        return;
+      }
       setError(e instanceof Error ? e.message : "No se pudo elegir el punto de expedicion.");
       setEligiendo(null);
     }
@@ -1385,13 +1466,14 @@ function SeleccionPerfilScreen({
         <div className="auth-copy">
           <p className="muted">Hola, {user?.display_name ?? user?.username ?? ""}</p>
           <h1 id="perfil-titulo">¿Desde que punto vas a trabajar?</h1>
+          <p className="muted perfil-eleccion-limite">{vencida ? "La eleccion vencio." : "Tenes 10 minutos para elegir."}</p>
         </div>
         <div className="perfil-lista" role="list">
           {perfiles.map((perfil) => (
             <button
               aria-label={`Elegir ${perfil.titulo_operativo} ${etiquetaPunto(perfil)}`}
               className="perfil-opcion"
-              disabled={eligiendo !== null}
+              disabled={eligiendo !== null || vencida}
               key={perfil.operacion_config_id}
               onClick={() => void elegir(perfil.operacion_config_id)}
               role="listitem"
@@ -1403,11 +1485,34 @@ function SeleccionPerfilScreen({
           ))}
         </div>
         {error ? <p className="form-error">{error}</p> : null}
-        <button className="ghost-action" onClick={() => void onSalir()} type="button">
-          Salir
-        </button>
+        {vencida ? (
+          <button className="primary-action" onClick={() => onVencida(MENSAJE_ELECCION_VENCIDA)} type="button">
+            Volver a entrar
+          </button>
+        ) : (
+          <button className="ghost-action" onClick={() => void onSalir()} type="button">
+            Salir
+          </button>
+        )}
       </section>
     </main>
+  );
+}
+
+/** SPEC_MULTIPERFIL_USUARIO_v0.2 B.3 (F-5, RN-16, D-14): un solo boton; no hay forma segura de conservar el borrador. */
+function AvisoCambioExterno({ onEntendido }: { onEntendido: () => void }) {
+  return (
+    <div className="menu-scrim dialog-perfil-scrim" role="presentation">
+      <div aria-labelledby="aviso-cambio-titulo" aria-modal="true" className="dialog-perfil" role="dialog">
+        <h2 id="aviso-cambio-titulo">Tu punto de expedicion cambio</h2>
+        <p className="aviso-perfil">El backoffice cambio tu punto de expedicion. Lo que tenias cargado se descarta.</p>
+        <div className="dialog-perfil-acciones">
+          <button autoFocus className="primary-action" onClick={onEntendido} type="button">
+            Entendido
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -1429,6 +1534,7 @@ function CambioPerfilDialog({
 }) {
   const [elegido, setElegido] = useState<string | null>(null);
   const [password, setPassword] = useState("");
+  const [mostrarPassword, setMostrarPassword] = useState(false);
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -1493,13 +1599,25 @@ function CambioPerfilDialog({
         </div>
         <label>
           Tu contraseña
-          <input
-            autoComplete="current-password"
-            disabled={enviando}
-            onChange={(event) => setPassword(event.target.value)}
-            type="password"
-            value={password}
-          />
+          {/* SPEC_MULTIPERFIL_USUARIO_v0.2 B.6 (M-3): igual que el login. */}
+          <div className="password-input">
+            <input
+              autoComplete="current-password"
+              disabled={enviando}
+              onChange={(event) => setPassword(event.target.value)}
+              type={mostrarPassword ? "text" : "password"}
+              value={password}
+            />
+            <button
+              aria-label={mostrarPassword ? "Ocultar contrasena" : "Mostrar contrasena"}
+              className="password-toggle"
+              onClick={() => setMostrarPassword((v) => !v)}
+              tabIndex={-1}
+              type="button"
+            >
+              <EyeIcon crossed={mostrarPassword} />
+            </button>
+          </div>
         </label>
         {hayDocumentoSinEmitir ? (
           <p className="aviso-perfil" role="alert">Tenes un documento sin emitir. Si cambias de punto se descarta.</p>
@@ -1823,7 +1941,8 @@ function OperationHome({
   avisoPerfil,
   onCerrarAvisoPerfil,
   onCambiarPerfil,
-  onBloqueado
+  onBloqueado,
+  perfilesError = false
 }: {
   accessToken: string | null;
   context: OperationalContextResponse | null;
@@ -1837,6 +1956,8 @@ function OperationHome({
   onCerrarAvisoPerfil: () => void;
   onCambiarPerfil: (operacionConfigId: string, password: string) => Promise<void>;
   onBloqueado: (mensaje: string) => void;
+  /** SPEC_MULTIPERFIL_USUARIO_v0.2 B.5: /me/perfiles fallo dos veces. */
+  perfilesError?: boolean;
 }) {
   const canEmit = Boolean(readiness?.ready);
   // SPEC_CARGA_MASIVA_FACTURAS_v0.1 RN-22: el backend tambien lo rechaza.
@@ -1844,7 +1965,9 @@ function OperationHome({
   // §C.3: tras un cambio de punto se vuelve a "Informacion y estado" con el aviso.
   const [operationView, setOperationView] = useState<OperationView>(() => (avisoPerfil ? "status" : canEmit ? "invoice" : "status"));
   const variosPerfiles = perfiles.length > 1;
-  const perfilActivo = perfiles.find((p) => p.activo_en_sesion) ?? null;
+  // B.5: si la lista no marca el activo (token sin punto, D-6), se usa el claim `uoc` del token.
+  const perfilActivo =
+    perfiles.find((p) => p.activo_en_sesion) ?? perfiles.find((p) => p.operacion_config_id === claimsDeToken(accessToken).uoc) ?? null;
   const [cambioPerfil, setCambioPerfil] = useState<{ sinEmitir: boolean } | null>(null);
   const abrirCambioPerfil = () => setCambioPerfil({ sinEmitir: hayBorradorSinEmitir() });
   const [menuOpen, setMenuOpen] = useState(false);
@@ -2222,6 +2345,7 @@ function OperationHome({
           avisoPerfil={avisoPerfil}
           onCerrarAvisoPerfil={onCerrarAvisoPerfil}
           onCambiarPerfil={abrirCambioPerfil}
+          perfilesError={perfilesError}
         />
       )}
       </div>
@@ -2250,7 +2374,8 @@ function StatusView({
   variosPerfiles,
   avisoPerfil,
   onCerrarAvisoPerfil,
-  onCambiarPerfil
+  onCambiarPerfil,
+  perfilesError = false
 }: {
   canEmit: boolean;
   context: OperationalContextResponse | null;
@@ -2262,6 +2387,7 @@ function StatusView({
   avisoPerfil?: string | null;
   onCerrarAvisoPerfil?: () => void;
   onCambiarPerfil?: () => void;
+  perfilesError?: boolean;
 }) {
   const businessChecks = mapBusinessReadinessChecks(readiness?.checks ?? []);
   const statusLabel = canEmit ? "Listo para facturar" : "Faltan requisitos para facturar";
@@ -2294,6 +2420,7 @@ function StatusView({
               ) : null}
             </p>
           ) : null}
+          {perfilesError ? <p className="form-error">No se pudo cargar la lista de puntos de expedicion. Recarga la pagina.</p> : null}
         </div>
         <span className={canEmit ? "status-pill ready" : "status-pill blocked"}>{canEmit ? "Listo" : "Bloqueado"}</span>
       </section>
@@ -3063,9 +3190,7 @@ function DocumentsView({
         </div>
         {pestanasDocumentos}
         <CargaMasivaView
-          accessToken={accessToken}
           api={api}
-          apiBaseUrl={API_BASE_URL}
           cargaInicialId={cargaAbiertaId}
           contexto={{
             facturador: context.facturador.razon_social,
@@ -7822,7 +7947,11 @@ function formatIntegerInput(value: string): string {
 }
 
 function createApiClient(accessToken: string | null, setAccessToken: (token: string | null) => void) {
-  async function request<T>(path: string, init: RequestInit = {}, retry = true): Promise<T> {
+  /**
+   * SPEC_MULTIPERFIL_USUARIO_v0.2 RN-17 (M-7): devuelve la respuesta cruda cuando es exitosa, con la misma
+   * renovacion de sesion y el mismo manejo de errores de perfil que `request`. Sirve para descargas.
+   */
+  async function requestRaw(path: string, init: RequestInit = {}, retry = true): Promise<Response> {
     const response = await fetch(`${API_BASE_URL}${path}`, {
       ...init,
       credentials: "include",
@@ -7839,17 +7968,17 @@ function createApiClient(accessToken: string | null, setAccessToken: (token: str
       const refreshed = await refreshSession();
       if (requierePerfil(refreshed)) {
         // SPEC_MULTIPERFIL_USUARIO_v0.1 §B.5: el punto de la sesion ya no esta; App muestra la eleccion.
-        emitirPerfilRequerido(refreshed);
+        emitirEventoPerfil({ tipo: "ELEGIR", respuesta: refreshed });
         throw new ApiClientError(409, "Elegi el punto de expedicion para continuar.", { reason: "PERFIL_REQUERIDO" });
       }
       setAccessToken(refreshed.access_token);
       const uocAnterior = claimsDeToken(accessToken).uoc;
       if (uocAnterior && claimsDeToken(refreshed.access_token).uoc !== uocAnterior) {
         // RN-06: el refresh asigno otro punto; no se reintenta el pedido con un punto que no esta en pantalla.
-        emitirPerfilRequerido({ ...refreshed, pending_actions: ["RECARGAR_CONTEXTO"] });
+        emitirEventoPerfil({ tipo: "RECARGAR", respuesta: refreshed });
         throw new ApiClientError(409, "Tu punto de expedicion cambio. Revisa el punto activo antes de continuar.", { reason: "PERFIL_NO_DISPONIBLE" });
       }
-      return createApiClient(refreshed.access_token, setAccessToken).request<T>(path, init, false);
+      return createApiClient(refreshed.access_token, setAccessToken).requestRaw(path, init, false);
     }
 
     if (!response.ok) {
@@ -7864,16 +7993,20 @@ function createApiClient(accessToken: string | null, setAccessToken: (token: str
         }
         // RN-06: nunca se reintenta el pedido con otro punto. App recarga el contexto (o pide elegir)
         // y el operador ve el punto nuevo antes de volver a emitir.
-        emitirPerfilRequerido(requierePerfil(refreshed) ? refreshed : { ...refreshed, pending_actions: ["RECARGAR_CONTEXTO"] });
+        emitirEventoPerfil(requierePerfil(refreshed) ? { tipo: "ELEGIR", respuesta: refreshed } : { tipo: "RECARGAR", respuesta: refreshed });
         throw new ApiClientError(409, "Tu punto de expedicion cambio. Revisa el punto activo antes de continuar.", { reason: motivoDeError(error) });
       }
       throw error;
     }
 
+    return response;
+  }
+
+  async function request<T>(path: string, init: RequestInit = {}, retry = true): Promise<T> {
+    const response = await requestRaw(path, init, retry);
     if (response.status === 204) {
       return undefined as T;
     }
-
     return response.json() as Promise<T>;
   }
 
@@ -7888,24 +8021,38 @@ function createApiClient(accessToken: string | null, setAccessToken: (token: str
         },
         retry
       ),
-    request
+    request,
+    requestRaw
   };
 }
 
-async function refreshSession(): Promise<AuthResponse> {
-  const response = await fetch(`${API_BASE_URL}/auth/refresh`, {
-    method: "POST",
-    credentials: "include",
-    headers: {
-      "content-type": "application/json"
+let _refreshEnVuelo: Promise<AuthResponse> | null = null;
+
+/**
+ * SPEC_MULTIPERFIL_USUARIO_v0.2 RN-14 (F-1): una sola llamada a /auth/refresh por pestaña mientras hay
+ * una en curso. El refresh token se rota en cada llamada: dos llamadas con la misma cookie hacen que la
+ * segunda falle y mande al login.
+ */
+function refreshSession(): Promise<AuthResponse> {
+  if (_refreshEnVuelo) return _refreshEnVuelo;
+  _refreshEnVuelo = (async () => {
+    const response = await fetch(`${API_BASE_URL}/auth/refresh`, {
+      method: "POST",
+      credentials: "include",
+      headers: {
+        "content-type": "application/json"
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error(await readApiError(response));
     }
+
+    return (await response.json()) as AuthResponse;
+  })().finally(() => {
+    _refreshEnVuelo = null;
   });
-
-  if (!response.ok) {
-    throw new Error(await readApiError(response));
-  }
-
-  return response.json() as Promise<AuthResponse>;
+  return _refreshEnVuelo;
 }
 
 async function readApiError(response: Response): Promise<string> {

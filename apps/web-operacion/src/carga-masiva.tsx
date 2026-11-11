@@ -83,6 +83,8 @@ interface Lote {
 export interface CargaApi {
   get: <T>(path: string) => Promise<T>;
   request: <T>(path: string, init?: RequestInit) => Promise<T>;
+  /** SPEC_MULTIPERFIL_USUARIO_v0.2 RN-17: respuesta cruda para descargas, con renovacion de sesion. */
+  requestRaw: (path: string, init?: RequestInit) => Promise<Response>;
 }
 
 export interface CargaContexto {
@@ -242,16 +244,12 @@ function ListaProblemas({ problemas, clase }: { problemas: Problema[]; clase: "e
 
 export function CargaMasivaView({
   api,
-  apiBaseUrl,
-  accessToken,
   esInterno,
   contexto,
   cargaInicialId,
   onVerDocumento
 }: {
   api: CargaApi;
-  apiBaseUrl: string;
-  accessToken: string | null;
   esInterno: boolean;
   contexto: CargaContexto;
   cargaInicialId?: string | null;
@@ -269,8 +267,7 @@ export function CargaMasivaView({
   async function descargar(ruta: string, nombre: string) {
     setError(null);
     try {
-      const respuesta = await fetch(`${apiBaseUrl}${ruta}`, { headers: { authorization: `Bearer ${accessToken ?? ""}` } });
-      if (!respuesta.ok) throw new Error("No se pudo descargar el archivo.");
+      const respuesta = await api.requestRaw(ruta);
       const url = URL.createObjectURL(await respuesta.blob());
       const enlace = document.createElement("a");
       enlace.href = url;
