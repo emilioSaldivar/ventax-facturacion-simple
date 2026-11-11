@@ -36,7 +36,10 @@ Los subtitulos tienen que decir, con estas ideas:
 | Id | Tema | Decision | Fecha |
 |---|---|---|---|
 | D-1 | Entorno | Se graba en el stack local de Segel (FS + FE) contra **SIFEN test**. Las emisiones son reales en test. Nunca en `segel-fs` produccion. | 2026-11-11 |
-| D-2 | Datos visibles | Se ocultan en pantalla los datos del facturador del stack local (5057016-1): nombre y RUC se reemplazan por `Empresa Ejemplo S.A.` y `80000000-0`. Los clientes de ejemplo son empresas con RUC publico y activo (por ejemplo `SEGEL SA`, 80026570-0). El KuDE/PDF lo genera FE con los datos reales: **no se abre en los videos**. | 2026-11-11 |
+| D-2 | Datos visibles | Se ocultan en pantalla los datos del facturador del stack local (5057016-1): nombre y RUC se reemplazan por `Empresa Ejemplo S.A.` y `80000000-0`. El KuDE/PDF lo genera FE con los datos reales: **no se abre en los videos**. | 2026-11-11 |
+| D-6 | Clientes de ejemplo | Empresa: `SEGEL SA` (80026570-0), para RUC sin DV, con DV y la factura en dolares. Persona: la CI `5057016` del usuario, con su nombre real, con su permiso. Como el facturador local es la misma persona, el reemplazo de D-2 se aplica **por zonas** (barra superior, "Información y estado", datos de la cuenta y bloques del emisor), no en todo el texto, y la guardia controla esas zonas. | 2026-11-11 |
+| D-7 | Correo de V1 | El codigo llega a `emilio.saldivar@segel.com.py`. En pantalla el usuario demo es `ejemplo@ejemplo.com` y el correo enmascarado se muestra como `ej***@ejemplo.com`. | 2026-11-11 |
+| D-8 | Correcciones previas | Los textos que quedaban mal en los videos se corrigen antes de grabar, con su cadena (`SPEC_AJUSTES_TEXTOS_OPERADOR_v0.1`, hecha el 2026-11-11). Incluye quitar el "Próximo número" estimado de Nueva factura. | 2026-11-11 |
 | D-3 | Narracion | Subtitulos en pantalla por paso, sin audio. El usuario puede agregar voz despues. | 2026-11-11 |
 | D-4 | Formato | MP4 (H.264), escritorio 1440 x 900 (PC first, `SPEC_DOCUMENTOS_ESCRITORIO_v0.1`). Un archivo por video, de 2 a 6 minutos. | propuesta |
 | D-5 | Ubicacion | Videos fuera de git (`test-results/tutoriales/`). En el repo quedan los guiones y este SPEC. | propuesta |

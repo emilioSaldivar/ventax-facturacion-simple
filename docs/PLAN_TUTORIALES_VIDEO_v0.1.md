@@ -25,14 +25,14 @@ Salida en `test-results/tutoriales/<video>/`: `bruto.webm`, `linea.json`, `<vide
 - **Navegador:** Chromium de Playwright 1.61.1, viewport y video de 1440 x 900, `deviceScaleFactor` 1, idioma `es-PY`, zona `America/Asuncion`. A 1440 px la app usa el diseño de escritorio (menu lateral, menu "Nuevo", editor en "Modo completo"). Antes de V3 se fija `localStorage["fs.editor.modo"] = "completo"`.
 - **Subtitulos:** `addInitScript` inyecta una franja inferior fija (Montserrat 22 px, fondo negro al 80 %, maximo dos lineas) con `pointer-events: none`. `paso(texto, {ms})` cambia el texto y espera lo necesario para leerlo: `max(ms, 900 + 55 ms por palabra)`.
 - **Cursor y foco:** un punto rojo sigue al mouse. `senalar(locator)` dibuja un recuadro rojo de 600 ms sobre el elemento antes de hacer clic o escribir. Se escribe con `pressSequentially` a 70 ms por tecla, para que se vea.
-- **Datos ocultos (D-2, R-4):** un `MutationObserver` en `addInitScript` reemplaza en nodos de texto, `value` y `placeholder`:
-  - `EMILIO MATIAS SALDIVAR CAPUTO` y `EMILIO SALDIVAR` por `Empresa Ejemplo S.A.`;
-  - `5057016-1` y `5057016` por `80000000-0`;
-  - el nombre del operador por `Operador Demo`;
-  - el correo real del usuario demo por `usuario@empresa.com.py`, y su mascara por `us***@empresa.com.py`.
+- **Datos ocultos por zonas (D-2, D-6, R-4):** el facturador local y el cliente de la CI son la misma persona, asi que no se reemplaza en todo el texto. Un `MutationObserver` en `addInitScript` reemplaza nombre (`EMILIO MATIAS SALDIVAR CAPUTO`, `EMILIO SALDIVAR`) y RUC (`5057016-1`) del facturador por `Empresa Ejemplo S.A.` y `80000000-0` solo dentro de las zonas del emisor:
+  - barra superior (`.topbar`), pie del menu lateral y menu "Nuevo";
+  - "Información y estado" (tarjeta "Facturador y sesión");
+  - "Datos de tu cuenta" del primer ingreso;
+  - bloques del emisor en la ficha de Documentos ("Información fiscal").
   
-  La tabla de reemplazos vive en `lib.cjs` y se lee de un archivo local fuera del repo cuando incluye datos personales.
-- **Guardia:** despues de cada `paso`, `document.body.innerText` y los `value` de los inputs no pueden contener ningun texto de la lista prohibida. Si aparece uno, el guion falla y marca el video como invalido.
+  El selector exacto de cada zona se fija en TUT-001 contra el DOM. En todo el texto: el nombre del operador por `Operador Demo`; `emilio.saldivar@segel.com.py` por `ejemplo@ejemplo.com` y `em***@segel.com.py` por `ej***@ejemplo.com` (D-7).
+- **Guardia:** despues de cada `paso`, las zonas del emisor no pueden contener el nombre ni el RUC reales, y ninguna parte de la pagina puede mostrar `emilio.saldivar@segel.com.py` ni el usuario `operador-ensayo`. Si aparece uno, el guion falla y marca el video como invalido.
 - **KuDE:** nunca se abre "Ver KUDE en PDF" ni "Ver factura PDF" (D-2). Los botones se señalan con un subtitulo, sin clic.
 - **Esperas largas:** `espera(nombre, fn)` registra en `linea.json` el inicio y el fin de la espera (por ejemplo, aprobacion SIFEN o validacion de una carga). Durante la espera el subtitulo dice "Esperando a SIFEN…". `montar.sh` deja 2 s de cada espera y corta el resto, con un fundido corto.
 - **Montaje:** `ffmpeg` con `libx264`, CRF 20, `yuv420p`, `+faststart`, sin audio. Se recorta el primer segundo en blanco.
@@ -42,15 +42,15 @@ Salida en `test-results/tutoriales/<video>/`: `bruto.webm`, `linea.json`, `<vide
 | Uso | Dato | Nota |
 |---|---|---|
 | Operador V2-V6 | `operador-ensayo` (puntos 001-001 y 001-002) | contraseña por `ENSAYO_PASSWORD_FILE` |
-| Operador V1 | `demo-tutorial` en el tenant de `operador-ensayo`, con los mismos dos puntos | `preparar-v1.cjs` lo crea o lo reinicia: `must_change_password`, sin T&C aceptados, sin OTP; contraseña temporal en un archivo del scratchpad |
-| Cliente RUC sin DV | `80026570` → SEGEL SA | empresa, ACTIVO |
-| Cliente RUC con DV | `80016096-7` → RETAIL S.A. | empresa, ACTIVO |
-| Cliente para USD | `80000519-8` → TELEF. CELULAR DEL PARAGUAY SAE | empresa, ACTIVO |
-| Cliente CI | **pendiente P-1** | persona con RUC ACTIVO en el padron local; su nombre se reemplaza en pantalla |
+| Operador V1 | usuario `ejemplo@ejemplo.com` (correo real `emilio.saldivar@segel.com.py`, D-7) en el tenant de `operador-ensayo`, con los mismos dos puntos | `preparar-v1.cjs` lo crea o lo reinicia: `must_change_password`, sin T&C aceptados, sin OTP; contraseña temporal en un archivo del scratchpad |
+| Cliente RUC sin DV | `80026570` → SEGEL SA | empresa, ACTIVO (D-6) |
+| Cliente RUC con DV | `80026570-0` → SEGEL SA | idem |
+| Cliente para USD | `80026570-0` → SEGEL SA | idem |
+| Cliente CI | `5057016` → EMILIO MATIAS SALDIVAR CAPUTO | persona con RUC ACTIVO: la app la deja como RUC `5057016-1` (M-1). Se ve con su nombre real, con permiso del usuario (D-6) |
 | Items | escritos a mano: "Servicio de consultoria", "Soporte tecnico mensual", "Licencia anual" | sin catalogo previo (M-2) |
 | Tipo de cambio | valor fijo de ejemplo, por ejemplo `7.350,50` | M-3: en el subtitulo, "cotizacion del dia anterior segun la DNIT" |
 
-**Codigo de V1 (R-6):** el correo sale de verdad por el SMTP del stack local, hacia el buzon de pruebas definido en P-3. Despues de "Aceptar y continuar", el guion reemplaza en la base local `tyc_otp_sessions.otp_hash` de la sesion abierta por `sha256("123456")` y escribe `123456`. Solo en local: la base de `segel-fs` no se toca.
+**Codigo de V1 (R-6):** el correo sale de verdad por el SMTP del stack local, hacia `emilio.saldivar@segel.com.py` (D-7). Despues de "Aceptar y continuar", el guion reemplaza en la base local `tyc_otp_sessions.otp_hash` de la sesion abierta por `sha256("123456")` y escribe `123456`. Solo en local: la base de `segel-fs` no se toca.
 
 ## 4. Orden y dependencias
 
@@ -82,11 +82,11 @@ Con `operador-ensayo` en 001-001:
 5. Barra superior: punto activo, cambio de punto y "Salir".
 
 ### V3 — Facturas (aprox. 6 min)
-1. "Nueva factura", "Modo completo". Subtitulo M-2: no hace falta cliente ni producto cargados.
+1. "Nueva factura", "Modo completo". El subtitulo de la pantalla dice "el número lo asigna el sistema al emitir" (sin numero estimado, D-8). Subtitulo M-2: no hace falta cliente ni producto cargados.
 2. **Contado en guaranies:** "Documento" RUC, "Número" `80026570` sin DV → Tab → se completa "SEGEL SA" y la leyenda "Del padron de la DNIT…". Subtitulo M-1. Dos lineas escritas a mano con IVA 10 % y 5 %. Totales. "Crear factura". Pantalla de resultado: pasos "Creada" → "Enviada a SIFEN" → "Esperando aprobación" → "Aprobada · KUDE listo" (espera cortada). "Entregar al cliente" se señala sin abrir el PDF.
-3. **Credito:** "Crear nueva factura", "Crédito", "Plazo (días)" 30. Cliente `80016096-7` con DV → "RETAIL S.A.". Una linea. "Crear factura" y resultado.
-4. **Cliente con CI:** "Documento" CI y el numero de P-1 → se completa el nombre. Contado, una linea, emision.
-5. **Dolares:** "Moneda" "USD - Dólar estadounidense"; aparece "Tipo de cambio" (Gs. por 1 USD). Subtitulo M-3: la cotizacion del dia anterior segun la DNIT; la carga el operador. Cliente `80000519-8`. Precio en USD con decimales; totales con "equivale a Gs. …". Emision.
+3. **Credito:** "Crear nueva factura", "Crédito", "Plazo (días)" 30. Cliente `80026570-0` con DV → "SEGEL SA". Una linea. "Crear factura" y resultado.
+4. **Cliente con CI:** "Documento" CI y `5057016` → se completa el nombre y, como tiene RUC activo, la app lo deja como RUC `5057016-1` (subtitulo M-1). Contado, una linea, emision.
+5. **Dolares:** "Moneda" "USD - Dólar estadounidense"; aparece "Tipo de cambio" (Gs. por 1 USD). Subtitulo M-3: la cotizacion del dia anterior segun la DNIT; la carga el operador. Cliente `80026570-0`. Precio en USD con decimales; totales con "equivale a Gs. …". Emision.
 6. Cierre: "Ver en Documentos", la lista muestra las cuatro facturas.
 
 No hay cuotas ni forma de pago en la factura, ni otros tipos (B2G y exportacion existen solo como planillas de ejemplo): el video no los muestra.
@@ -113,7 +113,7 @@ No hay cuotas ni forma de pago en la factura, ni otros tipos (B2G y exportacion 
 
 ## 6. Hallazgos que se ven en los videos
 
-Salen del inventario. No se arreglan en esta cadena (SPEC §6). Van a `BACKLOG` y quedan pendientes de la decision P-2:
+Salen del inventario. **H-1 a H-7 quedaron corregidos antes de grabar** (D-8, `SPEC_AJUSTES_TEXTOS_OPERADOR_v0.1`, A-2 a A-8, commits `395f365` y `add786b`), junto con el numero estimado de Nueva factura (A-1). H-8 queda en `BACKLOG` como FS-60. Tabla original:
 
 | Id | Hallazgo | Donde | Se ve en |
 |---|---|---|---|

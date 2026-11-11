@@ -33,7 +33,7 @@
 
 - Mostrar el numero real que va a asignar FE (no existe contrato para consultarlo antes de emitir).
 - Calcular o sugerir la cotizacion.
-- Persona fisica con RUC no activo que pasa a CI sin aviso (`H-8` de los tutoriales): queda en `BACKLOG`.
+- Persona fisica con RUC no activo que pasa a CI sin aviso (`H-8` de los tutoriales): queda en `BACKLOG` (FS-60).
 
 ## 4. Criterios de aceptacion
 
