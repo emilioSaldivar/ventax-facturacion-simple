@@ -118,6 +118,7 @@ Contenido de cada espacio:
 
    Se reemplazan los botones apilados a lo ancho.
 5. En celular se conserva la lista actual de tarjetas, con la pastilla en lugar del emoji.
+6. **Busqueda por numero completo (pedido del usuario del 2026-11-11, D-15).** El buscador de Documentos y el de Notas de credito aceptan el numero como lo ve el operador: `001-001-1010006` (o `0010011010006`, sin guiones) encuentra el documento `1010006` **de ese establecimiento y punto**, y no el mismo numero de otro punto. Lo que ya se buscaba sigue igual: solo el numero (`1010006`, como prefijo), el CDC, el documento o la razon social del cliente (RN-12).
 
 ### D. Resto de las pantallas del operador (R-1, R-3 a R-6, R-8 a R-10)
 
@@ -226,6 +227,7 @@ Recorrido con Playwright sobre el stack local de Segel (frontend `3d6c6e3`, usua
 - **D-11 — Nombre corto del punto.** "Punto EST-PTO" y la actividad (`actividad_economica_descripcion`) como texto secundario. `titulo_operativo` y `perfil_emision_alias` traen hoy la descripcion fiscal larga (en la base, `alias_operativo` de los dos perfiles de ensayo); no se usan como titulo. Sin cambio de contrato.
 - **D-12 — Particion incremental.** `main.tsx` se divide en `api/`, `components/`, `lib/` y `views/` por etapas, empezando por lo que cada fase toca, y cada paso sin cambio de comportamiento, comprobado con las regresiones de Playwright. No hay un refactor de una sola vez.
 - **D-13 — Voseo.** La interfaz usa voseo, como multiperfil y Nueva factura. Aceptada por el usuario el 2026-11-11.
+- **D-15 — Busqueda por numero completo.** Pedido del usuario del 2026-11-11, al probar la app: escribir `001-001-1010006` no encontraba nada y solo funcionaba `1010006`. Se resuelve en la API (el filtro ya esta ahi; el frontend no recorta el texto) y vale para los dos buscadores que usan `GET /facturas` y `GET /facturas/nce-candidatas`.
 - **D-14 — Zoom permitido.** Se quita `maximum-scale=1.0, user-scalable=no` del `viewport`. El riesgo es que el celular agrande la pantalla al enfocar un campo de menos de 16 px; se cubre con campos de 16 px en celular. Aceptada por el usuario el 2026-11-11.
 
 ## Reglas
@@ -240,6 +242,7 @@ Recorrido con Playwright sobre el stack local de Segel (frontend `3d6c6e3`, usua
 - **RN-08 — Contrato solo donde se dice.** El unico cambio de contrato de esta cadena es el filtro por punto de §F.2, que va despues de multiperfil y se documenta en `spec/openapi.yaml`. El resto es solo de interfaz.
 - **RN-09 — Escritorio primero.** Se valida primero en 1440 y 1280 px y despues en 390 px, sin desplazamiento horizontal (decision del 2026-11-09).
 - **RN-10 — Sin cambio de comportamiento en la fase 0.** Tokens, componentes base, cliente de API, accesibilidad, textos y particion no cambian lo que se envia a la API ni los flujos. Lo comprueban las regresiones de Playwright y la linea base de la nota de credito (URA-001).
+- **RN-12 — Numero completo.** Un texto de busqueda con la forma `EEE-PPP-NNNNNNN` (tres, tres y hasta siete digitos, con o sin guiones) filtra por establecimiento y punto y por el numero: exacto si tiene 7 cifras, como prefijo si tiene menos, y tambien con ceros a la izquierda (`001-002-8487` encuentra `0008487`). El establecimiento y el punto del documento salen de su perfil (`actividad_punto_perfil_id`) o, si no lo tiene, del CDC (posiciones 12 a 17), como en `facturas.inutilizacion.ts`. Cualquier otro texto se busca como antes.
 - **RN-11 — La linea base no sube.** El guion de reconocimiento (URA-024) corre al cerrar cada tarea de frontend. Ninguna cuenta del anexo de las pautas puede subir.
 
 ## Criterios de aceptacion
@@ -258,6 +261,7 @@ Recorrido con Playwright sobre el stack local de Segel (frontend `3d6c6e3`, usua
 - **CA-12.** Al cerrar URA-016 y URA-022 (fase 0): `styles.css` sin `z-index` numericos, sin valores que coincidan con un token escritos a mano, con `1040px` corregido y sin el solape en 720 px; sin las clases sin uso ni los selectores duplicados de H-19; las capturas de 1440 y 390 px de las ocho pantallas no cambian a simple vista respecto del recorrido del 2026-11-10. Al cerrar URA-002 (fase 1, R-1): ningun color hex fuera de `:root`.
 - **CA-13.** `EncabezadoPantalla`, `PastillaEstado`, `Aviso`, `EstadoVacio`, `Dialogo`, `MenuFila`, `CampoFormulario` y `CampoContrasena` existen en `src/components/` y reemplazan a sus variantes (sin `window.confirm` en el codigo).
 - **CA-14.** Con dos puntos: la eleccion, el cambio, Informacion y estado y el menu de celular nombran el punto como "Punto 001-002" con la actividad como texto secundario, sin la descripcion fiscal larga ni el codigo del perfil ni "ultimo numero"; el menu de celular ofrece "Cambiar punto de expedición" y abre el dialogo; las tarjetas de celular y la ficha muestran el numero completo (`001-002-0008487`); el modal de nota de credito de Documentos avisa cuando la factura es de otro punto; con un motivo escrito en ese modal, "Cambiar punto" ofrece "Descartar y cambiar".
+- **CA-16.** En Documentos (pestaña Notas de crédito) y en Notas de crédito, `001-001-1010006` encuentra la nota 1010006 de 001-001; `001-002-1010006` no la encuentra; `1010006` la sigue encontrando; `001-002-8487` encuentra la factura 0008487 de 001-002. `spec/openapi.yaml` describe el formato del parametro `q`.
 - **CA-15.** Guion de reconocimiento (PLAN §11) en 1440, 1280 y 390 px: 0 desplazamiento horizontal, 0 controles sin nombre, 0 campos sin etiqueta, 0 controles de menos de 44 px y 0 campos de menos de 16 px en 390 px al cerrar URA-020; 0 emojis al cerrar URA-011 (los emojis de estado y de acciones salen en las fases 1 y 2, con las pantallas). Entre tareas, ningun total sube respecto de la linea base (RN-11).
 
 ## Limitaciones conocidas

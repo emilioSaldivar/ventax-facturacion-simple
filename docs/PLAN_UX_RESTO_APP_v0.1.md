@@ -139,6 +139,12 @@ Las fases 0, 1 y 2 son solo de interfaz: no cambian la API, la base ni `spec/ope
 - **Fase 0 sin cambio visible.** Tokens y componentes base pueden mover un pixel aca o alla. Se compara con las capturas del recorrido del 2026-11-10 en los tres anchos; una diferencia que no sea la buscada se corrige antes de cerrar.
 - **Particion de `main.tsx` con otra sesion trabajando.** Mover una vista a otro archivo choca con cualquier cambio en paralelo. Cada movimiento es un commit solo de movimiento (sin cambios dentro), anunciado antes a la otra sesion.
 
+## 9b. Busqueda por numero completo (SPEC C.6, D-15, RN-12, CA-16; URA-025)
+
+- **API** (`apps/api/src/modules/facturas/facturas.repository.ts`, `buildListWhere`): una funcion pura exportada `interpretarNumeroCompleto(q)` devuelve `{ establecimiento, punto, numero }` si `q` (sin espacios) coincide con `^(\d{3})-?(\d{3})-?(\d{1,7})$`, o `null`. Con resultado, en lugar del filtro de texto se agrega: `(numero_fiscal = lpad(numero, 7, '0') or numero_fiscal like numero || '%')` y `(exists (perfil del documento con ese establecimiento y punto) or (actividad_punto_perfil_id is null and substring(cdc from 12 for 3) = est and substring(cdc from 15 for 3) = pto))`. Sin resultado, el filtro de texto queda como esta. Aplica a `GET /facturas` y a `GET /facturas/nce-candidatas`, que usa la misma consulta.
+- **Pruebas:** unitarias de `interpretarNumeroCompleto` (con y sin guiones, numero corto, textos que no son numero: RUC `80026570-0`, nombres, CDC de 44 digitos); Playwright contra el stack: CA-16 en Documentos y en Notas de credito.
+- **Contrato:** sin parametros nuevos; `spec/openapi.yaml` describe el formato aceptado en `components/parameters/Q`.
+
 ## 10. Fase 0: pautas y base de componentes (SPEC §G y §H)
 
 Orden fijo: URA-024, URA-016, URA-017, URA-018, URA-019, URA-020, URA-021, URA-022, URA-023. Cada tarea es un commit propio y no cambia lo que se envia a la API ni los flujos (SPEC RN-10). "Sin cambio visible" (CA-12) aplica solo a URA-016 y URA-022; URA-019, URA-020 y URA-021 cambian textos y medidas a proposito.

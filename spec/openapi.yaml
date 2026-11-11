@@ -2660,6 +2660,10 @@ components:
       required: false
       schema:
         type: string
+      description: >-
+        Texto de busqueda. Numero fiscal (prefijo), CDC (prefijo), documento o razon social del cliente (fragmento).
+        El numero completo como lo ve el operador, EEE-PPP-NNNNNNN con o sin guiones (por ejemplo 001-001-1010006),
+        filtra ademas por establecimiento y punto de expedicion (SPEC_UX_RESTO_APP_v0.1 RN-12).
     Limit:
       in: query
       name: limit
