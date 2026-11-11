@@ -3066,23 +3066,37 @@ components:
 
     ClienteUpsertRequest:
       type: object
+      description: >-
+        SPEC_VALIDACIONES_RECEPTOR_v0.1 (RV-01 a RV-09). Se normaliza y valida antes de guardar; un dato invalido
+        responde 400 VALIDATION_ERROR con el mensaje para el operador en `error.message` y el campo en `error.details`.
+        Las mismas reglas aplican al `cliente` de `POST /facturas` y `POST /facturas/preview`, y al pagador de `POST /recibos`.
       required: [documento_tipo, documento, razon_social]
       properties:
         documento_tipo:
           $ref: "#/components/schemas/DocumentoIdentidadTipo"
         documento:
           type: string
+          description: >-
+            RUC con forma base-dv (base de 3 a 8 caracteres [0-9A-Z], guion, un digito) y DV que cumple el modulo 11 de SIFEN
+            (letras expandidas a los digitos de su codigo ASCII, como FE). CI solo digitos, 1 a 20. Pasaporte, cedula extranjera y
+            no especificado: 1 a 20 caracteres [0-9A-Z]. Se guarda en mayusculas, sin puntos ni espacios.
+          example: 80012345-0
         razon_social:
           type: string
+          description: 4 a 255 caracteres; los espacios repetidos se reducen a uno.
         direccion:
           type: string
           nullable: true
+          description: Hasta 255 caracteres.
         telefono:
           type: string
           nullable: true
+          description: Se guarda solo con digitos; 6 a 15 digitos.
+          example: "0981123456"
         email:
           type: string
           nullable: true
+          description: Sin espacios, forma nombre@dominio.tld; vacio se guarda como null.
         naturaleza:
           $ref: "#/components/schemas/ClienteNaturaleza"
           description: Opcional; si se omite, el sistema asume `FISICA`.
@@ -3097,6 +3111,13 @@ components:
               type: string
             activo:
               type: boolean
+            observaciones:
+              type: array
+              items:
+                type: string
+              description: >-
+                Solo en `GET /clientes` (SPEC_VALIDACIONES_RECEPTOR_v0.1 RV-11). Motivos por los que un cliente ya guardado
+                no cumple las reglas actuales; vacio si cumple. El cliente no se modifica.
 
     ClienteListResponse:
       type: object

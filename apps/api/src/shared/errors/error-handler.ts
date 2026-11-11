@@ -11,7 +11,10 @@ export const errorHandler: ErrorRequestHandler = (error, req, res, _next) => {
     const body: ApiErrorResponse = {
       error: {
         code: "VALIDATION_ERROR",
-        message: "La solicitud contiene datos invalidos.",
+        // SPEC_VALIDACIONES_RECEPTOR_v0.1 RV-09: si hay un mensaje para el operador, va como mensaje principal.
+        message:
+          (error.issues.find((i) => i.code === "custom" && (i as { params?: { operador?: boolean } }).params?.operador)?.message) ??
+          "La solicitud contiene datos invalidos.",
         details: error.flatten(),
         requestId
       }

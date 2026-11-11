@@ -45,6 +45,8 @@ import { DocumentsView } from "./views/DocumentsView";
 import { CatalogView } from "./views/CatalogView";
 import { AgendaView } from "./views/AgendaView";
 import { normalizeDocKey, sugerirNaturalezaPorLongitudRuc } from "./lib/clientes";
+import { revisarReceptor, type CampoReceptor } from "./lib/validacionReceptor";
+import { Aviso } from "./components/Aviso";
 import { formatIva } from "./lib/formato";
 import { ResultadoEmision } from "./components/ResultadoEmision";
 
@@ -1261,6 +1263,9 @@ function InvoiceEditor({
   const [clienteAutocompleting, setClienteAutocompleting] = useState(false);
   const [clienteSaving, setClienteSaving] = useState(false);
   const [clienteMessage, setClienteMessage] = useState<string | null>(null);
+  // SPEC_VALIDACIONES_RECEPTOR_v0.1 RV-09 y RV-10: errores por campo al salir del campo; aviso del padron.
+  const [clienteTocados, setClienteTocados] = useState<Set<CampoReceptor>>(new Set());
+  const [avisoDnitCliente, setAvisoDnitCliente] = useState<{ texto: string; documento?: string } | null>(null);
   const [catalogSuggestions, setCatalogSuggestions] = useState<Record<string, CatalogoItem[]>>({});
   const [catalogSearching, setCatalogSearching] = useState<Record<string, boolean>>({});
   const [catalogSaving, setCatalogSaving] = useState<Record<string, boolean>>({});
@@ -1333,6 +1338,16 @@ function InvoiceEditor({
     if (!cliente.documento.trim() || !cliente.razon_social.trim() || items.length === 0 || !tipoCambioValido) {
       return null;
     }
+    // SPEC_VALIDACIONES_RECEPTOR_v0.1 RV-08: sin receptor valido no hay vista previa ni emision.
+    const revision = revisarReceptor({
+      ...cliente,
+      direccion: cliente.direccion ?? null,
+      telefono: cliente.telefono ?? null,
+      email: cliente.email ?? null
+    });
+    if (revision.errores.length > 0) {
+      return null;
+    }
 
     return {
       ...(enMonedaExtranjera ? { moneda, tipo_cambio: Number(tipoCambio) } : {}),
@@ -1340,12 +1355,10 @@ function InvoiceEditor({
       tipo_transaccion: tipoTransaccion,
       credito_plazo_dias: condicionVenta === "CREDITO" ? creditoPlazoDias : null,
       cliente: {
-        ...cliente,
-        documento: cliente.documento.trim(),
-        razon_social: cliente.razon_social.trim(),
-        direccion: cliente.direccion?.trim() || null,
-        telefono: cliente.telefono?.trim() || null,
-        email: cliente.email?.trim() || null
+        ...revision.normalizado,
+        direccion: revision.normalizado.direccion ?? null,
+        telefono: revision.normalizado.telefono ?? null,
+        email: revision.normalizado.email ?? null
       },
       items
     };
@@ -1911,13 +1924,24 @@ function InvoiceEditor({
         return;
       }
 
+      // RV-10: un DV escrito distinto al del padron se avisa y se ofrece; un RUC no activo se informa.
+      const padron = result.cliente;
+      const dvDistinto = documentoTipo === "RUC" && rawDocumento.includes("-") && normalizeDocKey(padron.documento) !== normalizedInput;
+      const estadoPadron = (padron.estado ?? "").trim().toUpperCase();
+      if (dvDistinto) {
+        setAvisoDnitCliente({ texto: `Según la DNIT el RUC es ${padron.documento}.`, documento: padron.documento });
+      } else if (padron.documento_tipo === "RUC" && estadoPadron && estadoPadron !== "ACTIVO") {
+        setAvisoDnitCliente({ texto: `Este RUC figura como ${estadoPadron.toLowerCase()} en la DNIT. Verificá con el cliente cómo facturarle.` });
+      } else {
+        setAvisoDnitCliente(null);
+      }
       setCliente((current) => ({
         ...current,
-        documento_tipo: result.cliente?.documento_tipo ?? current.documento_tipo,
-        documento: result.cliente?.documento ?? current.documento,
-        razon_social: result.cliente?.razon_social ?? current.razon_social,
-        naturaleza: !clienteNaturalezaTouched && result.cliente?.documento_tipo === "RUC"
-          ? result.cliente.naturaleza_sugerida
+        documento_tipo: padron.documento_tipo ?? current.documento_tipo,
+        documento: dvDistinto ? current.documento : padron.documento ?? current.documento,
+        razon_social: padron.razon_social ?? current.razon_social,
+        naturaleza: !clienteNaturalezaTouched && padron.documento_tipo === "RUC"
+          ? padron.naturaleza_sugerida
           : current.naturaleza
       }));
       setClienteOrigen("PADRON");
@@ -2107,6 +2131,24 @@ function InvoiceEditor({
     : 0;
   const innominadoSobreTope = esInnominado && totalLineasGs >= TOPE_INNOMINADO_GS;
   const crearDeshabilitado = !canEmit || !preview || emitting || hasEmissionResult || lineasInvalidasIds.size > 0 || innominadoSobreTope;
+  // SPEC_VALIDACIONES_RECEPTOR_v0.1 RV-09: errores del cliente por campo (se muestran al salir del campo).
+  const revisionCliente = revisarReceptor({
+    ...cliente,
+    direccion: cliente.direccion ?? null,
+    telefono: cliente.telefono ?? null,
+    email: cliente.email ?? null
+  });
+  const errorCliente = (campo: CampoReceptor): string | null => revisionCliente.errores.find((e) => e.campo === campo)?.mensaje ?? null;
+  const errorClienteVisible = (campo: CampoReceptor) => {
+    const mensaje = clienteTocados.has(campo) ? errorCliente(campo) : null;
+    return mensaje ? (
+      <small className="campo-error" data-campo-error={campo} role="alert">
+        {mensaje}
+      </small>
+    ) : null;
+  };
+  const tocarCliente = (campo: CampoReceptor) => setClienteTocados((actual) => new Set(actual).add(campo));
+  const erroresOpcionalesCliente = revisionCliente.errores.some((e) => e.campo === "direccion" || e.campo === "telefono" || e.campo === "email");
   // SPEC_UX_NUEVA_FACTURA_v0.1, RN-04: un unico motivo, el primero que aplica.
   const motivoBloqueo: string | null = (() => {
     if (hasEmissionResult || emitting) return null;
@@ -2115,6 +2157,7 @@ function InvoiceEditor({
       return `No se puede facturar: ${falla?.message ?? "revisá Información y estado."}`;
     }
     if (!cliente.documento.trim() || !cliente.razon_social.trim()) return "Falta el cliente (documento y nombre)";
+    if (revisionCliente.errores.length > 0) return `Corregí los datos del cliente: ${revisionCliente.errores[0]!.mensaje}`;
     if (innominadoSobreTope) return MENSAJE_TOPE_INNOMINADO;
     if (!tipoCambioValido) return "Falta el tipo de cambio";
     if (lineasConDatos.length === 0) return "Agregá al menos una línea";
@@ -2184,15 +2227,18 @@ function InvoiceEditor({
       {!modoCompleto ? selectorTipoPersona : null}
       <label>
         Dirección
-        <input onChange={(event) => editarCliente({ direccion: event.target.value })} value={cliente.direccion ?? ""} />
+        <input aria-invalid={errorCliente("direccion") ? true : undefined} onBlur={() => tocarCliente("direccion")} onChange={(event) => editarCliente({ direccion: event.target.value })} value={cliente.direccion ?? ""} />
+        {errorClienteVisible("direccion")}
       </label>
       <label>
         Teléfono
-        <input inputMode="tel" onChange={(event) => editarCliente({ telefono: event.target.value })} value={cliente.telefono ?? ""} />
+        <input aria-invalid={errorCliente("telefono") ? true : undefined} inputMode="tel" onBlur={() => tocarCliente("telefono")} onChange={(event) => editarCliente({ telefono: event.target.value })} value={cliente.telefono ?? ""} />
+        {errorClienteVisible("telefono")}
       </label>
       <label>
         Correo
-        <input inputMode="email" onChange={(event) => editarCliente({ email: event.target.value })} value={cliente.email ?? ""} />
+        <input aria-invalid={errorCliente("email") ? true : undefined} inputMode="email" onBlur={() => tocarCliente("email")} onChange={(event) => editarCliente({ email: event.target.value })} value={cliente.email ?? ""} />
+        {errorClienteVisible("email")}
       </label>
     </div>
   );
@@ -2319,9 +2365,14 @@ function InvoiceEditor({
             <span className="campo-con-icono">
               <input
                 inputMode={cliente.documento_tipo === "RUC" || cliente.documento_tipo === "CI" ? "numeric" : "text"}
-                onBlur={() => void tryAutocompleteDnit()}
+                aria-invalid={clienteTocados.has("documento") && errorCliente("documento") ? true : undefined}
+                onBlur={() => {
+                  tocarCliente("documento");
+                  void tryAutocompleteDnit();
+                }}
                 readOnly={esInnominado}
                 onChange={(event) => {
+                  setAvisoDnitCliente(null);
                   setClienteNaturalezaTouched(false);
                   setClienteOrigen(null);
                   setGuardarEnAgenda(true);
@@ -2348,7 +2399,7 @@ function InvoiceEditor({
                     void tryAutocompleteDnit();
                   }
                 }}
-                placeholder="Ingresá el número de documento"
+                placeholder={cliente.documento_tipo === "RUC" ? "Ej. 80012345-0" : "Ingresá el número de documento"}
                 value={cliente.documento}
               />
               {clienteOrigen ? <span className="campo-tilde" title={clienteOrigen === "AGENDA" ? "En tu agenda" : "Del padron de la DNIT"}><Icono nombre="tilde" tamano={16} grosor={2.5} /></span> : null}
@@ -2368,10 +2419,18 @@ function InvoiceEditor({
                 ))}
               </div>
             ) : null}
+            {errorClienteVisible("documento")}
           </label>
           <label className="cliente-nombre">
             Nombre o razón social
-            <input onChange={(event) => editarCliente({ razon_social: event.target.value })} readOnly={esInnominado} value={cliente.razon_social} />
+            <input
+              aria-invalid={clienteTocados.has("razon_social") && errorCliente("razon_social") ? true : undefined}
+              onBlur={() => tocarCliente("razon_social")}
+              onChange={(event) => editarCliente({ razon_social: event.target.value })}
+              readOnly={esInnominado}
+              value={cliente.razon_social}
+            />
+            {errorClienteVisible("razon_social")}
           </label>
         </div>
         <div className="cliente-estado">
@@ -2399,7 +2458,24 @@ function InvoiceEditor({
           </button>
           {modoCompleto && !esInnominado ? casillaAgenda : null}
         </div>
-        {opcionalesAbiertos ? camposOpcionales : null}
+        {avisoDnitCliente ? (
+          <Aviso tono="atencion">
+            {avisoDnitCliente.texto}{" "}
+            {avisoDnitCliente.documento ? (
+              <button
+                className="secondary-action compact"
+                onClick={() => {
+                  editarCliente({ documento: avisoDnitCliente.documento! });
+                  setAvisoDnitCliente(null);
+                }}
+                type="button"
+              >
+                Usar {avisoDnitCliente.documento}
+              </button>
+            ) : null}
+          </Aviso>
+        ) : null}
+        {opcionalesAbiertos || erroresOpcionalesCliente ? camposOpcionales : null}
         {!modoCompleto && !esInnominado ? casillaAgenda : null}
       </section>
 

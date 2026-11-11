@@ -5078,3 +5078,13 @@ dd {
   white-space: nowrap;
 }
 
+
+/* SPEC_VALIDACIONES_RECEPTOR_v0.1 RV-11: cliente con datos para corregir en la agenda. */
+.agenda-revisar {
+  display: inline-flex;
+  margin-left: var(--esp-2);
+  vertical-align: middle;
+}
+.catalogo-form [aria-invalid="true"] {
+  border-color: var(--color-danger);
+}

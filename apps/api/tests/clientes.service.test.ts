@@ -377,7 +377,7 @@ describe("clientes service", () => {
     });
   });
 
-  it("returns documento without dv and switches to CI for inactive fisica when requested as RUC", async () => {
+  it("RV-10 (FS-60): un RUC no activo de persona fisica sigue siendo RUC, con el DV del padron", async () => {
     const repo = new FakeClienteRepository();
     repo.dnitResult = {
       status: "FOUND",
@@ -404,8 +404,8 @@ describe("clientes service", () => {
     expect(result).toMatchObject({
       found: true,
       cliente: {
-        documento_tipo: "CI",
-        documento: "1001210"
+        documento_tipo: "RUC",
+        documento: "1001210-9"
       }
     });
   });

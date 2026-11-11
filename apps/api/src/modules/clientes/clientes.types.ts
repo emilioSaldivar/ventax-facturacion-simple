@@ -29,6 +29,8 @@ export interface ClienteSearchResult {
 export interface ClienteResponse extends ClienteSearchResult {
   cliente_id: string;
   activo: boolean;
+  /** SPEC_VALIDACIONES_RECEPTOR_v0.1 RV-11: solo en `GET /clientes`; vacio si cumple las reglas. */
+  observaciones?: string[];
 }
 
 export interface ClienteListResponse {

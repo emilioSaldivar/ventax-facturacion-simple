@@ -10,6 +10,7 @@ import { env } from "../../config/env.js";
 import { facturasRepository } from "../facturas/facturas.repository.js";
 import { validateRequest } from "../../shared/validation/validate-request.js";
 import { HttpError } from "../../shared/errors/http-error.js";
+import { ISSUE_OPERADOR, normalizarDocumento, normalizarNombre, validarDocumento, validarNombre } from "../../shared/validation/receptor.js";
 import { recibosRepository } from "./recibos.repository.js";
 import {
   anularRecibo,
@@ -62,12 +63,28 @@ const createBodySchema = z.object({
   referencia_documento_numero_display: z.string().nullish(),
 });
 
+/** SPEC_VALIDACIONES_RECEPTOR_v0.1 RV-01, RV-02, RV-05 y RV-08: pagador del recibo. */
+function refinarPagador(
+  body: { pagador_nombre?: string; pagador_documento_tipo?: string | null; pagador_documento?: string | null },
+  ctx: z.RefinementCtx
+): void {
+  if (body.pagador_nombre !== undefined) {
+    const r = validarNombre(normalizarNombre(body.pagador_nombre));
+    if (!r.ok) ctx.addIssue({ code: "custom", path: ["pagador_nombre"], message: r.mensaje, params: ISSUE_OPERADOR });
+  }
+  if (body.pagador_documento_tipo && body.pagador_documento) {
+    const r = validarDocumento(body.pagador_documento_tipo, normalizarDocumento(body.pagador_documento_tipo, body.pagador_documento));
+    if (!r.ok) ctx.addIssue({ code: "custom", path: ["pagador_documento"], message: r.mensaje, params: ISSUE_OPERADOR });
+  }
+}
+
 const updateBodySchema = createBodySchema
   .omit({ fecha_cobro: true, referencia_documento_uuid: true, referencia_documento_numero_display: true })
   .partial()
   .extend({
     fecha_cobro: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-  });
+  })
+  .superRefine(refinarPagador);
 
 const anularBodySchema = z.object({
   motivo: z.string().min(1).max(500),
@@ -93,7 +110,7 @@ function parseIdempotencyKey(value: string | undefined): string | undefined {
 recibosRouter.post(
   "/recibos",
   requireAuth,
-  validateRequest("body", createBodySchema),
+  validateRequest("body", createBodySchema.superRefine(refinarPagador)),
   async (req, res, next) => {
     try {
       const context = await getOperationalContext(req.user!, operationalContextRepository);

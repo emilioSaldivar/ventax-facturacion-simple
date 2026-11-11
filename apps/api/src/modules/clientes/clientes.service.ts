@@ -9,6 +9,7 @@ import type {
   ClienteUpsertInput
 } from "./clientes.types";
 import { normalizeDocumento, normalizeOptional } from "./clientes.utils";
+import { observacionesReceptor } from "../../shared/validation/receptor";
 
 export async function searchClientes(
   context: OperationalContextResponse,
@@ -30,12 +31,14 @@ export async function listClientes(
   input: { q?: string; limit: number; offset: number },
   repository: ClienteRepository
 ): Promise<ClienteListResponse> {
-  return repository.list({
+  const result = await repository.list({
     facturadorId: context.facturador.id,
     q: input.q,
     limit: input.limit,
     offset: input.offset
   });
+  // SPEC_VALIDACIONES_RECEPTOR_v0.1 RV-11: los clientes viejos que no cumplen se marcan, no se modifican.
+  return { ...result, items: result.items.map((item) => ({ ...item, observaciones: observacionesReceptor(item) })) };
 }
 
 export async function createCliente(
@@ -176,8 +179,13 @@ export function sugerirNaturaleza(ruc: string, razonSocial?: string | null): Cli
   return tieneSufijoSocietario ? "JURIDICA" : "FISICA";
 }
 
+/**
+ * SPEC_VALIDACIONES_RECEPTOR_v0.1 RV-10 (FS-60): el tipo de documento lo decide el operador.
+ * Un RUC no activo sigue siendo RUC (con el DV del padron); la interfaz muestra el estado.
+ * Solo una persona juridica (base de mas de 7 digitos) se fuerza a RUC, porque no tiene CI.
+ */
 function resolveAutocompleteIdentity(
-  _requestedTipo: "RUC" | "CI",
+  requestedTipo: "RUC" | "CI",
   item: {
     ruc_sin_dv: string;
     dv: string;
@@ -187,21 +195,10 @@ function resolveAutocompleteIdentity(
     apellido: string | null;
   }
 ): { documento_tipo: "RUC" | "CI"; documento: string } {
-  const isJuridica = isJuridicaByRuc(item.ruc_sin_dv);
-  const estado = (item.estado ?? "").trim().toUpperCase();
-  const isActive = estado === "ACTIVO";
-
-  if (isJuridica || isActive) {
-    return {
-      documento_tipo: "RUC",
-      documento: item.ruc
-    };
+  if (requestedTipo === "RUC" || isJuridicaByRuc(item.ruc_sin_dv)) {
+    return { documento_tipo: "RUC", documento: item.ruc };
   }
-
-  return {
-    documento_tipo: "CI",
-    documento: item.ruc_sin_dv
-  };
+  return { documento_tipo: "CI", documento: item.ruc_sin_dv };
 }
 
 function isJuridicaByRuc(rucSinDv: string): boolean {

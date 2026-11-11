@@ -11,6 +11,8 @@ import { EstadoVacio } from "../components/EstadoVacio";
 import { Icono } from "../components/Icono";
 import { MenuFila } from "../components/MenuFila";
 import { normalizeDocKey, sugerirNaturalezaPorLongitudRuc } from "../lib/clientes";
+import { PastillaEstado } from "../components/PastillaEstado";
+import { revisarReceptor, type CampoReceptor } from "../lib/validacionReceptor";
 import { useEsEscritorio } from "../lib/useEsEscritorio";
 import type {
   ClienteListResponse,
@@ -57,6 +59,11 @@ export function AgendaView({ onBack, onUseCliente }: { onBack: () => void; onUse
   const [rowMenuClienteId, setRowMenuClienteId] = useState<string | null>(null);
   const [draft, setDraft] = useState<FacturaClienteInput>(draftVacio);
   const [naturalezaTouched, setNaturalezaTouched] = useState(false);
+  // SPEC_VALIDACIONES_RECEPTOR_v0.1 RV-09: el error se ve al salir del campo o al intentar guardar.
+  const [tocados, setTocados] = useState<Set<CampoReceptor>>(new Set());
+  const [intentoGuardar, setIntentoGuardar] = useState(false);
+  // RV-10: aviso del padron (DV distinto al escrito, RUC no activo); no cambia nada solo.
+  const [avisoDnit, setAvisoDnit] = useState<{ texto: string; documento?: string } | null>(null);
 
   useEffect(() => {
     const timeout = setTimeout(() => {
@@ -102,6 +109,9 @@ export function AgendaView({ onBack, onUseCliente }: { onBack: () => void; onUse
     setFormError(null);
     setMessage(null);
     setSearchSuggestions([]);
+    setTocados(new Set());
+    setIntentoGuardar(false);
+    setAvisoDnit(null);
     if (cliente) {
       setSelected(cliente);
       setDraft({
@@ -187,12 +197,24 @@ export function AgendaView({ onBack, onUseCliente }: { onBack: () => void; onUse
         }
         return;
       }
+      // RV-10: si el operador ya escribio un DV y el del padron es otro, se avisa y se ofrece; no se cambia solo.
+      const padron = result.cliente;
+      const escribioDv = draft.documento_tipo === "RUC" && documento.includes("-");
+      const dvDistinto = escribioDv && normalizeDocKey(padron.documento) !== normalizeDocKey(documento);
+      const estado = (padron.estado ?? "").trim().toUpperCase();
+      if (dvDistinto) {
+        setAvisoDnit({ texto: `Según la DNIT el RUC es ${padron.documento}.`, documento: padron.documento });
+      } else if (padron.documento_tipo === "RUC" && estado && estado !== "ACTIVO") {
+        setAvisoDnit({ texto: `Este RUC figura como ${estado.toLowerCase()} en la DNIT. Verificá con el cliente cómo facturarle.` });
+      } else {
+        setAvisoDnit(null);
+      }
       setDraft((current) => ({
         ...current,
-        documento_tipo: result.cliente?.documento_tipo ?? current.documento_tipo,
-        documento: result.cliente?.documento ?? current.documento,
-        razon_social: result.cliente?.razon_social ?? current.razon_social,
-        naturaleza: !naturalezaTouched && result.cliente?.documento_tipo === "RUC" ? result.cliente.naturaleza_sugerida : current.naturaleza
+        documento_tipo: padron.documento_tipo ?? current.documento_tipo,
+        documento: dvDistinto ? current.documento : padron.documento ?? current.documento,
+        razon_social: padron.razon_social ?? current.razon_social,
+        naturaleza: !naturalezaTouched && padron.documento_tipo === "RUC" ? padron.naturaleza_sugerida : current.naturaleza
       }));
     } catch {
       // No interrumpir carga manual cuando DNIT no esta disponible.
@@ -205,17 +227,20 @@ export function AgendaView({ onBack, onUseCliente }: { onBack: () => void; onUse
   }
 
   async function saveCliente() {
+    setIntentoGuardar(true);
+    if (revision.errores.length > 0) return;
     setSaving(true);
     setMessage(null);
     setFormError(null);
     try {
+      const n = revision.normalizado;
       const payload = {
-        documento_tipo: draft.documento_tipo,
-        documento: draft.documento.trim(),
-        razon_social: draft.razon_social.trim(),
-        direccion: draft.direccion?.trim() || null,
-        telefono: draft.telefono?.trim() || null,
-        email: draft.email?.trim() || null,
+        documento_tipo: n.documento_tipo,
+        documento: n.documento,
+        razon_social: n.razon_social,
+        direccion: n.direccion ?? null,
+        telefono: n.telefono ?? null,
+        email: n.email ?? null,
         ...(draft.naturaleza ? { naturaleza: draft.naturaleza } : {})
       };
       const result = selected
@@ -291,7 +316,26 @@ export function AgendaView({ onBack, onUseCliente }: { onBack: () => void; onUse
   }
 
   const tituloEditor = selected && editorOpen && draft.cliente_id ? "Editar cliente" : "Nuevo cliente";
+  const revision = revisarReceptor({
+    documento_tipo: draft.documento_tipo,
+    documento: draft.documento,
+    razon_social: draft.razon_social,
+    direccion: draft.direccion ?? null,
+    telefono: draft.telefono ?? null,
+    email: draft.email ?? null
+  });
+  const errorDe = (campo: CampoReceptor) =>
+    intentoGuardar || tocados.has(campo) ? revision.errores.find((e) => e.campo === campo)?.mensaje ?? null : null;
+  const tocar = (campo: CampoReceptor) => setTocados((actual) => new Set(actual).add(campo));
   const puedeGuardar = !saving && draft.documento.trim() !== "" && draft.razon_social.trim() !== "";
+  const errorCampo = (campo: CampoReceptor) => {
+    const mensaje = errorDe(campo);
+    return mensaje ? (
+      <small className="campo-error" data-campo-error={campo} role="alert">
+        {mensaje}
+      </small>
+    ) : null;
+  };
 
   const formulario = (
     <form
@@ -302,6 +346,9 @@ export function AgendaView({ onBack, onUseCliente }: { onBack: () => void; onUse
       }}
     >
       {formError ? <Aviso tono="error">{formError}</Aviso> : null}
+      {selected && draft.cliente_id && (selected.observaciones?.length ?? 0) > 0 ? (
+        <Aviso tono="atencion">Este cliente tiene datos para corregir antes de usarlo: {selected.observaciones!.join(" ")}</Aviso>
+      ) : null}
       <div className="catalogo-form-fila">
         <label>
           Tipo de documento
@@ -320,12 +367,38 @@ export function AgendaView({ onBack, onUseCliente }: { onBack: () => void; onUse
         <label>
           Documento
           <input
-            onBlur={() => void autocompleteFromDnit()}
-            onChange={(event) => setDraft((current) => ({ ...current, documento: event.target.value }))}
+            aria-invalid={errorDe("documento") ? true : undefined}
+            onBlur={() => {
+              tocar("documento");
+              void autocompleteFromDnit();
+            }}
+            onChange={(event) => {
+              setAvisoDnit(null);
+              setDraft((current) => ({ ...current, documento: event.target.value }));
+            }}
+            placeholder={draft.documento_tipo === "RUC" ? "80012345-0" : undefined}
             value={draft.documento}
           />
+          {errorCampo("documento")}
         </label>
       </div>
+      {avisoDnit ? (
+        <Aviso tono="atencion">
+          {avisoDnit.texto}{" "}
+          {avisoDnit.documento ? (
+            <button
+              className="secondary-action compact"
+              onClick={() => {
+                setDraft((current) => ({ ...current, documento: avisoDnit.documento! }));
+                setAvisoDnit(null);
+              }}
+              type="button"
+            >
+              Usar {avisoDnit.documento}
+            </button>
+          ) : null}
+        </Aviso>
+      ) : null}
       {autocompleting ? <small className="muted">Autocompletando...</small> : null}
       {searchSuggestions.length > 0 ? (
         <div className="suggestion-list">
@@ -340,7 +413,13 @@ export function AgendaView({ onBack, onUseCliente }: { onBack: () => void; onUse
       ) : null}
       <label>
         Nombre o razón social
-        <input onChange={(event) => setDraft((current) => ({ ...current, razon_social: event.target.value }))} value={draft.razon_social} />
+        <input
+          aria-invalid={errorDe("razon_social") ? true : undefined}
+          onBlur={() => tocar("razon_social")}
+          onChange={(event) => setDraft((current) => ({ ...current, razon_social: event.target.value }))}
+          value={draft.razon_social}
+        />
+        {errorCampo("razon_social")}
       </label>
       {draft.documento_tipo === "RUC" ? (
         <label>
@@ -361,19 +440,40 @@ export function AgendaView({ onBack, onUseCliente }: { onBack: () => void; onUse
       <div className="catalogo-form-fila">
         <label>
           Teléfono
-          <input inputMode="tel" onChange={(event) => setDraft((current) => ({ ...current, telefono: event.target.value }))} value={draft.telefono ?? ""} />
+          <input
+            aria-invalid={errorDe("telefono") ? true : undefined}
+            inputMode="tel"
+            onBlur={() => tocar("telefono")}
+            onChange={(event) => setDraft((current) => ({ ...current, telefono: event.target.value }))}
+            value={draft.telefono ?? ""}
+          />
+          {errorCampo("telefono")}
         </label>
         <label>
           Correo
-          <input inputMode="email" onChange={(event) => setDraft((current) => ({ ...current, email: event.target.value }))} value={draft.email ?? ""} />
+          <input
+            aria-invalid={errorDe("email") ? true : undefined}
+            inputMode="email"
+            onBlur={() => tocar("email")}
+            onChange={(event) => setDraft((current) => ({ ...current, email: event.target.value }))}
+            value={draft.email ?? ""}
+          />
+          {errorCampo("email")}
         </label>
       </div>
       <label>
         Dirección
-        <input onChange={(event) => setDraft((current) => ({ ...current, direccion: event.target.value }))} value={draft.direccion ?? ""} />
+        <input
+          aria-invalid={errorDe("direccion") ? true : undefined}
+          onBlur={() => tocar("direccion")}
+          onChange={(event) => setDraft((current) => ({ ...current, direccion: event.target.value }))}
+          value={draft.direccion ?? ""}
+        />
+        {errorCampo("direccion")}
       </label>
+      {intentoGuardar && revision.errores.length > 0 ? <small className="campo-error">Corregí los datos marcados para guardar.</small> : null}
       <div className="catalogo-form-acciones">
-        <button className="primary-action" disabled={!puedeGuardar} type="submit">
+        <button className="primary-action" disabled={!puedeGuardar || (intentoGuardar && revision.errores.length > 0)} type="submit">
           {saving ? "Guardando..." : "Guardar"}
         </button>
         <button className="ghost-action" disabled={saving} onClick={cerrarEditor} type="button">
@@ -456,6 +556,11 @@ export function AgendaView({ onBack, onUseCliente }: { onBack: () => void; onUse
                       >
                         <td>
                           <strong>{cliente.razon_social}</strong>
+                          {(cliente.observaciones?.length ?? 0) > 0 ? (
+                            <span className="agenda-revisar" title={cliente.observaciones!.join(" ")}>
+                              <PastillaEstado codigo="REVISAR_DATOS" texto="Revisar datos" tono="pending" />
+                            </span>
+                          ) : null}
                           {cliente.direccion ? <small className="agenda-direccion">{cliente.direccion}</small> : null}
                         </td>
                         <td className="agenda-documento">
@@ -498,6 +603,11 @@ export function AgendaView({ onBack, onUseCliente }: { onBack: () => void; onUse
                   <small>
                     {DOCUMENTO_TIPO_ETIQUETA[cliente.documento_tipo] ?? cliente.documento_tipo} {cliente.documento}
                   </small>
+                  {(cliente.observaciones?.length ?? 0) > 0 ? (
+                    <span className="agenda-revisar" title={cliente.observaciones!.join(" ")}>
+                      <PastillaEstado codigo="REVISAR_DATOS" texto="Revisar datos" tono="pending" />
+                    </span>
+                  ) : null}
                 </span>
                 <div className="client-row-actions">
                   <button className="secondary-action compact" onClick={() => useCliente(cliente)} type="button">

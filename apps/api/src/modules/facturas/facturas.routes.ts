@@ -7,6 +7,7 @@ import { clienteNaturalezaTipos } from "../clientes/clientes.types";
 import { operationalContextRepository } from "../context/context.repository";
 import { getOperationalContext } from "../context/context.service";
 import { validateRequest } from "../../shared/validation/validate-request";
+import { agregarErroresReceptor, revisarReceptor } from "../../shared/validation/receptor";
 import { createFiscalGateway, fiscalGateway } from "../fiscal-gateway/fiscal-gateway.client";
 import { buildFiscalGatewayConfig } from "../fiscal-gateway/fiscal-gateway.config";
 import type { FiscalGateway } from "../fiscal-gateway/fiscal-gateway.types";
@@ -55,9 +56,10 @@ const facturaBaseSchema = z.object({
     razon_social: z.string().trim().min(1).max(240),
     direccion: z.string().trim().max(240).nullable().optional(),
     telefono: z.string().trim().max(60).nullable().optional(),
-    email: z.string().trim().email().max(240).nullable().optional(),
+    // SPEC_VALIDACIONES_RECEPTOR_v0.1 RV-03: el formato del correo lo valida `revisarReceptor` (refinarFactura).
+    email: z.string().trim().max(240).nullable().optional(),
     naturaleza: z.enum(clienteNaturalezaTipos).nullable().optional()
-  }),
+  }).transform((cliente) => revisarReceptor(cliente).normalizado),
   items: z
     .array(
       z.object({
@@ -80,6 +82,8 @@ type FacturaBase = z.infer<typeof facturaBaseSchema>;
 
 /** SPEC_MONEDA_EXTRANJERA_v0.1, RN-02 y RN-06: tipo de cambio, decimales del precio por moneda y de la cantidad. */
 function refinarFactura(input: FacturaBase, ctx: z.RefinementCtx): void {
+  // SPEC_VALIDACIONES_RECEPTOR_v0.1 RV-01 a RV-06 y RV-08: el receptor se valida antes de encolar nada.
+  agregarErroresReceptor(ctx, revisarReceptor(input.cliente).errores, ["cliente"]);
   if (input.moneda !== "PYG") {
     if (!input.tipo_cambio) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["tipo_cambio"], message: "Con moneda extranjera el tipo de cambio es obligatorio." });

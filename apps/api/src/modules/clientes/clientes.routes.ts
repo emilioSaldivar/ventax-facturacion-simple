@@ -4,19 +4,24 @@ import { requireAuth } from "../auth/auth.middleware";
 import { getOperationalContext } from "../context/context.service";
 import { operationalContextRepository } from "../context/context.repository";
 import { validateRequest } from "../../shared/validation/validate-request";
+import { agregarErroresReceptor, revisarReceptor } from "../../shared/validation/receptor";
 import { clienteRepository } from "./clientes.repository";
 import { autocompleteClienteFromDnit, createCliente, deleteCliente, listClientes, searchClientes, updateCliente } from "./clientes.service";
 import { clienteNaturalezaTipos, documentoIdentidadTipos } from "./clientes.types";
 
-const clienteUpsertSchema = z.object({
-  documento_tipo: z.enum(documentoIdentidadTipos),
-  documento: z.string().trim().min(2).max(40),
-  razon_social: z.string().trim().min(2).max(180),
-  direccion: z.string().trim().max(220).nullable().optional(),
-  telefono: z.string().trim().max(60).nullable().optional(),
-  email: z.string().trim().email().max(180).nullable().optional(),
-  naturaleza: z.enum(clienteNaturalezaTipos).optional()
-});
+// SPEC_VALIDACIONES_RECEPTOR_v0.1 RV-01 a RV-08: formato del receptor antes de guardar en la agenda.
+export const clienteUpsertSchema = z
+  .object({
+    documento_tipo: z.enum(documentoIdentidadTipos),
+    documento: z.string().trim().min(1).max(40),
+    razon_social: z.string().trim().min(1).max(255),
+    direccion: z.string().trim().max(400).nullable().optional(),
+    telefono: z.string().trim().max(60).nullable().optional(),
+    email: z.string().trim().max(400).nullable().optional(),
+    naturaleza: z.enum(clienteNaturalezaTipos).optional()
+  })
+  .superRefine((cliente, ctx) => agregarErroresReceptor(ctx, revisarReceptor(cliente, { maxCorreo: 180 }).errores))
+  .transform((cliente) => revisarReceptor(cliente).normalizado);
 
 const searchQuerySchema = z.object({
   q: z.string().trim().min(2).max(120),
