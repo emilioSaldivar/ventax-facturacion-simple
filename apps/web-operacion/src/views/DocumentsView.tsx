@@ -27,7 +27,8 @@ export function DocumentsView({
   onCorregirFactura,
   mostrarPunto = false,
   pestanaInicial = "FACTURAS",
-  tipoCargaInicial
+  tipoCargaInicial,
+  documentoInicialId
 }: {
   onBack: () => void;
   onGoTo?: (view: OperationView) => void;
@@ -40,6 +41,8 @@ export function DocumentsView({
   pestanaInicial?: "FACTURAS" | "NOTAS_CREDITO" | "NOTAS_REMISION" | "CARGA_MASIVA";
   /** URA-004: con la pestaña de carga masiva, abre "Nueva carga" con este tipo. */
   tipoCargaInicial?: TipoDeCarga;
+  /** URA-006: abre la ficha de este documento al entrar (desde la carga masiva de Notas de remision). */
+  documentoInicialId?: string | null;
 }) {
   const api = useApi();
   const todayYmd = useMemo(() => formatYmdFromDate(new Date()), []);
@@ -147,6 +150,10 @@ export function DocumentsView({
       setLoading(false);
     }
   }
+
+  useEffect(() => {
+    if (documentoInicialId) void openDetail(documentoInicialId);
+  }, [documentoInicialId]);
 
   async function openDetail(documentoId: string) {
     setActionLoading(true);

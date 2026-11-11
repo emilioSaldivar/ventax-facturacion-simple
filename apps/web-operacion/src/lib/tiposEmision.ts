@@ -57,7 +57,8 @@ export const TIPOS_EMISION: DefinicionTipoEmision[] = [
     etiquetaSingular: "Nota de remisión",
     descripcion: "Traslado de mercadería",
     icono: "remision",
-    vista: "documents",
+    // URA-006: espacio propio (Emitidas y Por planilla).
+    vista: "remision",
     // SPEC_DOCUMENTOS_ESCRITORIO_v0.1 fase B1: hoy entra solo por planilla; la emision manual es FS-56.
     estado: (context) => (context?.carga_masiva_habilitada ? "POR_PLANILLA" : "PROXIMAMENTE")
   },

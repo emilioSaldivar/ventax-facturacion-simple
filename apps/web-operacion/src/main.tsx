@@ -34,6 +34,7 @@ import { cantidadValida, normalizeDecimalInput } from "./lib/formato";
 import { mensajeResultadoReintento, formatEmailStatus, getDocumentoNombreLower, getSimpleDocumentoEstado, esEstadoFinalOperador } from "./lib/documentos";
 import { getOperationalTitle, mapBusinessReadinessChecks } from "./lib/contexto";
 import { FORMAS_PAGO_LABELS } from "./lib/etiquetas";
+import { RemisionView } from "./views/RemisionView";
 import { StatusView } from "./views/StatusView";
 import { CreditNoteView } from "./views/CreditNoteView";
 import { LoginScreen } from "./views/LoginScreen";
@@ -675,6 +676,9 @@ function OperationHome({
   const [pestanaDocumentos, setPestanaDocumentos] = useState<"FACTURAS" | "NOTAS_CREDITO" | "NOTAS_REMISION" | "CARGA_MASIVA">("FACTURAS");
   // URA-004: el menu "Nuevo" abre la carga masiva con el tipo elegido.
   const [tipoCarga, setTipoCarga] = useState<TipoDeCarga | undefined>(undefined);
+  // URA-006: Notas de remision puede abrir "Nueva carga" y ver un documento en Documentos.
+  const [remisionNuevaCarga, setRemisionNuevaCarga] = useState(false);
+  const [documentoInicialId, setDocumentoInicialId] = useState<string | null>(null);
   // URA-019 (P-A3): Escape cierra el menu de celular.
   useEffect(() => {
     if (!menuOpen) return undefined;
@@ -776,6 +780,7 @@ function OperationHome({
     }
     setOperationView(view);
     setMenuOpen(false);
+    setDocumentoInicialId(null);
     if (avisoPerfil && view !== "status") onCerrarAvisoPerfil();
   }
 
@@ -842,7 +847,7 @@ function OperationHome({
         hint: t.tipo === "FACTURA" && numeracionDelCliente ? "Este punto emite por carga masiva" : t.descripcion,
         abrir: () => {
           if (!t.vista) return;
-          if (t.vista === "documents") abrirDocumentos(t.tipo === "NOTA_REMISION" ? "NOTAS_REMISION" : "FACTURAS");
+          if (t.vista === "remision") abrirRemision(false);
           else goTo(t.vista);
         }
       };
@@ -860,10 +865,16 @@ function OperationHome({
     { title: "Comercial", key: "comercial" },
     { title: "Administración", key: "admin" }
   ];
-  function abrirDocumentos(pestana: "FACTURAS" | "NOTAS_CREDITO" | "NOTAS_REMISION" | "CARGA_MASIVA", tipo?: TipoDeCarga) {
+  function abrirDocumentos(pestana: "FACTURAS" | "NOTAS_CREDITO" | "NOTAS_REMISION" | "CARGA_MASIVA", tipo?: TipoDeCarga, documentoId: string | null = null) {
+    goTo("documents");
+    // Despues de goTo, que limpia el documento inicial: React aplica el ultimo valor.
     setPestanaDocumentos(pestana);
     setTipoCarga(tipo);
-    goTo("documents");
+    setDocumentoInicialId(documentoId);
+  }
+  function abrirRemision(nuevaCarga: boolean) {
+    setRemisionNuevaCarga(nuevaCarga);
+    goTo("remision");
   }
   // SPEC_UX_RESTO_APP_v0.1 A.3 (URA-004): el menu "Nuevo" lista lo que se puede emitir, con el estado de cada tipo.
   const bloquesNuevo = [
@@ -880,7 +891,7 @@ function OperationHome({
           etiqueta: estado === "DISPONIBLE" ? undefined : ETIQUETA_ESTADO_TIPO[estado],
           deshabilitado: estado === "PROXIMAMENTE" || t.vista === null || bloqueado,
           onElegir: () => {
-            if (t.tipo === "NOTA_REMISION") abrirDocumentos("CARGA_MASIVA", "NOTA_REMISION");
+            if (t.tipo === "NOTA_REMISION") abrirRemision(true);
             else if (t.vista) goTo(t.vista);
           }
         };
@@ -904,8 +915,7 @@ function OperationHome({
         ]
       : [])
   ];
-  // La remision comparte la vista de Documentos: el activo es "Documentos".
-  const esActivo = (item: { clave: string; view: OperationView | null }) => item.view === operationView && item.clave !== "NOTA_REMISION";
+  const esActivo = (item: { clave: string; view: OperationView | null }) => item.view === operationView;
 
   return (
     <main className="operation-shell">
@@ -1114,6 +1124,16 @@ function OperationHome({
           onBack={() => goTo("status")}
           onVerEmitidas={() => abrirDocumentos("NOTAS_CREDITO")}
         />
+      ) : operationView === "remision" && context ? (
+        <RemisionView
+          abrirNuevaCarga={remisionNuevaCarga}
+          context={context}
+          key={remisionNuevaCarga ? "nueva" : "listado"}
+          onBack={() => goTo("status")}
+          onVerDocumento={(documentoId) => abrirDocumentos("NOTAS_REMISION", undefined, documentoId)}
+          onVerEmitidas={() => abrirDocumentos("NOTAS_REMISION")}
+          role={user?.role ?? "OPERADOR_FACTURACION"}
+        />
       ) : operationView === "documents" ? (
         <DocumentsView
           onBack={() => goTo("invoice")}
@@ -1122,7 +1142,8 @@ function OperationHome({
           role={user?.role ?? "OPERADOR_FACTURACION"}
           context={context}
           mostrarPunto={variosPerfiles}
-          key={`${pestanaDocumentos}-${tipoCarga ?? ""}`}
+          documentoInicialId={documentoInicialId}
+          key={`${pestanaDocumentos}-${tipoCarga ?? ""}-${documentoInicialId ?? ""}`}
           pestanaInicial={pestanaDocumentos}
           tipoCargaInicial={tipoCarga}
         />
@@ -3816,6 +3837,7 @@ function getOperationViewHint(value: OperationView): string {
     invoice: "Crear factura electrónica",
     clients: "Agenda de contactos",
     "credit-note": "Devolución total o parcial de una factura aprobada",
+    remision: "Traslado de mercadería",
     catalog: "Productos y servicios",
     documents: "Facturas y notas emitidas",
     notas: "Presupuestos y pedidos (no van a SIFEN)",

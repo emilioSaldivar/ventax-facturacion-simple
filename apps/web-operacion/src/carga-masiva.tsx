@@ -249,6 +249,7 @@ export function CargaMasivaView({
   contexto,
   cargaInicialId,
   tipoInicial,
+  tipoPorDefecto,
   onVerDocumento
 }: {
   api: CargaApi;
@@ -257,6 +258,8 @@ export function CargaMasivaView({
   cargaInicialId?: string | null;
   /** URA-004: el menu "Nuevo" abre "Nueva carga" con el tipo ya elegido (SPEC_UX_RESTO_APP A.3). */
   tipoInicial?: TipoDeCarga;
+  /** URA-006: tipo elegido al abrir "Nueva carga" desde el listado (Notas de remision usa NOTA_REMISION). */
+  tipoPorDefecto?: TipoDeCarga;
   onVerDocumento: (documentoId: string, cargaId: string) => void;
 }) {
   const [vista, setVista] = useState<"LISTADO" | "NUEVA" | "DETALLE">(cargaInicialId ? "DETALLE" : tipoInicial ? "NUEVA" : "LISTADO");
@@ -325,7 +328,7 @@ export function CargaMasivaView({
         <NuevaCarga
           api={api}
           contexto={contexto}
-          tipoInicial={tipoInicial}
+          tipoInicial={tipoInicial ?? tipoPorDefecto}
           onCancelar={volver}
           onDescargarPlantilla={(tipo) => void descargar(`/cargas/plantilla?tipo_documento=${tipo}`, PLANTILLA_POR_TIPO[tipo])}
           onDescargar={(ruta, nombre) => void descargar(ruta, nombre)}

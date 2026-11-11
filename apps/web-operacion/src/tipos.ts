@@ -50,7 +50,7 @@ export interface ApiErrorResponse {
 
 export type ViewState = "checking-session" | "login" | "loading-context" | "operacion" | "onboarding" | "select-perfil";
 
-export type OperationView = "status" | "invoice" | "credit-note" | "documents" | "catalog" | "clients" | "notas" | "recibos";
+export type OperationView = "status" | "invoice" | "credit-note" | "remision" | "documents" | "catalog" | "clients" | "notas" | "recibos";
 
 export type CondicionVenta = "CONTADO" | "CREDITO";
 

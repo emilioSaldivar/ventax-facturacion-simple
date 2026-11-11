@@ -405,9 +405,19 @@ async function casoMenu(browser) {
         await page.waitForTimeout(800);
         page.off("request", contar);
         check(`CA-01 ${ancho}: clic en "Próximamente" sin navegar ni pedir a la API`, pedidos === 0 && (await page.locator("main").innerText()) === antes, `pedidos=${pedidos}`);
+        // URA-006: espacio propio con "Emitidas · N" y "Por planilla" (la carga masiva con NOTA_REMISION por defecto).
         await remision.click();
-        const activa = await page.locator(".filter-tabs button.active, [role=tablist] button.active").first().innerText().catch(() => "");
-        check(`CA-02 ${ancho}: "Notas de remisión" abre Documentos en su pestaña`, /Notas de remisión/.test(activa), activa);
+        await page.getByRole("heading", { name: "Notas de remisión" }).waitFor();
+        const pestanas = await page.getByRole("group", { name: "Notas de remisión" }).innerText();
+        check(`URA-006 ${ancho}: "Notas de remisión" abre su espacio con Emitidas y Por planilla`, /Emitidas · \d+/.test(pestanas) && pestanas.includes("Por planilla"), pestanas.replace(/\s+/g, " "));
+        await page.getByRole("button", { name: "Nueva carga" }).click();
+        const tipoNr = await page.locator('select[aria-label="Tipo de documento"]').inputValue();
+        check(`URA-006 ${ancho}: "Nueva carga" desde Notas de remisión elige NOTA_REMISION`, tipoNr === "NOTA_REMISION", tipoNr);
+        await page.screenshot({ path: path.join(outDir, `${ancho}-remision.png`), fullPage: true });
+        await page.locator("nav.side-nav").getByRole("button", { name: /Notas de remisión/ }).click();
+        await page.getByRole("button", { name: /^Emitidas/ }).click();
+        const activa = await page.locator(".filter-tabs button.active").first().innerText().catch(() => "");
+        check(`URA-006 ${ancho}: "Emitidas" abre Documentos en la pestaña de remisiones`, /Notas de remisión/.test(activa), activa);
         await abrirVista(page, "Notas de crédito");
         check(`CA-03 ${ancho}: "Notas de crédito" abre la pantalla de notas de crédito`, await page.getByRole("heading", { name: "Notas de crédito" }).waitFor({ timeout: 10000 }).then(() => true, () => false));
       } else {
