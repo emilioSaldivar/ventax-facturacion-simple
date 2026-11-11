@@ -25,6 +25,12 @@ Todas las tareas estan **Pendiente** (2026-11-11). La implementacion arranca cua
 | NRE-015 | Guion `scripts/segel-fs/playwright-nota-remision.cjs` con los casos `permiso`, `motivo1`, `motivo7`, `validaciones`, `corregir`; capturas en `test-results/nota-remision/` | CA-01 a CA-04, CA-06 | corrida completa en 1440, 1280 y 390 contra el stack local; sin overflow ni emojis | Hecha (2026-11-11) |
 | NRE-016 | Regresion E1: `npm run test`, `typecheck`, `lint` de la API; `typecheck` y `build` del web; `playwright-documentos-escritorio.cjs`, `playwright-ux-resto-app.cjs`, `playwright-nc-cuerpo.cjs` | CA-08, CA-11 | todo en verde; evidencia aqui | Hecha (2026-11-11) |
 
+## Bloqueo para el despliegue (2026-11-11)
+
+| ID | Tarea | Reglas | Validacion | Estado |
+|---|---|---|---|---|
+| NRE-030 | Habilitar la remision solo con `NRE_EMIT` y numerador tipo 7 (dato del export a definir con FE) | RN-01b | vitest del mapper y del contexto; Playwright `permiso` con las dos condiciones | Pendiente: esperando respuesta de FE |
+
 ## Entrega E2 — datos reutilizables y agenda
 
 | ID | Tarea | Reglas | Validacion | Estado |
