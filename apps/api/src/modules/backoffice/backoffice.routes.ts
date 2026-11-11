@@ -9,6 +9,9 @@ import { importRepository } from "./import/import.repository";
 import { applyFacturadorImport, previewFacturadorImport } from "./import/import.service";
 import {
   assignBackofficeOperationConfig,
+  addBackofficeOperationConfig,
+  listBackofficeOperationConfigs,
+  removeBackofficeOperationConfig,
   createBackofficeUser,
   listPlanes,
   createTenant,
@@ -574,6 +577,32 @@ backofficeRouter.post("/backoffice/users/:userId/reset-password", ...auth, valid
   } catch (e) { next(e); }
 });
 
+// SPEC_MULTIPERFIL_USUARIO_v0.1 §E.5: varias configuraciones por usuario.
+const operationConfigParams = z.object({ userId: z.string().uuid(), configId: z.string().uuid() });
+
+backofficeRouter.get("/backoffice/users/:userId/operation-config", ...auth, validateRequest("params", userIdParam), async (req, res, next) => {
+  try {
+    const { userId } = req.params as z.infer<typeof userIdParam>;
+    res.json(await listBackofficeOperationConfigs(userId, backofficeRepository));
+  } catch (e) { next(e); }
+});
+
+backofficeRouter.post("/backoffice/users/:userId/operation-config", ...auth, validateRequest("params", userIdParam), validateRequest("body", operationConfigSchema), async (req, res, next) => {
+  try {
+    const { userId } = req.params as z.infer<typeof userIdParam>;
+    res.status(201).json(await addBackofficeOperationConfig(userId, req.body, backofficeRepository));
+  } catch (e) { next(e); }
+});
+
+backofficeRouter.delete("/backoffice/users/:userId/operation-config/:configId", ...auth, validateRequest("params", operationConfigParams), async (req, res, next) => {
+  try {
+    const { userId, configId } = req.params as z.infer<typeof operationConfigParams>;
+    await removeBackofficeOperationConfig(userId, configId, backofficeRepository);
+    res.status(204).send();
+  } catch (e) { next(e); }
+});
+
+/** @deprecated SPEC_MULTIPERFIL_USUARIO_v0.1 §D.6: reemplaza todas por una; usar POST y DELETE. */
 backofficeRouter.put("/backoffice/users/:userId/operation-config", ...auth, validateRequest("params", userIdParam), validateRequest("body", operationConfigSchema), async (req, res, next) => {
   try {
     const { userId } = req.params as z.infer<typeof userIdParam>;

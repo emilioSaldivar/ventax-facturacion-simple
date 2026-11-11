@@ -37,6 +37,10 @@ export interface BackofficeOperationConfigInput {
 export interface BackofficeOperationConfigResponse extends BackofficeOperationConfigInput {
   user_id: string;
   active: boolean;
+  /** SPEC_MULTIPERFIL_USUARIO_v0.1 §D: id de usuario_operacion_config, para quitarla. */
+  id?: string;
+  titulo_operativo?: string | null;
+  numeracion_facturas?: "SERVICIO" | "CLIENTE";
 }
 
 export interface BackofficeUserResponse {
@@ -251,7 +255,10 @@ export interface BackofficeContextoResponse {
 }
 
 export interface BackofficeUserDetailResponse extends BackofficeUserResponse {
+  /** La primera configuracion activa (compatibilidad, SPEC_MULTIPERFIL_USUARIO_v0.1 §E.6). */
   operation_config: BackofficeOperationConfigResponse | null;
+  /** Todas las configuraciones activas; solo en el detalle del usuario. */
+  operation_configs?: BackofficeOperationConfigResponse[];
 }
 
 export interface BackofficeReadinessChecks {
@@ -317,10 +324,16 @@ export interface BackofficeRepository {
     userId: string;
     passwordHash: string;
   }): Promise<Omit<BackofficeUserResponse, "temporary_password"> | null>;
+  /** @deprecated SPEC_MULTIPERFIL_USUARIO_v0.1 §D.6: reemplaza todas por una. Usar add/remove. */
   assignOperationConfig(input: {
     userId: string;
     data: BackofficeOperationConfigInput;
   }): Promise<BackofficeOperationConfigResponse | null>;
+  listOperationConfigs(userId: string): Promise<BackofficeOperationConfigResponse[]>;
+  /** null si el usuario o la configuracion no existen. */
+  addOperationConfig(input: { userId: string; data: BackofficeOperationConfigInput }): Promise<BackofficeOperationConfigResponse[] | null>;
+  /** null si la configuracion no es del usuario o ya no esta activa. */
+  removeOperationConfig(input: { userId: string; configId: string }): Promise<BackofficeOperationConfigResponse[] | null>;
 
   // Planes
   listPlanes(): Promise<BackofficePlanResponse[]>;

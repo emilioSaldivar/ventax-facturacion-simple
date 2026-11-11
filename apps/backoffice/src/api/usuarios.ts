@@ -10,6 +10,10 @@ export interface UserOperationConfig {
   perfil_emision_codigo: string;
   actividad_economica_codigo: string;
   active: boolean;
+  /** SPEC_MULTIPERFIL_USUARIO_v0.1: id de la configuracion, para quitarla. */
+  id?: string;
+  titulo_operativo?: string | null;
+  numeracion_facturas?: "SERVICIO" | "CLIENTE";
 }
 
 export interface BackofficeUser {
@@ -20,6 +24,8 @@ export interface BackofficeUser {
   active: boolean;
   temporary_password?: string;
   operation_config: UserOperationConfig | null;
+  /** SPEC_MULTIPERFIL_USUARIO_v0.1 §E.6: todas las configuraciones activas (solo en el detalle). */
+  operation_configs?: UserOperationConfig[];
 }
 
 /** Configuracion operativa dentro del alta (alta guiada): sin tenant_id, se deriva del usuario. */
@@ -87,6 +93,17 @@ export function resetPassword(id: string, input: UserPasswordResetInput): Promis
   return apiPost<BackofficeUser>(`/backoffice/users/${id}/reset-password`, input);
 }
 
+/** SPEC_MULTIPERFIL_USUARIO_v0.1 §D.1: agrega un punto sin tocar los demas. */
+export function addOperationConfig(id: string, input: OperationConfigInput): Promise<{ items: UserOperationConfig[] }> {
+  return apiPost<{ items: UserOperationConfig[] }>(`/backoffice/users/${id}/operation-config`, input);
+}
+
+/** SPEC_MULTIPERFIL_USUARIO_v0.1 §D.2: quita un punto (revoca las sesiones abiertas con el). */
+export function removeOperationConfig(id: string, configId: string): Promise<void> {
+  return apiDelete(`/backoffice/users/${id}/operation-config/${configId}`);
+}
+
+/** @deprecated SPEC_MULTIPERFIL_USUARIO_v0.1 §D.6: reemplaza todas por una. */
 export function assignOperationConfig(id: string, input: OperationConfigInput): Promise<UserOperationConfig> {
   return apiPut<UserOperationConfig>(`/backoffice/users/${id}/operation-config`, input);
 }

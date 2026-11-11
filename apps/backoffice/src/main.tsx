@@ -38,9 +38,11 @@ import {
   createUser,
   updateUser,
   resetPassword,
-  assignOperationConfig,
+  addOperationConfig,
+  removeOperationConfig,
   deleteUser,
   type BackofficeUser,
+  type UserOperationConfig,
 } from "./api/usuarios";
 import { listPlanes, type Plan } from "./api/planes";
 import { Layout } from "./components/Layout";
@@ -2798,20 +2800,37 @@ function UserDetailView({ userId, onNavigate }: { userId: string; onNavigate: (v
       .finally(() => setLoadingContextos(false));
   }, [configFacturadorId]);
 
-  // Cuando los contextos cargan, intenta auto-seleccionar si hay config existente
-  useEffect(() => {
-    if (!contextos.length || configContextoId) return;
-    const cfg = user?.operation_config;
-    if (!cfg || cfg.facturador_id !== configFacturadorId) return;
-    const match = contextos.find(
-      (c) =>
+  // SPEC_MULTIPERFIL_USUARIO_v0.1 §D.1: el formulario agrega un punto; los ya asignados no se ofrecen.
+  const configsActivas: UserOperationConfig[] = user?.operation_configs ?? (user?.operation_config ? [user.operation_config] : []);
+  const yaAsignado = (c: Contexto) =>
+    configsActivas.some(
+      (cfg) =>
+        cfg.facturador_id === configFacturadorId &&
         c.establecimiento.codigo === cfg.establecimiento &&
         c.punto_expedicion.codigo === cfg.punto_expedicion &&
         c.perfil_emision.codigo === cfg.perfil_emision_codigo &&
         c.actividad.codigo === cfg.actividad_economica_codigo
     );
-    if (match) setConfigContextoId(match.id);
-  }, [contextos, user, configFacturadorId]);
+  const [quitandoId, setQuitandoId] = useState<string | null>(null);
+
+  async function quitarConfig(cfg: UserOperationConfig) {
+    if (!cfg.id) return;
+    const ultima = configsActivas.length === 1;
+    const texto = ultima
+      ? "Quitar este punto de expedicion? El usuario quedara sin configuracion operativa y no podra facturar."
+      : `Quitar el punto ${cfg.establecimiento}-${cfg.punto_expedicion}? Las sesiones abiertas con ese punto se cierran.`;
+    if (!window.confirm(texto)) return;
+    setQuitandoId(cfg.id);
+    setError(null);
+    try {
+      await removeOperationConfig(userId, cfg.id);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error quitando el punto de expedicion.");
+    } finally {
+      setQuitandoId(null);
+    }
+  }
 
   async function load() {
     setLoading(true);
@@ -2882,7 +2901,7 @@ function UserDetailView({ userId, onNavigate }: { userId: string; onNavigate: (v
     setConfigSaving(true);
     setError(null);
     try {
-      await assignOperationConfig(userId, {
+      await addOperationConfig(userId, {
         tenant_id: configTenantId,
         facturador_id: facturador.id,
         emisor_id: facturador.emisor_id,
@@ -2894,7 +2913,7 @@ function UserDetailView({ userId, onNavigate }: { userId: string; onNavigate: (v
       setConfigMode(false);
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Error asignando configuracion operativa.");
+      setError(err instanceof Error ? err.message : "Error agregando el punto de expedicion.");
     } finally {
       setConfigSaving(false);
     }
@@ -2968,26 +2987,67 @@ function UserDetailView({ userId, onNavigate }: { userId: string; onNavigate: (v
       <div className="panel">
         <div className="panel-header">
           <h2 className="panel-title">Configuracion operativa</h2>
-          <button className="btn" onClick={() => setConfigMode(!configMode)} type="button">
-            {configMode ? "Cancelar" : (user.operation_config ? "Editar" : "Asignar")}
+          <button
+            className="btn"
+            onClick={() => {
+              if (!configMode) setConfigContextoId("");
+              setConfigMode(!configMode);
+            }}
+            type="button"
+          >
+            {configMode ? "Cancelar" : configsActivas.length > 0 ? "Agregar punto de expedicion" : "Asignar"}
           </button>
         </div>
 
-        {!configMode && !user.operation_config ? (
+        {configsActivas.length === 0 ? (
           <div className="empty-state">Sin configuracion operativa asignada.</div>
-        ) : null}
-
-        {!configMode && user.operation_config ? (
-          <dl className="detail-grid">
-            <div className="detail-item"><dt>Tenant ID</dt><dd className="monospace" style={{ fontSize: 11 }}>{user.operation_config.tenant_id}</dd></div>
-            <div className="detail-item"><dt>Facturador ID</dt><dd className="monospace" style={{ fontSize: 11 }}>{user.operation_config.facturador_id}</dd></div>
-            <div className="detail-item"><dt>Emisor ID</dt><dd className="monospace">{user.operation_config.emisor_id}</dd></div>
-            <div className="detail-item"><dt>Establecimiento</dt><dd>{user.operation_config.establecimiento}</dd></div>
-            <div className="detail-item"><dt>Punto expedicion</dt><dd>{user.operation_config.punto_expedicion}</dd></div>
-            <div className="detail-item"><dt>Perfil emision</dt><dd>{user.operation_config.perfil_emision_codigo}</dd></div>
-            <div className="detail-item"><dt>Actividad economica</dt><dd>{user.operation_config.actividad_economica_codigo}</dd></div>
-          </dl>
-        ) : null}
+        ) : (
+          <>
+            {/* SPEC_MULTIPERFIL_USUARIO_v0.1 §D.1: una fila por punto de expedicion asignado. */}
+            <table className="table" aria-label="Puntos de expedicion del usuario">
+              <thead>
+                <tr>
+                  <th>Establecimiento</th>
+                  <th>Punto</th>
+                  <th>Perfil</th>
+                  <th>Actividad</th>
+                  <th>Titulo operativo</th>
+                  <th>Numeracion</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {configsActivas.map((cfg) => (
+                  <tr key={cfg.id ?? `${cfg.establecimiento}-${cfg.punto_expedicion}-${cfg.perfil_emision_codigo}`}>
+                    <td>{cfg.establecimiento}</td>
+                    <td>{cfg.punto_expedicion}</td>
+                    <td className="monospace">{cfg.perfil_emision_codigo}</td>
+                    <td>{cfg.actividad_economica_codigo}</td>
+                    <td>{cfg.titulo_operativo ?? "-"}</td>
+                    <td>{cfg.numeracion_facturas === "CLIENTE" ? "Del cliente" : "Del servicio"}</td>
+                    <td>
+                      {cfg.id ? (
+                        <button
+                          className="btn btn-sm"
+                          disabled={quitandoId !== null}
+                          onClick={() => void quitarConfig(cfg)}
+                          type="button"
+                        >
+                          {quitandoId === cfg.id ? "Quitando..." : "Quitar"}
+                        </button>
+                      ) : null}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <p className="muted" style={{ fontSize: 12, marginTop: 8 }}>
+              Todas las configuraciones de un usuario son del mismo facturador (un RUC y un timbrado). Para otro
+              facturador, el cliente necesita otro usuario y otro correo. Con mas de un punto, el operador elige el
+              punto al iniciar sesion.
+            </p>
+          </>
+        )}
 
         {configMode ? (
           <form className="form" onSubmit={(e) => void saveConfig(e)}>
@@ -2996,6 +3056,7 @@ function UserDetailView({ userId, onNavigate }: { userId: string; onNavigate: (v
               <select
                 value={configTenantId}
                 onChange={(e) => { setConfigTenantId(e.target.value); setConfigFacturadorId(""); setConfigContextoId(""); }}
+                disabled={configsActivas.length > 0}
                 required
               >
                 <option value="">Seleccionar tenant...</option>
@@ -3010,7 +3071,7 @@ function UserDetailView({ userId, onNavigate }: { userId: string; onNavigate: (v
               <select
                 value={configFacturadorId}
                 onChange={(e) => { setConfigFacturadorId(e.target.value); setConfigContextoId(""); }}
-                disabled={!configTenantId || loadingFacturadores}
+                disabled={!configTenantId || loadingFacturadores || configsActivas.length > 0}
                 required
               >
                 <option value="">
@@ -3035,7 +3096,7 @@ function UserDetailView({ userId, onNavigate }: { userId: string; onNavigate: (v
                 <option value="">
                   {!configFacturadorId ? "Seleccionar facturador primero..." : loadingContextos ? "Cargando..." : "Seleccionar contexto..."}
                 </option>
-                {contextos.map((c) => (
+                {contextos.filter((c) => !yaAsignado(c)).map((c) => (
                   <option key={c.id} value={c.id}>{contextoLabel(c)}</option>
                 ))}
               </select>
@@ -3059,7 +3120,7 @@ function UserDetailView({ userId, onNavigate }: { userId: string; onNavigate: (v
 
             <div className="form-actions">
               <button className="btn btn-primary" disabled={configSaving || !canSubmitConfig} type="submit">
-                {configSaving ? "Guardando..." : "Guardar configuracion"}
+                {configSaving ? "Guardando..." : configsActivas.length > 0 ? "Agregar punto" : "Guardar configuracion"}
               </button>
             </div>
           </form>

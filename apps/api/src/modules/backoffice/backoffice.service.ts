@@ -84,6 +84,24 @@ export async function resetBackofficeUserPassword(
   return { ...user, temporary_password: temporaryPassword };
 }
 
+// ─── SPEC_MULTIPERFIL_USUARIO_v0.1 §D: varias configuraciones por usuario ─────
+
+export async function listBackofficeOperationConfigs(userId: string, repository: BackofficeRepository) {
+  return { items: await repository.listOperationConfigs(userId) };
+}
+
+export async function addBackofficeOperationConfig(userId: string, input: BackofficeOperationConfigInput, repository: BackofficeRepository) {
+  const items = await repository.addOperationConfig({ userId, data: normalizeOperationConfig(input) });
+  if (!items) throw new HttpError(404, "NOT_FOUND", "Usuario o configuracion operativa no encontrada.");
+  return { items };
+}
+
+export async function removeBackofficeOperationConfig(userId: string, configId: string, repository: BackofficeRepository) {
+  const items = await repository.removeOperationConfig({ userId, configId });
+  if (!items) throw new HttpError(404, "NOT_FOUND", "Configuracion operativa no encontrada para el usuario.");
+  return { items };
+}
+
 export async function assignBackofficeOperationConfig(
   userId: string,
   input: BackofficeOperationConfigInput,

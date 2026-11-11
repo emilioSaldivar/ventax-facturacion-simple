@@ -140,6 +140,78 @@ describeDb("multiperfil: base de datos (integracion)", () => {
     }
   });
 
+  it("backoffice: quitar, agregar, duplicado y otro facturador (MPU-013, CA-07)", async () => {
+    const { backofficeRepository } = await import("../src/modules/backoffice/backoffice.repository");
+    const datos = await fila<{ emisor_id: string; est: string; pto: string; perfil: string; act: string }>(
+      `select f.emisor_id, e.codigo as est, p.codigo as pto, pe.codigo as perfil, a.codigo as act
+         from actividad_punto_perfiles app
+         join facturadores f on f.id = app.facturador_id
+         join facturador_establecimientos e on e.id = app.establecimiento_id
+         join facturador_puntos_expedicion p on p.id = app.punto_expedicion_id
+         join facturador_perfiles_emision pe on pe.id = app.perfil_emision_id
+         join facturador_actividades a on a.id = app.actividad_id
+        where app.id = $1`,
+      [perfilNuevo]
+    );
+    const input = {
+      tenant_id: tenantId,
+      facturador_id: facturadorId,
+      emisor_id: datos.emisor_id,
+      establecimiento: datos.est,
+      punto_expedicion: datos.pto,
+      perfil_emision_codigo: datos.perfil,
+      actividad_economica_codigo: datos.act
+    };
+
+    // Quitar revoca los refresh emitidos con esa configuracion (D-9).
+    const hash = `it-mpu-bo-${Date.now()}`;
+    tokens.push(hash);
+    await authRepo.createRefreshToken({ userId: usuarioId, tokenHash: hash, expiresAt: new Date(Date.now() + 3600_000), operacionConfigId: configNueva });
+    const trasQuitar = await backofficeRepository.removeOperationConfig({ userId: usuarioId, configId: configNueva });
+    expect(trasQuitar?.map((c) => c.id)).toEqual([configOriginal]);
+    expect((await fila<{ revoked_at: Date | null }>("select revoked_at from refresh_tokens where token_hash = $1", [hash])).revoked_at).not.toBeNull();
+    expect(await backofficeRepository.removeOperationConfig({ userId: usuarioId, configId: configNueva })).toBeNull();
+
+    // Agregar de nuevo el mismo punto: entra sin desactivar el otro.
+    const trasAgregar = await backofficeRepository.addOperationConfig({ userId: usuarioId, data: input });
+    expect(trasAgregar).toHaveLength(2);
+    configNueva = trasAgregar!.find((c) => c.id !== configOriginal)!.id;
+    expect(trasAgregar!.every((c) => c.titulo_operativo)).toBe(true);
+
+    // Duplicado: 409.
+    await expect(backofficeRepository.addOperationConfig({ userId: usuarioId, data: input })).rejects.toMatchObject({ statusCode: 409 });
+
+    // Detalle: una fila por usuario y la lista completa.
+    const detalle = await backofficeRepository.getUserDetail(usuarioId);
+    expect(detalle?.operation_configs).toHaveLength(2);
+    const listado = await backofficeRepository.listUsers({ tenant_id: tenantId, limit: 200 } as never);
+    expect(listado.filter((u) => u.id === usuarioId)).toHaveLength(1);
+
+    // Otro facturador: un usuario temporal que ya opera para un facturador ficticio.
+    const otroFact = await fila<{ id: string }>(
+      `insert into facturadores (tenant_id, emisor_id, razon_social, ruc, activo) values ($1, '99999999-9', 'OTRO FACTURADOR IT', '99999999-9', true) returning id`,
+      [tenantId]
+    );
+    const temp = await fila<{ id: string }>(
+      `insert into usuarios (tenant_id, username, password_hash) values ($1, $2, 'x') returning id`,
+      [tenantId, `it-mpu-${Date.now()}@segel.invalid`]
+    );
+    try {
+      await pool.query(
+        `insert into usuario_operacion_config (tenant_id, usuario_id, facturador_id, actividad_punto_perfil_id, activo) values ($1, $2, $3, $4, true)`,
+        [tenantId, temp.id, otroFact.id, perfilNuevo]
+      );
+      await expect(backofficeRepository.addOperationConfig({ userId: temp.id, data: input })).rejects.toMatchObject({
+        statusCode: 422,
+        details: { motivo: "FACTURADOR_DISTINTO" }
+      });
+    } finally {
+      await pool.query("delete from usuario_operacion_config where usuario_id = $1", [temp.id]);
+      await pool.query("delete from usuarios where id = $1", [temp.id]);
+      await pool.query("delete from facturadores where id = $1", [otroFact.id]);
+    }
+  });
+
   it("el indice impide repetir el mismo perfil activo y el disparador otro facturador (RN-01)", async () => {
     await expect(
       pool.query(

@@ -384,8 +384,15 @@ const USER_DETAIL_SELECT = `
   from usuarios u
   left join usuario_roles ur on ur.usuario_id = u.id
   left join roles r on r.id = ur.role_id and r.activo = true and r.deleted_at is null
-  left join usuario_operacion_config uoc
-    on uoc.usuario_id = u.id and uoc.activo = true and uoc.deleted_at is null
+  -- SPEC_MULTIPERFIL_USUARIO_v0.1: un usuario puede tener varias configuraciones; aca va la
+  -- primera, para no duplicar la fila del usuario. La lista completa sale de listOperationConfigs.
+  left join lateral (
+    select x.*
+      from usuario_operacion_config x
+     where x.usuario_id = u.id and x.activo = true and x.deleted_at is null
+     order by x.created_at, x.id
+     limit 1
+  ) uoc on true
   left join actividad_punto_perfiles app
     on app.id = uoc.actividad_punto_perfil_id and app.deleted_at is null
   left join facturadores f on f.id = uoc.facturador_id and f.deleted_at is null
@@ -524,6 +531,114 @@ export class PgBackofficeRepository implements BackofficeRepository {
     return { tenant_id: row.tenant_id, facturador_id: row.facturador_id, actividad_punto_perfil_id: row.actividad_punto_perfil_id };
   }
 
+  /** SPEC_MULTIPERFIL_USUARIO_v0.1 §D.1: todas las configuraciones activas del usuario. */
+  async listOperationConfigs(userId: string, client: Queryable = pool): Promise<BackofficeOperationConfigResponse[]> {
+    const result = await client.query<OperationConfigRow & { id: string; titulo_operativo: string | null; numeracion_facturas: "SERVICIO" | "CLIENTE" }>(
+      `select uoc.id, uoc.usuario_id as user_id, uoc.tenant_id, uoc.facturador_id, f.emisor_id,
+              e.codigo as establecimiento, p.codigo as punto_expedicion,
+              pe.codigo as perfil_emision_codigo, a.codigo as actividad_economica_codigo, uoc.activo as active,
+              coalesce(nullif(trim(app.alias_operativo), ''), nullif(trim(f.nombre_fantasia), ''), nullif(trim(a.alias_operativo), ''), a.descripcion, f.razon_social) as titulo_operativo,
+              app.numeracion_facturas
+       from usuario_operacion_config uoc
+       join facturadores f on f.id = uoc.facturador_id
+       join actividad_punto_perfiles app on app.id = uoc.actividad_punto_perfil_id
+       join facturador_establecimientos e on e.id = app.establecimiento_id
+       join facturador_puntos_expedicion p on p.id = app.punto_expedicion_id
+       join facturador_perfiles_emision pe on pe.id = app.perfil_emision_id
+       join facturador_actividades a on a.id = app.actividad_id
+       where uoc.usuario_id = $1 and uoc.activo = true and uoc.deleted_at is null
+       order by e.codigo, p.codigo, pe.codigo`,
+      [userId]
+    );
+    return result.rows.map((row) => ({
+      ...mapOperationConfigRow(row),
+      id: row.id,
+      titulo_operativo: row.titulo_operativo,
+      numeracion_facturas: row.numeracion_facturas
+    }));
+  }
+
+  /**
+   * SPEC_MULTIPERFIL_USUARIO_v0.1 §D.1 y RN-01: agrega una configuracion sin tocar las demas.
+   * Otro facturador → 422 FACTURADOR_DISTINTO; el mismo perfil ya activo → 409.
+   */
+  async addOperationConfig(input: { userId: string; data: BackofficeOperationConfigInput }): Promise<BackofficeOperationConfigResponse[] | null> {
+    const client = await pool.connect();
+    try {
+      await client.query("begin");
+      const match = await this.resolveOperationConfigTarget(client, {
+        userId: input.userId,
+        tenantId: input.data.tenant_id,
+        data: input.data
+      });
+      if (!match) { await client.query("rollback"); return null; }
+      const actual = await client.query<{ facturador_id: string; razon_social: string }>(
+        `select uoc.facturador_id, f.razon_social
+           from usuario_operacion_config uoc join facturadores f on f.id = uoc.facturador_id
+          where uoc.usuario_id = $1 and uoc.activo = true and uoc.deleted_at is null
+          order by uoc.created_at limit 1`,
+        [input.userId]
+      );
+      const otro = actual.rows[0];
+      if (otro && otro.facturador_id !== match.facturador_id) {
+        throw new HttpError(
+          422,
+          "VALIDATION_ERROR",
+          `El usuario ya opera para ${otro.razon_social}. Todas sus configuraciones son del mismo facturador: quita las existentes antes de asignarle otro.`,
+          { motivo: "FACTURADOR_DISTINTO", facturador_actual: otro.razon_social }
+        );
+      }
+      try {
+        await client.query(
+          `insert into usuario_operacion_config (tenant_id, usuario_id, facturador_id, actividad_punto_perfil_id, activo)
+           values ($1, $2, $3, $4, true)`,
+          [match.tenant_id, input.userId, match.facturador_id, match.actividad_punto_perfil_id]
+        );
+      } catch (error) {
+        if (isUniqueViolation(error)) {
+          throw new HttpError(409, "CONFLICT", "El usuario ya tiene ese punto de expedicion.", { motivo: "PERFIL_YA_ASIGNADO" });
+        }
+        throw error;
+      }
+      const lista = await this.listOperationConfigs(input.userId, client);
+      await client.query("commit");
+      return lista;
+    } catch (error) {
+      // Rollback siempre: resolveOperationConfigTarget puede lanzar con la transaccion abierta.
+      await client.query("rollback").catch(() => undefined);
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  /** SPEC_MULTIPERFIL_USUARIO_v0.1 §D.2 y D-9: quita una configuracion y revoca los refresh emitidos con ella. */
+  async removeOperationConfig(input: { userId: string; configId: string }): Promise<BackofficeOperationConfigResponse[] | null> {
+    const client = await pool.connect();
+    try {
+      await client.query("begin");
+      const quitada = await client.query<{ id: string }>(
+        `update usuario_operacion_config set activo = false, deleted_at = now(), updated_at = now()
+          where id = $2 and usuario_id = $1 and activo = true and deleted_at is null returning id`,
+        [input.userId, input.configId]
+      );
+      if (!quitada.rows[0]) { await client.query("rollback"); return null; }
+      await client.query(
+        `update refresh_tokens set revoked_at = now() where operacion_config_id = $1 and revoked_at is null`,
+        [input.configId]
+      );
+      const lista = await this.listOperationConfigs(input.userId, client);
+      await client.query("commit");
+      return lista;
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  /** @deprecated SPEC_MULTIPERFIL_USUARIO_v0.1 §D.6: reemplaza todas las configuraciones por esta. */
   async assignOperationConfig(input: { userId: string; data: BackofficeOperationConfigInput }): Promise<BackofficeOperationConfigResponse | null> {
     const client = await pool.connect();
     try {
@@ -723,7 +838,8 @@ export class PgBackofficeRepository implements BackofficeRepository {
          where app.activo = true and app.deleted_at is null
        ),
        usr as (
-         select count(*) as usuarios_operativos
+         -- SPEC_MULTIPERFIL_USUARIO_v0.1 §D.5: usuarios distintos, no configuraciones.
+         select count(distinct uoc.usuario_id) as usuarios_operativos
          from usuario_operacion_config uoc join f on uoc.facturador_id = f.id
          -- RN-35: un usuario sobre un contexto inactivo no puede emitir; no cuenta.
          join actividad_punto_perfiles app on app.id = uoc.actividad_punto_perfil_id
@@ -1097,7 +1213,8 @@ export class PgBackofficeRepository implements BackofficeRepository {
       `${USER_DETAIL_SELECT} where u.id = $1 and u.deleted_at is null`,
       [userId]
     );
-    return result.rows[0] ? mapUserDetailRow(result.rows[0]) : null;
+    if (!result.rows[0]) return null;
+    return { ...mapUserDetailRow(result.rows[0]), operation_configs: await this.listOperationConfigs(userId) };
   }
 
   async updateUser(userId: string, input: BackofficeUserUpdateInput): Promise<BackofficeUserDetailResponse | null> {
