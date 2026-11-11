@@ -354,8 +354,9 @@ async function casoPuntos(browser) {
       check("CA-14 390 Documentos: las tarjetas muestran el numero con su punto", conPunto.length > 0 && conPunto.length === numeros.filter((t) => /\d{7}/.test(t)).length, numeros.slice(0, 3).join(" | "));
       await page.locator(".document-row-main, button.document-row").first().click();
       await page.getByRole("button", { name: /Volver a resultados/ }).waitFor();
-      const ficha = await page.locator(".documents-view").innerText();
-      check("CA-14 390 ficha: numero con su punto", /Número \d{3}-\d{3}-\d{7}/.test(ficha), (ficha.match(/Número [^\n]*/) ?? [""])[0]);
+      // URA-007: el numero con su punto esta en el titulo de la ficha.
+      const tituloFicha = await page.locator(".document-ficha h3").first().innerText();
+      check("CA-14 390 ficha: numero con su punto", /\d{3}-\d{3}-\d{7}/.test(tituloFicha), tituloFicha);
 
       await abrirVista(page, "Notas de crédito");
       await page.locator("button.document-row").first().waitFor();
