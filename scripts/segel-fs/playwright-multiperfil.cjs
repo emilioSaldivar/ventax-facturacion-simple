@@ -254,8 +254,11 @@ async function esperarDocumentoFinal(page, documentoId) {
     check("RN-13: la auditoria no contiene la contraseña", sql("select count(*) from audit_events where usuario_id = $1 and metadata::text like $2", uid, `%${clave}%`) === "0");
     await page.screenshot({ path: path.join(outDir, "1440-cambiado-001.png"), fullPage: true });
 
-    // Paso 13: NC por 001-001 sobre la factura de 001-002 (D-1).
-    if (aprobada) {
+    // Paso 13: NC por 001-001 sobre la factura de 001-002 (D-1). MPU_SIN_NC=1 lo omite en las regresiones (ya validado:
+    // NC 1010024 aprobada en SIFEN test; repetirlo emitiria otra NC sobre una factura ya acreditada).
+    if (process.env.MPU_SIN_NC === "1") {
+      check("Paso 13: NC omitida por MPU_SIN_NC (validada en la v0.1)", true);
+    } else if (aprobada) {
       await abrirVista(page, "Devolver factura");
       await page.getByPlaceholder("Cliente, documento, numero o total").fill(fNumero.slice(-7));
       await page.getByRole("button", { name: "Buscar" }).click();
