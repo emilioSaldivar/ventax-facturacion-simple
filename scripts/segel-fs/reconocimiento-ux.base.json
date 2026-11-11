@@ -1,5 +1,5 @@
 {
-  "generado": "2026-11-11T04:21:07.072Z",
+  "generado": "2026-11-11T08:17:55.726Z",
   "app": "http://127.0.0.1:18492/app/",
   "nota": "Totales por ancho del guion de reconocimiento (PLAN_UX_RESTO_APP_v0.1 §11). Se reescribe solo cuando bajan.",
   "totales": {
@@ -10,7 +10,7 @@
       "camposSinEtiqueta": 0,
       "chicos": 0,
       "camposChicos": 0,
-      "sinTilde": 8,
+      "sinTilde": 0,
       "consola": 0,
       "pantallas": 13,
       "errores": 0
@@ -22,7 +22,7 @@
       "camposSinEtiqueta": 0,
       "chicos": 0,
       "camposChicos": 0,
-      "sinTilde": 7,
+      "sinTilde": 0,
       "consola": 0,
       "pantallas": 12,
       "errores": 0
@@ -34,7 +34,7 @@
       "camposSinEtiqueta": 0,
       "chicos": 0,
       "camposChicos": 0,
-      "sinTilde": 7,
+      "sinTilde": 0,
       "consola": 0,
       "pantallas": 12,
       "errores": 0
