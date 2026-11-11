@@ -5,6 +5,8 @@ import "./styles.css";
 import { useConfirmar } from "./components/Dialogo";
 import { Icono, type NombreIcono } from "./components/Icono";
 import { MenuFila } from "./components/MenuFila";
+import { MenuNuevo } from "./components/MenuNuevo";
+import type { TipoDeCarga } from "./carga-masiva";
 import { PastillaEstado } from "./components/PastillaEstado";
 import { hayBorradorSinEmitir, useBorradorSinEmitir } from "./lib/borradores";
 import { numeroCorrelativo } from "./lib/formato";
@@ -668,7 +670,9 @@ function OperationHome({
   const abrirCambioPerfil = () => setCambioPerfil({ sinEmitir: hayBorradorSinEmitir() });
   const [menuOpen, setMenuOpen] = useState(false);
   // URA-003: "Notas de remisión" (por planilla) abre Documentos en su pestaña hasta que tenga espacio propio (URA-006).
-  const [pestanaDocumentos, setPestanaDocumentos] = useState<"FACTURAS" | "NOTAS_REMISION">("FACTURAS");
+  const [pestanaDocumentos, setPestanaDocumentos] = useState<"FACTURAS" | "NOTAS_REMISION" | "CARGA_MASIVA">("FACTURAS");
+  // URA-004: el menu "Nuevo" abre la carga masiva con el tipo elegido.
+  const [tipoCarga, setTipoCarga] = useState<TipoDeCarga | undefined>(undefined);
   // URA-019 (P-A3): Escape cierra el menu de celular.
   useEffect(() => {
     if (!menuOpen) return undefined;
@@ -836,12 +840,12 @@ function OperationHome({
         hint: t.tipo === "FACTURA" && numeracionDelCliente ? "Este punto emite por carga masiva" : t.descripcion,
         abrir: () => {
           if (!t.vista) return;
-          setPestanaDocumentos(t.tipo === "NOTA_REMISION" ? "NOTAS_REMISION" : "FACTURAS");
-          goTo(t.vista);
+          if (t.vista === "documents") abrirDocumentos(t.tipo === "NOTA_REMISION" ? "NOTAS_REMISION" : "FACTURAS");
+          else goTo(t.vista);
         }
       };
     }),
-    { clave: "documents", label: "Documentos", view: "documents", icon: "documentos", group: "consultar", hint: getOperationViewHint("documents"), abrir: () => { setPestanaDocumentos("FACTURAS"); goTo("documents"); } },
+    { clave: "documents", label: "Documentos", view: "documents", icon: "documentos", group: "consultar", hint: getOperationViewHint("documents"), abrir: () => abrirDocumentos("FACTURAS") },
     { clave: "clients", label: "Agenda / Clientes", view: "clients", icon: "agenda", group: "consultar", hint: getOperationViewHint("clients"), abrir: () => goTo("clients") },
     { clave: "catalog", label: "Catálogo", view: "catalog", icon: "catalogo", group: "consultar", hint: getOperationViewHint("catalog"), abrir: () => goTo("catalog") },
     { clave: "notas", label: "Presupuestos / Pedidos", view: "notas", icon: "notas", group: "comercial", hint: getOperationViewHint("notas"), abrir: () => goTo("notas") },
@@ -853,6 +857,50 @@ function OperationHome({
     { title: "Consultar", key: "consultar" },
     { title: "Comercial", key: "comercial" },
     { title: "Administración", key: "admin" }
+  ];
+  function abrirDocumentos(pestana: "FACTURAS" | "NOTAS_REMISION" | "CARGA_MASIVA", tipo?: TipoDeCarga) {
+    setPestanaDocumentos(pestana);
+    setTipoCarga(tipo);
+    goTo("documents");
+  }
+  // SPEC_UX_RESTO_APP_v0.1 A.3 (URA-004): el menu "Nuevo" lista lo que se puede emitir, con el estado de cada tipo.
+  const bloquesNuevo = [
+    {
+      titulo: "Documentos electrónicos (SIFEN)",
+      opciones: TIPOS_EMISION.map((t) => {
+        const estado = t.estado(context);
+        const bloqueado = t.tipo === "FACTURA" ? !canEmit || numeracionDelCliente : t.tipo === "NOTA_CREDITO" ? !canEmit : false;
+        return {
+          clave: t.tipo,
+          nombre: t.etiquetaSingular,
+          descripcion: t.tipo === "FACTURA" && numeracionDelCliente ? "Este punto emite por carga masiva" : t.descripcion,
+          icono: t.icono,
+          etiqueta: estado === "DISPONIBLE" ? undefined : ETIQUETA_ESTADO_TIPO[estado],
+          deshabilitado: estado === "PROXIMAMENTE" || t.vista === null || bloqueado,
+          onElegir: () => {
+            if (t.tipo === "NOTA_REMISION") abrirDocumentos("CARGA_MASIVA", "NOTA_REMISION");
+            else if (t.vista) goTo(t.vista);
+          }
+        };
+      })
+    },
+    {
+      titulo: "Comprobantes comerciales (no van a SIFEN)",
+      opciones: [
+        { clave: "presupuesto", nombre: "Presupuesto o pedido", descripcion: "Para el cliente; no tiene valor fiscal", icono: "notas" as NombreIcono, onElegir: () => goTo("notas") },
+        { clave: "recibo", nombre: "Recibo de dinero", descripcion: "Cobro de una factura o de otro concepto", icono: "recibos" as NombreIcono, onElegir: () => goTo("recibos") }
+      ]
+    },
+    ...(context?.carga_masiva_habilitada
+      ? [
+          {
+            titulo: "Carga masiva",
+            opciones: [
+              { clave: "carga", nombre: "Carga masiva por planilla", descripcion: "Muchos documentos desde un archivo", icono: "documentos" as NombreIcono, onElegir: () => abrirDocumentos("CARGA_MASIVA") }
+            ]
+          }
+        ]
+      : [])
   ];
   // La remision comparte la vista de Documentos: el activo es "Documentos".
   const esActivo = (item: { clave: string; view: OperationView | null }) => item.view === operationView && item.clave !== "NOTA_REMISION";
@@ -899,6 +947,12 @@ function OperationHome({
             <small>{esEscritorio ? lineaFiscal : lineaFiscalCorta}</small>
           </div>
         )}
+        {esEscritorio ? (
+          <MenuNuevo
+            bloques={bloquesNuevo}
+            pie={fc ? `Se emite por el ${[nombrePunto(fc), actividadPunto(fc)].filter(Boolean).join(" · ")}` : undefined}
+          />
+        ) : null}
         {esEscritorio && operadorNombre ? (
           <div className="topbar-operador" title={operadorNombre}>
             <span className="topbar-avatar" aria-hidden="true">{iniciales(operadorNombre)}</span>
@@ -1065,8 +1119,9 @@ function OperationHome({
           role={user?.role ?? "OPERADOR_FACTURACION"}
           context={context}
           mostrarPunto={variosPerfiles}
-          key={pestanaDocumentos}
+          key={`${pestanaDocumentos}-${tipoCarga ?? ""}`}
           pestanaInicial={pestanaDocumentos}
+          tipoCargaInicial={tipoCarga}
         />
       ) : operationView === "clients" ? (
         <ClientesAgendaView

@@ -4406,3 +4406,114 @@ dd {
     padding-bottom: 6px;
   }
 }
+
+/* components/MenuNuevo (SPEC_UX_RESTO_APP_v0.1 A.3; PLAN §3, URA-004) */
+.menu-nuevo {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.menu-nuevo-boton {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--esp-2);
+  min-height: 40px;
+  border: 0;
+  border-radius: var(--radius-control);
+  padding: 0 var(--esp-4);
+  font: inherit;
+  font-weight: 600;
+}
+
+.menu-nuevo-panel {
+  position: absolute;
+  top: calc(100% + var(--esp-2));
+  right: 0;
+  z-index: var(--z-menu);
+  display: grid;
+  gap: var(--esp-3);
+  width: 440px;
+  max-height: calc(100vh - var(--altura-barra) - var(--esp-6));
+  overflow-y: auto;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-card);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-menu);
+  padding: var(--esp-3);
+}
+
+.menu-nuevo-bloque {
+  display: grid;
+  gap: 2px;
+}
+
+.menu-nuevo-titulo {
+  margin: 0 0 var(--esp-1);
+  padding: 0 var(--esp-2);
+  color: var(--color-muted);
+  font-size: var(--fs-12);
+  font-weight: 600;
+}
+
+.menu-nuevo-opcion {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--esp-3);
+  width: 100%;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--color-ink);
+  font: inherit;
+  padding: var(--esp-2);
+  text-align: left;
+  cursor: pointer;
+}
+
+.menu-nuevo-opcion:hover:not(:disabled) {
+  background: var(--color-bg);
+}
+
+.menu-nuevo-opcion:disabled {
+  color: var(--color-muted);
+  cursor: not-allowed;
+}
+
+.menu-nuevo-icono {
+  display: grid;
+  place-items: center;
+  flex: 0 0 32px;
+  height: 32px;
+  border-radius: var(--radius-control);
+  background: var(--nav-active-bg);
+  color: var(--nav-active-ink);
+}
+
+.menu-nuevo-opcion:disabled .menu-nuevo-icono {
+  background: var(--color-bg);
+  color: var(--color-muted);
+}
+
+.menu-nuevo-texto {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.menu-nuevo-texto strong {
+  font-size: var(--fs-14);
+  font-weight: 600;
+}
+
+.menu-nuevo-texto small {
+  color: var(--color-muted);
+  font-size: var(--fs-12);
+}
+
+.menu-nuevo-pie {
+  margin: 0;
+  border-top: 1px solid var(--color-line);
+  padding: var(--esp-2) var(--esp-2) 0;
+  color: var(--color-muted);
+  font-size: var(--fs-12);
+}

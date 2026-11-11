@@ -100,7 +100,7 @@ export interface CargaContexto {
  * SPEC_DOCUMENTOS_ESCRITORIO_v0.1, fase B1 (RN-05). Catalogo fijo `CARGA_TIPO_DOCUMENTO` de FE (`segel-rc4.21`):
  * se fija en el codigo, como FE propone, y se actualiza cuando FE habilite otro tipo.
  */
-type TipoDeCarga = "FACTURA" | "NOTA_REMISION";
+export type TipoDeCarga = "FACTURA" | "NOTA_REMISION";
 const TIPOS_DE_CARGA: Array<{ codigo: string; etiqueta: string; plural: string; habilitado: boolean }> = [
   { codigo: "FACTURA", etiqueta: "Factura", plural: "facturas", habilitado: true },
   { codigo: "NOTA_REMISION", etiqueta: "Nota de remisión", plural: "notas de remisión", habilitado: true },
@@ -248,15 +248,18 @@ export function CargaMasivaView({
   esInterno,
   contexto,
   cargaInicialId,
+  tipoInicial,
   onVerDocumento
 }: {
   api: CargaApi;
   esInterno: boolean;
   contexto: CargaContexto;
   cargaInicialId?: string | null;
+  /** URA-004: el menu "Nuevo" abre "Nueva carga" con el tipo ya elegido (SPEC_UX_RESTO_APP A.3). */
+  tipoInicial?: TipoDeCarga;
   onVerDocumento: (documentoId: string, cargaId: string) => void;
 }) {
-  const [vista, setVista] = useState<"LISTADO" | "NUEVA" | "DETALLE">(cargaInicialId ? "DETALLE" : "LISTADO");
+  const [vista, setVista] = useState<"LISTADO" | "NUEVA" | "DETALLE">(cargaInicialId ? "DETALLE" : tipoInicial ? "NUEVA" : "LISTADO");
   const [cargaId, setCargaId] = useState<string | null>(cargaInicialId ?? null);
   const [aviso, setAviso] = useState<string | null>(null);
   const [error, setError] = useState<{ texto: string; motivos: Problema[] } | null>(null);
@@ -322,6 +325,7 @@ export function CargaMasivaView({
         <NuevaCarga
           api={api}
           contexto={contexto}
+          tipoInicial={tipoInicial}
           onCancelar={volver}
           onDescargarPlantilla={(tipo) => void descargar(`/cargas/plantilla?tipo_documento=${tipo}`, PLANTILLA_POR_TIPO[tipo])}
           onDescargar={(ruta, nombre) => void descargar(ruta, nombre)}
@@ -516,10 +520,12 @@ function NuevaCarga({
   onDescargarPlantilla,
   onDescargar,
   onError,
-  onLimpiarError
+  onLimpiarError,
+  tipoInicial = "FACTURA"
 }: {
   api: CargaApi;
   contexto: CargaContexto;
+  tipoInicial?: TipoDeCarga;
   onSubida: (carga: Carga) => void;
   onCancelar: () => void;
   onDescargarPlantilla: (tipo: TipoDeCarga) => void;
@@ -527,7 +533,7 @@ function NuevaCarga({
   onError: (causa: unknown) => void;
   onLimpiarError: () => void;
 }) {
-  const [tipo, setTipo] = useState<TipoDeCarga>("FACTURA");
+  const [tipo, setTipo] = useState<TipoDeCarga>(tipoInicial);
   // SPEC_PLANILLAS_EJEMPLO_v0.1: ejemplos de FE del tipo elegido, con el punto del operador.
   const [ejemplos, setEjemplos] = useState<EjemploPlanilla[]>([]);
   const [menuEjemplos, setMenuEjemplos] = useState(false);

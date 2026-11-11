@@ -1,6 +1,6 @@
 // Movido de main.tsx sin cambios (PLAN_UX_RESTO_APP_v0.1 §10.9, URA-023).
 import { useEffect, useMemo, useState } from "react";
-import { CargaMasivaView } from "../carga-masiva";
+import { CargaMasivaView, type TipoDeCarga } from "../carga-masiva";
 import { useConfirmar } from "../components/Dialogo";
 import { MenuFila } from "../components/MenuFila";
 import { PastillaEstado } from "../components/PastillaEstado";
@@ -26,7 +26,8 @@ export function DocumentsView({
   context,
   onCorregirFactura,
   mostrarPunto = false,
-  pestanaInicial = "FACTURAS"
+  pestanaInicial = "FACTURAS",
+  tipoCargaInicial
 }: {
   onBack: () => void;
   onGoTo?: (view: OperationView) => void;
@@ -37,6 +38,8 @@ export function DocumentsView({
   mostrarPunto?: boolean;
   /** URA-003: el menu "Notas de remisión" abre Documentos en su pestaña. */
   pestanaInicial?: "FACTURAS" | "NOTAS_CREDITO" | "NOTAS_REMISION" | "CARGA_MASIVA";
+  /** URA-004: con la pestaña de carga masiva, abre "Nueva carga" con este tipo. */
+  tipoCargaInicial?: TipoDeCarga;
 }) {
   const api = useApi();
   const todayYmd = useMemo(() => formatYmdFromDate(new Date()), []);
@@ -711,6 +714,7 @@ export function DocumentsView({
         <CargaMasivaView
           api={api}
           cargaInicialId={cargaAbiertaId}
+          tipoInicial={tipoCargaInicial}
           contexto={{
             facturador: context.facturador.razon_social,
             establecimiento: context.fiscal_context.establecimiento,

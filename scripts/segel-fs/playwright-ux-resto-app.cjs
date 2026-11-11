@@ -4,7 +4,7 @@
 //
 //   ENSAYO_PASSWORD_FILE=/ruta/clave node scripts/segel-fs/playwright-ux-resto-app.cjs [caso ...]
 //
-// Sin argumentos corre todos los casos. Casos: componentes (URA-017, CA-13), api (URA-018), teclado (URA-019), puntos (URA-021, CA-14), menu (URA-003). URA-012 suma los de las fases 1 y 2.
+// Sin argumentos corre todos los casos. Casos: componentes (URA-017, CA-13), api (URA-018), teclado (URA-019), puntos (URA-021, CA-14), menu (URA-003), nuevo (URA-004). URA-012 suma los de las fases 1 y 2.
 // Escribe test-results/ux-resto-app/.
 const fs = require("node:fs");
 const path = require("node:path");
@@ -423,6 +423,58 @@ async function casoMenu(browser) {
   }
 }
 
+// ─── URA-004: boton "Nuevo" en la barra de escritorio (CA-04) ──────────────────────────────────────────
+async function casoNuevo(browser) {
+  for (const [ancho, alto] of [
+    [1440, 900],
+    [1280, 800]
+  ]) {
+    const { ctx, page } = await entrar(browser, ancho, alto);
+    try {
+      const boton = page.getByRole("button", { name: "Nuevo", exact: true });
+      check(`CA-04 ${ancho}: boton "Nuevo" con aria-haspopup=menu`, (await boton.getAttribute("aria-haspopup")) === "menu");
+      await boton.click();
+      const menu = page.getByRole("menu", { name: "Nuevo documento" });
+      await menu.waitFor();
+      check(`CA-04 ${ancho}: aria-expanded=true y foco en la primera opcion`, (await boton.getAttribute("aria-expanded")) === "true" && (await page.evaluate(() => document.activeElement?.getAttribute("role"))) === "menuitem");
+      const texto = await menu.innerText();
+      check(`CA-04 ${ancho}: bloques SIFEN y comerciales`, texto.includes("Documentos electrónicos (SIFEN)") && texto.includes("Comprobantes comerciales"), "");
+      for (const t of ["Nota de débito", "Autofactura"]) {
+        const op = menu.getByRole("menuitem", { name: new RegExp(t) });
+        check(`CA-04 ${ancho}: ${t} "Próximamente" no se puede elegir`, (await op.isDisabled()) && (await op.innerText()).includes("Próximamente"));
+      }
+      check(`CA-04 ${ancho}: el pie dice por que punto se emite (RN-07)`, /Se emite por el Punto 001-001/.test(texto), (texto.match(/Se emite por[^\n]*/) ?? [""])[0]);
+      await page.screenshot({ path: path.join(outDir, `${ancho}-menu-nuevo.png`) });
+      await page.keyboard.press("Escape");
+      check(`CA-04 ${ancho}: Escape cierra y el foco vuelve al boton`, (await page.getByRole("menu", { name: "Nuevo documento" }).count()) === 0 && (await page.evaluate(() => document.activeElement?.textContent?.trim())) === "Nuevo");
+
+      await boton.click();
+      await page.getByRole("menuitem", { name: /^Factura/ }).click();
+      check(`CA-04 ${ancho}: "Factura" abre Nueva factura`, await page.getByRole("heading", { name: "Nueva factura" }).waitFor({ timeout: 10000 }).then(() => true, () => false));
+      await boton.click();
+      await page.getByRole("menuitem", { name: /^Nota de crédito/ }).click();
+      check(`CA-04 ${ancho}: "Nota de crédito" abre Notas de crédito`, await page.getByRole("heading", { name: "Seleccionar factura" }).waitFor({ timeout: 10000 }).then(() => true, () => false));
+      await boton.click();
+      await page.getByRole("menuitem", { name: /^Nota de remisión/ }).click();
+      const tipo = page.getByLabel("Tipo de documento");
+      const llego = await tipo.waitFor({ timeout: 10000 }).then(() => true, () => false);
+      check(`CA-04 ${ancho}: "Nota de remisión" abre la carga masiva con el tipo elegido`, llego && (await tipo.inputValue()) === "NOTA_REMISION", llego ? await tipo.inputValue() : "sin selector");
+      await page.mouse.click(5, 300);
+      await boton.click();
+      await page.mouse.click(700, 700);
+      check(`CA-04 ${ancho}: un clic afuera cierra el menu`, (await page.getByRole("menu", { name: "Nuevo documento" }).count()) === 0);
+    } finally {
+      await ctx.close();
+    }
+  }
+  const { ctx, page } = await entrar(browser, 390, 844);
+  try {
+    check("CA-04 390: sin boton \"Nuevo\" en la barra de celular (E.2)", (await page.getByRole("button", { name: "Nuevo", exact: true }).count()) === 0);
+  } finally {
+    await ctx.close();
+  }
+}
+
 (async () => {
   const browser = await chromium.launch();
   try {
@@ -431,6 +483,7 @@ async function casoMenu(browser) {
     if (corre("teclado")) await casoTeclado(browser);
     if (corre("puntos")) await casoPuntos(browser);
     if (corre("menu")) await casoMenu(browser);
+    if (corre("nuevo")) await casoNuevo(browser);
   } catch (e) {
     check("el guion termino sin excepciones", false, String(e));
   } finally {
