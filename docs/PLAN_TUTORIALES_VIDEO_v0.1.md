@@ -27,17 +27,19 @@ Salida en `test-results/tutoriales/<video>/`: `bruto.webm`, `linea.json`, `<vide
 ## 2. Grabacion (`lib.cjs`)
 
 - **Navegador:** Chromium de Playwright 1.61.1, viewport y video de 1440 x 900, `deviceScaleFactor` 1, idioma `es-PY`, zona `America/Asuncion`. A 1440 px la app usa el diseño de escritorio (menu lateral, menu "Nuevo", editor en "Modo completo"). Antes de V3 se fija `localStorage["fs.editor.modo"] = "completo"`; la escena 1 de V3 muestra el cambio simple → completo a mano.
-- **Subtitulos:** `addInitScript` inyecta una franja inferior fija (Montserrat 22 px, fondo negro al 80 %, maximo dos lineas) con `pointer-events: none`. `paso(texto, {ms, cubre})` cambia el texto y espera lo necesario para leerlo: `max(ms, 1200 + 300 ms por palabra)` (unas tres palabras por segundo; la cifra anterior, 55 ms por palabra, no alcanzaba para leer). Los textos siguen R-7 (voseo, una idea por frase, etiquetas de la app entre comillas tipograficas).
+- **Subtitulos:** `addInitScript` inyecta una franja inferior fija (Montserrat 22 px, fondo negro al 80 %, maximo dos lineas) con `pointer-events: none`. El texto va en el atributo `data-t` y se dibuja con `::after`, fuera del texto de la pagina: los selectores por texto de los guiones no lo confunden con la app (hallazgo de V3, que fallo al buscar la ayuda de la DNIT porque el subtitulo repetia la frase). `paso(texto, {ms, cubre})` cambia el texto y espera lo necesario para leerlo: `max(ms, 1200 + 300 ms por palabra)` (unas tres palabras por segundo; la cifra anterior, 55 ms por palabra, no alcanzaba para leer). Los textos siguen R-7 (voseo, una idea por frase, etiquetas de la app entre comillas tipograficas).
 - **Cobertura (CA-6):** `paso` recibe en `cubre` los ids del mapa del SPEC (`3.2 Nueva factura`, `4 Procesando`, …). Al terminar, cada guion escribe `cobertura.json` con los ids tocados; `montar.sh` los junta y TUT-010 compara contra la lista completa (§8).
 - **Cursor y foco:** un punto rojo sigue al mouse. `senalar(locator)` dibuja un recuadro rojo de 600 ms sobre el elemento antes de hacer clic o escribir. Se escribe con `pressSequentially` a 70 ms por tecla, para que se vea. Para los botones que se explican sin usar (R-8), `senalar` sin clic.
 - **Datos ocultos (D-2, D-6, D-7, R-4), diseño adoptado en TUT-001:** el reemplazo se hace en las **respuestas de la API** (`/api/v1/**`, solo JSON), antes de que lleguen a la pantalla, y no en el DOM. Solo se tocan los campos que cuelgan de `facturador`, `tenant` y `emisor` (nombre, RUC, correo) y de `user`, `emitido_por`, `usuario` (`Operador Demo`, `operador.demo`, `ejemplo@ejemplo.com`); los datos del cliente no se tocan, asi que el cliente de la CI conserva su nombre y su RUC. Ademas, en cualquier campo:
   - el timbrado local `05057016` lleva el RUC del emisor: se reemplaza por `12345678` en todo texto, lo que cubre tambien el **CDC**, que lleva el RUC del emisor con el cero adelante (el RUC de un cliente nunca lo lleva);
   - `email_destino_ofuscado` pasa a `ej***@ejemplo.com`;
   - la actividad local ("TALLERES DE CHAPERÍA Y PINTURA", 45203) pasa a "SERVICIOS DE CONSULTORÍA INFORMÁTICA" (62010), coherente con los items de los videos;
-  - el XML crudo de SIFEN en las respuestas se vacia.
+  - el XML crudo de SIFEN en las respuestas se vacia;
+  - **clientes de pruebas anteriores** (hallazgo al preparar V2): la base local tiene clientes con nombres de terceros reales, correos personales y nombres de "ensayo". Cualquier `razon_social`, `cliente_nombre` o `pagador_nombre` fuera de la lista permitida (SEGEL SA, la persona de D-6, EMPRESA FICTICIA S.A., CLIENTE DE EJEMPLO, COMERCIAL DEMO, BANCO CENTRAL DEL PARAGUAY y "Sin nombre") pasa a `Cliente Ejemplo NN`, con documento y contacto de ejemplo; los correos de clientes se vacian;
+  - descripciones de items de pruebas (`UX`, `ensayo`, `prueba`, `ATO-`, `cac`, `merge`, `volumen`) pasan a "Servicio de consultoría"; los nombres de archivo de cargas anteriores pasan a `ventas-NN.csv` (los del tutorial empiezan con `tutorial-`).
 
   Las paginas publicas `/verificar/recibo/…` y `/verificar/nota/…` no muestran datos del emisor: **se abren en V6** (P-5, comprobado en TUT-001).
-- **Guardia:** despues de cada `paso`, las zonas del emisor (barra superior, menu lateral, menu "Nuevo", tarjeta "Facturador y sesión", encabezado de "Información y estado", "Datos de tu cuenta"; en las paginas publicas, toda la pagina) no pueden contener `5057016` ni `SALDIVAR`, y ninguna parte de la pagina, incluidos los campos de texto, puede mostrar `operador-ensayo`, `segel.com.py`, `emilio.saldivar`, `(ensayo)` ni `05057016`. Si aparece uno, el guion falla, deja una captura y marca el video como invalido.
+- **Guardia:** despues de cada `paso`, las zonas del emisor (barra superior, menu lateral, menu "Nuevo", tarjeta "Facturador y sesión", encabezado de "Información y estado", "Datos de tu cuenta"; en las paginas publicas, toda la pagina) no pueden contener `5057016` ni `SALDIVAR`, y ninguna parte de la pagina, incluidos los campos de texto, puede mostrar `operador-ensayo`, `emilio.saldivar`, `em***@segel`, `(ensayo)` ni `05057016`. `segel.com.py` sola no se prohibe: los T&C muestran el contacto del proveedor (`no-reply-facturacion@segel.com.py`), hallazgo de la primera grabacion de V1. Si aparece uno, el guion falla, deja una captura y marca el video como invalido.
 - **KuDE:** nunca se abre "Ver KUDE en PDF", el PDF de "Entregar al cliente" ni el PDF de un presupuesto (D-2). Los botones se señalan con un subtitulo, sin clic. Las paginas publicas de nota y recibo se abren solo si en TUT-001 se confirma que el reemplazo cubre su bloque de emisor (SPEC §3.9).
 - **Esperas largas:** `espera(nombre, fn)` registra en `linea.json` el inicio y el fin de la espera (por ejemplo, aprobacion SIFEN o validacion de una carga). Durante la espera el subtitulo dice "Esperando la respuesta de SIFEN…". `montar.sh` deja 2 s de cada espera y corta el resto.
 - **Montaje:** `ffmpeg` con `libx264`, CRF 20, `yuv420p`, `+faststart`, sin audio, a 30 cuadros por segundo. Se recorta el primer segundo en blanco. De cada espera de mas de 3 s quedan 1 s al principio y 1 s al final.
@@ -62,10 +64,10 @@ Salida en `test-results/tutoriales/<video>/`: `bruto.webm`, `linea.json`, `<vide
 
 ## 4. Orden y dependencias
 
-Se graba V1 → V2 → V3 → V4 → V5 → V6 en una sola corrida, con FE avisado (R-1) y sin otros guiones sobre `operador-ensayo` (R-2).
+Se graba V1 → V3 → V4 → V5 → V6 → **V2 al final** (cambio del 2026-11-11: asi la lista de Documentos de V2 se filtra por el dia y muestra solo los documentos de los tutoriales, y no los de pruebas anteriores), con FE avisado (R-1) y sin otros guiones sobre `operador-ensayo` (R-2).
 
-- V2 necesita documentos ya emitidos para mostrar la lista y la ficha: usa los que ya existen en la base local de `operador-ensayo` (hay facturas aprobadas, notas y cargas de corridas anteriores). Si la ficha elegida tuviera un estado raro, se elige otra.
-- V4 usa la factura contado y la de credito de V3, por numero, guardadas en `test-results/tutoriales/estado.json`.
+- V2 usa los documentos de V3 a V6, con "Desde" y "Hasta" en el dia de la grabacion. Para "Requiere revisión" usa una factura rechazada de una fecha anterior con cliente ficticio (EMPRESA FICTICIA S.A.).
+- V4 usa la factura a la CI (nota total) y la de contado (nota parcial: 2 horas de consultoria, se devuelve 1) de V3, por numero. Nunca la factura sin nombre: FE la rechaza con `422 UNIDENTIFIED_REFERENCED_RECEIVER` (SIFEN 1331), aviso de FE del 2026-11-11, guardadas en `test-results/tutoriales/estado.json`.
 - V6 usa la factura a credito de V3 para el recibo.
 - Si V3 falla, no se graban V4 ni V6.
 
@@ -105,8 +107,8 @@ Con `operador-ensayo` en 001-001:
 
 ### V4 — Notas de credito (aprox. 4 min) [SPEC §3.5]
 1. "Notas de crédito": pestañas "Nueva nota de crédito" y "Emitidas · N". Subtitulo M-4 (en RAJ, 001-001).
-2. **Total:** "Buscar factura" la contado de V3; la lista marca "Elegible". "Toda la factura", "Motivo (detalle para el cliente)", "Emitir nota de crédito", resultado "Nota de crédito 001-001-…" (espera cortada), "Crear nueva nota de crédito".
-3. **Parcial:** la factura de credito de V3, "Algunas líneas", "Cantidad a devolver" menor a lo facturado, "Resumen" con "(estimado)" y "Queda por devolver", emision.
+2. **Total:** "Buscar factura" la factura a la CI de V3; la lista marca "Elegible". "Toda la factura", "Motivo (detalle para el cliente)", "Emitir nota de crédito", resultado "Nota de crédito 001-001-…" (espera cortada), "Crear nueva nota de crédito".
+3. **Parcial:** la factura de contado de V3, "Algunas líneas", "Cantidad a devolver" 1 de 2, "Resumen" con "(estimado)" y "Queda por devolver", emision.
 4. Camino alternativo: desde "Documentos", ficha de la factura en dolares → "Crear nota de crédito" (solo se muestra la ventana y se cancela). Subtitulo: la factura "Sin nombre" no ofrece esta accion.
 5. Pestaña "Emitidas": las dos notas con "Nota de crédito emitida". Subtitulo M-6: si una queda "Nota de crédito sin confirmar", la ficha ofrece "Reintentar nota de crédito".
 
@@ -123,7 +125,7 @@ Con `operador-ensayo` en 001-001:
 4. **Clientes:** "Agenda / Clientes": SEGEL SA y la CI ya estan guardados por la casilla de V3. "Nuevo cliente" con autocompletado por RUC; "Usar" lleva a Nueva factura con el cliente cargado; se vuelve. Subtitulo M-2.
 5. **Catalogo:** "Catálogo" → "Nuevo producto o servicio": codigo "SERV-001", nombre, "Precio", "IVA"; se guarda. En "Nueva factura", "Buscar en el catálogo" lo trae con precio e IVA. Subtitulo M-2. Se vuelve sin emitir.
 
-Orden real de grabacion de V6: 5 (catalogo) → 3 (presupuesto, con el producto) → 1 → 2 → 4, y se monta en el orden de arriba por `linea.json`.
+Orden real de grabacion de V6 (adoptado al escribir el guion, sin remontar): 1 recibo de factura → 2 recibo suelto (con su pagina publica) → 5 catalogo (y su uso en Nueva factura) → 3 presupuesto (con el producto del catalogo y su pagina publica) → 4 clientes. "Nuevo cliente" usa `80009769` → BANCO CENTRAL DEL PARAGUAY, entidad publica del padron; el guion borra antes en la base local ese cliente y el producto `MANT-01`, para poder repetir.
 
 ## 6. Hallazgos que se ven en los videos
 
@@ -141,6 +143,23 @@ Salen del inventario. **H-1 a H-7 quedaron corregidos antes de grabar** (D-8, `S
 | H-8 | Una persona fisica con RUC no activo pasa a CI sin aviso | `clientes.service.ts` | V3 (si P-1 lo muestra) |
 
 Lo que aparezca en la segunda pasada se agrega aca con un id nuevo y va a `BACKLOG`, sin arreglarlo en esta cadena (SPEC §8).
+
+Hallazgos de la grabacion (2026-11-11), pendientes de pasar a `BACKLOG`:
+
+| Id | Hallazgo | Donde | Video |
+|---|---|---|---|
+| H-9 | La factura "Sin nombre" muestra `0` en la columna "RUC o CI" de Documentos | `views/DocumentsView.tsx`, lista | V3 (cierre) |
+| H-10 | En Notas de credito, la candidata "Sin nombre" parte el numero en tres renglones (`001-001-10106` / `27`) y su aviso se superpone | `views/CreditNoteView.tsx`, lista de candidatas | V4 |
+| H-11 | El atajo "Crear nota de crédito" de la ficha abre una ventana corta (Total/Parcial, motivo), distinta de la pantalla de Notas de credito; el subtitulo de V4 dice "la misma nota de crédito" | `views/DocumentsView.tsx` | V4 (texto a ajustar si se regraba) |
+| H-12 | La planilla de ejemplo de remisiones (`NRE_VENTA`) trae un transportista ficticio (`80000000-5`); la validacion de FS la deja pasar y SIFEN rechaza con 2303 "RUC del transportista inexistente". El menu avisa que son ficticios, pero el rechazo llega recien despues de confirmar | `/cargas/ejemplos`, FE | V5 |
+| H-14 | En escritorio, el item de un presupuesto se carga en una hoja a pantalla completa con diseño de celular, distinta de la grilla de Nueva factura | `main.tsx` `NotasView`, hoja de item | V6 |
+| H-15 | En el editor del presupuesto, la fila del item superpone "1 × Gs 450.000" con la etiqueta "ITEM"; la lista de sugerencias del cliente queda abierta despues de autocompletar | `main.tsx` `NotasView`, editor | V6 |
+| H-16 | La ficha de una factura rechazada ("Requiere revisión") ofrece "Crear nota de crédito" en "Desde esta factura" | `views/DocumentsView.tsx`, ficha | V2 |
+| H-13 | En V1, el subtitulo dice "Reenviar código" mientras el boton todavia muestra "Reenviar en 47s" | guion V1 | V1 (texto a ajustar si se regraba) |
+
+Ademas, `lib.cjs` reemplaza la actividad real tambien dentro de textos largos (alias del perfil, visto en V5) y descripciones con codigos internos (`FS-NN`, `FE-…`, `RAJ`, visto en V2).
+
+Efecto en los datos de SIFEN test: las remisiones `001-001-0000505` y `0000506` quedaron rechazadas (carga `tutorial-remisiones.csv` de las 14:21, "Requiere atención"), sin inutilizar.
 
 ## 7. Riesgos
 

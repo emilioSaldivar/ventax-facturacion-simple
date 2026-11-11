@@ -44,6 +44,31 @@ function reemplazarUsuario(clave, valor) {
   return valor;
 }
 
+// Clientes que pueden verse tal cual (D-6 y datos ficticios de la base local). Cualquier otro nombre de cliente que
+// haya quedado de pruebas anteriores se reemplaza por "Cliente Ejemplo NN", con su documento y contacto.
+const CLIENTES_PERMITIDOS = new Set(["SEGEL SA", "EMILIO MATIAS SALDIVAR CAPUTO", "EMPRESA FICTICIA S.A.", "CLIENTE DE EJEMPLO", "COMERCIAL DEMO", "BANCO CENTRAL DEL PARAGUAY"]);
+const CLAVES_NOMBRE_CLIENTE = new Set(["razon_social", "cliente_nombre", "pagador_nombre", "nombre_razon_social"]);
+const CLAVES_DOC_CLIENTE = ["documento", "ruc", "cliente_ruc", "pagador_documento", "numero_documento"];
+const CLAVES_CONTACTO = ["email", "telefono", "direccion", "cliente_email", "cliente_telefono"];
+const sustitutos = new Map();
+function clienteEjemplo(nombre) {
+  if (!sustitutos.has(nombre)) sustitutos.set(nombre, String(sustitutos.size + 1).padStart(2, "0"));
+  return sustitutos.get(nombre);
+}
+function nombrePermitido(v) {
+  const n = v.trim().toUpperCase();
+  return !n || CLIENTES_PERMITIDOS.has(n) || n.startsWith("SIN NOMBRE") || n.startsWith("CLIENTE EJEMPLO") || /INNOMINADO|CONSUMIDOR FINAL/.test(n);
+}
+// Archivos de cargas de pruebas anteriores: se muestran con un nombre neutro. Los de los tutoriales empiezan con "tutorial-".
+const archivos = new Map();
+function archivoEjemplo(nombre) {
+  if (/^tutorial-/.test(nombre)) return nombre;
+  if (!archivos.has(nombre)) archivos.set(nombre, `ventas-${String(archivos.size + 1).padStart(2, "0")}.csv`);
+  return archivos.get(nombre);
+}
+// Descripciones de items de pruebas anteriores.
+const DESCRIPCION_DE_PRUEBA = /\bUX\b|ensayo|prueba|\bATO-|\btest\b|\bcac\b|merge|volumen|\bFS-?\d+|\bFE-\w+|\bRAJ\b/i;
+
 /** Recorre una respuesta JSON y reemplaza los datos reales del emisor y del operador. */
 function anonimizar(nodo, ambito = null) {
   if (Array.isArray(nodo)) return nodo.map((x) => anonimizar(x, ambito));
@@ -64,21 +89,42 @@ function anonimizar(nodo, ambito = null) {
     if (ambito === "emisor") s = reemplazarEmisor(k, s);
     else if (ambito === "usuario") s = reemplazarUsuario(k, s);
     if (k === "emisor_id") s = RUC_EJEMPLO;
+    // Campos planos del emisor fuera de su objeto (por ejemplo, el contexto de los T&C).
+    if (/^(tenant_nombre|facturador_razon_social|facturador_nombre(_fantasia)?)$/.test(k)) s = EMPRESA;
+    if (/^facturador_ruc$/.test(k)) s = RUC_EJEMPLO;
+    if (s.includes("emilio.saldivar@segel.com.py")) s = s.split("emilio.saldivar@segel.com.py").join(CORREO_DEMO);
     // Actividad del facturador local (talleres) por una de servicios, coherente con los items de los videos.
     if (/^actividad_economica_(descripcion|alias)$/.test(k)) s = ACTIVIDAD_EJEMPLO;
     if (k === "actividad_economica_codigo") s = "62010";
     if (k === "perfil_emision_codigo") s = s.replace("45203", "62010");
     if (k === "email_destino_ofuscado") s = CORREO_DEMO_OFUSCADO;
+    if (k === "nombre_archivo") s = archivoEjemplo(s);
+    // Correos de clientes de pruebas (personales del usuario): fuera.
+    if (/email|correo/.test(k) && s.includes("@") && !s.endsWith("@ejemplo.com")) s = ambito === "usuario" || ambito === "emisor" ? CORREO_DEMO : "";
+    if (ambito !== "emisor" && /^(descripcion|concepto|observaciones|nce_motivo|motivo)$/.test(k) && DESCRIPCION_DE_PRUEBA.test(s)) s = k === "descripcion" ? "Servicio de consultoría" : "";
     // Timbrado y CDC llevan el RUC del emisor con el cero adelante; el RUC del cliente nunca lo lleva.
     s = s.split(TIMBRADO_REAL).join(TIMBRADO_EJEMPLO);
+    // La actividad real tambien va dentro de textos largos (alias del perfil: "...actividad economica TALLERES DE ...").
+    s = s.replace(/TALLERES DE CHAPER[IÍ]A Y PINTURA/gi, ACTIVIDAD_EJEMPLO);
     salida[k] = s;
+  }
+  // Cliente de pruebas anteriores: nombre, documento y contacto de ejemplo.
+  if (ambito !== "emisor") {
+    for (const k of Object.keys(salida)) {
+      if (!CLAVES_NOMBRE_CLIENTE.has(k) || typeof salida[k] !== "string" || nombrePermitido(salida[k])) continue;
+      const n = clienteEjemplo(salida[k]);
+      salida[k] = `Cliente Ejemplo ${n}`;
+      for (const d of CLAVES_DOC_CLIENTE) if (typeof salida[d] === "string" && salida[d]) salida[d] = `80000${n}`;
+      for (const c of CLAVES_CONTACTO) if (typeof salida[c] === "string") salida[c] = "";
+    }
   }
   return salida;
 }
 
 // ---- Guardia (R-4) -------------------------------------------------------------------------------
 /** Prohibidos en toda la pagina. */
-const PROHIBIDO_GLOBAL = ["operador-ensayo", "segel.com.py", "(ensayo)", TIMBRADO_REAL, "emilio.saldivar"];
+// `segel.com.py` aparece de forma legitima (contacto del proveedor en los T&C); se prohibe el correo personal.
+const PROHIBIDO_GLOBAL = ["operador-ensayo", "(ensayo)", TIMBRADO_REAL, "emilio.saldivar", "em***@segel", "ENSAYO", "Ensayo", "ensayo", "AREVALOS", "@gmail.com", "matiassaldiv", "CHAPERIA", "CHAPERÍA"];
 /** Prohibidos en las zonas del emisor (el cliente de la CI puede mostrar su nombre y su RUC en el resto). */
 const PROHIBIDO_EMISOR = ["5057016", "SALDIVAR", "Saldivar"];
 // En las paginas publicas (/verificar/...) toda la pagina cuenta como zona del emisor.
@@ -93,7 +139,7 @@ function superposiciones() {
       #tut-sub{position:fixed;left:50%;bottom:28px;transform:translateX(-50%);max-width:1100px;z-index:2147483646;
         background:rgba(0,0,0,.8);color:#fff;font:600 22px/1.35 Montserrat,system-ui,sans-serif;padding:12px 22px;
         border-radius:10px;text-align:center;pointer-events:none;transition:opacity .2s;}
-      #tut-sub:empty{opacity:0}
+      #tut-sub::after{content:attr(data-t)} #tut-sub:not([data-t]),#tut-sub[data-t='']{opacity:0}
       #tut-cursor{position:fixed;width:18px;height:18px;margin:-9px 0 0 -9px;border-radius:50%;background:rgba(220,38,38,.85);
         box-shadow:0 0 0 4px rgba(220,38,38,.25);z-index:2147483647;pointer-events:none;left:-40px;top:-40px;transition:transform .1s}
       #tut-cursor.click{transform:scale(.6)}
@@ -103,7 +149,7 @@ function superposiciones() {
     const sub = document.createElement("div");
     sub.id = "tut-sub";
     try {
-      sub.textContent = sessionStorage.getItem("tut-sub") ?? "";
+      sub.dataset.t = sessionStorage.getItem("tut-sub") ?? "";
     } catch {}
     const cursor = document.createElement("div");
     cursor.id = "tut-cursor";
@@ -136,6 +182,7 @@ async function abrir(video, { modoEditor = "completo", grabar = true } = {}) {
     locale: "es-PY",
     timezoneId: "America/Asuncion",
     acceptDownloads: true,
+    permissions: ["clipboard-read", "clipboard-write"],
     ...(grabar ? { recordVideo: { dir: outDir, size: { width: ANCHO, height: ALTO } } } : {})
   });
   await ctx.addInitScript((modo) => {
@@ -175,7 +222,7 @@ async function paso(s, texto, { ms = 0, cubre = [] } = {}) {
       sessionStorage.setItem("tut-sub", t);
     } catch {}
     const el = document.getElementById("tut-sub");
-    if (el) el.textContent = t;
+    if (el) el.dataset.t = t;
   }, texto);
   s.linea.push({ t: seg(s), tipo: "paso", texto });
   const palabras = texto.trim() ? texto.trim().split(/\s+/).length : 0;
@@ -192,7 +239,7 @@ async function sinSubtitulo(s) {
       sessionStorage.setItem("tut-sub", "");
     } catch {}
     const el = document.getElementById("tut-sub");
-    if (el) el.textContent = "";
+    if (el) el.dataset.t = "";
   });
 }
 
@@ -223,10 +270,10 @@ async function senalar(s, locator, { clic = false, escribir = null, ms = 700 } =
 
 /** Espera larga (SIFEN, validacion): se marca en la linea para cortarla al montar. */
 async function espera(s, nombre, fn, { texto = "Esperando la respuesta de SIFEN…" } = {}) {
-  const anterior = await s.page.evaluate(() => document.getElementById("tut-sub")?.textContent ?? "");
+  const anterior = await s.page.evaluate(() => document.getElementById("tut-sub")?.dataset.t ?? "");
   await s.page.evaluate((t) => {
     const el = document.getElementById("tut-sub");
-    if (el) el.textContent = t;
+    if (el) el.dataset.t = t;
   }, texto);
   const inicio = seg(s);
   try {
@@ -235,7 +282,7 @@ async function espera(s, nombre, fn, { texto = "Esperando la respuesta de SIFEN�
     s.linea.push({ t: inicio, fin: seg(s), tipo: "espera", nombre });
     await s.page.evaluate((t) => {
       const el = document.getElementById("tut-sub");
-      if (el) el.textContent = t;
+      if (el) el.dataset.t = t;
     }, anterior);
   }
 }
