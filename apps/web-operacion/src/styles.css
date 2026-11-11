@@ -4556,6 +4556,7 @@ dd {
 
 /* P-A6: el numero de la fila de Documentos es un boton que no cambia el aspecto de la celda. */
 .enlace-fila {
+  white-space: nowrap;
   padding: 0;
   border: 0;
   background: none;
