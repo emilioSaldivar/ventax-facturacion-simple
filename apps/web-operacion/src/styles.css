@@ -4618,19 +4618,46 @@ dd {
   font-size: var(--fs-16);
 }
 
+.nc-lineas-wrap {
+  overflow-x: auto;
+}
+
+.nc-lineas {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-14);
+}
+
 .nc-lineas th,
 .nc-lineas td {
+  border-bottom: 1px solid var(--color-line);
+  padding: var(--esp-2);
   text-align: left;
+  vertical-align: middle;
+}
+
+.nc-lineas th {
+  color: var(--color-muted);
+  font-size: var(--fs-12);
+  font-weight: 600;
 }
 
 .nc-lineas .numero {
   text-align: right;
+  white-space: nowrap;
 }
 
 .nc-lineas input {
   width: 100%;
   max-width: 110px;
   text-align: right;
+}
+
+/* En celular, el maximo a devolver ya esta en el campo ("máx. 2"): se ocultan Facturado y Ya devuelto. */
+@media (max-width: 719px) {
+  .nc-lineas .nc-col-secundaria {
+    display: none;
+  }
 }
 
 .nc-totales {

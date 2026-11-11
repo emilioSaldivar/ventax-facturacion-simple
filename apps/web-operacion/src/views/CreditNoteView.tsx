@@ -331,14 +331,14 @@ export function CreditNoteView({
                       Algunas líneas
                     </button>
                   </div>
-                  <div className="nc-parcial-tabla-wrap">
-                    <table className="nc-parcial-tabla nc-lineas">
+                  <div className="nc-lineas-wrap">
+                    <table className="nc-lineas">
                       <thead>
                         <tr>
                           <th>#</th>
                           <th>Descripción</th>
-                          <th className="numero">Facturado</th>
-                          <th className="numero">Ya devuelto</th>
+                          <th className="numero nc-col-secundaria">Facturado</th>
+                          <th className="numero nc-col-secundaria">Ya devuelto</th>
                           <th className="numero">Devolver</th>
                           <th className="numero">Importe</th>
                         </tr>
@@ -350,8 +350,8 @@ export function CreditNoteView({
                             <tr key={linea.line_no}>
                               <td>{linea.line_no}</td>
                               <td>{linea.descripcion}</td>
-                              <td className="numero">{formatCantidad(linea.cantidad_facturada)}</td>
-                              <td className="numero">{formatCantidad(linea.cantidad_acreditada)}</td>
+                              <td className="numero nc-col-secundaria">{formatCantidad(linea.cantidad_facturada)}</td>
+                              <td className="numero nc-col-secundaria">{formatCantidad(linea.cantidad_acreditada)}</td>
                               <td className="numero">
                                 {modo === "PARCIAL" ? (
                                   <input
