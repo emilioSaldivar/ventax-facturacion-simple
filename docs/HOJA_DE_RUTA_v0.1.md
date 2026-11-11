@@ -21,6 +21,8 @@ Este documento los ordena por la **prioridad que fijo el usuario el 2026-11-11**
 | 1 | **Critico, comprometido para el 2026-11-12** | Catalogo en moneda extranjera (USD primero) | Catalogo solo en guaranies | No hace falta FE | Preguntas (a) a (d) de FS-59 |
 | 2 | **Critico, 2026-11-12** | Descuentos en la factura | Solo se muestran en facturas de carga | Si, §43 y §50 | Decisiones D-1 a D-5 de abajo |
 | 3 | **Critico, 2026-11-12** | Documentos nuevos; primero la **nota de remision** (urgente) | Remision solo por planilla | Si, §53 a §55 (remision), §59 (debito), §63 (autofactura) | Permiso `NRE_EMIT` en la clave de cada facturador; decisiones R-1 a R-6 |
+| 3b | **Critico** (decision del usuario, 2026-11-11) | ATO-009: desplegar los textos del operador en `segel-fs` | Hecho y probado en local (17/17) | No aplica | Solo la orden directa de despliegue |
+| 3c | **Critico** (decision del usuario, 2026-11-11) | FS-62 ampliado: validar RUC con DV, correo, telefono y direccion en **todos los documentos que llevan RUC** (clientes, factura, NC, remision, recibo) | Zod minimo: RUC de 2 caracteres, correo con `.email()`, telefono y direccion sin formato | FE valida el DV del transportista (v0.49) y el formato del correo; el resto se confirma con FE | Reglas exactas de FE (pedidas a FE el 2026-11-11) |
 | 4 | Menos critico | Recibos asociados a facturas a credito | Un recibo por factura desde la ficha | Si, §16.4.1 (una factura por recibo) | Saldo y cobros parciales |
 | 5 | Menos critico | Documentos asociados entre si | Solo "Corrige a" / "Corregida por" | Las referencias fiscales ya viajan | Que se muestra y donde |
 | 6 | Menos critico | Backoffice: mejoras y automatizacion | Backoffice basico | Parcial | Varias cadenas sin PLAN |
@@ -174,6 +176,15 @@ Para que el usuario decida si entran antes, junto o despues de los criticos:
 | FS-60: RUC no activo pasa a CI sin avisar | Se relaciona con FS-62 | Con FS-62 |
 | `SPEC_ESTADO_FISCAL_CANONICO_v0.1`, carga masiva G3 contra FE real, `TASKS_CONTRATO_CANONICO_FISCAL_v0.1`, `TASKS_VERIFICACION_CAPACIDAD_200_v0.1` | Cadenas abiertas con decisiones o pruebas pendientes | Revisar una por una; varias pueden cerrarse como superadas |
 | Tutoriales en video | Los lleva otra sesion | Sin cambio |
+
+## Decisiones del usuario (2026-11-11)
+
+- Acepta las propuestas (a) a (d) del catalogo, D-1 a D-5 de descuentos y R-1 a R-6 de la remision.
+- **FE define las reglas.** Como se aplican los descuentos, las validaciones y los valores predefinidos que espera SIFEN los dice FE; FS los reproduce antes de numerar y redacta las SPEC en coordinacion con FE. No se inventan reglas en FS.
+- **Validar antes de emitir, en todo documento.** FS-62 se amplia: RUC con DV en todo documento que lleve RUC; correo sin espacios ni caracteres invalidos; telefono y direccion con el formato que FE acepte. Toda iniciativa de documento nuevo nace con sus validaciones.
+- **Direcciones codificadas.** Para la remision, consultar con FE la codificacion de domicilio del MT150 (`GET /v1/parametrizaciones/geografia`: departamento, distrito, ciudad) y usarla en FS.
+- ATO-009 y FS-62 pasan a criticos.
+- Autoriza validar en SIFEN test y escribir las SPEC/PLAN/TASKS ahora.
 
 ## Orden de trabajo propuesto para el compromiso del 2026-11-12
 
