@@ -10,7 +10,7 @@ import { EstadoVacio } from "../components/EstadoVacio";
 import { Icono } from "../components/Icono";
 import { MenuFila } from "../components/MenuFila";
 import { PastillaEstado } from "../components/PastillaEstado";
-import { formatGuaranies, formatIntegerInput, formatIva, normalizeIntegerInput } from "../lib/formato";
+import { formatIntegerInput, formatIva, formatMonto, normalizeDecimalInput, normalizeIntegerInput } from "../lib/formato";
 import { useEsEscritorio } from "../lib/useEsEscritorio";
 import type { CatalogoDraft, CatalogoItem, CatalogoItemListResponse, TipoIva } from "../tipos";
 
@@ -19,10 +19,20 @@ function createCatalogoDraft(): CatalogoDraft {
     codigo: "",
     descripcion: "",
     precio_unitario: "",
+    moneda: "PYG",
     iva_tipo: "IVA_10",
     activo: true
   };
 }
+
+/** SPEC_CATALOGO_MONEDA_v0.1 RN-05: mismo criterio y mensajes que la API. */
+function errorPrecio(precio: number, moneda: string): string | null {
+  if (!Number.isFinite(precio) || precio <= 0) return "Completá un precio mayor a cero.";
+  if (moneda === "PYG") return Number.isInteger(precio) ? null : "En guaraníes el precio va sin decimales.";
+  return Math.abs(precio * 100 - Math.round(precio * 100)) < 1e-6 ? null : `En ${moneda} el precio va con hasta 2 decimales.`;
+}
+
+const monedaDe = (item: CatalogoItem): "PYG" | "USD" => (item.moneda === "USD" ? "USD" : "PYG");
 
 function PastillaActivo({ activo }: { activo: boolean }) {
   return activo ? <PastillaEstado codigo="ACTIVO" texto="Activo" tono="ready" /> : <PastillaEstado codigo="ARCHIVADO" texto="Archivado" tono="anulada" />;
@@ -35,6 +45,8 @@ export function CatalogView({ onBack }: { onBack: () => void }) {
   const [items, setItems] = useState<CatalogoItem[]>([]);
   const [query, setQuery] = useState("");
   const [statusChip, setStatusChip] = useState<"ACTIVE" | "ARCHIVED" | "ALL">("ACTIVE");
+  // RN-11 y DP-2: filtro de moneda, arranca en "Todas" y no se recuerda.
+  const [monedaChip, setMonedaChip] = useState<"ALL" | "PYG" | "USD">("ALL");
   const [draft, setDraft] = useState<CatalogoDraft>(() => createCatalogoDraft());
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -52,7 +64,7 @@ export function CatalogView({ onBack }: { onBack: () => void }) {
       void loadItems(query);
     }, 220);
     return () => window.clearTimeout(timeout);
-  }, [query, statusChip]);
+  }, [query, statusChip, monedaChip]);
 
   async function loadItems(nextQuery = query) {
     setLoading(true);
@@ -61,6 +73,9 @@ export function CatalogView({ onBack }: { onBack: () => void }) {
     const params = new URLSearchParams({ limit: "50", offset: "0" });
     if (nextQuery.trim()) {
       params.set("q", nextQuery.trim());
+    }
+    if (monedaChip !== "ALL") {
+      params.set("moneda", monedaChip);
     }
     if (statusChip === "ACTIVE") {
       params.set("activo", "true");
@@ -97,7 +112,7 @@ export function CatalogView({ onBack }: { onBack: () => void }) {
     abrirEditor(
       "EDIT",
       item,
-      { codigo: item.codigo, descripcion: item.descripcion, precio_unitario: String(item.precio_unitario), iva_tipo: item.iva_tipo, activo: item.activo },
+      { codigo: item.codigo, descripcion: item.descripcion, precio_unitario: String(item.precio_unitario), moneda: monedaDe(item), iva_tipo: item.iva_tipo, activo: item.activo },
       false
     );
   }
@@ -106,7 +121,7 @@ export function CatalogView({ onBack }: { onBack: () => void }) {
     abrirEditor(
       "CREATE",
       null,
-      { codigo: "", descripcion: `${item.descripcion} (copia)`, precio_unitario: String(item.precio_unitario), iva_tipo: item.iva_tipo, activo: true },
+      { codigo: "", descripcion: `${item.descripcion} (copia)`, precio_unitario: String(item.precio_unitario), moneda: monedaDe(item), iva_tipo: item.iva_tipo, activo: true },
       true
     );
   }
@@ -128,6 +143,7 @@ export function CatalogView({ onBack }: { onBack: () => void }) {
           codigo: item.codigo || null,
           descripcion: item.descripcion,
           precio_unitario: item.precio_unitario,
+          moneda: item.moneda,
           iva_tipo: item.iva_tipo,
           activo: false
         })
@@ -177,12 +193,18 @@ export function CatalogView({ onBack }: { onBack: () => void }) {
       codigo: draft.codigo.trim() || null,
       descripcion: draft.descripcion.trim(),
       precio_unitario: Number(draft.precio_unitario),
+      moneda: draft.moneda,
       iva_tipo: draft.iva_tipo,
       activo: draft.activo
     };
 
-    if (!payload.descripcion || !Number.isInteger(payload.precio_unitario) || payload.precio_unitario <= 0) {
-      setFormError("Completá descripción y precio entero mayor a cero.");
+    if (!payload.descripcion) {
+      setFormError("Completá la descripción.");
+      return;
+    }
+    const mensajePrecio = errorPrecio(payload.precio_unitario, payload.moneda);
+    if (mensajePrecio) {
+      setFormError(mensajePrecio);
       return;
     }
 
@@ -241,15 +263,36 @@ export function CatalogView({ onBack }: { onBack: () => void }) {
           value={draft.descripcion}
         />
       </label>
+      <label>
+        Moneda
+        <select
+          onChange={(event) => setDraft((current) => ({ ...current, moneda: event.target.value as "PYG" | "USD" }))}
+          value={draft.moneda}
+        >
+          <option value="PYG">Guaraníes (Gs.)</option>
+          <option value="USD">Dólares (USD)</option>
+        </select>
+      </label>
       <div className="catalogo-form-fila">
         <label>
-          Precio (Gs.)
-          <input
-            inputMode="numeric"
-            onChange={(event) => setDraft((current) => ({ ...current, precio_unitario: normalizeIntegerInput(event.target.value) }))}
-            required
-            value={formatIntegerInput(draft.precio_unitario)}
-          />
+          {draft.moneda === "PYG" ? "Precio (Gs.)" : `Precio (${draft.moneda})`}
+          {draft.moneda === "PYG" ? (
+            <input
+              inputMode="numeric"
+              onChange={(event) => setDraft((current) => ({ ...current, precio_unitario: normalizeIntegerInput(event.target.value) }))}
+              required
+              value={/^\d*$/.test(draft.precio_unitario) ? formatIntegerInput(draft.precio_unitario) : draft.precio_unitario.replace(".", ",")}
+            />
+          ) : (
+            <input
+              inputMode="decimal"
+              onChange={(event) => setDraft((current) => ({ ...current, precio_unitario: normalizeDecimalInput(event.target.value) }))}
+              placeholder="0,00"
+              required
+              value={draft.precio_unitario.replace(".", ",")}
+            />
+          )}
+          {draft.moneda !== "PYG" ? <small className="field-hint">Con hasta 2 decimales (centavos).</small> : null}
         </label>
         <label>
           IVA
@@ -339,6 +382,11 @@ export function CatalogView({ onBack }: { onBack: () => void }) {
           <button className={statusChip === "ACTIVE" ? "active" : ""} onClick={() => setStatusChip("ACTIVE")} type="button">Activos</button>
           <button className={statusChip === "ARCHIVED" ? "active" : ""} onClick={() => setStatusChip("ARCHIVED")} type="button">Archivados</button>
         </div>
+        <div className="filter-tabs" role="group" aria-label="Moneda">
+          <button className={monedaChip === "ALL" ? "active" : ""} onClick={() => setMonedaChip("ALL")} type="button">Todas</button>
+          <button className={monedaChip === "PYG" ? "active" : ""} onClick={() => setMonedaChip("PYG")} type="button">Gs.</button>
+          <button className={monedaChip === "USD" ? "active" : ""} onClick={() => setMonedaChip("USD")} type="button">USD</button>
+        </div>
       </section>
 
       {error ? <Aviso tono="error">{error}</Aviso> : null}
@@ -371,7 +419,7 @@ export function CatalogView({ onBack }: { onBack: () => void }) {
                         <td>
                           <strong>{item.descripcion}</strong>
                         </td>
-                        <td className="numero">{formatGuaranies(item.precio_unitario)}</td>
+                        <td className="numero">{formatMonto(item.precio_unitario, item.moneda)}</td>
                         <td>{formatIva(item.iva_tipo)}</td>
                         <td>
                           <PastillaActivo activo={item.activo} />
@@ -407,7 +455,7 @@ export function CatalogView({ onBack }: { onBack: () => void }) {
                     <small>{item.codigo || "Sin código"}</small>
                   </span>
                   <span>
-                    <strong>{formatGuaranies(item.precio_unitario)}</strong>
+                    <strong>{formatMonto(item.precio_unitario, item.moneda)}</strong>
                     <small>{formatIva(item.iva_tipo)}</small>
                   </span>
                 </button>

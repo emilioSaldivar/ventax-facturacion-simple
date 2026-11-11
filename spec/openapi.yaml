@@ -434,6 +434,12 @@ paths:
             default: 10
             minimum: 1
             maximum: 30
+        - in: query
+          name: moneda
+          schema:
+            type: string
+            enum: [PYG, USD]
+          description: No filtra; ordena primero los articulos de esa moneda (moneda de la factura).
       responses:
         "200":
           description: Resultados de catalogo
@@ -466,6 +472,12 @@ paths:
           name: activo
           schema:
             type: boolean
+        - in: query
+          name: moneda
+          schema:
+            type: string
+            enum: [PYG, USD]
+          description: Filtra por moneda; sin el parametro lista todas.
         - $ref: "#/components/parameters/Limit"
         - $ref: "#/components/parameters/Offset"
       responses:
@@ -3198,7 +3210,7 @@ components:
 
     CatalogoItem:
       type: object
-      required: [id, codigo, descripcion, precio_unitario, iva_tipo, activo]
+      required: [id, codigo, descripcion, precio_unitario, moneda, iva_tipo, activo]
       properties:
         id:
           type: string
@@ -3207,9 +3219,14 @@ components:
         descripcion:
           type: string
         precio_unitario:
-          type: integer
+          type: number
           minimum: 0
-          description: Precio con IVA incluido en PYG.
+          description: Precio con IVA incluido. Entero en PYG; hasta 2 decimales en otra moneda (SPEC_CATALOGO_MONEDA_v0.1).
+        moneda:
+          type: string
+          pattern: "^[A-Z]{3}$"
+          example: PYG
+          description: Moneda del precio (ISO 4217).
         iva_tipo:
           $ref: "#/components/schemas/IvaTipo"
         activo:
@@ -3226,8 +3243,14 @@ components:
         descripcion:
           type: string
         precio_unitario:
-          type: integer
+          type: number
           minimum: 0
+          description: Entero en PYG ("En guaraníes el precio va sin decimales."); hasta 2 decimales en USD.
+        moneda:
+          type: string
+          enum: [PYG, USD]
+          default: PYG
+          description: Otra moneda responde 400 "Moneda no admitida. Por ahora el catálogo acepta Gs. y USD.".
         iva_tipo:
           $ref: "#/components/schemas/IvaTipo"
         activo:

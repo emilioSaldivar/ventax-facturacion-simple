@@ -516,7 +516,9 @@ export interface CatalogoItem {
   id: string;
   codigo: string;
   descripcion: string;
+  /** Entero en PYG; hasta 2 decimales en otra moneda (SPEC_CATALOGO_MONEDA_v0.1 RN-03). */
   precio_unitario: number;
+  moneda: string;
   iva_tipo: TipoIva;
   activo: boolean;
 }
@@ -530,6 +532,7 @@ export interface CatalogoDraft {
   codigo: string;
   descripcion: string;
   precio_unitario: string;
+  moneda: "PYG" | "USD";
   iva_tipo: TipoIva;
   activo: boolean;
 }

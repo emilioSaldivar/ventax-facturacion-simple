@@ -5,33 +5,37 @@ import type {
   CatalogoItemListResponse,
   CatalogoItemPersistInput,
   CatalogoItemUpsertInput,
-  CatalogoRepository
+  CatalogoRepository,
+  MonedaCatalogo
 } from "./catalogo.types";
+import { monedasCatalogo } from "./catalogo.types";
 import { generateAutoCodigo, normalizeCodigo } from "./catalogo.utils";
 
 export async function searchCatalogoItems(
   context: OperationalContextResponse,
-  input: { q: string; limit: number },
+  input: { q: string; limit: number; moneda?: MonedaCatalogo },
   repository: CatalogoRepository
 ): Promise<{ items: CatalogoItem[] }> {
   return {
     items: await repository.search({
       facturadorId: context.facturador.id,
       q: input.q,
-      limit: input.limit
+      limit: input.limit,
+      ...(input.moneda ? { moneda: input.moneda } : {})
     })
   };
 }
 
 export async function listCatalogoItems(
   context: OperationalContextResponse,
-  input: { q?: string; activo?: boolean; limit: number; offset: number },
+  input: { q?: string; activo?: boolean; moneda?: MonedaCatalogo; limit: number; offset: number },
   repository: CatalogoRepository
 ): Promise<CatalogoItemListResponse> {
   return repository.list({
     facturadorId: context.facturador.id,
     q: input.q,
     activo: input.activo,
+    ...(input.moneda ? { moneda: input.moneda } : {}),
     limit: input.limit,
     offset: input.offset
   });
@@ -99,8 +103,17 @@ export async function normalizeCatalogoInput(
     throw new HttpError(400, "VALIDATION_ERROR", "Descripcion requerida.");
   }
 
-  if (!Number.isInteger(data.precio_unitario) || data.precio_unitario < 0) {
-    throw new HttpError(400, "VALIDATION_ERROR", "Precio unitario debe ser un entero en guaranies.");
+  // SPEC_CATALOGO_MONEDA_v0.1 RN-04 y RN-05.
+  const moneda = (data.moneda ?? "PYG").trim().toUpperCase();
+  if (!(monedasCatalogo as readonly string[]).includes(moneda)) {
+    throw new HttpError(400, "VALIDATION_ERROR", "Moneda no admitida. Por ahora el catálogo acepta Gs. y USD.");
+  }
+  if (!precioValidoSegunMoneda(data.precio_unitario, moneda)) {
+    throw new HttpError(
+      400,
+      "VALIDATION_ERROR",
+      moneda === "PYG" ? "En guaraníes el precio va sin decimales." : `En ${moneda} el precio va con hasta 2 decimales.`
+    );
   }
 
   const codigo = await resolveCodigo(facturadorId, data.codigo, repository, excludeItemId);
@@ -108,10 +121,18 @@ export async function normalizeCatalogoInput(
   return {
     codigo,
     descripcion,
-    precio_unitario: data.precio_unitario,
+    precio_unitario: moneda === "PYG" ? data.precio_unitario : Math.round(data.precio_unitario * 100) / 100,
+    moneda: moneda as MonedaCatalogo,
     iva_tipo: data.iva_tipo ?? "IVA_10",
     activo: data.activo ?? true
   };
+}
+
+/** Entero en PYG; hasta 2 decimales en otra moneda, con tolerancia para el error de punto flotante. */
+export function precioValidoSegunMoneda(precio: number, moneda: string): boolean {
+  if (!Number.isFinite(precio) || precio < 0) return false;
+  if (moneda === "PYG") return Number.isInteger(precio);
+  return Math.abs(precio * 100 - Math.round(precio * 100)) < 1e-6;
 }
 
 async function resolveCodigo(

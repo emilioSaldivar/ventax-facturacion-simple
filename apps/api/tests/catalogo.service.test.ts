@@ -64,6 +64,7 @@ const item: CatalogoItem = {
   codigo: "SERV-001",
   descripcion: "Servicio profesional",
   precio_unitario: 100000,
+  moneda: "PYG",
   iva_tipo: "IVA_10",
   activo: true
 };
@@ -319,6 +320,46 @@ describe("catalogo service", () => {
       )
     ).rejects.toMatchObject({
       statusCode: 400
+    });
+  });
+
+  describe("SPEC_CATALOGO_MONEDA_v0.1", () => {
+    const base = { codigo: "MON-001", descripcion: "Servicio" };
+
+    it("CA-01: sin moneda crea en PYG", async () => {
+      const r = await normalizeCatalogoInput(context.facturador.id, { ...base, precio_unitario: 15000 }, new FakeCatalogoRepository());
+      expect(r).toMatchObject({ moneda: "PYG", precio_unitario: 15000 });
+    });
+
+    it("CA-01: USD con 2 decimales", async () => {
+      const r = await normalizeCatalogoInput(context.facturador.id, { ...base, precio_unitario: 12.5, moneda: "usd" }, new FakeCatalogoRepository());
+      expect(r).toMatchObject({ moneda: "USD", precio_unitario: 12.5 });
+      const r2 = await normalizeCatalogoInput(context.facturador.id, { ...base, precio_unitario: 1.15, moneda: "USD" }, new FakeCatalogoRepository());
+      expect(r2.precio_unitario).toBe(1.15);
+    });
+
+    it.each([
+      [12.345, "USD", "En USD el precio va con hasta 2 decimales."],
+      [100.5, "PYG", "En guaraníes el precio va sin decimales."],
+      [10, "EUR", "Moneda no admitida. Por ahora el catálogo acepta Gs. y USD."]
+    ])("CA-01: %s %s responde 400 con su mensaje", async (precio, moneda, mensaje) => {
+      await expect(
+        normalizeCatalogoInput(context.facturador.id, { ...base, precio_unitario: precio, moneda }, new FakeCatalogoRepository())
+      ).rejects.toMatchObject({ statusCode: 400, message: mensaje });
+    });
+
+    it("CA-02: list y search pasan la moneda al repositorio", async () => {
+      const repo = new FakeCatalogoRepository();
+      await listCatalogoItems(context, { moneda: "USD", limit: 30, offset: 0 }, repo);
+      expect(repo.lastListInput).toMatchObject({ moneda: "USD" });
+      await searchCatalogoItems(context, { q: "serv", limit: 5, moneda: "USD" }, repo);
+      expect(repo.lastSearchInput).toMatchObject({ moneda: "USD" });
+    });
+
+    it("CA-03: editar cambia la moneda", async () => {
+      const repo = new FakeCatalogoRepository();
+      await updateCatalogoItem(context, item.id, { ...base, precio_unitario: 9.99, moneda: "USD" }, repo);
+      expect(repo.lastUpdateInput).toMatchObject({ data: { moneda: "USD", precio_unitario: 9.99 } });
     });
   });
 });

@@ -1562,7 +1562,8 @@ function InvoiceEditor({
       return window.setTimeout(async () => {
         setCatalogSearching((current) => ({ ...current, [line.id]: true }));
         try {
-          const result = await api.get<{ items: CatalogoItem[] }>(`/catalogo/items/search?q=${encodeURIComponent(q)}&limit=5`);
+          // RN-07: los articulos de la moneda de la factura primero.
+          const result = await api.get<{ items: CatalogoItem[] }>(`/catalogo/items/search?q=${encodeURIComponent(q)}&limit=5&moneda=${moneda}`);
           setCatalogSuggestions((current) => ({ ...current, [line.id]: result.items }));
         } catch {
           setCatalogSuggestions((current) => ({ ...current, [line.id]: [] }));
@@ -1990,19 +1991,23 @@ function InvoiceEditor({
   }
 
   function applyCatalogItem(lineId: string, item: CatalogoItem) {
-    // SPEC_MONEDA_EXTRANJERA_v0.1: el catalogo esta en guaranies; en otra moneda el precio se carga a mano.
+    // SPEC_CATALOGO_MONEDA_v0.1 RN-13 y RN-14: el precio se completa solo si el articulo es de la moneda de la factura.
+    const monedaItem = item.moneda ?? "PYG";
+    const mismaMoneda = monedaItem === moneda;
     updateLine(lineId, {
       catalogo_item_id: item.id,
       codigo: item.codigo,
       descripcion: item.descripcion,
-      precio_unitario: enMonedaExtranjera ? "" : String(item.precio_unitario),
+      precio_unitario: mismaMoneda ? String(item.precio_unitario) : "",
       iva_tipo: item.iva_tipo,
-      lockedFromCatalog: !enMonedaExtranjera
+      lockedFromCatalog: mismaMoneda
     });
     setCatalogSuggestions((current) => ({ ...current, [lineId]: [] }));
     setCatalogMessage((current) => ({
       ...current,
-      [lineId]: enMonedaExtranjera ? `Item del catálogo: el precio del catálogo está en guaraníes, cargá el precio en ${moneda}.` : "Item seleccionado del catálogo."
+      [lineId]: mismaMoneda
+        ? "Item seleccionado del catálogo."
+        : `Item del catálogo en ${monedaItem === "PYG" ? "Gs." : monedaItem}: cargá el precio en ${moneda === "PYG" ? "Gs." : moneda}.`
     }));
   }
 
@@ -2010,8 +2015,12 @@ function InvoiceEditor({
     setCatalogSaving((current) => ({ ...current, [line.id]: true }));
     setCatalogMessage((current) => ({ ...current, [line.id]: null }));
 
-    if (!Number.isInteger(Number(line.precio_unitario)) || Number(line.precio_unitario) <= 0) {
-      setCatalogMessage((current) => ({ ...current, [line.id]: "Ingresá un precio entero mayor a cero." }));
+    // SPEC_CATALOGO_MONEDA_v0.1 RN-16: se guarda en la moneda de la factura.
+    if (!precioValidoEnMoneda(Number(line.precio_unitario), moneda) || Number(line.precio_unitario) <= 0) {
+      setCatalogMessage((current) => ({
+        ...current,
+        [line.id]: moneda === "PYG" ? "En guaraníes el precio va sin decimales." : `En ${moneda} el precio va con hasta 2 decimales.`
+      }));
       setCatalogSaving((current) => ({ ...current, [line.id]: false }));
       return false;
     }
@@ -2021,6 +2030,7 @@ function InvoiceEditor({
         codigo: line.codigo.trim() || null,
         descripcion: line.descripcion.trim(),
         precio_unitario: Number(line.precio_unitario),
+        moneda,
         iva_tipo: line.iva_tipo,
         activo: true
       });
@@ -2399,7 +2409,7 @@ function InvoiceEditor({
                     void tryAutocompleteDnit();
                   }
                 }}
-                placeholder={cliente.documento_tipo === "RUC" ? "Ej. 80012345-0" : "Ingresá el número de documento"}
+                placeholder="Ingresá el número de documento"
                 value={cliente.documento}
               />
               {clienteOrigen ? <span className="campo-tilde" title={clienteOrigen === "AGENDA" ? "En tu agenda" : "Del padron de la DNIT"}><Icono nombre="tilde" tamano={16} grosor={2.5} /></span> : null}
@@ -2635,7 +2645,7 @@ function InvoiceEditor({
                     <button key={item.id} onClick={() => applyCatalogItem(activeLine.id, item)} type="button">
                       <strong>{item.codigo}</strong>
                       <span>{item.descripcion}</span>
-                      <small>{formatGuaranies(item.precio_unitario)} · {formatIva(item.iva_tipo)}</small>
+                      <small>{formatMonto(item.precio_unitario, item.moneda)} · {formatIva(item.iva_tipo)}</small>
                     </button>
                   ))}
                 </div>
@@ -2697,16 +2707,14 @@ function InvoiceEditor({
                 <button
                   className="primary-action save-catalog"
                   disabled={
-                    // SPEC_MONEDA_EXTRANJERA_v0.1: el catalogo esta en guaranies; en otra moneda no se guarda.
-                    enMonedaExtranjera ||
+                    // SPEC_CATALOGO_MONEDA_v0.1 RN-16: disponible en cualquier moneda.
                     catalogSaving[activeLine.id] ||
                     !activeLine.descripcion.trim() ||
                     !cantidadValida(Number(activeLine.cantidad)) ||
-                    !Number.isInteger(Number(activeLine.precio_unitario)) ||
+                    !precioValidoEnMoneda(Number(activeLine.precio_unitario), moneda) ||
                     Number(activeLine.precio_unitario) <= 0
                   }
                   onClick={() => void confirmLine(activeLine, true)}
-                  title={enMonedaExtranjera ? "El catálogo está en guaraníes" : undefined}
                   type="button"
                 >
                   {catalogSaving[activeLine.id] ? "Guardando..." : "AGREGAR Y GUARDAR"}
@@ -2870,6 +2878,13 @@ function motivoLineaInvalida(line: InvoiceLineDraft, moneda: string): string {
  * SPEC_EDITOR_FACTURA_PC_v0.1: grilla de lineas del modo completo. Edita el mismo estado que el modo simple
  * (RN-02); la ultima fila vacia sirve para agregar. Enter pasa a la descripcion de la fila siguiente (RN-06).
  */
+/** SPEC_CATALOGO_MONEDA_v0.1 RN-05 y RN-16: entero en PYG; hasta 2 decimales en otra moneda. */
+function precioValidoEnMoneda(precio: number, monedaPrecio: string): boolean {
+  if (!Number.isFinite(precio) || precio < 0) return false;
+  if (monedaPrecio === "PYG") return Number.isInteger(precio);
+  return Math.abs(precio * 100 - Math.round(precio * 100)) < 1e-6;
+}
+
 function GrillaLineas({
   lines,
   moneda,
@@ -2945,7 +2960,7 @@ function GrillaLineas({
             const subtotal = subtotales.get(line.id) ?? (enMonedaExtranjera ? Math.round(cantidad * precio * 100) / 100 : Math.round(cantidad * precio));
             const sugerencias = filaConFoco === line.id ? catalogSuggestions[line.id] ?? [] : [];
             const puedeGuardar =
-              !enMonedaExtranjera && !line.catalogo_item_id && !line.lockedFromCatalog && conDatos && !invalida && Number.isInteger(precio);
+              !line.catalogo_item_id && !line.lockedFromCatalog && conDatos && !invalida && precioValidoEnMoneda(precio, moneda);
             const claseFila = [invalida ? "fila-invalida" : "", !conDatos ? "fila-nueva" : ""].filter(Boolean).join(" ") || undefined;
             return (
               <React.Fragment key={line.id}>
@@ -2984,7 +2999,7 @@ function GrillaLineas({
                             type="button"
                           >
                             {item.codigo ? <small>{item.codigo}</small> : null} {item.descripcion}
-                            {enMonedaExtranjera ? null : <small> · {formatGuaranies(item.precio_unitario)}</small>}
+                            <small> · {formatMonto(item.precio_unitario, item.moneda)}</small>
                           </button>
                         </li>
                       ))}
@@ -3073,7 +3088,6 @@ function GrillaLineas({
         </button>
         <span className="muted">Enter en la última celda agrega una fila · Supr quita la fila</span>
         <span className="tarjeta-cabecera-espacio" />
-        {enMonedaExtranjera ? <span className="muted">Guardar en el catálogo no disponible en {moneda}</span> : null}
       </div>
       {dialogoConfirmar}
     </div>
@@ -3464,9 +3478,11 @@ function NotasView({
   }
 
   function applyCatalogItem(filaId: string, item: CatalogoItem) {
-    updateFila(filaId, { descripcion: item.descripcion, precio_unitario: String(item.precio_unitario), catalog_item_id: item.id, catalog_iva_tipo: item.iva_tipo });
+    // SPEC_CATALOGO_MONEDA_v0.1 RN-17: presupuestos y pedidos siguen en guaranies.
+    const enGs = (item.moneda ?? "PYG") === "PYG";
+    updateFila(filaId, { descripcion: item.descripcion, precio_unitario: enGs ? String(item.precio_unitario) : "", catalog_item_id: item.id, catalog_iva_tipo: item.iva_tipo });
     setCatalogSuggestions(c => ({ ...c, [filaId]: [] }));
-    setCatalogMessage(c => ({ ...c, [filaId]: null }));
+    setCatalogMessage(c => ({ ...c, [filaId]: enGs ? null : `Item del catálogo en ${item.moneda}: cargá el precio en Gs.` }));
     setFilaSheetOpen(false);
   }
 

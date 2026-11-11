@@ -6,19 +6,22 @@ import { getOperationalContext } from "../context/context.service";
 import { validateRequest } from "../../shared/validation/validate-request";
 import { catalogoRepository } from "./catalogo.repository";
 import { createCatalogoItem, deleteCatalogoItem, listCatalogoItems, searchCatalogoItems, updateCatalogoItem } from "./catalogo.service";
-import { ivaTipos } from "./catalogo.types";
+import { ivaTipos, monedasCatalogo } from "./catalogo.types";
 
 const catalogoItemSchema = z.object({
   codigo: z.string().trim().min(1).max(60).nullable().optional(),
   descripcion: z.string().trim().min(1).max(240),
-  precio_unitario: z.coerce.number().int().min(0),
+  // SPEC_CATALOGO_MONEDA_v0.1 RN-05: los decimales segun la moneda se validan en el servicio.
+  precio_unitario: z.coerce.number().min(0),
+  moneda: z.string().trim().toUpperCase().optional(),
   iva_tipo: z.enum(ivaTipos).default("IVA_10"),
   activo: z.boolean().default(true)
 });
 
 const searchQuerySchema = z.object({
   q: z.string().trim().min(1).max(120),
-  limit: z.coerce.number().int().min(1).max(30).default(10)
+  limit: z.coerce.number().int().min(1).max(30).default(10),
+  moneda: z.enum(monedasCatalogo).optional()
 });
 
 const listQuerySchema = z.object({
@@ -27,6 +30,7 @@ const listQuerySchema = z.object({
     .enum(["true", "false"])
     .transform((value) => value === "true")
     .optional(),
+  moneda: z.enum(monedasCatalogo).optional(),
   limit: z.coerce.number().int().min(1).max(100).default(30),
   offset: z.coerce.number().int().min(0).default(0)
 });

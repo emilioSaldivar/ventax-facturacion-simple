@@ -5035,7 +5035,7 @@ dd {
 
 @media (min-width: 1024px) {
   .catalogo-filtros {
-    grid-template-columns: minmax(240px, 420px) auto;
+    grid-template-columns: minmax(240px, 420px) auto auto;
     align-items: end;
     justify-content: start;
     column-gap: var(--esp-4);

@@ -174,7 +174,7 @@ async function casoEditor(browser, ancho, alto) {
     const seccion = page.locator("section.client-section");
     await seccion.waitFor();
     await seccion.locator(".cliente-fila select").first().selectOption("RUC");
-    const numero = seccion.getByPlaceholder(/80012345-0/);
+    const numero = seccion.getByPlaceholder("Ingresá el número de documento");
     await numero.fill("80012345-1");
     await seccion.getByLabel("Nombre o razón social").click();
     await page.waitForTimeout(600);

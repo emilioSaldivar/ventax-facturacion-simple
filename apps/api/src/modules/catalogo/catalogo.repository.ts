@@ -6,21 +6,22 @@ interface CatalogoItemRow {
   id: string;
   codigo: string;
   descripcion: string;
-  precio_unitario: number;
+  precio_unitario: number | string;
+  moneda: string;
   iva_tipo: CatalogoItem["iva_tipo"];
   activo: boolean;
   total_count?: string;
 }
 
 export class PgCatalogoRepository implements CatalogoRepository {
-  async search(input: { facturadorId: string; q: string; limit: number }): Promise<CatalogoItem[]> {
+  async search(input: { facturadorId: string; q: string; limit: number; moneda?: string }): Promise<CatalogoItem[]> {
     const q = input.q.trim();
     const codigoQ = `%${normalizeCodigo(q)}%`;
     const likeQ = `%${q}%`;
 
     const result = await pool.query<CatalogoItemRow>(
       `
-        select id, codigo, descripcion, precio_unitario, iva_tipo, activo
+        select id, codigo, descripcion, precio_unitario, moneda, iva_tipo, activo
         from catalogo_items
         where facturador_id = $1
           and deleted_at is null
@@ -31,11 +32,12 @@ export class PgCatalogoRepository implements CatalogoRepository {
             or descripcion ilike $3
           )
         order by
+          case when $6::text is not null and moneda = $6 then 0 else 1 end,
           case when codigo_normalizado = $4 then 0 else 1 end,
           descripcion
         limit $5
       `,
-      [input.facturadorId, codigoQ, likeQ, normalizeCodigo(q), input.limit]
+      [input.facturadorId, codigoQ, likeQ, normalizeCodigo(q), input.limit, input.moneda ?? null]
     );
 
     return result.rows.map(mapRow);
@@ -45,6 +47,7 @@ export class PgCatalogoRepository implements CatalogoRepository {
     facturadorId: string;
     q?: string;
     activo?: boolean;
+    moneda?: string;
     limit: number;
     offset: number;
   }): Promise<CatalogoItemListResponse> {
@@ -59,6 +62,7 @@ export class PgCatalogoRepository implements CatalogoRepository {
           codigo,
           descripcion,
           precio_unitario,
+          moneda,
           iva_tipo,
           activo,
           count(*) over()::text as total_count
@@ -66,6 +70,7 @@ export class PgCatalogoRepository implements CatalogoRepository {
         where facturador_id = $1
           and deleted_at is null
           and ($2::boolean is null or activo = $2)
+          and ($7::text is null or moneda = $7)
           and (
             $3::text is null
             or codigo_normalizado ilike $4
@@ -75,7 +80,7 @@ export class PgCatalogoRepository implements CatalogoRepository {
         order by descripcion
         limit $5 offset $6
       `,
-      [input.facturadorId, input.activo ?? null, likeQ, codigoQ, input.limit, input.offset]
+      [input.facturadorId, input.activo ?? null, likeQ, codigoQ, input.limit, input.offset, input.moneda ?? null]
     );
 
     return {
@@ -102,10 +107,11 @@ export class PgCatalogoRepository implements CatalogoRepository {
           iva_tipo,
           activo,
           created_by,
-          updated_by
+          updated_by,
+          moneda
         )
-        values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9)
-        returning id, codigo, descripcion, precio_unitario, iva_tipo, activo
+        values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9, $10)
+        returning id, codigo, descripcion, precio_unitario, moneda, iva_tipo, activo
       `,
       [
         input.tenantId,
@@ -116,7 +122,8 @@ export class PgCatalogoRepository implements CatalogoRepository {
         input.data.precio_unitario,
         input.data.iva_tipo,
         input.data.activo,
-        input.userId
+        input.userId,
+        input.data.moneda
       ]
     );
 
@@ -139,11 +146,12 @@ export class PgCatalogoRepository implements CatalogoRepository {
           precio_unitario = $6,
           iva_tipo = $7,
           activo = $8,
-          updated_by = $9
+          updated_by = $9,
+          moneda = $10
         where id = $1
           and facturador_id = $2
           and deleted_at is null
-        returning id, codigo, descripcion, precio_unitario, iva_tipo, activo
+        returning id, codigo, descripcion, precio_unitario, moneda, iva_tipo, activo
       `,
       [
         input.itemId,
@@ -154,7 +162,8 @@ export class PgCatalogoRepository implements CatalogoRepository {
         input.data.precio_unitario,
         input.data.iva_tipo,
         input.data.activo,
-        input.userId
+        input.userId,
+        input.data.moneda
       ]
     );
 
@@ -207,6 +216,7 @@ function mapRow(row: CatalogoItemRow): CatalogoItem {
     codigo: row.codigo,
     descripcion: row.descripcion,
     precio_unitario: Number(row.precio_unitario),
+    moneda: row.moneda ?? "PYG",
     iva_tipo: row.iva_tipo,
     activo: row.activo
   };
