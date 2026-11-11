@@ -135,6 +135,9 @@ La fuente de verdad de este proyecto es:
 - `docs/SPEC_UX_NUEVA_FACTURA_v0.1.md`
 - `docs/PLAN_UX_NUEVA_FACTURA_v0.1.md`
 - `docs/TASKS_UX_NUEVA_FACTURA_v0.1.md`
+- `docs/SPEC_MULTIPERFIL_USUARIO_v0.1.md`
+- `docs/PLAN_MULTIPERFIL_USUARIO_v0.1.md`
+- `docs/TASKS_MULTIPERFIL_USUARIO_v0.1.md`
 - `docs/SPEC_UX_RESTO_APP_v0.1.md`
 - `docs/PLAN_UX_RESTO_APP_v0.1.md`
 - `docs/TASKS_UX_RESTO_APP_v0.1.md`
