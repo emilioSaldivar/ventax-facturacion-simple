@@ -1,5 +1,6 @@
 // Formatos compartidos (PAUTAS_FRONTEND_v0.1 P-E4). URA-022 empieza con el numero correlativo; URA-023 mueve aca el
 // resto de los formatos de main.tsx.
+import type { TipoIva } from "../tipos";
 
 /** Numero de presupuesto, pedido o recibo con siete cifras: 12 -> "0000012". */
 export function numeroCorrelativo(numero: number | string): string {
@@ -148,4 +149,14 @@ export function normalizeDecimalInput(value: string, decimales = 2): string {
 /** SPEC_MONEDA_EXTRANJERA_v0.1, RN-06 (MT150 E711): cantidad mayor que cero con hasta 4 decimales. */
 export function cantidadValida(valor: number): boolean {
   return Number.isFinite(valor) && valor > 0 && Math.abs(valor * 10000 - Math.round(valor * 10000)) < 1e-6;
+}
+
+export function formatIva(value: TipoIva): string {
+  if (value === "IVA_10") {
+    return "IVA 10%";
+  }
+  if (value === "IVA_5") {
+    return "IVA 5%";
+  }
+  return "Exenta";
 }
