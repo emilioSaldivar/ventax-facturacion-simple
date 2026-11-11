@@ -154,10 +154,17 @@ pero la resolución de contexto lo exige no nulo.
 ## 7. Después del alta
 
 1. Crear el usuario operativo y asignarle el facturador y el contexto (backoffice → Usuarios). Con
-   eso el readiness pasa a `ready: true`.
-2. Primera emisión de prueba desde la app. Es la que valida la API key contra FE: el readiness no la
+   eso el readiness pasa a `ready: true`. Si el usuario debe emitir por varios puntos del mismo
+   facturador (`SPEC_MULTIPERFIL_USUARIO_v0.1`), agregar los demás desde el detalle del usuario con
+   "Agregar punto de expedicion": elegirá el punto al iniciar sesión. Otro facturador (otro RUC o
+   timbrado) necesita otro usuario y otro correo.
+2. **Nota de crédito por punto (SPEC_MULTIPERFIL_USUARIO_v0.1 D-1).** La NC sale por el punto activo de
+   la sesión y FE la numera con el numerador `(establecimiento, punto, tipo 5)` de ese punto. Verificar
+   en FE que **cada punto por el que se vaya a emitir NC tenga numerador tipo 5**; sin él, la NC falla
+   en FE al numerar.
+3. Primera emisión de prueba desde la app. Es la que valida la API key contra FE: el readiness no la
    prueba.
-3. Si la API key se compartió por un canal no seguro, rotarla en FE y recargarla con el paso 2.
+4. Si la API key se compartió por un canal no seguro, rotarla en FE y recargarla con el paso 2.
 
 ---
 

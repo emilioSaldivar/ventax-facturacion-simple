@@ -126,13 +126,87 @@ paths:
                 type: string
               description: Cookie de refresh limpiada.
 
+  /auth/perfil:
+    post:
+      tags: [Auth]
+      summary: Elegir o cambiar el punto de expedicion de la sesion
+      description: |
+        SPEC_MULTIPERFIL_USUARIO_v0.1 §B.2 y §B.3. Con token `perfil_select` elige sin contraseña.
+        Con token completo exige `password`: un fallo cuenta como intento fallido de login y bloquea con
+        el mismo umbral. Emite un token nuevo con el punto elegido, rota la cookie de refresh y registra
+        `PERFIL_SELECCIONADO` o `PERFIL_CAMBIADO` en auditoria.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PerfilSeleccionRequest"
+      responses:
+        "200":
+          description: Sesion con el punto elegido
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
+              description: Refresh token httpOnly con el punto elegido.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "400":
+          description: Falta la contraseña con un token completo
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: |
+            Contraseña incorrecta (`details.reason = PASSWORD_INCORRECTA`) o punto no disponible para el
+            usuario (`details.reason = PERFIL_NO_DISPONIBLE`; mismo codigo para ajeno, inexistente o no emitible).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Token de onboarding
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "423":
+          $ref: "#/components/responses/AccountLocked"
+
+  /me/perfiles:
+    get:
+      tags: [Contexto]
+      summary: Puntos de expedicion emitibles del usuario
+      description: SPEC_MULTIPERFIL_USUARIO_v0.1 §B.4. Acepta tokens completos y `perfil_select`.
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Lista ordenada por establecimiento y punto
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [perfiles]
+                properties:
+                  perfiles:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/PerfilDisponible"
+
   /me/context:
     get:
       tags: [Contexto]
       summary: Obtener contexto operativo del usuario
       description: |
-        Devuelve el unico facturador, establecimiento, punto, perfil de emision
-        y actividad economica efectiva asociados al operador.
+        Devuelve el facturador, establecimiento, punto, perfil de emision y actividad economica
+        del punto activo de la sesion (claim `uoc` del token, SPEC_MULTIPERFIL_USUARIO_v0.1 §B.7).
+        Un token sin punto se resuelve solo si el usuario tiene una unica configuracion emitible.
       responses:
         "200":
           description: Contexto operativo
@@ -141,7 +215,10 @@ paths:
               schema:
                 $ref: "#/components/schemas/OperationalContextResponse"
         "409":
-          description: Usuario sin configuracion operativa completa
+          description: |
+            Usuario sin configuracion operativa completa; o `details.reason = PERFIL_REQUERIDO` (token sin
+            punto y varias configuraciones); o `details.reason = PERFIL_NO_DISPONIBLE` (el punto de la
+            sesion dejo de estar disponible: el cliente debe renovar la sesion).
           content:
             application/json:
               schema:
@@ -2428,9 +2505,74 @@ paths:
           $ref: "#/components/responses/NotFound"
 
   /backoffice/users/{userId}/operation-config:
+    get:
+      tags: [Backoffice]
+      summary: Puntos de expedicion asignados al usuario
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Configuraciones activas
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserOperationConfigList"
+    post:
+      tags: [Backoffice]
+      summary: Agregar un punto de expedicion al usuario
+      description: |
+        SPEC_MULTIPERFIL_USUARIO_v0.1 §D.1. No toca las demas configuraciones. Todas deben ser del mismo
+        facturador (RN-01).
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserOperationConfigRequest"
+      responses:
+        "201":
+          description: Lista resultante
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserOperationConfigList"
+        "404":
+          description: Usuario o contexto no encontrado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: El usuario ya tiene ese punto (`details.motivo = PERFIL_YA_ASIGNADO`)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: |
+            Otro facturador (`details.motivo = FACTURADOR_DISTINTO`) o facturador sin API key
+            (`details.motivo = FACTURADOR_SIN_API_KEY`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
     put:
       tags: [Backoffice]
-      summary: Asociar configuracion operativa unica al usuario
+      deprecated: true
+      summary: Reemplazar todas las configuraciones por una (deprecado)
+      description: SPEC_MULTIPERFIL_USUARIO_v0.1 §D.6. Usar POST y DELETE.
       security:
         - BearerAuth: []
       parameters:
@@ -2471,6 +2613,34 @@ paths:
           description: |
             El facturador no tiene API key de FE (`details.motivo = FACTURADOR_SIN_API_KEY`).
             No se asignan usuarios operativos a un facturador que no puede emitir (SPEC import v0.3 RN-33).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /backoffice/users/{userId}/operation-config/{configId}:
+    delete:
+      tags: [Backoffice]
+      summary: Quitar un punto de expedicion al usuario
+      description: |
+        SPEC_MULTIPERFIL_USUARIO_v0.1 §D.2 y D-9. Revoca los refresh tokens emitidos con ese punto: la
+        proxima renovacion pide elegir o asigna el unico restante.
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema: { type: string, format: uuid }
+        - in: path
+          name: configId
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "204":
+          description: Quitada
+        "404":
+          description: La configuracion no es del usuario o ya no esta activa
           content:
             application/json:
               schema:
@@ -2653,6 +2823,55 @@ components:
           example: 900
         user:
           $ref: "#/components/schemas/UserSummary"
+        pending_actions:
+          type: array
+          description: |
+            Acciones pendientes antes de operar. `CHANGE_PASSWORD` y `ACCEPT_TYC` (onboarding);
+            `SELECT_PERFIL` (SPEC_MULTIPERFIL_USUARIO_v0.1 §B.1): el usuario tiene varios puntos de
+            expedicion; el token es de alcance `perfil_select` (10 minutos, sin cookie de refresh) y solo
+            sirve para `POST /auth/perfil`, `GET /me/perfiles` y `POST /auth/logout`.
+          items:
+            type: string
+            enum: [CHANGE_PASSWORD, ACCEPT_TYC, SELECT_PERFIL]
+        perfiles:
+          type: array
+          description: Solo con `SELECT_PERFIL`.
+          items:
+            $ref: "#/components/schemas/PerfilDisponible"
+
+    PerfilDisponible:
+      type: object
+      description: Configuracion operativa emitible del usuario (SPEC_MULTIPERFIL_USUARIO_v0.1 §B.4).
+      required: [operacion_config_id, establecimiento, punto_expedicion, perfil_emision_codigo, actividad_economica_codigo, titulo_operativo, timbrado, numeracion_facturas, activo_en_sesion]
+      properties:
+        operacion_config_id: { type: string, format: uuid }
+        establecimiento: { type: string, example: "001" }
+        punto_expedicion: { type: string, example: "002" }
+        perfil_emision_codigo: { type: string }
+        perfil_emision_alias: { type: string, nullable: true }
+        actividad_economica_codigo: { type: string }
+        actividad_economica_descripcion: { type: string, nullable: true }
+        actividad_economica_alias: { type: string, nullable: true }
+        titulo_operativo: { type: string }
+        timbrado: { type: string }
+        numeracion_facturas: { type: string, enum: [SERVICIO, CLIENTE] }
+        documento_nro:
+          type: string
+          nullable: true
+          description: Ultimo numero; null con numeracion del cliente.
+        activo_en_sesion:
+          type: boolean
+          description: Es el punto del token con que se pidio.
+
+    PerfilSeleccionRequest:
+      type: object
+      required: [operacion_config_id]
+      properties:
+        operacion_config_id: { type: string, format: uuid }
+        password:
+          type: string
+          format: password
+          description: Obligatoria con un token completo (cambio dentro de la app); no se pide con `perfil_select`.
 
     UserSummary:
       type: object
@@ -3226,6 +3445,17 @@ components:
       type: object
       required: [id, tipo, estado, condicion_venta, cliente, items, totals, delivery]
       properties:
+        perfil_emision:
+          type: object
+          nullable: true
+          description: |
+            Punto por el que se emitio (SPEC_MULTIPERFIL_USUARIO_v0.1 §E.7). La NC lleva el punto activo
+            de la sesion, que puede diferir del de su factura (D-1). null en documentos historicos.
+          properties:
+            establecimiento: { type: string }
+            punto_expedicion: { type: string }
+            perfil_emision_codigo: { type: string }
+            alias: { type: string, nullable: true }
         carga:
           type: object
           nullable: true
@@ -4482,6 +4712,16 @@ components:
           format: password
           nullable: true
           description: Solo se devuelve en creacion o reset; no se persiste en claro.
+        operation_config:
+          allOf:
+            - $ref: "#/components/schemas/UserOperationConfig"
+          nullable: true
+          description: Primera configuracion activa (compatibilidad).
+        operation_configs:
+          type: array
+          description: Todas las configuraciones activas; solo en el detalle (SPEC_MULTIPERFIL_USUARIO_v0.1 §E.6).
+          items:
+            $ref: "#/components/schemas/UserOperationConfig"
 
     UserOperationConfigRequest:
       type: object
@@ -4515,6 +4755,25 @@ components:
               type: string
             active:
               type: boolean
+            id:
+              type: string
+              format: uuid
+              description: Id de la configuracion (para quitarla).
+            titulo_operativo:
+              type: string
+              nullable: true
+            numeracion_facturas:
+              type: string
+              enum: [SERVICIO, CLIENTE]
+
+    UserOperationConfigList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/UserOperationConfig"
 
     # ── Notas Comerciales ─────────────────────────────────────────────────────
 
