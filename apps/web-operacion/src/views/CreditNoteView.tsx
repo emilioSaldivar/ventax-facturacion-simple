@@ -196,7 +196,7 @@ export function CreditNoteView({
 
   if (entrega.documento) {
     return (
-      <section className="documents-view nc-espacio" aria-labelledby="credit-note-title">
+      <section className="nc-espacio" aria-labelledby="credit-note-title">
         <EncabezadoPantalla id="credit-note-title" onVolver={onBack} subtitulo={seEmitePor} titulo="Notas de crédito" />
         {entrega.deliveryMessage ? <Aviso tono="info">{entrega.deliveryMessage}</Aviso> : null}
         {/* RN-04: el resultado reemplaza al formulario, con los pasos y la entrega, como en Nueva factura. */}
@@ -226,7 +226,7 @@ export function CreditNoteView({
   }
 
   return (
-    <section className="documents-view nc-espacio" aria-labelledby="credit-note-title">
+    <section className="nc-espacio" aria-labelledby="credit-note-title">
       <EncabezadoPantalla
         id="credit-note-title"
         onVolver={onBack}
@@ -309,7 +309,7 @@ export function CreditNoteView({
               {saldoError ? <Aviso tono="error">{saldoError}</Aviso> : null}
               {saldo ? (
                 <>
-                  <div className="segmented" role="group" aria-label="Tipo de nota de crédito">
+                  <div className="segmented-control nc-modo" role="group" aria-label="Tipo de nota de crédito">
                     <button
                       aria-pressed={modo === "TOTAL"}
                       className={modo === "TOTAL" ? "active" : ""}
