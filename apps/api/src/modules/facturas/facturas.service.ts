@@ -28,6 +28,7 @@ import {
   FiscalGatewayError,
   type FiscalGateway,
   type FiscalEmitFacturaRequest,
+  type FiscalEmitNotaRemisionRequest,
   type FiscalEmitFacturaResponse,
   type FiscalEmitNotaCreditoRequest,
   type FiscalEmitNotaCreditoResponse,
@@ -198,7 +199,7 @@ export async function listDocumentos(
   return { ...result, items: result.items.map(withAccion) };
 }
 
-function withAccion(documento: DocumentoResponse): DocumentoResponse {
+export function withAccion(documento: DocumentoResponse): DocumentoResponse {
   const { accion, accion_detalle } = deriveAccion(documento);
   return {
     ...documento,
@@ -645,7 +646,7 @@ async function confirmarRecepcionFiscal(
 const ERRORES_EVENTO: Record<string, { status: number; mensaje: string }> = {
   EVENT_ALREADY_EXISTS: { status: 409, mensaje: "La factura ya esta anulada en SIFEN." },
   EVENT_IN_PROGRESS: { status: 409, mensaje: "Hay una anulacion en curso para esta factura. Espera unos segundos y volve a consultar." },
-  CANCEL_WINDOW_EXPIRED: { status: 409, mensaje: "Pasaron mas de 48 horas desde la aprobacion: corresponde emitir una nota de credito." },
+  CANCEL_WINDOW_EXPIRED: { status: 409, mensaje: "Pasó el plazo para anular desde la aprobación (48 horas la factura, 168 horas la nota de remisión)." },
   INVALID_DOCUMENT_STATUS: { status: 409, mensaje: "El documento no esta aprobado en SIFEN, asi que no se puede anular." }
 };
 
@@ -669,7 +670,8 @@ export async function cancelDocumento(
 
   const documento = await getDocumentoById(context, documentoId, repository);
 
-  if (documento.tipo !== "FACTURA" || documento.estado !== "EMITIDA" || !documento.cdc) {
+  // SPEC_NOTA_REMISION_v0.1 RN-26: la nota de remision tambien se anula (FE admite 168 horas para ella).
+  if ((documento.tipo !== "FACTURA" && documento.tipo !== "NOTA_REMISION") || documento.estado !== "EMITIDA" || !documento.cdc) {
     throw new HttpError(409, "CONFLICT", "Documento no elegible para cancelacion.");
   }
 
@@ -1690,7 +1692,9 @@ export async function inutilizarNumeroFactura(
   }
   const numeracion = leerNumeracionDelCdc(documento.cdc);
   const numero = numeroComparable(documento.numero_fiscal);
-  if (!numeracion || numeracion.tipo !== "01" || !mismoEmisor(context.facturador.emisor_id, numeracion) || numeracion.numero !== numero) {
+  // SPEC_NOTA_REMISION_v0.1 RN-26: el CDC de una NRE empieza con 07 y se inutiliza con tipoDocumento "NRE".
+  const tipoCdcEsperado = documento.tipo === "NOTA_REMISION" ? "07" : "01";
+  if (!numeracion || numeracion.tipo !== tipoCdcEsperado || !mismoEmisor(context.facturador.emisor_id, numeracion) || numeracion.numero !== numero) {
     throw new HttpError(409, "CONFLICT", "No se pudo identificar el número fiscal de esta factura. Contacte a soporte.", {
       reason: "NUMERACION_NO_IDENTIFICADA"
     });
@@ -1727,7 +1731,7 @@ export async function inutilizarNumeroFactura(
       desdeNumero: numeracion.numero,
       hastaNumero: numeracion.numero,
       motivo: input.motivo,
-      tipoDocumento: "FE"
+      tipoDocumento: documento.tipo === "NOTA_REMISION" ? "NRE" : "FE"
     });
   } catch (error) {
     if (!(error instanceof FiscalGatewayError)) {
@@ -1823,12 +1827,20 @@ export async function processNextQueuedFiscalEmission(
     : gateway;
 
   try {
-    const response = await effectiveGateway.emitFactura(pending.fiscalRequest);
+    // SPEC_NOTA_REMISION_v0.1 RN-23: la nota de remision va a `/v1/nota-remision` y no tiene totales (no se piden).
+    const esRemision = (pending.fiscalRequest as { tipo_documento?: string }).tipo_documento === "NOTA_REMISION";
+    if (esRemision && !effectiveGateway.emitNotaRemision) {
+      throw new FiscalGatewayError("UNAVAILABLE", "El gateway fiscal no admite la nota de remision.");
+    }
+    const response = esRemision
+      ? await effectiveGateway.emitNotaRemision!(pending.fiscalRequest as FiscalEmitNotaRemisionRequest)
+      : await effectiveGateway.emitFactura(pending.fiscalRequest as FiscalEmitFacturaRequest);
     const completado = await repository.completePendingEmission({
       outboxId: pending.outboxId,
       documentoId: pending.documentoId,
       response
     });
+    if (esRemision) return completado;
     // A-2: aprobada en el acto (sincronico o mock); `gateway` es el de clave compartida, el de `/totales`.
     return completado ? await guardarTotalesFe(pending.facturadorId, completado, repository, gateway) : completado;
   } catch (error) {

@@ -1,5 +1,5 @@
 import type { AccionSugerida } from "./sifen-causa-catalogo";
-import type { FiscalCancelStatus } from "../fiscal-gateway/fiscal-gateway.types";
+import type { FiscalEmitNotaRemisionRequest, FiscalCancelStatus } from "../fiscal-gateway/fiscal-gateway.types";
 import type { TaxCalculatedLine, TaxTotals, TipoIva } from "@facturacion-simple/shared";
 import { documentoIdentidadTipos, type ClienteNaturaleza } from "../clientes/clientes.types";
 import type {
@@ -414,9 +414,11 @@ export interface FacturaQueuedPersistInput {
   idempotencyKey?: string;
   input: FacturaPreviewInput;
   preview: FacturaPreviewResponse;
-  fiscalRequest: FiscalEmitFacturaRequest;
+  fiscalRequest: FiscalEmitFacturaRequest | FiscalEmitNotaRemisionRequest;
   /** SPEC_CORRECCION_INUTILIZACION_RECHAZADAS_v0.1, RN-A1: factura rechazada que se corrige. */
   documentoRelacionadoId?: string | null;
+  /** SPEC_NOTA_REMISION_v0.1 RN-04: la nota de remision manual usa el mismo outbox; sin condicion de venta. */
+  tipo?: "FACTURA" | "NOTA_REMISION";
 }
 
 export interface InutilizacionPersistInput {
@@ -457,7 +459,8 @@ export interface PendingFiscalEmission {
   documentoId: string;
   facturadorId: string;
   facturadorApiKey: string | null;
-  fiscalRequest: FiscalEmitFacturaRequest;
+  /** SPEC_NOTA_REMISION_v0.1 RN-23: `tipo_documento: "NOTA_REMISION"` en el snapshot distingue la remision. */
+  fiscalRequest: FiscalEmitFacturaRequest | FiscalEmitNotaRemisionRequest;
   attempts: number;
   documentoCreatedAt: string;
   accionNotificadaAt: string | null;

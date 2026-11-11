@@ -690,7 +690,7 @@ export class PgFacturaRepository implements FacturaRepository {
             actividad_punto_perfil_id
           )
           values (
-            $1, $2, $3, 'FACTURA', $4, 'EMITIENDO', $5, $6, $7::jsonb, $8::jsonb, $9::jsonb, '{}'::jsonb, $10, $11, $12, $13, $14
+            $1, $2, $3, $15, $4, 'EMITIENDO', $5, $6, $7::jsonb, $8::jsonb, $9::jsonb, '{}'::jsonb, $10, $11, $12, $13, $14
           )
           returning
             ${COLUMNAS_DOCUMENTO}
@@ -709,7 +709,8 @@ export class PgFacturaRepository implements FacturaRepository {
           input.documentoRelacionadoId ?? null,
           input.input.moneda ?? "PYG",
           input.input.moneda && input.input.moneda !== "PYG" ? input.input.tipo_cambio ?? null : null,
-          input.actividadPuntoPerfilId ?? null
+          input.actividadPuntoPerfilId ?? null,
+          input.tipo ?? "FACTURA"
         ]
       );
 

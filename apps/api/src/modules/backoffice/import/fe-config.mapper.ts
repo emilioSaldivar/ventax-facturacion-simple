@@ -328,7 +328,6 @@ function reportarIgnorados(doc: FeConfigDocument, h: Hallazgos): void {
   }
 
   if (doc.consumidor.length > 0) {
-    h.ignorado("$.consumidor[].permisos", doc.consumidor.map((c) => c.permisos), "La API key se administra aparte.");
     h.ignorado("$.consumidor[].alcance", doc.consumidor.map((c) => c.alcance), "La API key se administra aparte.");
   }
 }
@@ -658,7 +657,8 @@ export function buildImportPlan(doc: FeConfigDocument, ctx: MapperContext): Impo
       ruc: emisorId ?? "",
       razon_social: razonSocial ?? "",
       nombre_fantasia: texto(doc.emisor.nombre_fantasia),
-      ambiente: texto(doc.emisor.ambiente)
+      ambiente: texto(doc.emisor.ambiente),
+      permisos_consumidor: permisosConAlcance(doc, ctx, emisorId)
     },
     establecimientos,
     puntos,
@@ -668,6 +668,14 @@ export function buildImportPlan(doc: FeConfigDocument, ctx: MapperContext): Impo
     timbradoElegido,
     hallazgos: h.all()
   };
+}
+
+/** SPEC_NOTA_REMISION_v0.1 RN-01: union de permisos de los consumidores con alcance activo sobre el emisor. */
+function permisosConAlcance(doc: FeConfigDocument, ctx: MapperContext, emisorId: string | null): string[] {
+  const conAlcance = doc.consumidor.filter((c) =>
+    c.alcance.some((a) => a.activo !== false && (emisorId === null || texto(a.emisor_id) === emisorId) && texto(a.env) === ctx.feApiEnv)
+  );
+  return [...new Set(conAlcance.flatMap((c) => c.permisos.filter((p): p is string => typeof p === "string")))].sort();
 }
 
 export function bloqueantes(plan: ImportPlan): Hallazgo[] {

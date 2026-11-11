@@ -84,7 +84,9 @@ describe("buildImportPlan — fixture real de produccion (5057016-1)", () => {
     expect(rutas).toContain("$.servicio.base_url");
     expect(rutas).toContain("$.envio.modos_habilitados");
     expect(rutas).toContain("$.perfiles_emision.items[].tipo_documento");
-    expect(rutas).toContain("$.consumidor[].permisos");
+    // SPEC_NOTA_REMISION_v0.1 RN-01: los permisos ya no se ignoran; pasan a permisos_consumidor del emisor.
+    expect(rutas).not.toContain("$.consumidor[].permisos");
+    expect(Array.isArray(p.emisor.permisos_consumidor)).toBe(true);
     // serie_fiscal viene en null: una ruta ausente o vacia NO se reporta
     expect(rutas).not.toContain("$.numeracion.serie_fiscal");
   });
@@ -230,5 +232,22 @@ describe("validaciones estructurales sobre documentos alterados", () => {
     const d = clonar();
     d.consumidor = [];
     expect(codigos(advertencias(planDe(d)))).toContain("PERMISOS_CONSUMIDOR_INCOMPLETOS");
+  });
+});
+
+describe("SPEC_NOTA_REMISION_v0.1 RN-01 - permisos del consumidor", () => {
+  function planConPermisos(permisos: string[]) {
+    const doc = JSON.parse(leer("fe-config-ambiente-test.json"));
+    doc.consumidor[0].permisos.valor = permisos;
+    const parsed = parseFeConfig({ filename: "fe-config-ambiente-test.json", content: JSON.stringify(doc) });
+    return buildImportPlan(parsed.document, ctxTest);
+  }
+
+  it("con NRE_EMIT en la clave con alcance, el plan lo lleva", () => {
+    expect(planConPermisos(["FACTURA_EMIT", "NRE_EMIT"]).emisor.permisos_consumidor).toContain("NRE_EMIT");
+  });
+
+  it("sin NRE_EMIT, no", () => {
+    expect(planConPermisos(["FACTURA_EMIT"]).emisor.permisos_consumidor).not.toContain("NRE_EMIT");
   });
 });

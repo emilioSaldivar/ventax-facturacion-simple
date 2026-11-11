@@ -1,3 +1,4 @@
+import { calcularDvRuc } from "../../shared/validation/receptor";
 import { logger } from "../../shared/logging/logger";
 import crypto from "node:crypto";
 import { env } from "../../config/env";
@@ -10,6 +11,8 @@ import {
   type FiscalEmitFacturaRequest,
   type FiscalEmitFacturaResponse,
   type FiscalEmitNotaCreditoRequest,
+  FiscalEmitNotaRemisionRequest,
+  FiscalGeografiaResponse,
   type FiscalEmitNotaCreditoResponse,
   type FiscalArtifactResponse,
   type FiscalCancelFacturaRequest,
@@ -185,6 +188,77 @@ export class MockFiscalGateway implements FiscalGateway {
         external_ref: request.external_ref,
         total: request.totals.total
       }
+    };
+  }
+
+  /**
+   * SPEC_NOTA_REMISION_v0.1 RN-24: NRE aprobada, con los 422 de FE que FS debe prevenir (para las pruebas):
+   * articulo con precio, DV incorrecto del transportista, receptor sin departamento o ciudad, fin antes del inicio.
+   */
+  async emitNotaRemision(request: FiscalEmitNotaRemisionRequest): Promise<FiscalEmitFacturaResponse> {
+    const rechazo = (campo: string, mensaje: string) =>
+      new FiscalGatewayError("UPSTREAM_ERROR", "Backend fiscal rechazo la nota de remision.", {
+        status: 422,
+        body: { error: "VALIDATION_ERROR", message: mensaje, details: [{ path: campo, message: mensaje }] }
+      });
+    if (request.items.some((i) => "precioUnitario" in (i as Record<string, unknown>) || "ivaTipo" in (i as Record<string, unknown>))) {
+      throw rechazo("items.0.precioUnitario", "La nota de remision no lleva precio");
+    }
+    const ruc = request.transporte.transportista.ruc;
+    if (ruc) {
+      const [base, dv] = ruc.split("-");
+      if (!base || !dv || calcularDvMock(base) !== Number(dv)) throw rechazo("transporte.transportista.ruc", "Digito verificador incorrecto (4318)");
+    }
+    if (!request.receptor.departamento || !request.receptor.ciudad) throw rechazo("receptor.ciudad", "Domicilio del receptor incompleto");
+    if (request.transporte.finTraslado < request.transporte.inicioTraslado) throw rechazo("transporte.finTraslado", "Fin anterior al inicio (2110)");
+
+    const digest = crypto.createHash("sha256").update(request.external_ref).digest("hex").toUpperCase();
+    const digestLower = digest.toLowerCase();
+    const numeric = String(Number.parseInt(digest.slice(0, 8), 16) % 10_000_000).padStart(7, "0");
+    const document_uuid = `${digestLower.slice(0, 8)}-${digestLower.slice(8, 12)}-4${digestLower.slice(13, 16)}-${digestLower.slice(16, 20)}-${digestLower.slice(20, 32)}`;
+    return {
+      fiscal_document_id: `mock-${request.external_ref}`,
+      document_uuid,
+      cdc: `07${digest}`.padEnd(44, "0").slice(0, 44),
+      numero_fiscal: `${request.fiscal_context.establecimiento}-${request.fiscal_context.punto_expedicion}-${numeric}`,
+      estado: "EMITIDA",
+      status_raw: "APPROVED",
+      result_code: "0260",
+      result_message: "Aprobado",
+      fiscal_envio_modo: resolveFiscalEnvioModo(request.fiscal_context.fiscal_envio_modo),
+      delivery_mode: "BATCH",
+      batch: null,
+      email_status: request.receptor.email ? "DELEGATED" : "NOT_APPLICABLE",
+      raw: { mode: "mock", document_uuid, tipo_documento: "NRE", external_ref: request.external_ref }
+    };
+  }
+
+  /** Catalogo chico fijo con `version: "mock"` (Capital y Central), con los codigos reales del MT150. */
+  async getGeografia(filtro: { departamento?: number; distrito?: number }): Promise<FiscalGeografiaResponse> {
+    if (filtro.distrito) {
+      const ciudades: Record<number, Array<{ codigo: number; descripcion: string }>> = {
+        1: [{ codigo: 1, descripcion: "ASUNCION (DISTRITO)" }],
+        159: [{ codigo: 5946, descripcion: "LUQUE" }],
+        164: [{ codigo: 6010, descripcion: "SAN LORENZO" }]
+      };
+      return { version: "mock", items: (ciudades[filtro.distrito] ?? []).map((c) => ({ ...c, distrito: filtro.distrito })) };
+    }
+    if (filtro.departamento) {
+      const distritos: Record<number, Array<{ codigo: number; descripcion: string }>> = {
+        1: [{ codigo: 1, descripcion: "ASUNCION" }],
+        12: [
+          { codigo: 159, descripcion: "LUQUE" },
+          { codigo: 164, descripcion: "SAN LORENZO" }
+        ]
+      };
+      return { version: "mock", items: (distritos[filtro.departamento] ?? []).map((d) => ({ ...d, departamento: filtro.departamento })) };
+    }
+    return {
+      version: "mock",
+      items: [
+        { codigo: 1, descripcion: "CAPITAL" },
+        { codigo: 12, descripcion: "CENTRAL" }
+      ]
     };
   }
 
@@ -836,6 +910,76 @@ export class RealFiscalGateway implements FiscalGateway {
     }
 
     return mapFiscalEmitResponse(body);
+  }
+
+  /** SPEC_NOTA_REMISION_v0.1 RN-24: `POST /v1/nota-remision` con la clave del facturador (permiso NRE_EMIT). */
+  async emitNotaRemision(request: FiscalEmitNotaRemisionRequest): Promise<FiscalEmitFacturaResponse> {
+    const response = await this.fetchWithTimeout(`${this.config.baseUrl}/nota-remision`, {
+      method: "POST",
+      headers: { ...this.buildHeaders(), "content-type": "application/json" },
+      body: JSON.stringify(this.buildEmitirNotaRemisionPayload(request))
+    });
+    const body = await readJson(response);
+    if (response.status === 503 && (body as { error?: unknown } | null)?.error === "EMISSION_OVERLOADED") {
+      throw new FiscalGatewayError("EMISSION_OVERLOADED", "Backend fiscal al limite de emisiones simultaneas.", {
+        status: response.status,
+        body,
+        retry_after_seconds: retryAfterSeconds(response, body)
+      });
+    }
+    if (!response.ok && !isIdempotentDocumentConflict(response.status, body)) {
+      throw new FiscalGatewayError(
+        response.status === 408 || response.status === 504 ? "TIMEOUT" : "UPSTREAM_ERROR",
+        "Backend fiscal rechazo la nota de remision.",
+        { status: response.status, body }
+      );
+    }
+    return mapFiscalEmitResponse(body);
+  }
+
+  /** SPEC_NOTA_REMISION_v0.1 RN-08: `GET /v1/parametrizaciones/geografia` (guia §38). */
+  async getGeografia(filtro: { departamento?: number; distrito?: number }): Promise<FiscalGeografiaResponse> {
+    const query = filtro.distrito ? `?distrito=${filtro.distrito}` : filtro.departamento ? `?departamento=${filtro.departamento}` : "";
+    const response = await this.fetchWithTimeout(`${this.config.baseUrl}/parametrizaciones/geografia${query}`, {
+      method: "GET",
+      headers: this.buildHeaders()
+    });
+    const body = (await readJson(response)) as Record<string, unknown> | null;
+    if (!response.ok || !body) {
+      throw new FiscalGatewayError("UPSTREAM_ERROR", "No se pudo leer la geografia de FE.", { status: response.status, body });
+    }
+    return mapGeografia(body, filtro);
+  }
+
+  private buildEmitirNotaRemisionPayload(request: FiscalEmitNotaRemisionRequest): Record<string, unknown> {
+    const suggestedDocumentNumber = this.config.serviceNumbering === true ? null : request.fiscal_context.documento_nro;
+    const payload: Record<string, unknown> = {
+      emisor_id: request.facturador.emisor_id,
+      actividadEconomicaCodigo: request.fiscal_context.actividad_economica_codigo,
+      timbrado: {
+        timbrado: request.fiscal_context.timbrado,
+        establecimiento: request.fiscal_context.establecimiento,
+        puntoExpedicion: request.fiscal_context.punto_expedicion,
+        documentoNro: suggestedDocumentNumber,
+        fecIni: request.fiscal_context.timbrado_inicio
+      },
+      numbering: { mode: "ONLINE", authority: "SERVICE", requested_document_number: suggestedDocumentNumber },
+      client_reference: buildClientReference("nota_remision_operativa", request.external_ref, request.fiscal_context.perfil_emision_codigo),
+      // El receptor de la NRE es estricto en FE: solo los campos admitidos.
+      receptor: request.receptor,
+      fecha: request.fecha,
+      remision: request.remision,
+      transporte: request.transporte,
+      items: request.items,
+      ...(request.documentosAsociados && request.documentosAsociados.length > 0 ? { documentosAsociados: request.documentosAsociados } : {}),
+      ...(request.informacionFisco ? { informacionFisco: request.informacionFisco } : {}),
+      envio: buildEnvio(request.fiscal_context.fiscal_envio_modo)
+    };
+    const profileCode = request.fiscal_context.perfil_emision_codigo;
+    if (this.config.sendEmissionProfileCode !== false && profileCode !== "NO_REQUERIDO") {
+      payload.emission_profile_code = profileCode;
+    }
+    return payload;
   }
 
   async emitNotaCredito(request: FiscalEmitNotaCreditoRequest): Promise<FiscalEmitNotaCreditoResponse> {
@@ -2613,3 +2757,38 @@ export const __testing = {
   mapFiscalCancelResponse,
   mapFiscalDocumentoEventosResponse
 };
+
+/** Modulo 11 de SIFEN (como `calcularDvRuc` de `shared/validation/receptor`), para el mock de la NRE. */
+function calcularDvMock(base: string): number {
+  return calcularDvRuc(base);
+}
+
+/** Normaliza la respuesta de geografia de FE (`departamentos`, `departamento.distritos` o `distrito.ciudades`). */
+function mapGeografia(body: Record<string, unknown>, filtro: { departamento?: number; distrito?: number }): FiscalGeografiaResponse {
+  const version = typeof body.version === "string" ? body.version : "";
+  const lista = (valor: unknown): unknown[] => (Array.isArray(valor) ? valor : []);
+  const objeto = (valor: unknown): Record<string, unknown> =>
+    valor && typeof valor === "object" && !Array.isArray(valor) ? (valor as Record<string, unknown>) : {};
+  let items: unknown[];
+  if (filtro.distrito) {
+    const d = objeto(body.distrito);
+    items = lista(d.ciudades ?? d.items ?? body.ciudades ?? body.distrito);
+  } else if (filtro.departamento) {
+    const d = objeto(body.departamento);
+    items = lista(d.distritos ?? d.items ?? body.distritos ?? body.departamento);
+  } else {
+    items = lista(body.departamentos);
+  }
+  return {
+    version,
+    items: items
+      .map((i) => objeto(i))
+      .filter((i) => typeof i.codigo === "number" && typeof i.descripcion === "string")
+      .map((i) => ({
+        codigo: i.codigo as number,
+        descripcion: i.descripcion as string,
+        ...(typeof i.departamento === "number" ? { departamento: i.departamento } : {}),
+        ...(typeof i.distrito === "number" ? { distrito: i.distrito } : {})
+      }))
+  };
+}

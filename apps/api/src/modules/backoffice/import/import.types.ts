@@ -24,6 +24,11 @@ export interface PlanEmisor {
   razon_social: string;
   nombre_fantasia: string | null;
   ambiente: string | null;
+  /**
+   * SPEC_NOTA_REMISION_v0.1 RN-01: permisos de los consumidores con alcance activo sobre el emisor en el
+   * ambiente del deployment (por ejemplo NRE_EMIT). Habilitan documentos nuevos en la app.
+   */
+  permisos_consumidor?: string[];
 }
 
 export interface PlanEstablecimiento {

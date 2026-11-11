@@ -197,6 +197,14 @@ export class PgImportRepository implements ImportRepository {
       );
       const facturadorId = f.rows[0]!.id;
 
+      // SPEC_NOTA_REMISION_v0.1 RN-01 y RN-03: los permisos del consumidor se toman en cada importacion.
+      if (plan.emisor.permisos_consumidor) {
+        await client.query(`update facturadores set fe_consumer_permisos = $2::jsonb, updated_at = now() where id = $1`, [
+          facturadorId,
+          JSON.stringify(plan.emisor.permisos_consumidor)
+        ]);
+      }
+
       // RN-33: la clave entra en la misma transaccion; si algo falla despues, no queda guardada.
       if (input.apiKey) {
         await client.query(`update facturadores set fe_consumer_api_key = $2, updated_at = now() where id = $1`, [

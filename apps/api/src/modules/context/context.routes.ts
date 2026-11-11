@@ -4,13 +4,20 @@ import { getOperationalContext, getReadiness } from "./context.service";
 import { operationalContextRepository } from "./context.repository";
 import { fiscalGateway } from "../fiscal-gateway/fiscal-gateway.client";
 import { env } from "../../config/env";
+import { notaRemisionHabilitada } from "../notas-remision/notas-remision.permiso";
 
 export const contextRouter = Router();
 
 contextRouter.get("/me/context", requireAuth, async (req, res, next) => {
   try {
     const context = await getOperationalContext(req.user!, operationalContextRepository);
-    res.json({ ...context, carga_masiva_habilitada: env.CARGA_MASIVA_ENABLED, nc_moneda_extranjera_habilitada: env.FE_NC_MONEDA_EXTRANJERA });
+    res.json({
+      ...context,
+      carga_masiva_habilitada: env.CARGA_MASIVA_ENABLED,
+      nc_moneda_extranjera_habilitada: env.FE_NC_MONEDA_EXTRANJERA,
+      // SPEC_NOTA_REMISION_v0.1 RN-01: la clave de consumidor del facturador tiene NRE_EMIT (export de FE).
+      nota_remision_habilitada: await notaRemisionHabilitada(context.facturador.id)
+    });
   } catch (error) {
     next(error);
   }

@@ -57,7 +57,7 @@ export function puedeInutilizar(
   documento: Pick<DocumentoResponse, "tipo" | "estado" | "cdc" | "numero_fiscal" | "inutilizacion">
 ): boolean {
   return (
-    documento.tipo === "FACTURA" &&
+    (documento.tipo === "FACTURA" || documento.tipo === "NOTA_REMISION") &&
     documento.estado === "RECHAZADA" &&
     Boolean(documento.cdc) &&
     Boolean(documento.numero_fiscal) &&

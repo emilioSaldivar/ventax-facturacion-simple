@@ -415,6 +415,95 @@ paths:
         "422":
           $ref: "#/components/responses/ValidationError"
 
+  /notas-remision:
+    post:
+      tags: [Notas de remision]
+      summary: Emitir una nota de remision (SPEC_NOTA_REMISION_v0.1 RN-21)
+      description: >-
+        Crea un documento NOTA_REMISION y lo encola en el outbox de emision (mismo worker e idempotencia que la factura).
+        Motivos 1 (venta) y 7 (traslado entre locales propios). Sin precios, IVA ni totales. Con motivo 7 el destinatario es
+        el propio facturador con el domicilio del local de entrega. Requiere `nota_remision_habilitada` (403 FORBIDDEN con
+        `details.reason = NOTA_REMISION_NO_HABILITADA`). Un dato invalido responde 400 con el mensaje para el operador y
+        `details.errores[]` (`campo`, `mensaje`).
+      parameters:
+        - in: header
+          name: Idempotency-Key
+          required: true
+          schema: { type: string, minLength: 8, maxLength: 120 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NotaRemisionRequest"
+      responses:
+        "201":
+          description: Nota creada y encolada (o la existente con la misma clave)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DocumentoResponse"
+        "400":
+          description: Datos invalidos
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "403":
+          description: Clave fiscal sin NRE_EMIT
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /notas-remision/validar:
+    post:
+      tags: [Notas de remision]
+      summary: Validar una nota de remision sin crearla (RN-22)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NotaRemisionRequest"
+      responses:
+        "200":
+          description: Sin errores
+          content:
+            application/json:
+              schema: { type: object, properties: { ok: { type: boolean } } }
+        "400":
+          description: Primer error en `error.message`; todos en `error.details.errores[]`
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /geografia/departamentos:
+    get:
+      tags: [Notas de remision]
+      summary: Departamentos del MT150 (proxy de FE `GET /v1/parametrizaciones/geografia`, cache 24 h; RN-08)
+      responses:
+        "200": { description: Lista, content: { application/json: { schema: { $ref: "#/components/schemas/GeografiaResponse" } } } }
+        "503": { description: FE no responde y no hay cache, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+
+  /geografia/distritos:
+    get:
+      tags: [Notas de remision]
+      summary: Distritos de un departamento (RN-08)
+      parameters:
+        - { in: query, name: departamento, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Lista, content: { application/json: { schema: { $ref: "#/components/schemas/GeografiaResponse" } } } }
+        "503": { description: FE no responde y no hay cache, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+
+  /geografia/ciudades:
+    get:
+      tags: [Notas de remision]
+      summary: Ciudades de un distrito (RN-08)
+      parameters:
+        - { in: query, name: distrito, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Lista, content: { application/json: { schema: { $ref: "#/components/schemas/GeografiaResponse" } } } }
+        "503": { description: FE no responde y no hay cache, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+
   /catalogo/items/search:
     get:
       tags: [Catalogo]
@@ -2922,6 +3011,11 @@ components:
         carga_masiva_habilitada:
           type: boolean
           description: La instancia tiene encendida la carga masiva (`CARGA_MASIVA_ENABLED`).
+        nota_remision_habilitada:
+          type: boolean
+          description: >-
+            SPEC_NOTA_REMISION_v0.1 RN-01. La clave de consumidor del facturador tiene el permiso NRE_EMIT de FE (tomado del
+            export de configuracion importado en el backoffice). Sin el, "Nueva nota de remision" se muestra Proximamente.
         nc_moneda_extranjera_habilitada:
           type: boolean
           description: FE admite la nota de credito de una factura en moneda extranjera, en la moneda de la factura (`FE_NC_MONEDA_EXTRANJERA`). Apagada, esa nota se bloquea con el motivo `NOTA_CREDITO_MONEDA_EXTRANJERA`.
@@ -3075,6 +3169,115 @@ components:
           nullable: true
         naturaleza:
           $ref: "#/components/schemas/ClienteNaturaleza"
+
+    GeografiaResponse:
+      type: object
+      required: [version, items]
+      properties:
+        version: { type: string, description: Version del catalogo de FE }
+        items:
+          type: array
+          items:
+            type: object
+            required: [codigo, descripcion]
+            properties:
+              codigo: { type: integer }
+              descripcion: { type: string }
+              departamento: { type: integer }
+              distrito: { type: integer }
+
+    NotaRemisionLocal:
+      type: object
+      required: [direccion, numero_casa, departamento, ciudad]
+      properties:
+        nombre: { type: string, nullable: true }
+        direccion: { type: string, maxLength: 255 }
+        numero_casa: { type: string, pattern: "^\\d{1,6}$", description: "0 si no tiene" }
+        departamento: { type: integer }
+        departamento_descripcion: { type: string, nullable: true }
+        distrito: { type: integer, nullable: true }
+        distrito_descripcion: { type: string, nullable: true }
+        ciudad: { type: integer }
+        ciudad_descripcion: { type: string, nullable: true }
+        geografia_version: { type: string, nullable: true }
+        telefono: { type: string, nullable: true, description: 6 a 15 digitos }
+
+    NotaRemisionRequest:
+      type: object
+      required: [remision, transporte, items]
+      properties:
+        cliente:
+          type: object
+          nullable: true
+          description: Destinatario (motivo 1). Con motivo 7 se ignora (RN-15).
+          properties:
+            cliente_id: { type: string, format: uuid, nullable: true }
+            documento_tipo: { type: string, enum: [RUC, CI, PASAPORTE, CEDULA_EXTRANJERA] }
+            documento: { type: string }
+            razon_social: { type: string }
+            naturaleza: { type: string, enum: [FISICA, JURIDICA], nullable: true }
+            telefono: { type: string, nullable: true }
+            email: { type: string, nullable: true }
+            domicilio: { $ref: "#/components/schemas/NotaRemisionLocal" }
+        remision:
+          type: object
+          required: [motivo, responsable, kilometros]
+          properties:
+            motivo: { type: integer, enum: [1, 7] }
+            responsable: { type: integer, minimum: 1, maximum: 5, description: Catalogo NRE_RESPONSABLE de FE }
+            kilometros: { type: integer, minimum: 1, maximum: 99999 }
+            fecha_futura_factura: { type: string, format: date, nullable: true, description: Obligatoria con motivo 1; su mes no posterior al de la nota }
+            costo_flete: { type: integer, minimum: 0, nullable: true }
+        transporte:
+          type: object
+          required: [tipo, modalidad, responsable_flete, inicio_traslado, fin_traslado, salida, vehiculo, transportista]
+          properties:
+            tipo: { type: integer, enum: [1, 2], description: 1 propio, 2 tercero }
+            modalidad: { type: integer, enum: [1, 2, 4] }
+            responsable_flete: { type: integer, minimum: 1, maximum: 5, description: Con tipo 1 va 5 (transporte propio) }
+            inicio_traslado: { type: string, format: date }
+            fin_traslado: { type: string, format: date }
+            salida: { $ref: "#/components/schemas/NotaRemisionLocal" }
+            entrega_destinatario: { type: boolean, description: Motivo 1 - la entrega es el domicilio del destinatario }
+            entrega: { $ref: "#/components/schemas/NotaRemisionLocal" }
+            vehiculo:
+              type: object
+              required: [tipo, marca, tipo_identificacion]
+              properties:
+                tipo: { type: string, minLength: 4, maxLength: 10 }
+                marca: { type: string, minLength: 1, maxLength: 10 }
+                tipo_identificacion: { type: integer, enum: [1, 2], description: 1 numero, 2 matricula }
+                numero_identificacion: { type: string, nullable: true }
+                matricula: { type: string, minLength: 6, maxLength: 7, nullable: true }
+            transportista:
+              type: object
+              required: [naturaleza, nombre, domicilio_fiscal, chofer]
+              properties:
+                naturaleza: { type: string, enum: [CONTRIBUYENTE, NO_CONTRIBUYENTE] }
+                nombre: { type: string, minLength: 4, maxLength: 60 }
+                ruc: { type: string, nullable: true, description: Con DV valido por modulo 11 (contribuyente) }
+                tipo_documento: { type: integer, minimum: 1, maximum: 4, nullable: true }
+                doc_nro: { type: string, nullable: true }
+                domicilio_fiscal: { type: string, minLength: 1, maxLength: 150 }
+                chofer:
+                  type: object
+                  required: [nombre, doc_nro, direccion]
+                  properties:
+                    nombre: { type: string, minLength: 4, maxLength: 60 }
+                    doc_nro: { type: string, pattern: "^[^.]{1,20}$" }
+                    direccion: { type: string, minLength: 1, maxLength: 255 }
+        items:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [descripcion, cantidad]
+            properties:
+              codigo: { type: string, nullable: true }
+              descripcion: { type: string, maxLength: 120 }
+              cantidad: { type: number, exclusiveMinimum: true, minimum: 0, description: Hasta 4 decimales }
+              catalogo_item_id: { type: string, format: uuid, nullable: true }
+        informacion_fisco: { type: string, maxLength: 3000, nullable: true }
 
     ClienteUpsertRequest:
       type: object

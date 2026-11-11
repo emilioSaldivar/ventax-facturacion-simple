@@ -16,6 +16,8 @@ import { facturasRouter } from "./modules/facturas/facturas.routes";
 import { fiscalGatewayRouter } from "./modules/fiscal-gateway/fiscal-gateway.routes";
 import { healthRouter } from "./modules/health/health.routes";
 import { notasRouter } from "./modules/notas/notas.routes";
+import { notasRemisionRouter } from "./modules/notas-remision/notas-remision.routes";
+import { geografiaRouter } from "./modules/geografia/geografia.routes";
 import { onboardingRouter } from "./modules/onboarding/onboarding.routes";
 import { recibosRouter } from "./modules/recibos/recibos.routes";
 import { verificacionRouter } from "./modules/verificacion/verificacion.routes";
@@ -76,6 +78,8 @@ export function createApp() {
   app.use(env.API_BASE_PATH, entregaRouter);
   app.use(env.API_BASE_PATH, fiscalGatewayRouter);
   app.use(env.API_BASE_PATH, notasRouter);
+  app.use(env.API_BASE_PATH, notasRemisionRouter);
+  app.use(env.API_BASE_PATH, geografiaRouter);
   app.use(env.API_BASE_PATH, recibosRouter);
   app.use(env.API_BASE_PATH, healthRouter);
   app.use(publicEntregaRouter);

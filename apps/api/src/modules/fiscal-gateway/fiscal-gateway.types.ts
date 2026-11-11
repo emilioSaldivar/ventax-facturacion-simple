@@ -50,6 +50,84 @@ export interface FiscalEmitFacturaRequest {
   tipo_cambio?: number | null;
 }
 
+/** SPEC_NOTA_REMISION_v0.1 RN-05 y RN-24: pedido de `POST /v1/nota-remision`; los bloques van en la forma de FE. */
+export interface FiscalEmitNotaRemisionRequest {
+  /** Discriminador para el worker: el snapshot se guarda tal cual en `fiscal_request_snapshot`. */
+  tipo_documento: "NOTA_REMISION";
+  external_ref: string;
+  facturador: FacturadorSummary;
+  fiscal_context: FiscalContext;
+  /** Fecha y hora de emision en hora de Asuncion, `AAAA-MM-DDTHH:mm:ss` (FE `toXmlgenDateTime`). */
+  fecha: string;
+  receptor: {
+    tipoDocumento: string;
+    docNro: string;
+    dv?: string;
+    razonSocial: string;
+    naturaleza?: "FISICA" | "JURIDICA";
+    tipoOperacion: "B2B" | "B2C";
+    direccion: string;
+    numeroCasa: string;
+    departamento: number;
+    distrito?: number;
+    ciudad: number;
+    telefono?: string;
+    email?: string;
+  };
+  remision: {
+    motivo: number;
+    responsable: number;
+    kilometros: number;
+    fechaFuturaFactura?: string;
+    costoFlete?: number;
+  };
+  transporte: {
+    tipo: 1 | 2;
+    modalidad: 1 | 2 | 3 | 4;
+    responsableFlete: number;
+    inicioTraslado: string;
+    finTraslado: string;
+    salida: FiscalNotaRemisionLocal;
+    entregas: FiscalNotaRemisionLocal[];
+    vehiculos: Array<{ tipo: string; marca: string; tipoIdentificacion: 1 | 2; numeroIdentificacion?: string; matricula?: string }>;
+    transportista: {
+      naturaleza: "CONTRIBUYENTE" | "NO_CONTRIBUYENTE";
+      nombre: string;
+      ruc?: string;
+      tipoDocumento?: number;
+      docNro?: string;
+      domicilioFiscal: string;
+      chofer: { docNro: string; nombre: string; direccion: string };
+    };
+  };
+  items: Array<{ codigo: string; descripcion: string; cantidad: number; unidadMedida: number }>;
+  documentosAsociados?: Array<{ tipo: "ELECTRONICO"; cdc: string }>;
+  informacionFisco?: string;
+}
+
+export interface FiscalNotaRemisionLocal {
+  direccion: string;
+  numeroCasa: string;
+  departamento: number;
+  distrito?: number;
+  ciudad: number;
+  complemento1?: string;
+  complemento2?: string;
+  telefono?: string;
+}
+
+/** `GET /v1/parametrizaciones/geografia` (guia §38). */
+export interface FiscalGeografiaItem {
+  codigo: number;
+  descripcion: string;
+  departamento?: number;
+  distrito?: number;
+}
+export interface FiscalGeografiaResponse {
+  version: string;
+  items: FiscalGeografiaItem[];
+}
+
 export interface FiscalEmitNotaCreditoRequest {
   external_ref: string;
   facturador: FacturadorSummary;
@@ -175,7 +253,8 @@ export interface FiscalInutilizarNumeracionRequest {
   desdeNumero: string;
   hastaNumero: string;
   motivo: string;
-  tipoDocumento: "FE";
+  /** SPEC_NOTA_REMISION_v0.1 RN-26: "NRE" para la nota de remision. */
+  tipoDocumento: "FE" | "NRE";
 }
 
 /** `status`: `VOIDED` si SIFEN acepto; si no, el estado del evento que informa FE. */
@@ -445,6 +524,10 @@ export interface FiscalGateway {
   health(): Promise<FiscalGatewayHealth>;
   emitFactura(request: FiscalEmitFacturaRequest): Promise<FiscalEmitFacturaResponse>;
   emitNotaCredito(request: FiscalEmitNotaCreditoRequest): Promise<FiscalEmitNotaCreditoResponse>;
+  /** SPEC_NOTA_REMISION_v0.1 RN-24. Opcional para no obligar a los dobles de prueba existentes. */
+  emitNotaRemision?(request: FiscalEmitNotaRemisionRequest): Promise<FiscalEmitFacturaResponse>;
+  /** SPEC_NOTA_REMISION_v0.1 RN-08: departamentos, o distritos de un departamento, o ciudades de un distrito. */
+  getGeografia?(filtro: { departamento?: number; distrito?: number }): Promise<FiscalGeografiaResponse>;
   refreshFacturaStatus(request: FiscalRefreshStatusRequest): Promise<FiscalRefreshStatusResponse>;
   /** Motivo original de un rechazo, sin consultar a SIFEN. null si FE no lo conserva. */
   getMotivoRechazo(documentUuid: string): Promise<FiscalMotivoRechazo | null>;
