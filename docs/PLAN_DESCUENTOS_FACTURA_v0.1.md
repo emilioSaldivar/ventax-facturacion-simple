@@ -74,11 +74,11 @@ Principio: FS reproduce el calculo y la validacion de FE (§43, §50 de la guia 
 
 ## Coordinacion con FE
 
-Preguntas abiertas para la sesion de FE antes de implementar el calculo:
+Preguntas hechas y respondidas por la sesion de FE el 2026-11-11 (xmlgen 1.0.277, la misma version en `segel-fs`, el FE local y el lockfile):
 
-1. **Reparto de centavos del descuento global por linea en USD (y de guaranies en PYG).** FE aplica un porcentaje unico por item; ¿como redondea `descuento global por unidad` de cada item (a 2 decimales en USD, al entero en PYG) y a que linea asigna la diferencia para que la suma coincida con `descuentoGlobal`? ¿O FE no ajusta y el `total` del XML sale de la formula directa `Σ cantidad × (precio − descuento) − descuentoGlobal` aunque la suma de items difiera en centavos?
-2. **IVA por linea con descuento.** ¿FE calcula base e IVA de cada item sobre `cantidad × (precio − descuento − descuentoGlobalUnitario)` con redondeo a la mitad hacia arriba (como FS), o con otro redondeo (`Math.round`, truncamiento)? Interesa para que `iva_10` de la vista previa coincida con `/totales`.
-3. **Descuentos en USD en la clave de prueba.** Confirmar que la clave del ensayo local (`segel-fs-5057016` en FE local) acepta `descuento` con decimales en `moneda: "USD"` para CA-10.
-4. **`pagos` con descuento.** Confirmar que en contado `pagos[0].monto` debe ser el total neto (antes del redondeo a 50) y que el redondeo lo aplica FE sobre ese total.
+1. **Reparto del global.** Lo hace xmlgen por peso sobre el bruto, 8 decimales por unidad, sin asignar la diferencia a ninguna linea; `dTotOpe` sale de la formula directa. Registrado en la SPEC (Contrato de FE, RN-04, RN-06).
+2. **Base e IVA por item.** Primero la base (`neto / 1,1` o `/ 1,05`), despues el IVA (`base × tasa / 100`), 8 decimales con `toFixed`. Registrado en RN-06. `packages/shared` reproduce esa secuencia; las pruebas usan los vectores USD y PYG de la SPEC.
+3. **USD con descuentos en la clave de prueba.** Si: `segel-fs-5057016` tiene `FACTURA_EMIT` y moneda y descuentos son campos del request. Avisar a FE antes de emitir.
+4. **Pagos en contado.** FE solo exige suma > 0; FS manda `pagos[0].monto = total` sin redondear (`dTotOpe`), como §43.3 y los ejemplos aprobados.
 
-Respuestas y decisiones se registran en esta seccion y, si cambian una regla, en la SPEC (RN-06 es la unica provisional).
+Pendiente de verificar en SIFEN test (CA-10): una factura **PYG con descuento global que no divide exacto** (xmlgen deja `dSub10`, bases e IVA con decimales en el XML). FE no tiene ninguna aprobada asi; FS la emite en SIFEN test con aviso previo y le pasa el resultado a FE, que lo registra de su lado. Si SIFEN la rechaza, la cadena se detiene en PYG hasta que FE decida como redondea por item, y sigue solo con montos que dividan exacto o con USD.
