@@ -102,7 +102,7 @@ describeDb("multiperfil: base de datos (integracion)", () => {
     }
   });
 
-  it("el refresh guarda la configuracion, la rota y se revoca por configuracion (D-9)", async () => {
+  it("el refresh guarda la configuracion y la conserva al rotar", async () => {
     const hash = `it-mpu-${Date.now()}`;
     tokens.push(hash, `${hash}-2`);
     await authRepo.createRefreshToken({ userId: usuarioId, tokenHash: hash, expiresAt: new Date(Date.now() + 3600_000), operacionConfigId: configNueva });
@@ -110,9 +110,8 @@ describeDb("multiperfil: base de datos (integracion)", () => {
     expect(rotado?.operacionConfigId).toBe(configNueva);
     const nueva = await fila<{ operacion_config_id: string }>("select operacion_config_id from refresh_tokens where token_hash = $1", [`${hash}-2`]);
     expect(nueva.operacion_config_id).toBe(configNueva);
-    expect(await authRepo.revokeRefreshTokensByOperacionConfig(configNueva)).toBeGreaterThanOrEqual(1);
-    const revocada = await fila<{ revoked_at: Date | null }>("select revoked_at from refresh_tokens where token_hash = $1", [`${hash}-2`]);
-    expect(revocada.revoked_at).not.toBeNull();
+    const vieja = await fila<{ revoked_at: Date | null }>("select revoked_at from refresh_tokens where token_hash = $1", [hash]);
+    expect(vieja.revoked_at).not.toBeNull();
   });
 
   it("un documento con perfil se lee con perfil_emision (MPU-007, §E.7)", async () => {
@@ -163,13 +162,13 @@ describeDb("multiperfil: base de datos (integracion)", () => {
       actividad_economica_codigo: datos.act
     };
 
-    // Quitar revoca los refresh emitidos con esa configuracion (D-9).
+    // Quitar NO revoca la sesion (D-9 revisada): el refresh decide con la lista vigente.
     const hash = `it-mpu-bo-${Date.now()}`;
     tokens.push(hash);
     await authRepo.createRefreshToken({ userId: usuarioId, tokenHash: hash, expiresAt: new Date(Date.now() + 3600_000), operacionConfigId: configNueva });
     const trasQuitar = await backofficeRepository.removeOperationConfig({ userId: usuarioId, configId: configNueva });
     expect(trasQuitar?.map((c) => c.id)).toEqual([configOriginal]);
-    expect((await fila<{ revoked_at: Date | null }>("select revoked_at from refresh_tokens where token_hash = $1", [hash])).revoked_at).not.toBeNull();
+    expect((await fila<{ revoked_at: Date | null }>("select revoked_at from refresh_tokens where token_hash = $1", [hash])).revoked_at).toBeNull();
     expect(await backofficeRepository.removeOperationConfig({ userId: usuarioId, configId: configNueva })).toBeNull();
 
     // Agregar de nuevo el mismo punto: entra sin desactivar el otro.

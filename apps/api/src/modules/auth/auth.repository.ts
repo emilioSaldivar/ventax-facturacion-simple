@@ -282,15 +282,6 @@ export class PgAuthRepository implements AuthRepository {
     );
   }
 
-  /** D-9: quitar un perfil revoca los refresh emitidos con el. */
-  async revokeRefreshTokensByOperacionConfig(operacionConfigId: string): Promise<number> {
-    const result = await pool.query(
-      `update refresh_tokens set revoked_at = now() where operacion_config_id = $1 and revoked_at is null`,
-      [operacionConfigId]
-    );
-    return result.rowCount ?? 0;
-  }
-
   /** Tras confirmar la contraseña en el cambio de perfil, el contador vuelve a cero como en el login. */
   async resetFailedLogin(userId: string): Promise<void> {
     await pool.query(`update usuarios set failed_login_count = 0 where id = $1 and failed_login_count <> 0`, [userId]);

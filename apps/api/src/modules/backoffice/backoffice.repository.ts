@@ -612,7 +612,10 @@ export class PgBackofficeRepository implements BackofficeRepository {
     }
   }
 
-  /** SPEC_MULTIPERFIL_USUARIO_v0.1 §D.2 y D-9: quita una configuracion y revoca los refresh emitidos con ella. */
+  /**
+   * SPEC_MULTIPERFIL_USUARIO_v0.1 §D.2. No revoca la sesion (D-9 revisada el 2026-11-10): el pedido
+   * siguiente responde 409 PERFIL_NO_DISPONIBLE y el refresh reasigna el punto restante o pide elegir.
+   */
   async removeOperationConfig(input: { userId: string; configId: string }): Promise<BackofficeOperationConfigResponse[] | null> {
     const client = await pool.connect();
     try {
@@ -623,10 +626,6 @@ export class PgBackofficeRepository implements BackofficeRepository {
         [input.userId, input.configId]
       );
       if (!quitada.rows[0]) { await client.query("rollback"); return null; }
-      await client.query(
-        `update refresh_tokens set revoked_at = now() where operacion_config_id = $1 and revoked_at is null`,
-        [input.configId]
-      );
       const lista = await this.listOperationConfigs(input.userId, client);
       await client.query("commit");
       return lista;

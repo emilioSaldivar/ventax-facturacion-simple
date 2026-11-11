@@ -74,7 +74,6 @@ export interface AuthRepository {
   revokeRefreshToken(input: { tokenHash: string }): Promise<boolean>;
   /** SPEC_MULTIPERFIL_USUARIO_v0.1. Opcionales para no romper repositorios de prueba existentes. */
   setRefreshTokenOperacionConfig?(input: { tokenHash: string; operacionConfigId: string | null }): Promise<void>;
-  revokeRefreshTokensByOperacionConfig?(operacionConfigId: string): Promise<number>;
   resetFailedLogin?(userId: string): Promise<void>;
   findActiveUserById(userId: string): Promise<AuthenticatedUser | null>;
 }
