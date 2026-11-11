@@ -144,7 +144,7 @@ Patron comun de `SPEC_UX_RESTO_APP_v0.1` §B: encabezado "Notas de remision" con
 |---|---|---|---|
 | DP-1 | `unidadMedida`: FE toma 77 por defecto. ¿Se ofrece un selector de unidades (kg, litro, caja) en v0.1 o se fija 77 "Unidad"? ¿Cual es el codigo del catalogo de unidades en `GET /v1/parametrizaciones`? | Usuario y FE | v0.1 fija 77; selector en v0.2 con el catalogo de FE |
 | DP-2 | Formato de `fecha` de la nota: el OpenAPI de `/v1/nota-remision` dice `string` sin formato; la factura usa `date-time`. ¿FE acepta el mismo ISO `date-time` que la factura? | FE | Mandar `new Date().toISOString()` como la factura |
-| DP-3 | RUC con letras (`^[0-9A-Z]{3,8}-\d$`): para el modulo 11, ¿FE usa el codigo ASCII de la letra como la SET? | FE | Reproducir lo que FE haga; si no responde, FS valida con digitos y deja pasar las letras a FE |
+| DP-3 | RUC con letras (`^[0-9A-Z]{3,8}-\d$`) en el modulo 11 | FE | Resuelta el 2026-11-11: FE expande cada letra a los digitos de su codigo ASCII (`A` -> `65`) y pondera digito por digito; algoritmo y vectores en `SPEC_VALIDACIONES_RECEPTOR_v0.1` (RV-01). FS usa esa funcion compartida |
 | DP-4 | Motivos sin campos extra (2, 4, 6, 8 a 14): ¿se agregan en v0.1 si cuestan solo una opcion mas en el selector, o se esperan a probarlos en SIFEN test? | Usuario | Esperar: cada motivo tiene reglas de SIFEN que no se probaron |
 | DP-5 | Transporte propio sin transportista: FE dice que SIFEN test rechaza sin transportista (2300). FS exige siempre transportista; con transporte propio lo precarga con el facturador (RN-13). ¿Correcto para el usuario? | Usuario | Si |
 | DP-6 | Permiso en produccion: ¿para que facturadores de `segel-fs` se pide `NRE_EMIT` a FE? | Usuario | Nombres concretos en la sesion de FE, antes del despliegue |

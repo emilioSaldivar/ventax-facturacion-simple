@@ -131,7 +131,7 @@ Pedidos y confirmaciones a la sesion de FE (`facturacion-electronica-7c`), con r
 
 1. `NRE_EMIT` en `segel-fs` para los facturadores que el usuario nombre (DP-6). Hecho ya en el FE local `fe-segel` para el consumidor del ensayo.
 2. DP-2: formato de `fecha` en `/v1/nota-remision` (ISO `date-time` como la factura, o `date`).
-3. DP-3: modulo 11 con letras en el RUC (ASCII como la SET).
+3. DP-3: resuelta el 2026-11-11 (ver `SPEC_VALIDACIONES_RECEPTOR_v0.1`, RV-01).
 4. DP-1: codigo del catalogo de unidades de medida en `GET /v1/parametrizaciones` y si 77 es "Unidad".
 5. Confirmar que `GET /v1/documentos/{uuid}/files/kude.pdf` de una NRE no requiere nada distinto a la factura y que `/totales` no debe llamarse para una NRE.
 6. Aviso previo a cada emision en SIFEN test (CA-10) con fecha y hora.
