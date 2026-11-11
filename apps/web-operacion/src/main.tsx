@@ -2,43 +2,33 @@ import React, { FormEvent, KeyboardEvent, useEffect, useMemo, useRef, useState }
 import { createRoot } from "react-dom/client";
 import "./styles.css";
 
-import { CargaMasivaView } from "./carga-masiva";
-import { Aviso, type TonoAviso } from "./components/Aviso";
-import { CampoContrasena } from "./components/CampoContrasena";
-import { CampoFormulario } from "./components/CampoFormulario";
 import { useConfirmar } from "./components/Dialogo";
-import { EncabezadoPantalla } from "./components/EncabezadoPantalla";
-import { EstadoVacio } from "./components/EstadoVacio";
 import { Icono, type NombreIcono } from "./components/Icono";
 import { MenuFila } from "./components/MenuFila";
 import { PastillaEstado } from "./components/PastillaEstado";
-import { AvisoPuntoDistinto } from "./components/AvisoPuntoDistinto";
 import { hayBorradorSinEmitir, useBorradorSinEmitir } from "./lib/borradores";
 import { numeroCorrelativo } from "./lib/formato";
-import { actividadPunto, etiquetaPunto, nombrePunto, numeroConPunto } from "./lib/punto";
-import { esNotaSinConfirmar, estadoDocumento, estadoRecibo, etiquetaCondicionVenta, formatDocumentoTipo } from "./lib/estados";
+import { actividadPunto, nombrePunto } from "./lib/punto";
+import { estadoRecibo, etiquetaCondicionVenta, formatDocumentoTipo } from "./lib/estados";
 import {
   ApiClientError,
   claimsDeToken,
   createApiClient,
-  esErrorDePerfil,
-  motivoDeError,
-  onEventoPerfil,
+  esErrorDePerfil, onEventoPerfil,
   refreshSession,
   requierePerfil
 } from "./api/cliente";
 import { _updatePending, applyUpdate, startVersionPolling, useUpdatePending } from "./api/version";
-import { API_BASE_URL } from "./api/config";
 import { ApiProvider, useApi } from "./api/useApi";
 import type { AuthResponse, PerfilDisponible, UserSummary } from "./tipos";
-import { type ViewState, type OperationView, type CondicionVenta, type TipoTransaccionServicio, type DocumentoIdentidadTipo, type TipoIva, type DocumentoEstado, type BeforeInstallPromptEvent, type OperationalContextResponse, type ReadinessResponse, type ClienteNaturaleza, type FacturaClienteInput, type FacturaPreviewRequest, type FacturaPreviewResponse, type DocumentoAccion, type DocumentoAccionSoportePayload, type DocumentoInutilizacion, type NotaCreditoSaldoResponse, type DocumentoResponse, type DocumentoListResponse, type NotaCreditoCandidate, type NotaCreditoCandidateListResponse, type DeliveryLinkResponse, type EmailStatusResponse, type DocumentoEventosListResponse, type DocumentoDecisionResponse, type DocumentoValidateCdcImpactResponse, type DocumentoGestionResendResponse, type DocumentoGestionCreateDerivedResponse, type DocumentoGestionCancelSendResponse, type DocumentoGestionVoidResponse, type BatchPendientesGestionResponse, type ReconciliacionFiscalResponse, type InvoiceLineDraft, type ClienteSearchResult, type ClienteResponse, type ClienteListResponse, type DnitAutocompleteResponse, type CatalogoItem, type CatalogoItemListResponse, type CatalogoDraft, type InvoiceClientePrefillRequest, type NotaPublicaPayload, type ReciboPublicaPayload, type TycCurrentData, type ClasePaso, type MonedaFactura, type SifenSummary, type NotaTipo, type NotaEstadoComercial, type NotaEstadoVisual, type NotaFilaTipo, type NotaFilaDraft, type NotaClienteDraft, type NotaListItem, type NotaConItems, type InvoiceInitialDraft, type ReciboFormaPago, type ReciboRecord } from "./tipos";
-import { formatMonto, formatGuaranies, formatCantidad, formatShortDate, fmtFecha, formatHora, formatIntegerInput, normalizeIntegerInput, buildWhatsAppShareUrl, firstText, iniciales, formatYmdFromDate, formatUltimaVerificacion } from "./lib/formato";
+import { type ViewState, type OperationView, type CondicionVenta, type TipoTransaccionServicio, type DocumentoIdentidadTipo, type TipoIva, type DocumentoEstado, type BeforeInstallPromptEvent, type OperationalContextResponse, type ReadinessResponse, type ClienteNaturaleza, type FacturaClienteInput, type FacturaPreviewRequest, type FacturaPreviewResponse, type DocumentoResponse, type DeliveryLinkResponse, type EmailStatusResponse, type InvoiceLineDraft, type ClienteSearchResult, type ClienteResponse, type ClienteListResponse, type DnitAutocompleteResponse, type CatalogoItem, type CatalogoItemListResponse, type CatalogoDraft, type InvoiceClientePrefillRequest, type TycCurrentData, type ClasePaso, type MonedaFactura, type NotaTipo, type NotaEstadoComercial, type NotaEstadoVisual, type NotaFilaTipo, type NotaFilaDraft, type NotaClienteDraft, type NotaListItem, type NotaConItems, type InvoiceInitialDraft, type ReciboFormaPago, type ReciboRecord } from "./tipos";
+import { formatMonto, formatGuaranies, formatCantidad, fmtFecha, formatHora, formatIntegerInput, normalizeIntegerInput, buildWhatsAppShareUrl, firstText, iniciales } from "./lib/formato";
 import { BrandMark } from "./components/BrandMark";
 import { LoadingScreen } from "./components/LoadingScreen";
 import { TotalRow } from "./components/TotalRow";
 import { useEsEscritorio } from "./lib/useEsEscritorio";
 import { cantidadValida, normalizeDecimalInput } from "./lib/formato";
-import { mensajeResultadoReintento, mensajeNotaCredito, formatEmailStatus, getDocumentoNombreLower, getSimpleDocumentoEstado, esEstadoFinalOperador } from "./lib/documentos";
+import { mensajeResultadoReintento, formatEmailStatus, getDocumentoNombreLower, getSimpleDocumentoEstado, esEstadoFinalOperador } from "./lib/documentos";
 import { getOperationalTitle, mapBusinessReadinessChecks } from "./lib/contexto";
 import { FORMAS_PAGO_LABELS } from "./lib/etiquetas";
 import { StatusView } from "./views/StatusView";

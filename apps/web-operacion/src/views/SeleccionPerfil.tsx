@@ -1,5 +1,5 @@
 // Movido de main.tsx sin cambios (PLAN_UX_RESTO_APP_v0.1 §10.9, URA-023).
-import { FormEvent, KeyboardEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { CampoContrasena } from "../components/CampoContrasena";
 import { Icono } from "../components/Icono";
 import { actividadPunto, nombrePunto } from "../lib/punto";
