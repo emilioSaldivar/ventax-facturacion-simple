@@ -417,8 +417,8 @@ function ListadoCargas({
     <>
       <div className="carga-encabezado">
         <div>
-          {/* SPEC_AJUSTES_TEXTOS_OPERADOR_v0.1, A-3: el listado tiene cargas de todos los tipos. */}
-          <h3>Cargas por planilla</h3>
+          {/* SPEC_AJUSTES_TEXTOS_OPERADOR_v0.1, A-3: el listado tiene cargas de todos los tipos; el titulo de la pantalla ya dice "Cargas por planilla". */}
+          <h3>Cargas subidas</h3>
           <p className="muted">Subí un archivo con tus ventas, revisá los errores y confirmá para emitir.</p>
         </div>
         <div className="carga-acciones">

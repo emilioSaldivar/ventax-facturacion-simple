@@ -36,7 +36,7 @@ async function irACargas(page) {
   await abrirVista(page, "Documentos");
   await page.getByRole("heading", { name: "Facturas y notas" }).waitFor({ timeout: 20000 });
   await page.getByRole("button", { name: /^Cargas por planilla/ }).click();
-  await page.getByRole("heading", { name: "Cargas por planilla" }).waitFor({ timeout: 20000 });
+  await page.getByRole("heading", { name: "Cargas subidas" }).waitFor({ timeout: 20000 });
 }
 
 const estado = async (page) => (await page.locator(".carga-encabezado .status-pill").first().innerText().catch(() => "")).trim();
@@ -56,7 +56,7 @@ async function probar(page, ruta) {
   if (!validada.includes("Lista para confirmar")) {
     check(`${nombre}: validado sin errores`, false, `${validada} :: ${informe.slice(0, 500)}`);
     await page.getByRole("button", { name: "Volver a las cargas" }).click();
-    await page.getByRole("heading", { name: "Cargas por planilla" }).waitFor({ timeout: 20000 });
+    await page.getByRole("heading", { name: "Cargas subidas" }).waitFor({ timeout: 20000 });
     return;
   }
   check(`${nombre}: validado sin errores`, total(informe, "Con errores") === 0, informe.slice(0, 300));
@@ -80,7 +80,7 @@ async function probar(page, ruta) {
     `${final} comprobantes=${comprobantes} aprobados=${aprobados} rechazados=${total(texto, "Rechazados")} :: ${texto.slice(texto.indexOf("Número del archivo"), texto.indexOf("Número del archivo") + 500)}`
   );
   await page.getByRole("button", { name: "Volver a las cargas" }).click();
-  await page.getByRole("heading", { name: "Cargas por planilla" }).waitFor({ timeout: 20000 });
+  await page.getByRole("heading", { name: "Cargas subidas" }).waitFor({ timeout: 20000 });
 }
 
 (async () => {

@@ -22,7 +22,7 @@
 
 - **A-1** Sin numero estimado. Subtitulo: "{fecha} · el número lo asigna el sistema al emitir". Se borra `getNextFiscalNumber`. El numero aparece recien en el resultado, como hoy. `documento_nro` sigue en el contexto: el backoffice lo usa y la app no lo muestra.
 - **A-2** El titulo y el boton dicen el tipo del documento: "Nota de crédito 001-001-…", "Nota de crédito creada · número pendiente", "Crear nueva nota de crédito". Para facturas queda todo igual.
-- **A-3** Titulo "Cargas por planilla", igual que la pestaña de Documentos. La bajada pasa a voseo: "Subí un archivo con tus ventas, revisá los errores y confirmá para emitir."
+- **A-3** Titulo del listado "Cargas subidas". No se repite "Cargas por planilla": ya es el titulo de la pantalla en Documentos (primer intento, corregido en la validacion: quedaban dos titulos iguales). La bajada pasa a voseo: "Subí un archivo con tus ventas, revisá los errores y confirmá para emitir."
 - **A-4** El boton baja la plantilla del tipo con el que se entro: "Descargar plantilla de facturas" o "Descargar plantilla de notas de remisión".
 - **A-5** "Ver factura" o "Ver nota de remisión" segun el tipo de la carga.
 - **A-6** Titulo "Presupuestos" o "Pedidos" segun la pestaña activa.
@@ -39,7 +39,7 @@
 
 - **CA-1** Nueva factura no muestra "Próximo número" en ningun modo ni ancho.
 - **CA-2** El resultado de una nota de credito dice "Nota de crédito" en el titulo y en el boton; el de una factura no cambia.
-- **CA-3** El listado de cargas titula "Cargas por planilla"; desde Notas de remision el boton baja `plantilla-carga-notas-remision.csv`.
+- **CA-3** El listado de cargas titula "Cargas subidas" (un solo "Cargas por planilla" en la pantalla); desde Notas de remision el boton baja `plantilla-carga-notas-remision.csv`.
 - **CA-4** En una carga de remisiones la fila dice "Ver nota de remisión".
 - **CA-5** La pestaña Pedidos titula "Pedidos".
 - **CA-6** Con USD y un tipo de cambio valido se ve la ayuda de la DNIT.

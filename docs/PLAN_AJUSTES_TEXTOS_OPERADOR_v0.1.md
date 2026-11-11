@@ -10,7 +10,7 @@ Solo frontend (`apps/web-operacion`). Sin cambios de API, base ni `spec/openapi.
 |---|---|---|
 | A-1 | `src/main.tsx` (`InvoiceEditor`) | Se borran `nextFiscalNumber`, `numeroEstimado` y `getNextFiscalNumber`. Subtitulo: `{fecha} · el número lo asigna el sistema al emitir`, en los dos modos. Se actualiza `SPEC_UX_NUEVA_FACTURA_v0.1` B.1 con una nota que remite a este SPEC. |
 | A-2 | `src/components/ResultadoEmision.tsx` | Titulo con `getDocumentoNombre(documento.tipo)` (se agrega a `lib/documentos.ts` la variante con mayuscula inicial): "Nota de crédito 001-…" / "Nota de crédito creada · número pendiente". El boton "Crear nueva {tipo en minuscula}". |
-| A-3 | `src/carga-masiva.tsx` (`ListadoCargas`) | `<h3>Cargas por planilla</h3>`. |
+| A-3 | `src/carga-masiva.tsx` (`ListadoCargas`) | `<h3>Cargas subidas</h3>` (la pantalla de Documentos ya titula "Cargas por planilla"). |
 | A-4 | `src/carga-masiva.tsx` | `ListadoCargas` recibe `tipo` (`tipoPorDefecto ?? "FACTURA"`); el boton dice "Descargar plantilla de {plural}" y baja `/cargas/plantilla?tipo_documento={tipo}` con `PLANTILLA_POR_TIPO[tipo]`. |
 | A-5 | `src/carga-masiva.tsx` (`DetalleCarga`) | "Ver {etiqueta en minuscula}" con `tipoDeCarga(carga.tipo_documento)`: "Ver factura" / "Ver nota de remisión". |
 | A-6 | `src/main.tsx` (`NotasView`) | `<h2>` con `filtroTipo === "PEDIDO" ? "Pedidos" : "Presupuestos"`. |
@@ -19,7 +19,7 @@ Solo frontend (`apps/web-operacion`). Sin cambios de API, base ni `spec/openapi.
 
 ## Guiones que usan los textos viejos
 
-- "Cargas de facturas" → "Cargas por planilla": `scripts/playwright-carga-masiva.cjs`, `scripts/segel-fs/playwright-atencion-comprobantes.cjs`, `scripts/segel-fs/playwright-ejemplos-planilla.cjs`.
+- "Cargas de facturas" → "Cargas subidas": `scripts/segel-fs/playwright-ensayo-volumen.cjs`, `scripts/segel-fs/playwright-planillas-ejemplo.cjs`, `scripts/playwright-carga-masiva.cjs`, `scripts/segel-fs/playwright-atencion-comprobantes.cjs`, `scripts/segel-fs/playwright-ejemplos-planilla.cjs`.
 - "Próximo número": `scripts/segel-fs/playwright-ux-nueva-factura.cjs` (se cambia la verificacion por la ausencia del texto).
 - "Ver factura" sigue igual en cargas de facturas.
 
