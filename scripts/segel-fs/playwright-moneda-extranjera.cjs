@@ -51,12 +51,12 @@ async function entrar(browser, ancho, alto, modo = "simple") {
 async function emitir(page, { moneda, tipoCambio, credito, precio, etiqueta, cantidad = "2" }) {
   await abrirVista(page, "Nueva factura");
   await page.locator('select[aria-label="Moneda"]').waitFor();
-  if (credito) await page.getByRole("button", { name: "Credito", exact: true }).click();
+  if (credito) await page.getByRole("button", { name: "Crédito", exact: true }).click();
   await page.locator('select[aria-label="Moneda"]').selectOption(moneda);
-  await page.getByPlaceholder("Ingrese numero de documento").fill(RUC);
-  await page.getByLabel("Nombre o razon social").fill(NOMBRE);
+  await page.getByPlaceholder("Ingresá el número de documento").fill(RUC);
+  await page.getByLabel("Nombre o razón social").fill(NOMBRE);
   await page.getByRole("button", { name: /Agregar producto/ }).click();
-  await page.getByPlaceholder("Ingrese descripcion").fill(`Consultoria en informatica ${etiqueta}`);
+  await page.getByPlaceholder("Ingresá descripción").fill(`Consultoria en informatica ${etiqueta}`);
   await page.locator('label:has-text("Cantidad") input').first().fill(cantidad);
   await page.locator('label:has-text("Precio") input').first().fill(precio);
   await page.getByRole("button", { name: "AGREGAR Y NO GUARDAR" }).click();
@@ -95,10 +95,10 @@ async function emitir(page, { moneda, tipoCambio, credito, precio, etiqueta, can
     // CA-11 (RN-08): una linea USD con centavos deja de valer al volver a PYG; corregida, se puede crear.
     await page.locator('select[aria-label="Moneda"]').selectOption("USD");
     await page.getByLabel("Tipo de cambio").fill("7350,5");
-    await page.getByPlaceholder("Ingrese numero de documento").fill(RUC);
-    await page.getByLabel("Nombre o razon social").fill(NOMBRE);
+    await page.getByPlaceholder("Ingresá el número de documento").fill(RUC);
+    await page.getByLabel("Nombre o razón social").fill(NOMBRE);
     await page.getByRole("button", { name: /Agregar producto/ }).click();
-    await page.getByPlaceholder("Ingrese descripcion").fill("Prueba de cambio de moneda");
+    await page.getByPlaceholder("Ingresá descripción").fill("Prueba de cambio de moneda");
     await page.locator('label:has-text("Precio") input').first().fill("150,25");
     await page.getByRole("button", { name: "AGREGAR Y NO GUARDAR" }).click();
     await page.locator('select[aria-label="Moneda"]').selectOption("PYG");
@@ -171,7 +171,7 @@ async function emitir(page, { moneda, tipoCambio, credito, precio, etiqueta, can
       const habilitado = await page.waitForFunction((b) => b && !b.disabled, await nc.elementHandle(), { timeout: 20000 }).then(() => true, () => false);
       check("CA-06 1440: con FE rc4.27 la nota de credito de la factura en USD esta habilitada y sin aviso", habilitado && !ficha.includes("moneda extranjera se gestiona con soporte"), "");
       await nc.click();
-      await page.getByRole("group", { name: "Tipo de nota de credito" }).getByRole("button", { name: "Total" }).waitFor({ timeout: 15000 });
+      await page.getByRole("group", { name: "Tipo de nota de crédito" }).getByRole("button", { name: "Total" }).waitFor({ timeout: 15000 });
       await page.locator(".modal-panel textarea").fill("Prueba de nota de credito en dolares");
       await page.getByRole("button", { name: "Confirmar" }).click();
       const popup = page.locator('section[aria-labelledby="nc-success-title"]');
@@ -183,7 +183,7 @@ async function emitir(page, { moneda, tipoCambio, credito, precio, etiqueta, can
       await page.reload({ waitUntil: "domcontentloaded" });
       await esperarSesion(page);
       await abrirVista(page, "Documentos");
-      await page.locator('.filter-tabs button:has-text("Notas de credito")').first().click();
+      await page.locator('.filter-tabs button:has-text("Notas de crédito")').first().click();
       await page.waitForTimeout(2500);
       const filasNc = await page.locator("table.documents-tabla tbody tr").allInnerTexts().catch(() => []);
       const filaNc = filasNc.find((f) => f.includes("USD 300,50")) ?? "";

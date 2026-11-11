@@ -58,7 +58,7 @@ async function banderaApagada(browser, vp) {
   await page.getByRole("button", { name: "Abrir menu" }).first().click();
   await page.locator('button:has-text("Documentos")').first().click();
   await page.getByRole("heading", { name: "Facturas y notas" }).waitFor();
-  await page.getByRole("button", { name: "Notas de credito" }).waitFor();
+  await page.getByRole("button", { name: "Notas de crédito" }).waitFor();
   check(vp.nombre, "CA-12: sin pestana Carga masiva", (await page.getByRole("button", { name: "Carga masiva" }).count()) === 0);
   const estados = await page.evaluate(async () => {
     const sesion = await fetch("/api/v1/auth/refresh", { method: "POST", credentials: "include" });
@@ -97,16 +97,16 @@ async function selectorBackoffice(browser, vp) {
   await page.getByText(/^Contextos \(/).click();
 
   const tarjeta = page.locator("div", { has: page.getByRole("button", { name: "Editar", exact: true }) }).filter({ hasText: "E2E-P001" }).last();
-  check(vp.nombre, "el contexto muestra su numeracion", (await tarjeta.innerText()).includes("Numeracion: del servicio"), await tarjeta.innerText());
+  check(vp.nombre, "el contexto muestra su numeracion", (await tarjeta.innerText()).includes("Numeración: del servicio"), await tarjeta.innerText());
   await tarjeta.getByRole("button", { name: "Editar", exact: true }).click();
 
-  const selector = page.getByLabel("Numeracion de facturas");
+  const selector = page.getByLabel("Numeración de facturas");
   check(vp.nombre, "el selector parte en el valor actual", (await selector.inputValue()) === "SERVICIO");
-  check(vp.nombre, "el selector avisa del cruce de numeros", await page.getByText("puede cruzar numeros").isVisible());
+  check(vp.nombre, "el selector avisa del cruce de numeros", await page.getByText("puede cruzar números").isVisible());
   await page.screenshot({ path: path.join(outDir, `${vp.nombre}-21-backoffice-selector.png`), fullPage: true });
   await selector.selectOption("CLIENTE");
   await page.getByRole("button", { name: "Guardar" }).click();
-  await page.getByText("Numeracion: del cliente").first().waitFor();
+  await page.getByText("Numeración: del cliente").first().waitFor();
 
   const evento = psql("select metadata from audit_events where event_type = 'CONTEXTO_NUMERACION_FACTURAS_CAMBIADA' order by created_at desc limit 1;");
   check(vp.nombre, "el cambio queda auditado con anterior y nuevo", evento.includes('"anterior": "SERVICIO"') && evento.includes('"nuevo": "CLIENTE"'), evento);

@@ -195,7 +195,7 @@ async function run() {
       const { page, cerrar } = await abrir("catalogo-pestana-activa", ["ventax_factura_access_token", "mock"]);
       await page.goto(`${origin}/app/`, { waitUntil: "networkidle" });
       await page.getByRole("button", { name: "Abrir menu" }).first().click();
-      await page.locator(".menu-item", { hasText: "Catalogo" }).first().click();
+      await page.locator(".menu-item", { hasText: "Catálogo" }).first().click();
       await page.waitForSelector(".filter-tabs button.active");
       const tab = await page.locator(".filter-tabs button.active").first().evaluate((b) => {
         const c = getComputedStyle(b);

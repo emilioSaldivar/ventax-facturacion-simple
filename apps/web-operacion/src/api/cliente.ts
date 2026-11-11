@@ -103,14 +103,14 @@ export function createApiClient(accessToken: string | null, setAccessToken: (tok
       if (requierePerfil(refreshed)) {
         // SPEC_MULTIPERFIL_USUARIO_v0.1 §B.5: el punto de la sesion ya no esta; App muestra la eleccion.
         emitirEventoPerfil({ tipo: "ELEGIR", respuesta: refreshed });
-        throw new ApiClientError(409, "Elegi el punto de expedicion para continuar.", { reason: "PERFIL_REQUERIDO" });
+        throw new ApiClientError(409, "Elegí el punto de expedición para continuar.", { reason: "PERFIL_REQUERIDO" });
       }
       setAccessToken(refreshed.access_token);
       const uocAnterior = claimsDeToken(accessToken).uoc;
       if (uocAnterior && claimsDeToken(refreshed.access_token).uoc !== uocAnterior) {
         // RN-06: el refresh asigno otro punto; no se reintenta el pedido con un punto que no esta en pantalla.
         emitirEventoPerfil({ tipo: "RECARGAR", respuesta: refreshed });
-        throw new ApiClientError(409, "Tu punto de expedicion cambio. Revisa el punto activo antes de continuar.", { reason: "PERFIL_NO_DISPONIBLE" });
+        throw new ApiClientError(409, "Tu punto de expedición cambió. Revisá el punto activo antes de continuar.", { reason: "PERFIL_NO_DISPONIBLE" });
       }
       return createApiClient(refreshed.access_token, setAccessToken).requestRaw(path, init, false);
     }
@@ -123,12 +123,12 @@ export function createApiClient(accessToken: string | null, setAccessToken: (tok
         // §C.6: perfil no disponible (lo quito el backoffice) o token viejo sin perfil: el refresh decide.
         const refreshed = await refreshSession().catch(() => null);
         if (!refreshed) {
-          throw new ApiClientError(401, "Tu punto de expedicion cambio. Volve a entrar.", { reason: "PERFIL_NO_DISPONIBLE" });
+          throw new ApiClientError(401, "Tu punto de expedición cambió. Volvé a entrar.", { reason: "PERFIL_NO_DISPONIBLE" });
         }
         // RN-06: nunca se reintenta el pedido con otro punto. App recarga el contexto (o pide elegir)
         // y el operador ve el punto nuevo antes de volver a emitir.
         emitirEventoPerfil(requierePerfil(refreshed) ? { tipo: "ELEGIR", respuesta: refreshed } : { tipo: "RECARGAR", respuesta: refreshed });
-        throw new ApiClientError(409, "Tu punto de expedicion cambio. Revisa el punto activo antes de continuar.", { reason: motivoDeError(error) });
+        throw new ApiClientError(409, "Tu punto de expedición cambió. Revisá el punto activo antes de continuar.", { reason: motivoDeError(error) });
       }
       throw error;
     }

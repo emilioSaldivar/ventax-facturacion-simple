@@ -103,7 +103,7 @@ async function login(browser, ancho, alto) {
 
 /** Pantalla C.1: elige el punto y espera la app. */
 async function elegirEnPantalla(page, v, punto) {
-  await page.getByRole("heading", { name: "¿Desde que punto vas a trabajar?" }).waitFor({ timeout: 20000 });
+  await page.getByRole("heading", { name: "¿Desde qué punto vas a trabajar?" }).waitFor({ timeout: 20000 });
   const opciones = page.locator(".perfil-eleccion .perfil-opcion");
   check(`CA-08 ${v}: pantalla de eleccion con dos puntos`, (await opciones.count()) === 2, await texto(page, ".perfil-eleccion"));
   check(`D-8 ${v}: el token de eleccion no se guarda`, (await page.evaluate(() => localStorage.getItem("ventax_factura_access_token"))) === null);
@@ -119,10 +119,10 @@ async function elegirEnPantalla(page, v, punto) {
 /** Ventana C.3: cambia de punto con la contraseña indicada. Devuelve el texto de error si lo hubo. */
 async function cambiarPunto(page, punto, password, { esperaAdvertencia = false, v = "" } = {}) {
   await page.locator("button.topbar-facturador--boton").click();
-  const dialogo = page.getByRole("dialog", { name: "Cambiar punto de expedicion" });
+  const dialogo = page.getByRole("dialog", { name: "Cambiar punto de expedición" });
   await dialogo.waitFor();
   if (esperaAdvertencia) {
-    check(`CA-09 ${v}: advertencia de documento sin emitir`, (await dialogo.innerText()).includes("Tenes un documento sin emitir"));
+    check(`CA-09 ${v}: advertencia de documento sin emitir`, (await dialogo.innerText()).includes("Tenés un documento sin emitir"));
   }
   await dialogo.locator(".perfil-opcion").filter({ hasText: `Punto ${punto}` }).click();
   await dialogo.getByLabel("Tu contraseña").fill(password);
@@ -146,10 +146,10 @@ async function abrirNuevaFactura(page) {
 }
 
 async function cargarFactura(page, lineas) {
-  await page.getByPlaceholder("Ingrese numero de documento").fill(RUC);
-  await page.getByPlaceholder("Ingrese numero de documento").press("Tab");
+  await page.getByPlaceholder("Ingresá el número de documento").fill(RUC);
+  await page.getByPlaceholder("Ingresá el número de documento").press("Tab");
   await page.waitForTimeout(800);
-  const nombre = page.getByLabel("Nombre o razon social");
+  const nombre = page.getByLabel("Nombre o razón social");
   if (!(await nombre.inputValue()).trim()) await nombre.fill(NOMBRE);
   for (const [i, l] of lineas.entries()) {
     const fila = page.locator(`[data-grilla-fila="${i}"]`);
@@ -164,7 +164,7 @@ async function esperarFacturaAprobada(page, etiqueta) {
   const inicio = Date.now();
   while (Date.now() - inicio < ESPERA_APROBACION_MS) {
     if ((await page.locator(".paso.hecho").count()) === 4) break;
-    const resumen = page.locator("summary", { hasText: "Mas opciones" });
+    const resumen = page.locator("summary", { hasText: "Más opciones" });
     if ((await resumen.count()) && !(await page.locator("details.mas-opciones[open]").count())) await resumen.click();
     const verificar = page.getByRole("button", { name: "Verificar estado fiscal" });
     if (await verificar.isVisible().catch(() => false)) await verificar.click();
@@ -238,7 +238,7 @@ async function esperarDocumentoFinal(page, documentoId) {
     check("Version: sin aviso de nueva version (frontend y API del mismo commit)", (await page.locator(".update-banner").count()) === 0);
 
     // Paso 12: cambio a 001-001, primero con una clave incorrecta.
-    await abrirVista(page, "Informacion y estado");
+    await abrirVista(page, "Información y estado");
     const errorClave = await cambiarPunto(page, "001", `${clave}-incorrecta`, { v: "1440" });
     check("CA-03 1440: contraseña incorrecta muestra el error en la ventana", errorClave === "Contraseña incorrecta.", errorClave ?? "sin error");
     const fallidos = Number(sql("select count(*) from login_attempts where usuario_id = $1 and reason = 'INVALID_PASSWORD_PERFIL'", uid));
@@ -260,7 +260,7 @@ async function esperarDocumentoFinal(page, documentoId) {
       check("Paso 13: NC omitida por MPU_SIN_NC (validada en la v0.1)", true);
     } else if (aprobada) {
       await abrirVista(page, "Devolver factura");
-      await page.getByPlaceholder("Cliente, documento, numero o total").fill(fNumero.slice(-7));
+      await page.getByPlaceholder("Cliente, documento, número o total").fill(fNumero.slice(-7));
       await page.getByRole("button", { name: "Buscar" }).click();
       await page.waitForTimeout(1500);
       await page.locator(".documents-list .document-row").filter({ hasText: fNumero.slice(-7) }).first().click();
@@ -268,7 +268,7 @@ async function esperarDocumentoFinal(page, documentoId) {
       check("RN-05: aviso de que la NC sale por otro punto", avisoNc.includes("se emitio por 001-002") && avisoNc.includes("saldra por 001-001"), avisoNc.slice(0, 300));
       await page.locator(".credit-note-motivo textarea").fill("Prueba FS-54: NC por otro punto del mismo emisor");
       await page.screenshot({ path: path.join(outDir, "1440-nc-aviso.png"), fullPage: true });
-      await page.getByRole("button", { name: "Emitir nota de credito" }).click();
+      await page.getByRole("button", { name: "Emitir nota de crédito" }).click();
       await page.waitForTimeout(3000);
       const ncId = sql(
         `select id from facturas_operativas where documento_relacionado_id = $1 and tipo = 'NOTA_CREDITO' order by created_at desc limit 1`,
@@ -330,7 +330,7 @@ async function esperarDocumentoFinal(page, documentoId) {
       if (ancho >= 1024) {
         await cargarFactura(p2, [{ descripcion: `Borrador ${v}`, cantidad: "1", precio: "1000" }]);
       } else {
-        await p2.getByPlaceholder("Ingrese numero de documento").fill(RUC);
+        await p2.getByPlaceholder("Ingresá el número de documento").fill(RUC);
         await p2.waitForTimeout(500);
       }
       const err = await cambiarPunto(p2, "002", clave, { esperaAdvertencia: true, v });

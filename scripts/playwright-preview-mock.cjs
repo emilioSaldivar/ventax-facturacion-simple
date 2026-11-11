@@ -38,8 +38,8 @@ let ultimo = null;
   await page.locator('select[aria-label="Moneda"]').waitFor();
   await page.locator('select[aria-label="Moneda"]').selectOption("USD");
   await page.getByLabel("Tipo de cambio").fill("7350,5");
-  await page.getByPlaceholder("Ingrese numero de documento").fill("80026570-0");
-  await page.getByLabel("Nombre o razon social").fill("SEGEL SA");
+  await page.getByPlaceholder("Ingresá el número de documento").fill("80026570-0");
+  await page.getByLabel("Nombre o razón social").fill("SEGEL SA");
   if (modo === "completo") {
     const fila = async (i, d, c, p) => {
       const f = page.locator(`[data-grilla-fila="${i}"]`);

@@ -39,7 +39,7 @@ async function buscar(page, campo, texto) {
     await page.getByRole("button", { name: "Abrir menu" }).first().waitFor({ timeout: 15000 });
     await page.getByRole("button", { name: "Abrir menu" }).first().click();
     await page.locator('button:has-text("Nueva factura")').first().click();
-    const campo = page.getByPlaceholder("Ingrese numero de documento").first();
+    const campo = page.getByPlaceholder("Ingresá el número de documento").first();
     await campo.waitFor({ timeout: 10000 });
 
     const porNombreAjeno = await buscar(page, campo, datos.ajeno.razon_social.slice(0, 10));

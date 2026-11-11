@@ -27,7 +27,7 @@ const ANCHOS = [
   { ancho: 1280, alto: 800 },
   { ancho: 390, alto: 844 }
 ];
-const MEDIDAS = ["emojis", "desbordeX", "sinNombre", "camposSinEtiqueta", "chicos", "camposChicos", "consola"];
+const MEDIDAS = ["emojis", "desbordeX", "sinNombre", "camposSinEtiqueta", "chicos", "camposChicos", "sinTilde", "consola"];
 
 const slug = (s) =>
   s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40);
@@ -44,6 +44,8 @@ async function medir(page, celular, alcance) {
     };
     const recorte = (e) => e.outerHTML.replace(/\s+/g, " ").slice(0, 120);
     const texto = raiz.innerText;
+    // URA-020 (P-X1, P-X2): palabras de la interfaz sin tilde o en usted (lista del PLAN §10.6).
+    const sinTilde = texto.match(/(?<![\p{L}])(Informacion|Catalogo|Credito|credito|Numero|numero|Descripcion|Codigo|Contrasena|contrasena|expedicion|emision|Operacion|Administracion|Sesion|ultimo|Seleccione|Ingrese)(?![\p{L}])/gu) ?? [];
     const emojis = texto.match(/[\p{Extended_Pictographic}✓✕⋮⋯⚠←→]/gu) ?? [];
     const controles = [...raiz.querySelectorAll('button, a[href], [role="button"]')].filter(visible);
     const sinNombre = controles.filter((e) => {
@@ -61,6 +63,8 @@ async function medir(page, celular, alcance) {
     );
     const res = {
       emojis: emojis.length,
+      sinTilde: sinTilde.length,
+      sinTildeMuestra: [...new Set(sinTilde)].slice(0, 8),
       emojisMuestra: [...new Set(emojis)].slice(0, 10).join(" "),
       desbordeX: document.documentElement.scrollWidth > window.innerWidth + 1 ? 1 : 0,
       sinNombre: sinNombre.length,
@@ -265,6 +269,10 @@ async function etiquetasMenu(page, celular) {
   const bajas = [];
   for (const { ancho } of ANCHOS) {
     for (const m of [...MEDIDAS, "errores"]) {
+      if (base0[ancho] && !(m in base0[ancho])) {
+        console.log(`  ${ancho} ${m}: medida nueva, sin linea base (ahora ${totales[ancho][m]})`);
+        continue;
+      }
       const antes = base0[ancho]?.[m] ?? 0;
       const ahora = totales[ancho][m];
       if (ahora > antes) subas.push(`${ancho} ${m}: ${antes} -> ${ahora}`);

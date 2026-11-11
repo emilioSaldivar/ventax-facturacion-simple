@@ -31,7 +31,7 @@ export interface DocumentoConEstado {
 }
 
 export function formatDocumentoTipo(value: TipoDocumento): string {
-  return value === "NOTA_CREDITO" ? "Nota credito" : value === "NOTA_REMISION" ? "Nota de remisión" : "Factura";
+  return value === "NOTA_CREDITO" ? "Nota de crédito" : value === "NOTA_REMISION" ? "Nota de remisión" : "Factura";
 }
 
 export function esNotaSinConfirmar(documento: Pick<DocumentoConEstado, "accion_detalle">): boolean {
@@ -48,7 +48,7 @@ function tonoDocumento(documento: DocumentoConEstado): TonoEstado {
 
 /** Texto del estado, sin emojis (P-I1). Mismos textos que la pastilla anterior, sin el emoji del principio. */
 function textoDocumento(documento: DocumentoConEstado): string {
-  if (esNotaSinConfirmar(documento)) return "Nota credito sin confirmar";
+  if (esNotaSinConfirmar(documento)) return "Nota de crédito sin confirmar";
   // SPEC_CORRECCION_INUTILIZACION_RECHAZADAS_v0.1, RN-C1.
   if (documento.tipo === "FACTURA" && documento.estado === "RECHAZADA") {
     const inutilizada = documento.inutilizacion?.status === "ACCEPTED";
@@ -68,7 +68,7 @@ function textoDocumento(documento: DocumentoConEstado): string {
     case "CANCELADO_LOCAL":
       return "Cancelada antes de enviar";
     default:
-      return "Requiere revision";
+      return "Requiere revisión";
   }
 }
 
@@ -84,4 +84,11 @@ export function estadoRecibo(estado: CodigoEstadoRecibo): Estado {
   if (estado === "EMITIDO") return { texto: "Emitido", tono: "ready", codigo: estado };
   if (estado === "ANULADO") return { texto: "Anulado", tono: "anulada", codigo: estado };
   return { texto: "Borrador", tono: "blocked", codigo: estado };
+}
+
+/** Condicion de venta para mostrar (PAUTAS_FRONTEND_v0.1 P-E2: nunca el enum crudo). */
+export function etiquetaCondicionVenta(condicion: string | null | undefined): string {
+  if (condicion === "CREDITO") return "Crédito";
+  if (condicion === "CONTADO") return "Contado";
+  return condicion ?? "";
 }

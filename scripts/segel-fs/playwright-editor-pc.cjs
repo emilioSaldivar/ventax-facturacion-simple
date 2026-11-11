@@ -49,8 +49,8 @@ async function entrar(browser, ancho, alto, modo) {
 const sinDesborde = (page) => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1);
 
 async function cargarCliente(page) {
-  await page.getByPlaceholder("Ingrese numero de documento").fill(RUC);
-  await page.getByLabel("Nombre o razon social").fill(NOMBRE);
+  await page.getByPlaceholder("Ingresá el número de documento").fill(RUC);
+  await page.getByLabel("Nombre o razón social").fill(NOMBRE);
 }
 
 /** Carga una fila de la grilla (indice desde 0). */
@@ -122,7 +122,7 @@ async function crear(page, etiqueta) {
     const cuerpoSimple = await ultimoPreview(page, async () => {
       await page.getByRole("group", { name: "Modo del editor" }).getByRole("button", { name: "Modo simple" }).click();
       // Fuerza una vista previa nueva sin cambiar datos: alternar y volver la condicion de venta.
-      await page.getByRole("button", { name: "Credito", exact: true }).click();
+      await page.getByRole("button", { name: "Crédito", exact: true }).click();
       await page.getByRole("button", { name: "Contado", exact: true }).click();
     });
     check("CA-04 1440: el modo simple muestra las tres lineas", (await page.locator(".sale-item-card").count()) === 3);

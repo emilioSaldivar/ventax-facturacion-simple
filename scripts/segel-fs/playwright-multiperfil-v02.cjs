@@ -97,7 +97,7 @@ async function login(ctx, u = usuario, c = clave) {
 }
 
 async function elegir(page, punto) {
-  await page.getByRole("heading", { name: "¿Desde que punto vas a trabajar?" }).waitFor({ timeout: 20000 });
+  await page.getByRole("heading", { name: "¿Desde qué punto vas a trabajar?" }).waitFor({ timeout: 20000 });
   await page.locator(".perfil-eleccion .perfil-opcion").filter({ hasText: `Punto ${punto}` }).first().click();
   await esperarSesion(page);
 }
@@ -124,17 +124,17 @@ async function api(metodo, ruta, token, cuerpo) {
     {
       const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
       const page = await login(ctx);
-      await page.getByRole("heading", { name: "¿Desde que punto vas a trabajar?" }).waitFor();
+      await page.getByRole("heading", { name: "¿Desde qué punto vas a trabajar?" }).waitFor();
       const textoEleccion = await page.locator(".perfil-eleccion").innerText();
-      check("CA-23: la eleccion no muestra 'Ultimo numero'", !/ultimo numero/i.test(textoEleccion), textoEleccion.replace(/\s+/g, " ").slice(0, 200));
-      check("RN-15: la eleccion muestra el limite de 10 minutos", textoEleccion.includes("Tenes 10 minutos para elegir"));
+      check("CA-23: la eleccion no muestra 'Ultimo numero'", !/[uú]ltimo n[uú]mero/i.test(textoEleccion), textoEleccion.replace(/\s+/g, " ").slice(0, 200));
+      check("RN-15: la eleccion muestra el limite de 10 minutos", textoEleccion.includes("Tenés 10 minutos para elegir"));
       await page.screenshot({ path: path.join(outDir, "1440-eleccion.png"), fullPage: true });
       await page.locator(".perfil-eleccion .perfil-opcion").filter({ hasText: "Punto 002" }).first().click();
       await esperarSesion(page);
       await page.locator("button.topbar-facturador--boton").click();
-      const dialogo = page.getByRole("dialog", { name: "Cambiar punto de expedicion" });
+      const dialogo = page.getByRole("dialog", { name: "Cambiar punto de expedición" });
       await dialogo.waitFor();
-      check("CA-23: el dialogo no muestra 'Ultimo numero'", !/ultimo numero/i.test(await dialogo.innerText()));
+      check("CA-23: el dialogo no muestra 'Ultimo numero'", !/[uú]ltimo n[uú]mero/i.test(await dialogo.innerText()));
       const campo = dialogo.locator(".password-input input");
       await campo.fill("abc");
       await dialogo.getByRole("button", { name: "Mostrar contraseña" }).click();
@@ -158,7 +158,7 @@ async function api(metodo, ruta, token, cuerpo) {
       const linea15 = await lineaFiscal(page).catch(() => "");
       check("CA-15: una sola renovacion", refrescos15 === 1, `refresh=${refrescos15}`);
       check("CA-15: sigue con el punto restante 001 sin login", !(await enLogin(page)) && linea15.includes("Punto 001"), linea15);
-      check("CA-15: aviso 'Tu punto de expedicion cambio'", (await page.locator(".aviso-perfil-banda").innerText().catch(() => "")).includes("Tu punto de expedicion cambio"));
+      check("CA-15: aviso 'Tu punto de expedicion cambio'", (await page.locator(".aviso-perfil-banda").innerText().catch(() => "")).includes("Tu punto de expedición cambió"));
       await page.screenshot({ path: path.join(outDir, "1440-ca15.png"), fullPage: true });
       agregarPunto("002");
       await ctx.close();
@@ -185,11 +185,11 @@ async function api(metodo, ruta, token, cuerpo) {
       await page.waitForTimeout(1500);
       quitarPunto("002");
       // Cualquier pedido del editor dispara el 409: la busqueda del cliente por documento.
-      await page.getByPlaceholder("Ingrese numero de documento").fill("80026570-0");
-      await page.getByPlaceholder("Ingrese numero de documento").press("Tab");
-      const aviso = page.getByRole("dialog", { name: "Tu punto de expedicion cambio" });
+      await page.getByPlaceholder("Ingresá el número de documento").fill("80026570-0");
+      await page.getByPlaceholder("Ingresá el número de documento").press("Tab");
+      const aviso = page.getByRole("dialog", { name: "Tu punto de expedición cambió" });
       const hayAviso = await aviso.waitFor({ timeout: 20000 }).then(() => true, () => false);
-      check("CA-17: aviso bloqueante con el borrador cargado", hayAviso && (await aviso.innerText()).includes("Lo que tenias cargado se descarta"));
+      check("CA-17: aviso bloqueante con el borrador cargado", hayAviso && (await aviso.innerText()).includes("Lo que tenías cargado se descarta"));
       await page.screenshot({ path: path.join(outDir, "1440-ca17-aviso.png") });
       if (hayAviso) {
         check("CA-17: el aviso tiene un solo boton", (await aviso.getByRole("button").count()) === 1);
@@ -215,7 +215,7 @@ async function api(metodo, ruta, token, cuerpo) {
       await page.locator('input[name="username"]').fill(usuario);
       await page.locator('input[name="password"]').fill(clave);
       await page.getByRole("button", { name: "Ingresar" }).click();
-      await page.getByRole("heading", { name: "¿Desde que punto vas a trabajar?" }).waitFor();
+      await page.getByRole("heading", { name: "¿Desde qué punto vas a trabajar?" }).waitFor();
       await page.clock.fastForward(10 * 60 * 1000 + 1000);
       const volver = page.getByRole("button", { name: "Volver a entrar" });
       const vencida = await volver.waitFor({ timeout: 5000 }).then(() => true, () => false);
@@ -224,13 +224,13 @@ async function api(metodo, ruta, token, cuerpo) {
       if (vencida) {
         await volver.click();
         await page.locator('input[name="username"]').waitFor();
-        check("CA-16: vuelve al login con el motivo", (await page.locator("body").innerText()).includes("La eleccion de punto vencio. Volve a entrar."));
+        check("CA-16: vuelve al login con el motivo", (await page.locator("body").innerText()).includes("La elección de punto venció. Volvé a entrar."));
       }
       await ctx.close();
 
       const ctx2 = await browser.newContext({ viewport: { width: 1440, height: 900 } });
       const p2 = await login(ctx2);
-      await p2.getByRole("heading", { name: "¿Desde que punto vas a trabajar?" }).waitFor();
+      await p2.getByRole("heading", { name: "¿Desde qué punto vas a trabajar?" }).waitFor();
       let simulado = false;
       await p2.route("**/auth/perfil", async (ruta) => {
         if (simulado) return ruta.continue();
@@ -239,7 +239,7 @@ async function api(metodo, ruta, token, cuerpo) {
       });
       await p2.locator(".perfil-eleccion .perfil-opcion").first().click();
       const alLogin = await p2.locator('input[name="username"]').waitFor({ timeout: 10000 }).then(() => true, () => false);
-      check("CA-16: un 401 al elegir lleva al login con el motivo", alLogin && (await p2.locator("body").innerText()).includes("La eleccion de punto vencio"));
+      check("CA-16: un 401 al elegir lleva al login con el motivo", alLogin && (await p2.locator("body").innerText()).includes("La elección de punto venció"));
       await ctx2.close();
     }
 
@@ -253,7 +253,7 @@ async function api(metodo, ruta, token, cuerpo) {
       await esperarSesion(b);
       check("CA-18: la segunda pestaña entra con el punto 002 sin pedir eleccion", (await lineaFiscal(b)).includes("Punto 002"), await lineaFiscal(b));
       await a.locator("button.topbar-facturador--boton").click();
-      const dialogo = a.getByRole("dialog", { name: "Cambiar punto de expedicion" });
+      const dialogo = a.getByRole("dialog", { name: "Cambiar punto de expedición" });
       await dialogo.locator(".perfil-opcion").filter({ hasText: "Punto 001" }).click();
       await dialogo.locator(".password-input input").fill(clave);
       await dialogo.getByRole("button", { name: "Cambiar", exact: true }).click();
@@ -325,7 +325,7 @@ async function api(metodo, ruta, token, cuerpo) {
       );
       await p.locator("input[type=text]").first().fill("123456");
       await p.locator("button[type=submit]").first().click();
-      const eleccion = await p.getByRole("heading", { name: "¿Desde que punto vas a trabajar?" }).waitFor({ timeout: 20000 }).then(() => true, () => false);
+      const eleccion = await p.getByRole("heading", { name: "¿Desde qué punto vas a trabajar?" }).waitFor({ timeout: 20000 }).then(() => true, () => false);
       check("CA-19: tras el onboarding aparece la eleccion de punto", eleccion);
       await p.screenshot({ path: path.join(outDir, "390-ca19-eleccion.png"), fullPage: true });
       if (eleccion) {

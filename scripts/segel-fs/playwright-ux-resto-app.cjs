@@ -98,7 +98,7 @@ async function casoComponentes(browser) {
     check("CA-13 dialogo: 'Quitar' quita la linea", (await page.getByLabel("Descripción, línea 1").inputValue()) === "");
 
     // Catalogo: MenuFila con nombre, aria-haspopup y aria-expanded; Escape devuelve el foco.
-    await abrirVista(page, "Catalogo");
+    await abrirVista(page, "Catálogo");
     const boton = page.locator(".menu-fila > button").first();
     await boton.waitFor();
     const nombre = await boton.getAttribute("aria-label");
@@ -119,7 +119,7 @@ async function casoComponentes(browser) {
     const elegible = page.locator("button.document-row", { hasText: "Elegible" }).first();
     await elegible.click();
     check("CA-13 campo: 'Motivo' asociado por etiqueta", (await page.getByLabel("Motivo").count()) === 1);
-    await page.getByRole("button", { name: "Emitir nota de credito" }).click();
+    await page.getByRole("button", { name: "Emitir nota de crédito" }).click();
     const aviso = page.locator(".aviso");
     await aviso.waitFor();
     check(

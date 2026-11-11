@@ -33,13 +33,13 @@ function check(escenario, ok, detalle = "") {
 async function emitir(page, { credito, precio, etiqueta, moneda = "USD" }) {
   await abrirVista(page, "Nueva factura");
   await page.locator('select[aria-label="Moneda"]').waitFor();
-  if (credito) await page.getByRole("button", { name: "Credito", exact: true }).click();
+  if (credito) await page.getByRole("button", { name: "Crédito", exact: true }).click();
   await page.locator('select[aria-label="Moneda"]').selectOption(moneda);
   if (moneda !== "PYG") await page.getByLabel("Tipo de cambio").fill(TC);
-  await page.getByPlaceholder("Ingrese numero de documento").fill(RUC);
-  await page.getByLabel("Nombre o razon social").fill(NOMBRE);
+  await page.getByPlaceholder("Ingresá el número de documento").fill(RUC);
+  await page.getByLabel("Nombre o razón social").fill(NOMBRE);
   await page.getByRole("button", { name: /Agregar producto/ }).click();
-  await page.getByPlaceholder("Ingrese descripcion").fill(`Servicio de prueba RAJ ${etiqueta}`);
+  await page.getByPlaceholder("Ingresá descripción").fill(`Servicio de prueba RAJ ${etiqueta}`);
   await page.locator('label:has-text("Cantidad") input').first().fill("1");
   await page.locator('label:has-text("Precio") input').first().fill(precio);
   await page.getByRole("button", { name: "AGREGAR Y NO GUARDAR" }).click();

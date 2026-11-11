@@ -150,7 +150,7 @@ async function correr(browser, vp) {
     const boton = await popup.getByTestId("popup-reintentar-nota-credito").isVisible();
     await foto("01-nota-sin-confirmar");
     check(nombre, "FE 502: la nota queda 'sin confirmar' con boton de reintento (CA-01, RN-06)", titulo === "Nota de crédito sin confirmar" && boton, titulo);
-    await popup.getByRole("button", { name: "Ver nota de credito" }).click();
+    await popup.getByRole("button", { name: "Ver nota de crédito" }).click();
   });
 
   await escenario(nombre, "tras recargar, el detalle de la nota muestra el aviso y no ofrece 'Verificar estado fiscal'", async () => {
@@ -166,8 +166,8 @@ async function correr(browser, vp) {
     const banner = page.locator(".accion-banner").first();
     const titulo = (await banner.locator(".accion-banner-titulo").innerText()).trim();
     const verificar = await banner.getByRole("button", { name: "Verificar estado fiscal" }).count();
-    const encabezado = await page.locator("h3", { hasText: "Nota credito sin confirmar" }).count();
-    const procesando = await page.getByText("Procesando nota credito").count();
+    const encabezado = await page.locator("h3", { hasText: "Nota de crédito sin confirmar" }).count();
+    const procesando = await page.getByText("Procesando nota de crédito").count();
     await foto("02-detalle-sin-confirmar");
     check(
       nombre,
@@ -194,7 +194,7 @@ async function correr(browser, vp) {
     await pedirNotaCredito(page, "[FE-REJECTED] devolucion e2e");
     const popup = page.locator('section[aria-labelledby="nc-success-title"]');
     await popup.waitFor();
-    await popup.getByRole("button", { name: "Ver nota de credito" }).click();
+    await popup.getByRole("button", { name: "Ver nota de crédito" }).click();
     await page.getByTestId("nueva-nota-credito").waitFor({ timeout: 15000 });
     const corregir = await page.getByRole("button", { name: "Corregir y emitir de nuevo" }).count();
     await foto("04-nota-rechazada");
@@ -212,7 +212,7 @@ async function correr(browser, vp) {
       select string_agg(estado, ',' order by created_at) || ':' || count(distinct external_ref)
       from facturas_operativas where documento_relacionado_id = '${facturaRechazo}' and tipo = 'NOTA_CREDITO'`);
     check(nombre, "la nueva nota sobre la factura con nota rechazada se emite (CA-05)", filas === "RECHAZADA,EMITIDA:2", filas);
-    await popup.getByRole("button", { name: "Ver nota de credito" }).click();
+    await popup.getByRole("button", { name: "Ver nota de crédito" }).click();
   });
 
   await contexto.close();

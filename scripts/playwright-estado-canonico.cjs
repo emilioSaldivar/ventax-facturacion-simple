@@ -50,7 +50,7 @@ async function main() {
       .waitFor({ timeout: 15000 }).then(() => true).catch(() => false);
     check(vp.nombre, "tras verificar, deja de figurar como en proceso", cambio);
     // RECHAZADA se presenta al operador como "Requiere revision" con el aviso rojo de causa.
-    check(vp.nombre, "el documento se muestra 'Requiere revision' (RECHAZADA)", await page.locator(".status-pill", { hasText: "Requiere revision" }).count() > 0);
+    check(vp.nombre, "el documento se muestra 'Requiere revision' (RECHAZADA)", await page.locator(".status-pill", { hasText: "Requiere revisión" }).count() > 0);
     check(vp.nombre, "aviso de rechazo con accion para soporte", await page.getByRole("button", { name: /Copiar datos para soporte/ }).count() > 0);
     check(vp.nombre, "sin 'Reintentar emisión' (FE ya lo recibio)", await page.getByRole("button", { name: "Reintentar emisión", exact: true }).count() === 0);
     const summary = page.locator("summary", { hasText: "Opciones avanzadas" }).first();

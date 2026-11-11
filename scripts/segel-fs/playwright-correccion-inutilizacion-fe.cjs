@@ -75,10 +75,10 @@ async function abrirDocumento(page, numero) {
 
     // Factura a un RUC que SIFEN test no reconoce.
     await abrirVista(page, "Nueva factura");
-    await page.getByPlaceholder("Ingrese numero de documento").fill(RUC_INEXISTENTE);
-    await page.getByLabel("Nombre o razon social").fill("EMPRESA FICTICIA S.A.");
+    await page.getByPlaceholder("Ingresá el número de documento").fill(RUC_INEXISTENTE);
+    await page.getByLabel("Nombre o razón social").fill("EMPRESA FICTICIA S.A.");
     await page.getByRole("button", { name: /Agregar producto/ }).click();
-    await page.getByPlaceholder("Ingrese descripcion").fill(`Servicio ${marca}`);
+    await page.getByPlaceholder("Ingresá descripción").fill(`Servicio ${marca}`);
     await page.locator('label:has-text("Precio") input').first().fill("1100");
     await page.getByRole("button", { name: "AGREGAR Y NO GUARDAR" }).click();
     await page.getByRole("button", { name: "Calcular" }).click();
@@ -115,8 +115,8 @@ async function abrirDocumento(page, numero) {
     await page.screenshot({ path: path.join(outDir, "1-rechazada.png"), fullPage: true });
     await corregir.click();
     await page.locator(".invoice-editor .editor-alert", { hasText: "Corrigiendo la factura rechazada" }).waitFor();
-    await page.getByPlaceholder("Ingrese numero de documento").fill(RUC_VALIDO);
-    await page.getByLabel("Nombre o razon social").fill(NOMBRE_VALIDO);
+    await page.getByPlaceholder("Ingresá el número de documento").fill(RUC_VALIDO);
+    await page.getByLabel("Nombre o razón social").fill(NOMBRE_VALIDO);
     await page.getByRole("button", { name: "Calcular" }).click();
     await page.waitForTimeout(1500);
     await page.getByRole("button", { name: "Crear factura" }).click();

@@ -46,8 +46,8 @@ async function facturar(page, { moneda, lineas, etiqueta }) {
   await page.locator("table.grilla-lineas").waitFor();
   await page.locator('select[aria-label="Moneda"]').selectOption(moneda);
   if (moneda !== "PYG") await page.getByLabel("Tipo de cambio").fill("7350,5");
-  await page.getByPlaceholder("Ingrese numero de documento").fill(RUC);
-  await page.getByLabel("Nombre o razon social").fill(NOMBRE);
+  await page.getByPlaceholder("Ingresá el número de documento").fill(RUC);
+  await page.getByLabel("Nombre o razón social").fill(NOMBRE);
   for (const [indice, linea] of lineas.entries()) {
     const fila = page.locator(`[data-grilla-fila="${indice}"]`);
     await fila.locator('input[data-celda="descripcion"]').fill(`${linea.descripcion} ${marca}`);
@@ -88,11 +88,11 @@ async function notaParcial(page, cantidades, etiqueta) {
   const boton = page.getByRole("button", { name: /Crear nota de credito/ }).first();
   await page.waitForFunction((b) => b && !b.disabled, await boton.elementHandle(), { timeout: 20000 });
   await boton.click();
-  const grupo = page.getByRole("group", { name: "Tipo de nota de credito" });
+  const grupo = page.getByRole("group", { name: "Tipo de nota de crédito" });
   await grupo.waitFor({ timeout: 15000 });
   await grupo.getByRole("button", { name: "Parcial" }).click();
   for (const [linea, cantidad] of Object.entries(cantidades)) {
-    await page.getByLabel(`Cantidad a acreditar, linea ${linea}`).fill(cantidad);
+    await page.getByLabel(`Cantidad a acreditar, línea ${linea}`).fill(cantidad);
   }
   const totalNota = (await page.locator(".nc-parcial-total").innerText()).replace(/\s+/g, " ");
   await page.screenshot({ path: path.join(outDir, `${etiqueta}-ventana.png`), fullPage: true });
@@ -102,7 +102,7 @@ async function notaParcial(page, cantidades, etiqueta) {
   const ok = await popup.waitFor({ timeout: 90000 }).then(() => true, () => false);
   const texto = ok ? (await popup.innerText()).replace(/\s+/g, " ") : (await page.locator(".modal-panel").innerText().catch(() => "")).replace(/\s+/g, " ");
   await page.screenshot({ path: path.join(outDir, `${etiqueta}-resultado.png`), fullPage: true });
-  if (ok) await page.getByRole("button", { name: "Ver nota de credito" }).click();
+  if (ok) await page.getByRole("button", { name: "Ver nota de crédito" }).click();
   return { ok, texto, totalNota };
 }
 
@@ -136,11 +136,11 @@ async function notaParcial(page, cantidades, etiqueta) {
     check("CA-01 1440: la ficha de la factura muestra lo acreditado y el saldo", ficha.includes("Acreditado por notas de crédito") && ficha.includes("1 de 2"), ficha.slice(0, 300));
     const boton = page.getByRole("button", { name: /Crear nota de credito/ }).first();
     await boton.click();
-    const grupo = page.getByRole("group", { name: "Tipo de nota de credito" });
+    const grupo = page.getByRole("group", { name: "Tipo de nota de crédito" });
     await grupo.waitFor();
     check("RN-07 1440: con una nota viva, Total deshabilitado", await grupo.getByRole("button", { name: "Total" }).isDisabled());
     await grupo.getByRole("button", { name: "Parcial" }).click();
-    await page.getByLabel("Cantidad a acreditar, linea 1").fill("3");
+    await page.getByLabel("Cantidad a acreditar, línea 1").fill("3");
     await page.locator(".modal-panel textarea").fill("Mas que el saldo");
     await page.getByRole("button", { name: "Confirmar" }).click();
     const error = (await page.locator(".modal-panel .form-error").innerText().catch(() => "")).trim();
@@ -152,7 +152,7 @@ async function notaParcial(page, cantidades, etiqueta) {
     check("CA-02 1440: segunda parcial por el saldo, USD 250,24", p2.ok && p2.totalNota.includes("USD 250,24"), `${p2.totalNota} :: ${p2.texto}`);
     await fichaAprobada(page, "USD 400,49");
     await page.getByRole("button", { name: /Crear nota de credito/ }).first().click();
-    await page.getByRole("group", { name: "Tipo de nota de credito" }).waitFor();
+    await page.getByRole("group", { name: "Tipo de nota de crédito" }).waitFor();
     const sinSaldo = (await page.locator(".modal-panel").innerText()).replace(/\s+/g, " ");
     check("CA-02 1440: sin saldo, la ventana no ofrece ni total ni parcial", sinSaldo.includes("acreditada por completo"), sinSaldo.slice(0, 200));
     await page.getByRole("button", { name: "Cancelar" }).click();
@@ -162,7 +162,7 @@ async function notaParcial(page, cantidades, etiqueta) {
     await esperarSesion(page);
     await abrirVista(page, "Documentos");
     await page.locator("table.documents-tabla").waitFor({ timeout: 20000 });
-    await page.locator('.filter-tabs button:has-text("Notas de credito")').first().click();
+    await page.locator('.filter-tabs button:has-text("Notas de crédito")').first().click();
     await page.waitForTimeout(2500);
     const notas = (await page.locator("table.documents-tabla tbody tr").allInnerTexts()).map((t) => t.replace(/\s+/g, " "));
     check("CA-01/02 1440: las notas USD 150,25 y USD 250,24 en la lista", notas.some((n) => n.includes("USD 150,25")) && notas.some((n) => n.includes("USD 250,24")), notas.slice(0, 3).join(" || "));
@@ -191,7 +191,7 @@ async function notaParcial(page, cantidades, etiqueta) {
       const fila = ancho >= 1024 ? v.page.locator("table.documents-tabla tbody tr", { hasText: "385.000" }).first().locator("td").nth(2) : v.page.locator(".document-row-main", { hasText: "385.000" }).first();
       await fila.click();
       await v.page.getByRole("button", { name: /Crear nota de credito/ }).first().click();
-      const g = v.page.getByRole("group", { name: "Tipo de nota de credito" });
+      const g = v.page.getByRole("group", { name: "Tipo de nota de crédito" });
       await g.waitFor();
       await g.getByRole("button", { name: "Parcial" }).click();
       const desborde = await v.page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1);

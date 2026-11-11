@@ -44,7 +44,7 @@ function check(escenario, ok, detalle = "") {
     check("CA-07: el listado muestra una sola fila por usuario con varios puntos", (await filas.count()) === 1, String(await filas.count()));
     await filas.first().getByRole("button", { name: "Ver" }).click();
 
-    const tabla = page.getByRole("table", { name: "Puntos de expedicion del usuario" });
+    const tabla = page.getByRole("table", { name: "Puntos de expedición del usuario" });
     await tabla.waitFor();
     check("D.1: la tabla lista dos puntos", (await tabla.locator("tbody tr").count()) === 2);
     check("RN-01: texto fijo de un facturador por usuario", (await page.locator("body").innerText()).includes("Todas las configuraciones de un usuario son del mismo facturador"));
@@ -57,7 +57,7 @@ function check(escenario, ok, detalle = "") {
     check("CA-21: el confirm no dice que se cierran sesiones", !/sesiones abiertas/i.test(texto) && texto.includes("seguira con los puntos que le queden"), texto);
     check("D.2: tras quitar queda un punto", (await tabla.locator("tbody tr").count()) === 1);
 
-    await page.getByRole("button", { name: "Agregar punto de expedicion" }).click();
+    await page.getByRole("button", { name: "Agregar punto de expedición" }).click();
     const selects = page.locator("form.form select");
     check("D.1: tenant y facturador fijos al agregar", (await selects.nth(0).isDisabled()) && (await selects.nth(1).isDisabled()));
     const contexto = selects.nth(2);

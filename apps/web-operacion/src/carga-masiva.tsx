@@ -218,7 +218,7 @@ function mensajeDeError(error: unknown): { texto: string; motivos: Problema[] } 
   }
   if ((error as { status?: number } | null)?.status === 429) {
     const espera = Number(detalles.retry_after_seconds);
-    const cuando = Number.isFinite(espera) && espera > 0 ? ` Intenta de nuevo en ${espera >= 60 ? `${Math.ceil(espera / 60)} min` : `${espera} s`}.` : "";
+    const cuando = Number.isFinite(espera) && espera > 0 ? ` Intentá de nuevo en ${espera >= 60 ? `${Math.ceil(espera / 60)} min` : `${espera} s`}.` : "";
     const cuota = detalles.fe_code === "CARGA_CUOTA_DIARIA" ? " La cuota la fija soporte." : "";
     return { texto: `${base}${cuando}${cuota}`, motivos };
   }
@@ -815,12 +815,12 @@ function DetalleCarga({
     const texto = [
       `Carga: ${carga?.nombre_archivo ?? "-"} (${cargaId})`,
       `Comprobante: orden ${comprobante.orden}, filas ${comprobante.filas.join("-")}`,
-      `Numero del archivo: ${comprobante.numero_archivo ?? "-"}`,
-      `Numero asignado: ${comprobante.numero_asignado ?? "-"}`,
+      `Número del archivo: ${comprobante.numero_archivo ?? "-"}`,
+      `Número asignado: ${comprobante.numero_asignado ?? "-"}`,
       `Referencia: ${comprobante.referencia_venta ?? "-"}`,
       `Estado: ${ETIQUETA_COMPROBANTE[comprobante.estado]} (${comprobante.estado})`,
       ...(problemas.length ? ["Problemas:", ...problemas] : []),
-      `Codigo SIFEN: ${comprobante.sifen?.codigo ?? "-"}`,
+      `Código SIFEN: ${comprobante.sifen?.codigo ?? "-"}`,
       `Mensaje SIFEN: ${comprobante.sifen?.mensaje ?? "-"}`,
       `document_uuid: ${comprobante.document_uuid ?? "-"}`,
       `CDC: ${comprobante.cdc ?? "-"}`

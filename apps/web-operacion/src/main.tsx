@@ -12,7 +12,7 @@ import { EstadoVacio } from "./components/EstadoVacio";
 import { Icono, type NombreIcono } from "./components/Icono";
 import { MenuFila } from "./components/MenuFila";
 import { PastillaEstado } from "./components/PastillaEstado";
-import { esNotaSinConfirmar, estadoDocumento, estadoRecibo, formatDocumentoTipo } from "./lib/estados";
+import { esNotaSinConfirmar, estadoDocumento, estadoRecibo, etiquetaCondicionVenta, formatDocumentoTipo } from "./lib/estados";
 import {
   ApiClientError,
   claimsDeToken,
@@ -854,7 +854,7 @@ function App() {
 
   /** El refresh asigno otro punto (el anterior ya no esta): se recarga todo el contexto. */
   function recargarConPunto(respuesta: AuthResponse) {
-    setAvisoPerfil("Tu punto de expedicion cambio. Revisa el punto activo antes de continuar.");
+    setAvisoPerfil("Tu punto de expedición cambió. Revisá el punto activo antes de continuar.");
     setView("loading-context");
     setAccessToken(respuesta.access_token);
     setRecargaContexto((n) => n + 1);
@@ -1022,7 +1022,7 @@ function App() {
     const elegido = perfilesSesion.find((p) => p.operacion_config_id === operacionConfigId);
     await elegirPerfil(operacionConfigId, password);
     if (elegido) {
-      setAvisoPerfil(`Ahora estas facturando por ${etiquetaPunto(elegido)} · ${elegido.titulo_operativo}`);
+      setAvisoPerfil(`Ahora estás facturando por ${etiquetaPunto(elegido)} · ${elegido.titulo_operativo}`);
     }
   }
 
@@ -1059,7 +1059,7 @@ function App() {
   }
 
   if (view === "checking-session" || view === "loading-context") {
-    return <LoadingScreen message={view === "checking-session" ? "Verificando sesion" : "Cargando contexto operativo"} />;
+    return <LoadingScreen message={view === "checking-session" ? "Verificando sesión" : "Cargando contexto operativo"} />;
   }
 
   if (view === "login") {
@@ -1136,7 +1136,7 @@ function LoginScreen({
     try {
       await onLogin(username.trim(), password);
     } catch (error) {
-      onError(error instanceof Error ? error.message : "No se pudo iniciar sesion.");
+      onError(error instanceof Error ? error.message : "No se pudo iniciar sesión.");
     } finally {
       setSubmitting(false);
     }
@@ -1147,8 +1147,8 @@ function LoginScreen({
       <section className="auth-panel" aria-labelledby="login-title">
         <BrandMark />
         <div className="auth-copy">
-          <p className="eyebrow">Operacion</p>
-          <h1 id="login-title">Ingresar a facturacion</h1>
+          <p className="eyebrow">Operación</p>
+          <h1 id="login-title">Ingresar a facturación</h1>
         </div>
 
         <form className="login-form" onSubmit={submit}>
@@ -1163,7 +1163,7 @@ function LoginScreen({
               value={username}
             />
           </label>
-          <CampoContrasena etiqueta="Contrasena" name="password" onChange={setPassword} required value={password} />
+          <CampoContrasena etiqueta="Contraseña" name="password" onChange={setPassword} required value={password} />
 
           {errorMessage ? <p className="form-error">{errorMessage}</p> : null}
 
@@ -1194,7 +1194,7 @@ function PerfilOpcionContenido({ perfil }: { perfil: PerfilDisponible }) {
 
 /** SPEC_MULTIPERFIL_USUARIO_v0.2 RN-15: el token de eleccion dura 10 minutos y no se renueva (D-8, D-15). */
 const PERFIL_SELECT_TTL_MS = 10 * 60 * 1000;
-const MENSAJE_ELECCION_VENCIDA = "La eleccion de punto vencio. Volve a entrar.";
+const MENSAJE_ELECCION_VENCIDA = "La elección de punto venció. Volvé a entrar.";
 
 function SeleccionPerfilScreen({
   perfiles: perfilesIniciales,
@@ -1236,7 +1236,7 @@ function SeleccionPerfilScreen({
         try {
           const lista = await onRefrescarLista();
           if (lista.length === 0) {
-            onVencida("No tenes puntos de expedicion asignados. Contacta con soporte.");
+            onVencida("No tenés puntos de expedición asignados. Contactá con soporte.");
             return;
           }
           if (lista.length === 1) {
@@ -1244,7 +1244,7 @@ function SeleccionPerfilScreen({
             return;
           }
           setPerfiles(lista);
-          setError("Ese punto ya no esta disponible. Elegi otro.");
+          setError("Ese punto ya no está disponible. Elegí otro.");
         } catch {
           onVencida(MENSAJE_ELECCION_VENCIDA);
           return;
@@ -1252,7 +1252,7 @@ function SeleccionPerfilScreen({
         setEligiendo(null);
         return;
       }
-      setError(e instanceof Error ? e.message : "No se pudo elegir el punto de expedicion.");
+      setError(e instanceof Error ? e.message : "No se pudo elegir el punto de expedición.");
       setEligiendo(null);
     }
   }
@@ -1263,8 +1263,8 @@ function SeleccionPerfilScreen({
         <BrandMark />
         <div className="auth-copy">
           <p className="muted">Hola, {user?.display_name ?? user?.username ?? ""}</p>
-          <h1 id="perfil-titulo">¿Desde que punto vas a trabajar?</h1>
-          <p className="muted perfil-eleccion-limite">{vencida ? "La eleccion vencio." : "Tenes 10 minutos para elegir."}</p>
+          <h1 id="perfil-titulo">¿Desde qué punto vas a trabajar?</h1>
+          <p className="muted perfil-eleccion-limite">{vencida ? "La elección venció." : "Tenés 10 minutos para elegir."}</p>
         </div>
         <div className="perfil-lista" role="list">
           {perfiles.map((perfil) => (
@@ -1302,8 +1302,8 @@ function AvisoCambioExterno({ onEntendido }: { onEntendido: () => void }) {
   return (
     <div className="menu-scrim dialog-perfil-scrim" role="presentation">
       <div aria-labelledby="aviso-cambio-titulo" aria-modal="true" className="dialog-perfil" role="dialog">
-        <h2 id="aviso-cambio-titulo">Tu punto de expedicion cambio</h2>
-        <p className="aviso-perfil">El backoffice cambio tu punto de expedicion. Lo que tenias cargado se descarta.</p>
+        <h2 id="aviso-cambio-titulo">Tu punto de expedición cambió</h2>
+        <p className="aviso-perfil">El backoffice cambió tu punto de expedición. Lo que tenías cargado se descarta.</p>
         <div className="dialog-perfil-acciones">
           <button autoFocus className="primary-action" onClick={onEntendido} type="button">
             Entendido
@@ -1358,7 +1358,7 @@ function CambioPerfilDialog({
       setPassword("");
       setError(e instanceof ApiClientError && e.status === 401 && motivoDeError(e) === "PASSWORD_INCORRECTA"
         ? "Contraseña incorrecta."
-        : e instanceof Error ? e.message : "No se pudo cambiar el punto de expedicion.");
+        : e instanceof Error ? e.message : "No se pudo cambiar el punto de expedición.");
       setEnviando(false);
     }
   }
@@ -1373,8 +1373,8 @@ function CambioPerfilDialog({
         onSubmit={(event) => void confirmar(event)}
         role="dialog"
       >
-        <h2 id="cambio-perfil-titulo">Cambiar punto de expedicion</h2>
-        <div className="perfil-lista" role="radiogroup" aria-label="Puntos de expedicion">
+        <h2 id="cambio-perfil-titulo">Cambiar punto de expedición</h2>
+        <div className="perfil-lista" role="radiogroup" aria-label="Puntos de expedición">
           {perfiles.map((perfil) => {
             const activo = perfil.operacion_config_id === activoId;
             const marcado = perfil.operacion_config_id === elegido;
@@ -1397,7 +1397,7 @@ function CambioPerfilDialog({
         {/* SPEC_MULTIPERFIL_USUARIO_v0.2 B.6 (M-3): igual que el login; URA-017: CampoContrasena (H-05). */}
         <CampoContrasena disabled={enviando} etiqueta="Tu contraseña" onChange={setPassword} value={password} />
         {hayDocumentoSinEmitir ? (
-          <p className="aviso-perfil" role="alert">Tenes un documento sin emitir. Si cambias de punto se descarta.</p>
+          <p className="aviso-perfil" role="alert">Tenés un documento sin emitir. Si cambiás de punto se descarta.</p>
         ) : null}
         {error ? <p className="form-error">{error}</p> : null}
         <div className="dialog-perfil-acciones">
@@ -1469,7 +1469,7 @@ function OnboardingFlow({
     setTycLoading(true);
     api.get<TycCurrentData>("/onboarding/tyc/current")
       .then((data) => setTyc(data))
-      .catch((err) => setError(err instanceof Error ? err.message : "Error al cargar los Terminos y Condiciones."))
+      .catch((err) => setError(err instanceof Error ? err.message : "Error al cargar los Términos y Condiciones."))
       .finally(() => setTycLoading(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -1485,7 +1485,7 @@ function OnboardingFlow({
       const tycData = await api.get<TycCurrentData>("/onboarding/tyc/current");
       setTyc(tycData);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Error al cambiar contrasena.");
+      setError(err instanceof Error ? err.message : "Error al cambiar contraseña.");
       setPhase("password");
     } finally {
       setSubmitting(false);
@@ -1500,7 +1500,7 @@ function OnboardingFlow({
       const result = await api.post<AuthResponse>("/onboarding/admin/accept-direct", {});
       onComplete(result.access_token, result.user, result);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Error al completar la activacion.");
+      setError(err instanceof Error ? err.message : "Error al completar la activación.");
     } finally {
       setSubmitting(false);
     }
@@ -1508,7 +1508,7 @@ function OnboardingFlow({
 
   async function handleTycContinue() {
     if (!tycAccepted) {
-      setError("Debes leer y aceptar los Terminos y Condiciones para continuar.");
+      setError("Debes leer y aceptar los Términos y Condiciones para continuar.");
       return;
     }
     setError(null);
@@ -1528,9 +1528,9 @@ function OnboardingFlow({
       setPhase("otp");
     } catch (err) {
       if (err instanceof ApiClientError && err.status === 412) {
-        setError(`Tu cuenta (${username}) no tiene correo electronico configurado. Ya le avisamos a Segel y te van a contactar. Si es urgente, escribi a no-reply-facturacion@segel.com.py indicando tu usuario.`);
+        setError(`Tu cuenta (${username}) no tiene correo electrónico configurado. Ya le avisamos a Segel y te van a contactar. Si es urgente, escribi a no-reply-facturacion@segel.com.py indicando tu usuario.`);
       } else {
-        setError(err instanceof Error ? err.message : "Error al solicitar codigo de verificacion.");
+        setError(err instanceof Error ? err.message : "Error al solicitar código de verificación.");
       }
     } finally {
       setSubmitting(false);
@@ -1550,7 +1550,7 @@ function OnboardingFlow({
       });
       onComplete(result.access_token, result.user, result);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Error al completar la activacion.");
+      setError(err instanceof Error ? err.message : "Error al completar la activación.");
     } finally {
       setSubmitting(false);
     }
@@ -1571,9 +1571,9 @@ function OnboardingFlow({
       setOtpCooldown(60);
     } catch (err) {
       if (err instanceof ApiClientError && err.status === 412) {
-        setError(`Tu cuenta (${username}) no tiene correo electronico configurado. Ya le avisamos a Segel y te van a contactar. Si es urgente, escribi a no-reply-facturacion@segel.com.py indicando tu usuario.`);
+        setError(`Tu cuenta (${username}) no tiene correo electrónico configurado. Ya le avisamos a Segel y te van a contactar. Si es urgente, escribi a no-reply-facturacion@segel.com.py indicando tu usuario.`);
       } else {
-        setError(err instanceof Error ? err.message : "Error al reenviar codigo.");
+        setError(err instanceof Error ? err.message : "Error al reenviar código.");
       }
     } finally {
       setSubmitting(false);
@@ -1581,24 +1581,24 @@ function OnboardingFlow({
   }
 
   const phaseTitle =
-    phase === "password" ? "Crear nueva contrasena" :
-    phase === "tyc" ? "Terminos y Condiciones" :
-    "Verificacion por correo";
+    phase === "password" ? "Crear nueva contraseña" :
+    phase === "tyc" ? "Términos y Condiciones" :
+    "Verificación por correo";
 
   return (
     <main className="auth-shell">
       <section className="auth-panel" aria-labelledby="onboarding-title">
         <BrandMark />
         <div className="auth-copy">
-          <p className="eyebrow">Activacion de cuenta</p>
+          <p className="eyebrow">Activación de cuenta</p>
           <h1 id="onboarding-title">{phaseTitle}</h1>
         </div>
 
         {phase === "password" ? (
           <form className="login-form" onSubmit={(e) => void handlePasswordSubmit(e)}>
-            <p className="muted">Crea una contrasena segura. Minimo 8 caracteres.</p>
+            <p className="muted">Creá una contraseña segura. Mínimo 8 caracteres.</p>
             <label>
-              Nueva contrasena
+              Nueva contraseña
               <input
                 autoComplete="new-password"
                 minLength={8}
@@ -1609,7 +1609,7 @@ function OnboardingFlow({
               />
             </label>
             <label>
-              Confirmar contrasena
+              Confirmar contraseña
               <input
                 autoComplete="new-password"
                 minLength={8}
@@ -1627,7 +1627,7 @@ function OnboardingFlow({
         ) : phase === "tyc" ? (
           <div>
             {tycLoading ? (
-              <p className="muted">Cargando terminos...</p>
+              <p className="muted">Cargando términos...</p>
             ) : tyc ? (
               <>
                 <section aria-label="Datos de tu cuenta">
@@ -1635,13 +1635,13 @@ function OnboardingFlow({
                   <dl className="receipt-summary">
                     <div><dt>Empresa</dt><dd>{tyc.context.tenant_nombre ?? "-"}</dd></div>
                     <div><dt>RUC</dt><dd>{tyc.context.facturador_ruc ?? "-"}</dd></div>
-                    <div><dt>Razon social</dt><dd>{tyc.context.facturador_razon_social ?? "-"}</dd></div>
+                    <div><dt>Razón social</dt><dd>{tyc.context.facturador_razon_social ?? "-"}</dd></div>
                     <div><dt>Plan</dt><dd>{tyc.context.plan_nombre ?? "-"}</dd></div>
                     <div><dt>Usuario</dt><dd>{tyc.context.username}</dd></div>
                     <div><dt>Email</dt><dd>{tyc.context.email ?? "-"}</dd></div>
                   </dl>
                 </section>
-                <section aria-label="Documento de terminos" style={{ maxHeight: "40vh", overflowY: "auto", border: "1px solid var(--color-border, #ccc)", borderRadius: "8px", padding: "1rem", margin: "1rem 0" }}>
+                <section aria-label="Documento de términos" style={{ maxHeight: "40vh", overflowY: "auto", border: "1px solid var(--color-border, #ccc)", borderRadius: "8px", padding: "1rem", margin: "1rem 0" }}>
                   <pre style={{ whiteSpace: "pre-wrap", fontFamily: "inherit", fontSize: "0.85rem", margin: 0 }}>{tyc.document_content}</pre>
                 </section>
                 <label style={{ display: "flex", gap: "0.75rem", alignItems: "flex-start", cursor: "pointer", marginBottom: "1rem" }}>
@@ -1651,7 +1651,7 @@ function OnboardingFlow({
                     style={{ marginTop: "0.2rem", flexShrink: 0 }}
                     type="checkbox"
                   />
-                  <span>He leido y acepto los Terminos y Condiciones (version {tyc.version})</span>
+                  <span>He leído y acepto los Términos y Condiciones (versión {tyc.version})</span>
                 </label>
                 {error ? <p className="form-error">{error}</p> : null}
                 <button
@@ -1664,16 +1664,16 @@ function OnboardingFlow({
                 </button>
               </>
             ) : (
-              <p className="form-error">No se pudo cargar los terminos. Recarga la pagina.</p>
+              <p className="form-error">No se pudo cargar los términos. Recargá la página.</p>
             )}
           </div>
         ) : (
           <form className="login-form" onSubmit={(e) => void handleOtpSubmit(e)}>
             <p className="muted">
-              Ingresa el codigo de 6 digitos enviado a {otpEmailMask ?? "tu correo electronico"}.
+              Ingresá el código de 6 dígitos enviado a {otpEmailMask ?? "tu correo electrónico"}.
             </p>
             <label>
-              Codigo de verificacion
+              Código de verificación
               <input
                 autoComplete="one-time-code"
                 inputMode="numeric"
@@ -1697,7 +1697,7 @@ function OnboardingFlow({
               onClick={() => void handleOtpResend()}
               type="button"
             >
-              {otpCooldown > 0 ? `Reenviar en ${otpCooldown}s` : "Reenviar codigo"}
+              {otpCooldown > 0 ? `Reenviar en ${otpCooldown}s` : "Reenviar código"}
             </button>
           </form>
         )}
@@ -1896,14 +1896,14 @@ function OperationHome({
     { label: "Documentos", view: "documents", icon: "documentos", group: "primary" },
     { label: "Notas / Presupuestos", view: "notas", icon: "notas", group: "secondary" },
     { label: "Cobros / Recibos", view: "recibos", icon: "recibos", group: "secondary" },
-    { label: "Catalogo", view: "catalog", icon: "catalogo", group: "secondary" },
+    { label: "Catálogo", view: "catalog", icon: "catalogo", group: "secondary" },
     { label: "Devolver factura", view: "credit-note", disabled: !canEmit, icon: "devolver", group: "secondary" },
-    { label: "Informacion y estado", view: "status", icon: "estado", group: "admin" }
+    { label: "Información y estado", view: "status", icon: "estado", group: "admin" }
   ];
   const menuSections: Array<{ title: string; key: "primary" | "secondary" | "admin" }> = [
     { title: "Operaciones", key: "primary" },
     { title: "Secundarias", key: "secondary" },
-    { title: "Administracion", key: "admin" }
+    { title: "Administración", key: "admin" }
   ];
 
   return (
@@ -1933,7 +1933,7 @@ function OperationHome({
             aria-haspopup="dialog"
             className="topbar-facturador topbar-facturador--boton"
             onClick={abrirCambioPerfil}
-            title="Cambiar punto de expedicion"
+            title="Cambiar punto de expedición"
             type="button"
           >
             <span className="topbar-facturador-texto">
@@ -1961,10 +1961,10 @@ function OperationHome({
 
       {menuOpen && !esEscritorio ? (
         <div className="menu-scrim" onClick={() => setMenuOpen(false)} role="presentation">
-          <nav className="mobile-menu" aria-label="Navegacion principal" onClick={(event) => event.stopPropagation()}>
+          <nav className="mobile-menu" aria-label="Navegación principal" onClick={(event) => event.stopPropagation()}>
             <div>
               <p className="eyebrow">Menu</p>
-              <h2>Operacion</h2>
+              <h2>Operación</h2>
               <p className="muted">{getOperationalTitle(context)}</p>
             </div>
             <div className="menu-list">
@@ -2000,7 +2000,7 @@ function OperationHome({
 
       <div className="operation-cuerpo">
       {esEscritorio ? (
-        <nav className="side-nav" aria-label="Navegacion principal">
+        <nav className="side-nav" aria-label="Navegación principal">
           {menuSections.map((section) => (
             <div className="side-nav-grupo" key={section.key}>
               <p className="side-nav-titulo">{section.title}</p>
@@ -2025,7 +2025,7 @@ function OperationHome({
             <span className="side-nav-punto" aria-hidden="true" />
             <span>
               {readiness?.ready ? "Listo para facturar" : "Revisar estado"}
-              {!numeracionDelCliente && context?.fiscal_context.documento_nro ? ` · ultimo numero ${context.fiscal_context.documento_nro}` : ""}
+              {!numeracionDelCliente && context?.fiscal_context.documento_nro ? ` · último número ${context.fiscal_context.documento_nro}` : ""}
             </span>
           </div>
         </nav>
@@ -2034,8 +2034,8 @@ function OperationHome({
       {updatePending ? (
         <section className="update-banner" aria-live="assertive">
           <div>
-            <strong>Nueva version disponible</strong>
-            <small>Hay una actualizacion lista. Toca el boton para cargarla ahora.</small>
+            <strong>Nueva versión disponible</strong>
+            <small>Hay una actualización lista. Tocá el botón para cargarla ahora.</small>
           </div>
           <button className="primary-action" onClick={() => void applyUpdate()} type="button">
             Actualizar
@@ -2189,27 +2189,27 @@ function StatusView({
           <p className="eyebrow">Facturador</p>
           <h1>{getOperationalTitle(context)}</h1>
           <p className="muted">
-            {context ? `${context.facturador.razon_social} · RUC ${context.facturador.ruc}` : "Configuracion operativa incompleta"}
+            {context ? `${context.facturador.razon_social} · RUC ${context.facturador.ruc}` : "Configuración operativa incompleta"}
           </p>
           {context ? (
             <p className="punto-activo">
-              Punto de expedicion: <strong>{context.fiscal_context.establecimiento}-{context.fiscal_context.punto_expedicion}</strong>
+              Punto de expedición: <strong>{context.fiscal_context.establecimiento}-{context.fiscal_context.punto_expedicion}</strong>
               {perfilActivo ? ` · ${perfilActivo.titulo_operativo}` : ""}
               {variosPerfiles ? (
                 <button className="enlace-accion" onClick={onCambiarPerfil} type="button">
-                  Cambiar punto de expedicion
+                  Cambiar punto de expedición
                 </button>
               ) : null}
             </p>
           ) : null}
-          {perfilesError ? <p className="form-error">No se pudo cargar la lista de puntos de expedicion. Recarga la pagina.</p> : null}
+          {perfilesError ? <p className="form-error">No se pudo cargar la lista de puntos de expedición. Recargá la página.</p> : null}
         </div>
         <span className={canEmit ? "status-pill ready" : "status-pill blocked"}>{canEmit ? "Listo" : "Bloqueado"}</span>
       </section>
 
       <section className="readiness-grid">
         <article className="context-card">
-          <p className="eyebrow">Sesion</p>
+          <p className="eyebrow">Sesión</p>
           <h2>{user?.display_name ?? user?.username ?? "Operador"}</h2>
           <dl>
             <div>
@@ -2256,10 +2256,10 @@ function StatusView({
           Documentos
         </button>
         <button className="secondary-action wide" onClick={() => onGoTo("catalog")} type="button">
-          Catalogo
+          Catálogo
         </button>
         <button className="secondary-action wide" disabled={!canEmit} onClick={() => onGoTo("credit-note")} type="button">
-          Nueva nota de credito
+          Nueva nota de crédito
         </button>
       </section>
     </>
@@ -2267,7 +2267,7 @@ function StatusView({
 }
 
 const POR_PAGINA_DOCUMENTOS = 30;
-const TIPOS_PROXIMAMENTE = ["Notas de debito", "Autofacturas"] as const;
+const TIPOS_PROXIMAMENTE = ["Notas de débito", "Autofacturas"] as const;
 
 /** SPEC_DOCUMENTOS_ESCRITORIO_v0.1, RN-01: 1024 px separa escritorio (menu lateral, tablas) de celular. */
 const MEDIA_ESCRITORIO = "(min-width: 1024px)";
@@ -2465,7 +2465,7 @@ function DocumentsView({
         send_now: false,
         comment: comment.trim() || undefined
       });
-      setMessage(`Reintento enviado. Revision ${result.revision_number}.`);
+      setMessage(`Reintento enviado. Revisión ${result.revision_number}.`);
       await openDetail(selected.id);
     } catch (err) {
       setMessage(err instanceof Error ? err.message : "No se pudo reintentar con mismo CDC.");
@@ -2559,7 +2559,7 @@ function DocumentsView({
       if (cantidad > linea.saldo + 1e-9) return { lineas, error: `Linea ${linea.line_no}: supera el saldo (${formatCantidad(linea.saldo)}).` };
       lineas.push({ line_no: linea.line_no, cantidad });
     }
-    if (lineas.length === 0) return { lineas, error: "Indica la cantidad a acreditar en al menos una linea." };
+    if (lineas.length === 0) return { lineas, error: "Indicá la cantidad a acreditar en al menos una línea." };
     return { lineas, error: null };
   }
 
@@ -2575,7 +2575,7 @@ function DocumentsView({
     }
     const motivo = reasonDraft.trim();
     if (!motivo) {
-      setReasonError("Ingrese un motivo para continuar.");
+      setReasonError("Escribí el motivo para continuar.");
       return;
     }
     if (motivo.length < 3) {
@@ -2730,7 +2730,7 @@ function DocumentsView({
       setDocuments((current) => current.map((item) => (item.id === updated.id ? updated : item)));
       setMessage(mensajeResultadoReintento(updated));
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "No se pudo reintentar la emision.");
+      setMessage(err instanceof Error ? err.message : "No se pudo reintentar la emisión.");
     } finally {
       setActionLoading(false);
     }
@@ -2747,7 +2747,7 @@ function DocumentsView({
       setMessage(mensajeNotaCredito(updated));
       if (updated.estado === "EMITIDA") await loadDeliveryFor(updated);
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "No se pudo reintentar la nota de credito.");
+      setMessage(err instanceof Error ? err.message : "No se pudo reintentar la nota de crédito.");
     } finally {
       setActionLoading(false);
     }
@@ -2787,7 +2787,7 @@ function DocumentsView({
       const targetUrl = mode === "whatsapp" ? link.whatsapp_url : link.public_url;
       window.open(targetUrl, "_blank", "noopener,noreferrer");
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "No se pudo abrir accion rapida.");
+      setMessage(err instanceof Error ? err.message : "No se pudo abrir acción rápida.");
     } finally {
       setActionLoading(false);
       setQuickMenuDocId(null);
@@ -2799,8 +2799,8 @@ function DocumentsView({
       `Documento: ${payload.documento_id}`,
       `document_uuid: ${payload.document_uuid ?? "-"}`,
       `CDC: ${payload.cdc ?? "-"}`,
-      `Numero fiscal: ${payload.numero_fiscal ?? "-"}`,
-      `Codigo SIFEN: ${payload.sifen_result_code ?? "-"}`,
+      `Número fiscal: ${payload.numero_fiscal ?? "-"}`,
+      `Código SIFEN: ${payload.sifen_result_code ?? "-"}`,
       `Mensaje SIFEN: ${payload.sifen_result_message ?? "-"}`,
       `Estado fiscal (raw): ${payload.fiscal_status_raw ?? "-"}`,
       `Creado: ${payload.created_at ?? "-"}`
@@ -2829,7 +2829,7 @@ function DocumentsView({
 
   async function loadEventosDocumento() {
     if (!selected) {
-      setMessage("Seleccione un documento para consultar historial.");
+      setMessage("Elegí un documento para consultar historial.");
       return;
     }
 
@@ -2919,7 +2919,7 @@ function DocumentsView({
                       <button onClick={() => { setQuickMenuDocId(null); void retryNotaCredito(documento); }} role="menuitem" type="button">Reintentar nota de crédito</button>
                     ) : null}
                     {documento.tipo === "FACTURA" ? (
-                      <button onClick={() => void emitNotaCreditoFromList(documento.id)} role="menuitem" type="button">Nota de credito</button>
+                      <button onClick={() => void emitNotaCreditoFromList(documento.id)} role="menuitem" type="button">Nota de crédito</button>
                     ) : null}
                     {documento.tipo !== "NOTA_REMISION" ? (
                       <button className="destructive-item" onClick={() => void cancelDocumentoFromList(documento.id, documento.tipo)} role="menuitem" type="button">Anular</button>
@@ -2940,7 +2940,7 @@ function DocumentsView({
           }}
           type="button"
         >
-          {value === "FACTURAS" ? "Facturas" : value === "NOTAS_CREDITO" ? "Notas de credito" : value === "NOTAS_REMISION" ? "Notas de remision" : "Carga masiva"}
+          {value === "FACTURAS" ? "Facturas" : value === "NOTAS_CREDITO" ? "Notas de crédito" : value === "NOTAS_REMISION" ? "Notas de remisión" : "Carga masiva"}
         </button>
       ))}
       {/* SPEC_DOCUMENTOS_ESCRITORIO_v0.1, RN-03: tipos que FS incorpora cuando FE los habilite (Fase B). */}
@@ -3032,7 +3032,7 @@ function DocumentsView({
           </button>
           {!esEscritorio ? (
           <button className="secondary-action" onClick={() => setShowAdvancedFilters((current) => !current)} type="button">
-            {showAdvancedFilters ? "Ocultar filtros" : "Mas filtros"}
+            {showAdvancedFilters ? "Ocultar filtros" : "Más filtros"}
           </button>
           ) : null}
           {!showAdvancedFilters ? (
@@ -3045,7 +3045,7 @@ function DocumentsView({
               }}
               type="button"
             >
-              Buscar mas documentos
+              Buscar más documentos
             </button>
           ) : null}
         </div>
@@ -3070,7 +3070,7 @@ function DocumentsView({
                 <select onChange={(event) => setTipoOperativoFilter(event.target.value as "TODOS" | "CONTADO" | "CREDITO")} value={tipoOperativoFilter}>
                   <option value="TODOS">Todas</option>
                   <option value="CONTADO">Contado</option>
-                  <option value="CREDITO">Credito</option>
+                  <option value="CREDITO">Crédito</option>
                 </select>
               </label>
             ) : null}
@@ -3098,7 +3098,7 @@ function DocumentsView({
         <div className="document-management-grid">
           <article className="document-management-card">
             <h4>Estado de mis documentos</h4>
-            <p className="muted">Revise emision, pendientes y rechazados en un solo lugar.</p>
+            <p className="muted">Revisá emisión, pendientes y rechazados en un solo lugar.</p>
             <button className="secondary-action" onClick={() => setGestionTab("STATUS")} type="button">
               Ver estado
             </button>
@@ -3111,7 +3111,7 @@ function DocumentsView({
             </button>
           </article>
           <article className="document-management-card">
-            <h4>Documentos en espera de confirmacion</h4>
+            <h4>Documentos en espera de confirmación</h4>
             <p className="muted">Identifique comprobantes pendientes de respuesta fiscal.</p>
             <button className="secondary-action" onClick={() => void loadBatchPendientes()} type="button">
               Ver pendientes
@@ -3139,7 +3139,7 @@ function DocumentsView({
         ) : null}
         {gestionTab === "PENDIENTES" && batchPendientes ? (
           <div className="document-management-results">
-            <strong>Documentos en espera de confirmacion</strong>
+            <strong>Documentos en espera de confirmación</strong>
             <p className="muted">
               Documentos: {batchPendientes.documents_pending} · Lotes: {batchPendientes.batches_pending}
             </p>
@@ -3151,7 +3151,7 @@ function DocumentsView({
             {reconciliacion.items.length === 0 ? <p className="muted">Sin diferencias visibles para la consulta actual.</p> : null}
             {reconciliacion.items.slice(0, 3).map((item) => (
               <p className="muted" key={`${item.document_id ?? "doc"}-${item.cdc ?? "cdc"}`}>
-                {(item.nro_factura ?? "sin numero")} · {(item.status ?? "sin estado")} · {(item.receptor_nombre ?? "sin receptor")}
+                {(item.nro_factura ?? "sin número")} · {(item.status ?? "sin estado")} · {(item.receptor_nombre ?? "sin receptor")}
               </p>
             ))}
           </div>
@@ -3222,7 +3222,7 @@ function DocumentsView({
                     {esRemision ? (
                       <td>{documento.remision?.motivo_descripcion ?? "-"}</td>
                     ) : (
-                      <td>{documento.condicion_venta === "CREDITO" ? "Crédito" : "Contado"}</td>
+                      <td>{etiquetaCondicionVenta(documento.condicion_venta)}</td>
                     )}
                     <td><EstadoDocumentoPill documento={documento} /></td>
                     <td className="documents-tabla-cdc" title={documento.cdc ?? undefined}>{documento.cdc ? `${documento.cdc.slice(0, 8)}…${documento.cdc.slice(-4)}` : "-"}</td>
@@ -3279,7 +3279,7 @@ function DocumentsView({
               {menuDeFila(documento)}
             </article>
           ))}
-          {hasRecentWindow ? <h3 className="documents-group-title">Ultimos 7 dias</h3> : null}
+          {hasRecentWindow ? <h3 className="documents-group-title">Últimos 7 días</h3> : null}
           {(hasRecentWindow ? weekDocs : documents).map((documento) => (
             <button
               className="document-row"
@@ -3288,7 +3288,7 @@ function DocumentsView({
               type="button"
             >
               <span>
-                <strong title={documento.accion_detalle?.titulo}>{`${getDocumentoAccionIcon(documento)} ${documento.numero_fiscal ?? "Numero pendiente"}`}</strong>
+                <strong title={documento.accion_detalle?.titulo}>{`${getDocumentoAccionIcon(documento)} ${documento.numero_fiscal ?? "Número pendiente"}`}</strong>
                 <small>{documento.cliente.razon_social}</small>
                 {formatEmisor(documento) ? <small className="document-row-emisor">Emitio {formatEmisor(documento)}</small> : null}
               </span>
@@ -3312,7 +3312,7 @@ function DocumentsView({
                 <div>
                   <p className="eyebrow">Documento</p>
                   <h3>{formatEstadoDocumento(selected)}</h3>
-                  <p className="muted">{formatDocumentoTipo(selected.tipo)} · Numero {selected.numero_fiscal ?? "pendiente"}</p>
+                  <p className="muted">{formatDocumentoTipo(selected.tipo)} · Número {selected.numero_fiscal ?? "pendiente"}</p>
                 </div>
                 <span className={selected.estado === "EMITIDA" ? "status-pill ready" : "status-pill blocked"}>
                   {formatEstadoDocumento(selected)}
@@ -3414,7 +3414,7 @@ function DocumentsView({
               </section>
 
               {selected.tipo === "FACTURA" && fichaSaldo && fichaSaldo.lineas.some((linea) => linea.cantidad_acreditada > 0) ? (
-                <section className="invoice-lines nc-acreditado" aria-label="Acreditado por notas de credito">
+                <section className="invoice-lines nc-acreditado" aria-label="Acreditado por notas de crédito">
                   <h4>Acreditado por notas de crédito</h4>
                   <div className="invoice-lines-list">
                     {fichaSaldo.lineas
@@ -3482,7 +3482,7 @@ function DocumentsView({
                       ) : null}
                       {selected.accion_detalle.acciones_sugeridas.includes("CREAR_NCE") ? (
                         <button className="secondary-action" disabled={actionLoading || !canEmitNotaCredito(selected, documents, Boolean(context?.nc_moneda_extranjera_habilitada))} onClick={() => void emitSelectedNotaCredito()} type="button">
-                          Crear nota de credito
+                          Crear nota de crédito
                         </button>
                       ) : null}
                       {selected.accion_detalle.acciones_sugeridas.includes("CONTACTAR_SOPORTE") && selected.accion_detalle.soporte_payload ? (
@@ -3584,7 +3584,7 @@ function DocumentsView({
                 ) : null}
                 {selected.tipo !== "NOTA_REMISION" ? (
                 <button className="secondary-action" disabled={actionLoading || !canEmitNotaCredito(selected, documents, Boolean(context?.nc_moneda_extranjera_habilitada))} onClick={() => void emitSelectedNotaCredito()} type="button">
-                  ↩ Crear nota de credito
+                  ↩ Crear nota de crédito
                 </button>
                 ) : null}
                 {(selected.totals?.anticipo ?? 0) > 0 ? <small className="muted">{AVISO_NOTA_CREDITO_CON_ANTICIPO}</small> : null}
@@ -3604,7 +3604,7 @@ function DocumentsView({
                   <p className="cancelacion-mensaje">{mensajeCancelacion(selected)}</p>
                   {selected.cancelacion.rejection_code ? (
                     <p className="muted">
-                      Codigo SIFEN {selected.cancelacion.rejection_code}
+                      Código SIFEN {selected.cancelacion.rejection_code}
                       {selected.cancelacion.intentos > 1 ? ` · ${selected.cancelacion.intentos} intentos` : null}
                     </p>
                   ) : null}
@@ -3616,7 +3616,7 @@ function DocumentsView({
                       type="button"
                       data-testid="reintentar-anulacion"
                     >
-                      ↻ Reintentar anulacion
+                      ↻ Reintentar anulación
                     </button>
                   ) : null}
                   {selected.cancelacion.status === "FAILED" ? (
@@ -3634,10 +3634,10 @@ function DocumentsView({
               ) : null}
 
               <details className="tech-block">
-                <summary>Informacion fiscal</summary>
+                <summary>Información fiscal</summary>
                 <dl className="receipt-summary">
                   <div>
-                    <dt>Codigo fiscal</dt>
+                    <dt>Código fiscal</dt>
                     <dd>{selected.cdc ?? "Pendiente"}</dd>
                   </div>
                   <div>
@@ -3672,24 +3672,24 @@ function DocumentsView({
                     Crear nuevo enlace
                   </button>
                   <a className={selectedXmlUrl ? "secondary-link" : "secondary-link disabled"} href={selectedXmlUrl ?? "#"} rel="noreferrer" target="_blank">
-                    Descargar documento electronico
+                    Descargar documento electrónico
                   </a>
                 </div>
               </details>
               {isInternalSupport ? (
                 <details className="tech-block">
-                  <summary>Administracion fiscal</summary>
+                  <summary>Administración fiscal</summary>
                 <section className="action-group action-group-internal" aria-label="Autogestion soporte">
-                  <h4 className="group-title">Eventos y regularizacion fiscal</h4>
-                  <p className="muted">Flujo sugerido: decision → validar impacto CDC → ejecutar acción.</p>
+                  <h4 className="group-title">Eventos y regularización fiscal</h4>
+                  <p className="muted">Flujo sugerido: decisión → validar impacto CDC → ejecutar acción.</p>
                   {decision ? (
                     <div className="support-decision-box">
-                      <p><strong>Accion recomendada:</strong> {decision.recommended_action}</p>
+                      <p><strong>Acción recomendada:</strong> {decision.recommended_action}</p>
                       <p><strong>Confianza:</strong> {decision.decision_confidence}</p>
-                      <p><strong>Motivos:</strong> {decision.reason_codes.join(", ") || "sin codigos"}</p>
+                      <p><strong>Motivos:</strong> {decision.reason_codes.join(", ") || "sin códigos"}</p>
                     </div>
                   ) : (
-                    <p className="muted">Sin decision disponible para este documento.</p>
+                    <p className="muted">Sin decisión disponible para este documento.</p>
                   )}
                   {cdcImpact ? (
                     <p className="muted">
@@ -3719,7 +3719,7 @@ function DocumentsView({
               {message ? <p className="inline-message">{message}</p> : null}
             </>
           ) : (
-            <p className="muted empty-state">Seleccione un documento para ver detalle y acciones.</p>
+            <p className="muted empty-state">Elegí un documento para ver detalle y acciones.</p>
           )}
         </aside>
         ) : null}
@@ -3727,19 +3727,19 @@ function DocumentsView({
         <div className="modal-backdrop" role="presentation">
           <section className="modal-panel" aria-labelledby="reason-modal-title" role="dialog" aria-modal="true">
             <header>
-              <p className="eyebrow">Confirmacion</p>
+              <p className="eyebrow">Confirmación</p>
               <h3 id="reason-modal-title">{getReasonModalTitle(reasonModal.action, reasonModal.tipo)}</h3>
-              <p className="muted">Ingrese un motivo para continuar.</p>
+              <p className="muted">Escribí el motivo para continuar.</p>
             </header>
             {(reasonModal.action === "CREDIT_NOTE_DETAIL" || reasonModal.action === "CREDIT_NOTE_LIST") && ncSaldo ? (
               <div className="nc-parcial">
-                <div className="segmented" role="group" aria-label="Tipo de nota de credito">
+                <div className="segmented" role="group" aria-label="Tipo de nota de crédito">
                   <button
                     aria-pressed={ncModo === "TOTAL"}
                     className={ncModo === "TOTAL" ? "active" : ""}
                     disabled={!ncSaldo.admite_total}
                     onClick={() => setNcModo("TOTAL")}
-                    title={ncSaldo.admite_total ? undefined : "La factura ya tiene notas de credito"}
+                    title={ncSaldo.admite_total ? undefined : "La factura ya tiene notas de crédito"}
                     type="button"
                   >
                     Total
@@ -3756,7 +3756,7 @@ function DocumentsView({
                   </button>
                 </div>
                 {!ncSaldo.admite_total && !ncSaldo.admite_parcial ? (
-                  <p className="form-error">{ncSaldo.motivo_no_parcial ?? "La factura no admite nota de credito."}</p>
+                  <p className="form-error">{ncSaldo.motivo_no_parcial ?? "La factura no admite nota de crédito."}</p>
                 ) : null}
                 {ncModo === "PARCIAL" ? (
                   <>
@@ -3780,7 +3780,7 @@ function DocumentsView({
                               <td>{formatCantidad(linea.cantidad_acreditada)}</td>
                               <td>
                                 <input
-                                  aria-label={`Cantidad a acreditar, linea ${linea.line_no}`}
+                                  aria-label={`Cantidad a acreditar, línea ${linea.line_no}`}
                                   disabled={linea.saldo <= 0}
                                   inputMode="decimal"
                                   onChange={(event) =>
@@ -3839,14 +3839,14 @@ function DocumentsView({
         <div className="modal-backdrop" role="presentation">
           <section className="modal-panel" aria-labelledby="nc-success-title" role="dialog" aria-modal="true">
             <header>
-              <p className="eyebrow">Nota de credito</p>
+              <p className="eyebrow">Nota de crédito</p>
               <h3 id="nc-success-title">
                 {notaCreditoPopup.accion_detalle?.acciones_sugeridas.includes("REINTENTAR_NOTA_CREDITO")
                   ? notaCreditoPopup.accion_detalle.titulo
                   : getSimpleDocumentoEstado(notaCreditoPopup.estado, notaCreditoPopup.tipo)}
               </h3>
               <p className="muted">
-                {notaCreditoPopup.numero_fiscal ? `Numero ${notaCreditoPopup.numero_fiscal}` : "Numero pendiente"}
+                {notaCreditoPopup.numero_fiscal ? `Número ${notaCreditoPopup.numero_fiscal}` : "Número pendiente"}
                 {" · "}{notaCreditoPopup.cliente.razon_social}
               </p>
             </header>
@@ -3862,7 +3862,7 @@ function DocumentsView({
                 </button>
               ) : null}
               <button className="primary-action" onClick={() => setNotaCreditoPopup(null)} type="button">
-                Ver nota de credito
+                Ver nota de crédito
               </button>
             </div>
           </section>
@@ -4227,7 +4227,7 @@ function ClientesAgendaView({
                   <option value="CI">CI</option>
                   <option value="RUC">RUC</option>
                   <option value="PASAPORTE">Pasaporte</option>
-                  <option value="CEDULA_EXTRANJERA">Cedula extranjera</option>
+                  <option value="CEDULA_EXTRANJERA">Cédula extranjera</option>
                   <option value="NO_ESPECIFICADO">No especificado</option>
                 </select>
               </label>
@@ -4256,7 +4256,7 @@ function ClientesAgendaView({
                 </div>
               ) : null}
               <label>
-                Nombre o razon social
+                Nombre o razón social
                 <input value={draft.razon_social} onChange={(event) => setDraft((current) => ({ ...current, razon_social: event.target.value }))} />
               </label>
               {draft.documento_tipo === "RUC" ? (
@@ -4269,14 +4269,14 @@ function ClientesAgendaView({
                       setDraft((current) => ({ ...current, naturaleza: event.target.value as ClienteNaturaleza }));
                     }}
                   >
-                    <option value="FISICA">Fisica</option>
-                    <option value="JURIDICA">Juridica</option>
+                    <option value="FISICA">Física</option>
+                    <option value="JURIDICA">Jurídica</option>
                   </select>
-                  <small className="muted">Sugerido segun RUC/razon social, verificar con el cliente.</small>
+                  <small className="muted">Sugerido según RUC/razon social, verificar con el cliente.</small>
                 </label>
               ) : null}
               <label>
-                Telefono
+                Teléfono
                 <input value={draft.telefono ?? ""} onChange={(event) => setDraft((current) => ({ ...current, telefono: event.target.value }))} />
               </label>
               <label>
@@ -4284,7 +4284,7 @@ function ClientesAgendaView({
                 <input value={draft.email ?? ""} onChange={(event) => setDraft((current) => ({ ...current, email: event.target.value }))} />
               </label>
               <label>
-                Direccion
+                Dirección
                 <input value={draft.direccion ?? ""} onChange={(event) => setDraft((current) => ({ ...current, direccion: event.target.value }))} />
               </label>
             </div>
@@ -4306,7 +4306,7 @@ function ClientesAgendaView({
           <section className="modal-panel" aria-labelledby="cliente-delete-title" role="dialog" aria-modal="true">
             <header>
               <h3 id="cliente-delete-title">¿Eliminar cliente de tu agenda?</h3>
-              <p className="muted">Esta accion quita a {deleteTarget.razon_social} de la agenda de este facturador.</p>
+              <p className="muted">Esta acción quita a {deleteTarget.razon_social} de la agenda de este facturador.</p>
             </header>
             <div className="result-actions">
               <button className="secondary-action" disabled={saving} onClick={() => setDeleteTarget(null)} type="button">
@@ -4369,7 +4369,7 @@ function CreditNoteView({
 
   async function emitNotaCredito() {
     if (!selected?.elegible) {
-      setAviso({ tono: "atencion", texto: selected?.motivo_no_elegible ?? "Seleccione una factura elegible." });
+      setAviso({ tono: "atencion", texto: selected?.motivo_no_elegible ?? "Elegí una factura elegible." });
       return;
     }
     if (!motivo.trim()) {
@@ -4393,7 +4393,7 @@ function CreditNoteView({
         setDeliveryLink(link);
       }
     } catch (error) {
-      setAviso({ tono: "error", texto: error instanceof Error ? error.message : "No se pudo emitir la nota de credito." });
+      setAviso({ tono: "error", texto: error instanceof Error ? error.message : "No se pudo emitir la nota de crédito." });
     } finally {
       setEmitting(false);
     }
@@ -4401,7 +4401,7 @@ function CreditNoteView({
 
   return (
     <section className="documents-view" aria-labelledby="credit-note-title">
-      <EncabezadoPantalla id="credit-note-title" onVolver={onBack} rotulo="Nueva nota de credito" titulo="Seleccionar factura" />
+      <EncabezadoPantalla id="credit-note-title" onVolver={onBack} rotulo="Nueva nota de crédito" titulo="Seleccionar factura" />
       <section className="documents-filters">
         <label>
           Buscar factura
@@ -4412,7 +4412,7 @@ function CreditNoteView({
                 void loadCandidates();
               }
             }}
-            placeholder="Cliente, documento, numero o total"
+            placeholder="Cliente, documento, número o total"
             value={query}
           />
         </label>
@@ -4438,7 +4438,7 @@ function CreditNoteView({
               type="button"
             >
               <span>
-                <strong>{candidate.documento.numero_fiscal ?? "Numero pendiente"}</strong>
+                <strong>{candidate.documento.numero_fiscal ?? "Número pendiente"}</strong>
                 <small>{candidate.documento.cliente.razon_social}</small>
               </span>
               <span>
@@ -4457,7 +4457,7 @@ function CreditNoteView({
                   <p className="eyebrow">Factura origen</p>
                   <h3>{selected.documento.cliente.razon_social}</h3>
                   <p className="muted">
-                    {selected.documento.numero_fiscal ?? "Numero pendiente"} · {selected.documento.condicion_venta} · {formatDocumentoEstado(selected.documento.estado)}
+                    {selected.documento.numero_fiscal ?? "Número pendiente"} · {etiquetaCondicionVenta(selected.documento.condicion_venta)} · {formatDocumentoEstado(selected.documento.estado)}
                   </p>
                 </div>
                 <span className={selected.elegible ? "status-pill ready" : "status-pill blocked"}>
@@ -4487,20 +4487,20 @@ function CreditNoteView({
                 <textarea onChange={(event) => setMotivo(event.target.value)} rows={4} value={motivo} />
               </CampoFormulario>
               <button className="primary-action wide" disabled={emitting || !selected.elegible} onClick={() => void emitNotaCredito()} type="button">
-                {emitting ? "Emitiendo..." : "Emitir nota de credito"}
+                {emitting ? "Emitiendo..." : "Emitir nota de crédito"}
               </button>
 
               {result ? (
                 <div className="public-link-box">
-                  <dt>Nota de credito</dt>
+                  <dt>Nota de crédito</dt>
                   <dd>
-                    {formatDocumentoEstado(result.estado)} · Numero {result.numero_fiscal ?? "pendiente"} · {deliveryLink?.public_url ?? "Link en proceso"}
+                    {formatDocumentoEstado(result.estado)} · Número {result.numero_fiscal ?? "pendiente"} · {deliveryLink?.public_url ?? "Link en proceso"}
                   </dd>
                 </div>
               ) : null}
             </>
           ) : (
-            <p className="muted empty-state">Seleccione una factura emitida elegible para emitir una nota de credito total.</p>
+            <p className="muted empty-state">Elegí una factura emitida elegible para emitir una nota de crédito total.</p>
           )}
         </aside>
       </section>
@@ -4554,7 +4554,7 @@ function CatalogView({
       const result = await api.get<CatalogoItemListResponse>(`/catalogo/items?${params.toString()}`);
       setItems(result.items);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "No se pudo cargar el catalogo.");
+      setError(err instanceof Error ? err.message : "No se pudo cargar el catálogo.");
     } finally {
       setLoading(false);
     }
@@ -4673,7 +4673,7 @@ function CatalogView({
 
     if (!payload.descripcion || !Number.isInteger(payload.precio_unitario) || payload.precio_unitario <= 0) {
       setSaving(false);
-      setError("Complete descripcion y precio entero mayor a cero.");
+      setError("Completá descripción y precio entero mayor a cero.");
       return;
     }
 
@@ -4698,7 +4698,7 @@ function CatalogView({
     <section className="catalog-view" aria-labelledby="catalog-title">
       <div className="editor-heading">
         <div>
-          <p className="eyebrow">Catalogo</p>
+          <p className="eyebrow">Catálogo</p>
           <h2 id="catalog-title">Productos y servicios</h2>
         </div>
         <button className="ghost-action" onClick={onBack} type="button">
@@ -4715,7 +4715,7 @@ function CatalogView({
             value={query}
           />
         </label>
-        <div className="filter-tabs" role="group" aria-label="Estado del catalogo">
+        <div className="filter-tabs" role="group" aria-label="Estado del catálogo">
           <button className={statusChip === "ALL" ? "active" : ""} onClick={() => setStatusChip("ALL")} type="button">Todos</button>
           <button className={statusChip === "ACTIVE" ? "active" : ""} onClick={() => setStatusChip("ACTIVE")} type="button">Activos</button>
           <button className={statusChip === "ARCHIVED" ? "active" : ""} onClick={() => setStatusChip("ARCHIVED")} type="button">Archivados</button>
@@ -4733,7 +4733,7 @@ function CatalogView({
               <button className="document-row-main" onClick={() => openEdit(item)} type="button">
                 <span>
                   <strong>{item.descripcion}</strong>
-                  <small>{item.codigo || "Sin codigo"}</small>
+                  <small>{item.codigo || "Sin código"}</small>
                 </span>
                 <span>
                   <strong>{formatGuaranies(item.precio_unitario)}</strong>
@@ -4772,7 +4772,7 @@ function CatalogView({
           <section className="modal-panel" aria-labelledby="catalog-editor-title" role="dialog" aria-modal="true">
             <header className="editor-heading">
               <div>
-                <p className="eyebrow">Catalogo</p>
+                <p className="eyebrow">Catálogo</p>
                 <h3 id="catalog-editor-title">{editorMode === "EDIT" ? "Editar producto o servicio" : "Nuevo producto o servicio"}</h3>
               </div>
               <button className="ghost-action" onClick={() => setEditorOpen(false)} type="button">
@@ -4783,7 +4783,7 @@ function CatalogView({
             <form className="catalog-form" onSubmit={(event) => void saveItem(event)}>
               <div className="documents-filters">
                 <label>
-                  Nombre o descripcion
+                  Nombre o descripción
                   <input
                     onChange={(event) => setDraft((current) => ({ ...current, descripcion: event.target.value }))}
                     required
@@ -4813,7 +4813,7 @@ function CatalogView({
                 {advancedOpen ? (
                   <>
                     <label>
-                      Codigo
+                      Código
                       <input
                         onChange={(event) => setDraft((current) => ({ ...current, codigo: event.target.value }))}
                         placeholder="SERV-001"
@@ -4856,9 +4856,9 @@ function CatalogView({
         <div className="modal-backdrop">
           <section className="modal-panel" aria-labelledby="catalog-delete-title" role="dialog" aria-modal="true">
             <header>
-              <h3 id="catalog-delete-title">¿Eliminar item del catalogo?</h3>
+              <h3 id="catalog-delete-title">¿Eliminar item del catálogo?</h3>
               <p className="muted">
-                Esta accion eliminara permanentemente <strong>{deleteTarget.descripcion}</strong> de este facturador.
+                Esta acción eliminará permanentemente <strong>{deleteTarget.descripcion}</strong> de este facturador.
               </p>
             </header>
             <div className="result-actions">
@@ -5285,7 +5285,7 @@ function InvoiceEditor({
 
   async function runPreview(nextRequest = request) {
     if (!nextRequest) {
-      setPreviewError("Complete cliente y al menos una linea para calcular.");
+      setPreviewError("Completá cliente y al menos una línea para calcular.");
       return;
     }
 
@@ -5305,7 +5305,7 @@ function InvoiceEditor({
 
   async function emitFactura() {
     if (!request) {
-      setEmissionError("Complete cliente y lineas antes de emitir.");
+      setEmissionError("Completá cliente y líneas antes de emitir.");
       return;
     }
 
@@ -5378,7 +5378,7 @@ function InvoiceEditor({
       setEmittedDocumento(result);
       setDeliveryMessage(mensajeResultadoReintento(result));
     } catch (error) {
-      setEmissionError(error instanceof Error ? error.message : "No se pudo reintentar la emision.");
+      setEmissionError(error instanceof Error ? error.message : "No se pudo reintentar la emisión.");
     } finally {
       setEmitting(false);
     }
@@ -5627,7 +5627,7 @@ function InvoiceEditor({
     setCatalogSuggestions((current) => ({ ...current, [lineId]: [] }));
     setCatalogMessage((current) => ({
       ...current,
-      [lineId]: enMonedaExtranjera ? `Item del catálogo: el precio del catálogo está en guaraníes, cargá el precio en ${moneda}.` : "Item seleccionado del catalogo."
+      [lineId]: enMonedaExtranjera ? `Item del catálogo: el precio del catálogo está en guaraníes, cargá el precio en ${moneda}.` : "Item seleccionado del catálogo."
     }));
   }
 
@@ -5636,7 +5636,7 @@ function InvoiceEditor({
     setCatalogMessage((current) => ({ ...current, [line.id]: null }));
 
     if (!Number.isInteger(Number(line.precio_unitario)) || Number(line.precio_unitario) <= 0) {
-      setCatalogMessage((current) => ({ ...current, [line.id]: "Ingrese un precio entero mayor a cero." }));
+      setCatalogMessage((current) => ({ ...current, [line.id]: "Ingresá un precio entero mayor a cero." }));
       setCatalogSaving((current) => ({ ...current, [line.id]: false }));
       return false;
     }
@@ -5650,7 +5650,7 @@ function InvoiceEditor({
         activo: true
       });
       applyCatalogItem(line.id, saved);
-      setCatalogMessage((current) => ({ ...current, [line.id]: "Item guardado en catalogo." }));
+      setCatalogMessage((current) => ({ ...current, [line.id]: "Item guardado en catálogo." }));
       return true;
     } catch (error) {
       setCatalogMessage((current) => ({
@@ -5757,12 +5757,12 @@ function InvoiceEditor({
     if (hasEmissionResult || emitting) return null;
     if (!canEmit) {
       const falla = mapBusinessReadinessChecks(readiness?.checks ?? []).find((check) => !check.ok);
-      return `No se puede facturar: ${falla?.message ?? "revisa Informacion y estado."}`;
+      return `No se puede facturar: ${falla?.message ?? "revisá Información y estado."}`;
     }
     if (!cliente.documento.trim() || !cliente.razon_social.trim()) return "Falta el cliente (documento y nombre)";
     if (!tipoCambioValido) return "Falta el tipo de cambio";
-    if (lineasConDatos.length === 0) return "Agrega al menos una linea";
-    if (primeraInvalida >= 0) return `Corregi la linea ${primeraInvalida + 1} para poder crear la factura`;
+    if (lineasConDatos.length === 0) return "Agregá al menos una línea";
+    if (primeraInvalida >= 0) return `Corregí la línea ${primeraInvalida + 1} para poder crear la factura`;
     if (!preview) return "Calculando…";
     return null;
   })();
@@ -5783,9 +5783,9 @@ function InvoiceEditor({
       <div>
         <h2 id="invoice-title">Nueva factura</h2>
         <p className="muted editor-subtitulo">
-          {numeroEstimado ? `Proximo numero ${numeroEstimado} · ` : ""}
+          {numeroEstimado ? `Próximo número ${numeroEstimado} · ` : ""}
           {today}
-          {numeroEstimado && modoCompleto ? " · el numero final lo asigna el sistema al emitir" : ""}
+          {numeroEstimado && modoCompleto ? " · el número final lo asigna el sistema al emitir" : ""}
         </p>
       </div>
       <div className="header-actions">
@@ -5810,15 +5810,15 @@ function InvoiceEditor({
     <label className="campo-inline">
       Tipo de persona
       <select
-        title="Sugerido segun RUC o razon social; verificar con el cliente."
+        title="Sugerido según RUC o razón social; verificar con el cliente."
         value={cliente.naturaleza ?? "FISICA"}
         onChange={(event) => {
           setClienteNaturalezaTouched(true);
           editarCliente({ naturaleza: event.target.value as ClienteNaturaleza });
         }}
       >
-        <option value="FISICA">Fisica</option>
-        <option value="JURIDICA">Juridica</option>
+        <option value="FISICA">Física</option>
+        <option value="JURIDICA">Jurídica</option>
       </select>
     </label>
   ) : null;
@@ -5827,11 +5827,11 @@ function InvoiceEditor({
     <div className="cliente-opcionales-campos">
       {!modoCompleto ? selectorTipoPersona : null}
       <label>
-        Direccion
+        Dirección
         <input onChange={(event) => editarCliente({ direccion: event.target.value })} value={cliente.direccion ?? ""} />
       </label>
       <label>
-        Telefono
+        Teléfono
         <input inputMode="tel" onChange={(event) => editarCliente({ telefono: event.target.value })} value={cliente.telefono ?? ""} />
       </label>
       <label>
@@ -5854,8 +5854,8 @@ function InvoiceEditor({
 
       {initialDraft?.corrige_numero !== undefined ? (
         <p className="editor-alert ready" role="status">
-          Corrigiendo la factura rechazada {initialDraft.corrige_numero ?? "sin numero"}. Revise los datos del cliente:
-          la factura se emite con numero nuevo y queda vinculada a la rechazada. El numero de la rechazada se inutiliza
+          Corrigiendo la factura rechazada {initialDraft.corrige_numero ?? "sin número"}. Revisá los datos del cliente:
+          la factura se emite con número nuevo y queda vinculada a la rechazada. El número de la rechazada se inutiliza
           desde su detalle.
         </p>
       ) : null}
@@ -5863,8 +5863,8 @@ function InvoiceEditor({
       {/* SPEC_UX_NUEVA_FACTURA_v0.1, B.2 y D.2: banda Comprobante en una fila (apilada en modo simple). */}
       <section className="form-section banda-comprobante" aria-label="Comprobante" ref={comprobanteSectionRef}>
         <div className="banda-campo banda-condicion">
-          <span className="banda-etiqueta">Condicion de venta</span>
-          <div className="segmented-control" role="group" aria-label="Condicion de venta">
+          <span className="banda-etiqueta">Condición de venta</span>
+          <div className="segmented-control" role="group" aria-label="Condición de venta">
             {(["CONTADO", "CREDITO"] as const).map((value) => (
               <button
                 aria-pressed={condicionVenta === value}
@@ -5873,16 +5873,16 @@ function InvoiceEditor({
                 onClick={() => setCondicionVenta(value)}
                 type="button"
               >
-                {value === "CONTADO" ? "Contado" : "Credito"}
+                {value === "CONTADO" ? "Contado" : "Crédito"}
               </button>
             ))}
           </div>
         </div>
         {condicionVenta === "CREDITO" || modoCompleto ? (
           <label className="banda-campo banda-plazo">
-            <span className="banda-etiqueta">Plazo (dias)</span>
+            <span className="banda-etiqueta">Plazo (días)</span>
             <select
-              aria-label="Plazo en dias"
+              aria-label="Plazo en días"
               disabled={condicionVenta !== "CREDITO"}
               onChange={(event) => setCreditoPlazoDias(Number(event.target.value))}
               value={creditoPlazoDias}
@@ -5948,12 +5948,12 @@ function InvoiceEditor({
               <option value="RUC">RUC</option>
               <option value="CI">CI</option>
               <option value="PASAPORTE">Pasaporte</option>
-              <option value="CEDULA_EXTRANJERA">Cedula extranjera</option>
+              <option value="CEDULA_EXTRANJERA">Cédula extranjera</option>
               <option value="NO_ESPECIFICADO">No especificado</option>
             </select>
           </label>
           <label className="cliente-numero">
-            Numero
+            Número
             <span className="campo-con-icono">
               <input
                 inputMode={cliente.documento_tipo === "RUC" || cliente.documento_tipo === "CI" ? "numeric" : "text"}
@@ -5985,7 +5985,7 @@ function InvoiceEditor({
                     void tryAutocompleteDnit();
                   }
                 }}
-                placeholder="Ingrese numero de documento"
+                placeholder="Ingresá el número de documento"
                 value={cliente.documento}
               />
               {clienteOrigen ? <span className="campo-tilde" title={clienteOrigen === "AGENDA" ? "En tu agenda" : "Del padron de la DNIT"}><Icono nombre="tilde" tamano={16} grosor={2.5} /></span> : null}
@@ -6007,7 +6007,7 @@ function InvoiceEditor({
             ) : null}
           </label>
           <label className="cliente-nombre">
-            Nombre o razon social
+            Nombre o razón social
             <input onChange={(event) => editarCliente({ razon_social: event.target.value })} value={cliente.razon_social} />
           </label>
         </div>
@@ -6032,7 +6032,7 @@ function InvoiceEditor({
             type="button"
           >
             <Icono nombre={opcionalesAbiertos ? "chevron-abajo" : "chevron-derecha"} tamano={14} />
-            {modoCompleto ? "Direccion, telefono y correo (opcionales)" : "Tipo de persona, direccion, telefono y correo"}
+            {modoCompleto ? "Dirección, teléfono y correo (opcionales)" : "Tipo de persona, dirección, teléfono y correo"}
           </button>
           {modoCompleto ? casillaAgenda : null}
         </div>
@@ -6044,13 +6044,13 @@ function InvoiceEditor({
         <div className="tarjeta-cabecera">
           <h3>Productos y servicios</h3>
           <span className="muted">
-            {lineasConDatos.length === 1 ? "1 linea" : `${lineasConDatos.length} lineas`}
+            {lineasConDatos.length === 1 ? "1 línea" : `${lineasConDatos.length} líneas`}
             {modoCompleto ? (enMonedaExtranjera ? ` · precios en ${moneda} con hasta 2 decimales` : " · precios en guaranies") : ""}
           </span>
           <span className="tarjeta-cabecera-espacio" />
           {modoCompleto ? (
             <button className="ghost-action compact con-icono" onClick={agregarLinea} type="button">
-              <Icono nombre="buscar" tamano={14} /> Buscar en el catalogo
+              <Icono nombre="buscar" tamano={14} /> Buscar en el catálogo
             </button>
           ) : null}
         </div>
@@ -6076,7 +6076,7 @@ function InvoiceEditor({
           {visibleLines.length === 0 ? (
             <button className="empty-sale-list" onClick={addLineAndEdit} type="button">
               <strong>+ Agregar producto</strong>
-              <span>Descripcion, cantidad y precio.</span>
+              <span>Descripción, cantidad y precio.</span>
             </button>
           ) : null}
           {visibleLines.map((line, index) => {
@@ -6131,14 +6131,14 @@ function InvoiceEditor({
 
             <div className="sheet-grid">
               <label className="sheet-description">
-                Descripcion
+                Descripción
                 <input
                   ref={descriptionInputRef}
                   autoFocus
                   onChange={(event) =>
                     updateLine(activeLine.id, { catalogo_item_id: null, descripcion: event.target.value, lockedFromCatalog: false })
                   }
-                  placeholder="Ingrese descripcion"
+                  placeholder="Ingresá descripción"
                   value={activeLine.descripcion}
                 />
               </label>
@@ -6189,7 +6189,7 @@ function InvoiceEditor({
                 </label>
               </div>
 
-              {catalogSearching[activeLine.id] ? <span className="field-hint">Buscando catalogo...</span> : null}
+              {catalogSearching[activeLine.id] ? <span className="field-hint">Buscando catálogo...</span> : null}
               {(catalogSuggestions[activeLine.id] ?? []).length > 0 ? (
                 <div className="suggestion-list catalog">
                   {(catalogSuggestions[activeLine.id] ?? []).map((item) => (
@@ -6221,13 +6221,13 @@ function InvoiceEditor({
               </div>
 
               <button className="advanced-toggle" onClick={() => setLineCodeOpen((current) => !current)} type="button">
-                {lineCodeOpen ? "Ocultar codigo interno" : "+ Agregar codigo interno"}
+                {lineCodeOpen ? "Ocultar código interno" : "+ Agregar código interno"}
               </button>
 
               {lineCodeOpen ? (
                 <div className="advanced-fields">
                   <label>
-                    Codigo interno
+                    Código interno
                     <input
                       disabled={activeLine.lockedFromCatalog}
                       onChange={(event) =>
@@ -6315,7 +6315,7 @@ function InvoiceEditor({
             <p className="muted totales-nota">
               {equivalenteGs !== null ? `equivale a ${formatGuaranies(equivalenteGs)} al cambio de ${tipoCambio.replace(".", ",")}` : ""}
               {equivalenteGs !== null && primeraInvalida >= 0 ? " · " : ""}
-              {primeraInvalida >= 0 ? `la linea ${primeraInvalida + 1} no se cuenta` : ""}
+              {primeraInvalida >= 0 ? `la línea ${primeraInvalida + 1} no se cuenta` : ""}
             </p>
           ) : null}
           <button className="primary-action wide crear-factura" disabled={crearDeshabilitado} onClick={() => void emitFactura()} type="button">
@@ -6397,7 +6397,7 @@ function InvoiceEditor({
 /** SPEC_UX_NUEVA_FACTURA_v0.1, RN-06: pasos del estado fiscal segun el estado del documento. */
 type ClasePaso = "hecho" | "activo" | "error" | "pendiente";
 function pasosPorEstado(estado: DocumentoEstado): Array<{ etiqueta: string; clase: ClasePaso }> {
-  const etiquetas = ["Creada", "Enviada a SIFEN", "Esperando aprobacion", "Aprobada · KUDE listo"];
+  const etiquetas = ["Creada", "Enviada a SIFEN", "Esperando aprobación", "Aprobada · KUDE listo"];
   const armar = (clases: ClasePaso[], reemplazos: Record<number, string> = {}) =>
     etiquetas.map((etiqueta, indice) => ({ etiqueta: reemplazos[indice] ?? etiqueta, clase: clases[indice] ?? "pendiente" }));
   switch (estado) {
@@ -6506,7 +6506,7 @@ function ResultadoEmision({
     <div className="resultado-emision" aria-live="polite">
       <div className="editor-heading">
         <div>
-          <h2 id="invoice-title">{documento.numero_fiscal ? `Factura ${documento.numero_fiscal}` : "Factura creada · numero pendiente"}</h2>
+          <h2 id="invoice-title">{documento.numero_fiscal ? `Factura ${documento.numero_fiscal}` : "Factura creada · número pendiente"}</h2>
           <p className="muted editor-subtitulo">
             Creada hoy{hora ? ` ${hora}` : ""}{operador ? ` por ${operador}` : ""} · {documento.cliente.razon_social} · {total}
           </p>
@@ -6531,7 +6531,7 @@ function ResultadoEmision({
             <span className="muted">{descripcion}</span>
           </div>
         </div>
-        <ol className="pasos" aria-label="Pasos de la emision">
+        <ol className="pasos" aria-label="Pasos de la emisión">
           {pasos.map((paso, indice) => (
             <li className={`paso ${paso.clase}`} key={paso.etiqueta}>
               <span className="paso-punto" aria-hidden="true">{paso.clase === "hecho" ? <Icono nombre="tilde" tamano={14} grosor={3} /> : null}</span>
@@ -6549,11 +6549,11 @@ function ResultadoEmision({
             <div>
               <dt>Cliente</dt>
               <dd>{documento.cliente.razon_social}</dd>
-              <small>{documento.cliente.documento_tipo} {documento.cliente.documento}{documento.cliente.naturaleza ? ` · ${documento.cliente.naturaleza === "JURIDICA" ? "Juridica" : "Fisica"}` : ""}</small>
+              <small>{documento.cliente.documento_tipo} {documento.cliente.documento}{documento.cliente.naturaleza ? ` · ${documento.cliente.naturaleza === "JURIDICA" ? "Jurídica" : "Física"}` : ""}</small>
             </div>
             <div>
-              <dt>Condicion</dt>
-              <dd>{documento.condicion_venta === "CREDITO" ? "Credito" : "Contado"}</dd>
+              <dt>Condición</dt>
+              <dd>{etiquetaCondicionVenta(documento.condicion_venta)}</dd>
               <small>{context?.fiscal_context.actividad_economica_descripcion ?? ""}</small>
             </div>
             <div>
@@ -6573,7 +6573,7 @@ function ResultadoEmision({
                 <thead>
                   <tr>
                     <th className="col-numero">#</th>
-                    <th>Descripcion</th>
+                    <th>Descripción</th>
                     <th className="cifra">Cantidad</th>
                     <th className="cifra">Precio</th>
                     <th>IVA</th>
@@ -6602,8 +6602,8 @@ function ResultadoEmision({
             <div><span>Total IVA</span><strong className="cifra">{formatMonto(documento.totals.total_iva, moneda)}</strong></div>
           </div>
           <p className="muted resultado-cdc">
-            {documento.cdc ? <span title={documento.cdc}>CDC {documento.cdc.slice(0, 8)}…{documento.cdc.slice(-4)}</span> : "CDC pendiente hasta la aprobacion"}
-            {" · el enlace publico siempre entrega la version vigente del XML y el KUDE"}
+            {documento.cdc ? <span title={documento.cdc}>CDC {documento.cdc.slice(0, 8)}…{documento.cdc.slice(-4)}</span> : "CDC pendiente hasta la aprobación"}
+            {" · el enlace público siempre entrega la versión vigente del XML y el KUDE"}
           </p>
         </section>
 
@@ -6617,7 +6617,7 @@ function ResultadoEmision({
             </p>
             {emailStatus?.message ? <p className="editor-alert ready">{emailStatus.message}</p> : null}
             <label className="campo-whatsapp">
-              Numero de WhatsApp
+              Número de WhatsApp
               <span className="campo-prefijo">
                 <span>+595</span>
                 <input inputMode="tel" onChange={(event) => setWhatsappPhone(event.target.value)} placeholder="981 123 456" value={whatsappPhone} />
@@ -6652,10 +6652,10 @@ function ResultadoEmision({
           </section>
 
           <details className="form-section mas-opciones">
-            <summary className="group-title">Mas opciones</summary>
+            <summary className="group-title">Más opciones</summary>
             <div className="result-actions">
               <a className={xmlUrl ? "secondary-link" : "secondary-link disabled"} href={xmlUrl ?? "#"} rel="noreferrer" target="_blank">
-                Descargar documento electronico (XML)
+                Descargar documento electrónico (XML)
               </a>
               <button className="secondary-action" disabled={deliveryLoading} onClick={onRegenerarEnlace} type="button">
                 Regenerar enlace
@@ -6947,11 +6947,11 @@ function GrillaLineas({
       </table>
       <div className="grilla-pie">
         <button className="ghost-action compact con-icono" onClick={onAgregar} type="button">
-          <Icono nombre="mas" tamano={14} grosor={2.5} /> Agregar linea
+          <Icono nombre="mas" tamano={14} grosor={2.5} /> Agregar línea
         </button>
-        <span className="muted">Enter en la ultima celda agrega una fila · Supr quita la fila</span>
+        <span className="muted">Enter en la última celda agrega una fila · Supr quita la fila</span>
         <span className="tarjeta-cabecera-espacio" />
-        {enMonedaExtranjera ? <span className="muted">Guardar en el catalogo no disponible en {moneda}</span> : null}
+        {enMonedaExtranjera ? <span className="muted">Guardar en el catálogo no disponible en {moneda}</span> : null}
       </div>
       {dialogoConfirmar}
     </div>
@@ -7060,26 +7060,26 @@ function mapBusinessReadinessChecks(
     {
       code: "membresia_activa",
       ok: tenant?.ok ?? false,
-      message: tenant?.ok ? "Membresia activa" : "Membresia inactiva. Contacte a soporte para reactivarla."
+      message: tenant?.ok ? "Membresía activa" : "Membresía inactiva. Contactá a soporte para reactivarla."
     },
     {
       code: "suscripcion_al_dia",
       ok: suscripcion?.ok ?? false,
-      message: suscripcion?.ok ? "Suscripcion al dia" : "Suscripcion con pagos pendientes. Regularice para facturar."
+      message: suscripcion?.ok ? "Suscripción al día" : "Suscripción con pagos pendientes. Regularizá para facturar."
     },
     {
       code: "facturador_activo",
       ok: facturador?.ok ?? false,
-      message: facturador?.ok ? "Facturador activo" : "Facturador inactivo. Solicite activacion al administrador."
+      message: facturador?.ok ? "Facturador activo" : "Facturador inactivo. Solicitá activación al administrador."
     },
     {
       code: "operacion_fiscal_habilitada",
       ok: integracionFiscalOk,
       message: integracionFiscalOk
-        ? "Integracion con facturacion-electronica lista para operar"
+        ? "Conexión fiscal lista"
         : !contexto?.ok
-          ? "Faltan datos fiscales. Contacte al equipo de configuracion."
-          : "Conexion con facturacion-electronica no disponible. Intente nuevamente o contacte a soporte."
+          ? "Faltan datos fiscales. Contactá al equipo de configuración."
+          : "Conexión fiscal no disponible. Intentá nuevamente o contactá a soporte."
     }
   ];
 }
@@ -7253,22 +7253,22 @@ function mensajeCancelacion(doc: DocumentoResponse): string {
   if (c.status === "REJECTED") {
     const motivo = c.rejection_message ? `: ${c.rejection_message}.` : ".";
     if (c.rejection_code === "0100") {
-      return "SIFEN no pudo procesar la anulacion en este momento y la factura sigue vigente. Espera un minuto y reintenta.";
+      return "SIFEN no pudo procesar la anulación en este momento y la factura sigue vigente. Esperá un minuto y reintenta.";
     }
     return c.retryable
-      ? `SIFEN rechazo la anulacion${motivo} Podes reintentar: suele resolverse en el segundo intento.`
-      : `SIFEN rechazo la anulacion de forma definitiva${motivo} Si corresponde, emiti una nota de credito.`;
+      ? `SIFEN rechazó la anulación${motivo} Podés reintentar: suele resolverse en el segundo intento.`
+      : `SIFEN rechazó la anulación de forma definitiva${motivo} Si corresponde, emití una nota de crédito.`;
   }
   if (c.status === "FAILED") {
     return "No hubo respuesta de SIFEN. La factura puede seguir vigente: consulta el estado antes de reintentar.";
   }
-  return "La anulacion quedo en un estado que no pudimos interpretar. Consulta el estado del documento.";
+  return "La anulación quedó en un estado que no pudimos interpretar. Consultá el estado del documento.";
 }
 
 function formatDocumentoEstado(value: DocumentoEstado, tipo?: DocumentoResponse["tipo"]): string {
   const nombre = formatDocumentoTipo(tipo ?? "FACTURA");
   const labels: Record<DocumentoEstado, string> = {
-    EMITIENDO: "Emision en proceso",
+    EMITIENDO: "Emisión en proceso",
     EMITIDA: `${nombre} emitida`,
     PENDIENTE_SIFEN: "Pendiente SIFEN",
     RECHAZADA: "Rechazada",
@@ -7286,7 +7286,7 @@ function getSimpleDocumentoEstado(value: DocumentoEstado, tipo?: DocumentoRespon
     return `🟢 ${nombre} emitida`;
   }
   if (value === "RECHAZADA" || value === "ERROR_OPERATIVO" || value === "ERROR_TEMPORAL" || value === "ANULADA" || value === "CANCELADO_LOCAL") {
-    return "🔴 Requiere revision";
+    return "🔴 Requiere revisión";
   }
   return `🟡 Procesando ${nombre.toLowerCase()}`;
 }
@@ -7297,9 +7297,9 @@ function getSimpleDocumentoHint(value: DocumentoEstado, tipo?: DocumentoResponse
     return `${nombre} lista para enviar por WhatsApp, compartir enlace o abrir PDF.`;
   }
   if (value === "RECHAZADA" || value === "ERROR_OPERATIVO" || value === "ERROR_TEMPORAL" || value === "ANULADA" || value === "CANCELADO_LOCAL") {
-    return "El documento requiere revision antes de continuar.";
+    return "El documento requiere revisión antes de continuar.";
   }
-  return `Estamos procesando la ${nombre.toLowerCase()}. Puede compartir el enlace al cliente.`;
+  return `Estamos procesando la ${nombre.toLowerCase()}. Podés compartir el enlace al cliente.`;
 }
 
 /** Nombre visible del emisor del documento; `null` si la respuesta no lo trae. */
@@ -7310,16 +7310,16 @@ function formatEmisor(documento: DocumentoResponse): string | null {
 }
 
 function getDocumentoNombreLower(tipo: DocumentoResponse["tipo"]): string {
-  return tipo === "NOTA_CREDITO" ? "nota de credito" : tipo === "NOTA_REMISION" ? "nota de remisión" : "factura";
+  return tipo === "NOTA_CREDITO" ? "nota de crédito" : tipo === "NOTA_REMISION" ? "nota de remisión" : "factura";
 }
 
 function formatOperationViewTitle(value: OperationView): string {
   const labels: Record<OperationView, string> = {
-    status: "Informacion",
+    status: "Información",
     invoice: "Nueva factura",
     clients: "Agenda clientes",
     "credit-note": "Devolver factura",
-    catalog: "Catalogo",
+    catalog: "Catálogo",
     documents: "Documentos",
     notas: "Notas / Presupuestos",
     recibos: "Cobros / Recibos"
@@ -7330,7 +7330,7 @@ function formatOperationViewTitle(value: OperationView): string {
 function getOperationViewHint(value: OperationView): string {
   const hints: Record<OperationView, string> = {
     status: "Estado del facturador",
-    invoice: "Crear factura electronica",
+    invoice: "Crear factura electrónica",
     clients: "Agenda de contactos",
     "credit-note": "Devolver una factura",
     catalog: "Productos y servicios",
@@ -7346,10 +7346,10 @@ function getReasonModalTitle(
   tipo?: DocumentoResponse["tipo"]
 ): string {
   if (action === "VOID_NUMBER") {
-    return "Inutilizar numeracion";
+    return "Inutilizar numeración";
   }
   if (action === "CREDIT_NOTE_DETAIL" || action === "CREDIT_NOTE_LIST") {
-    return "Crear nota de credito";
+    return "Crear nota de crédito";
   }
   return `Anular ${getDocumentoNombreLower(tipo ?? "FACTURA")}`;
 }
@@ -7358,31 +7358,31 @@ function getReasonModalPlaceholder(
   action: "CANCEL_DETAIL" | "CANCEL_LIST" | "CREDIT_NOTE_DETAIL" | "CREDIT_NOTE_LIST" | "VOID_NUMBER"
 ): string {
   if (action === "VOID_NUMBER") {
-    return "Explique por que necesita inutilizar la numeracion.";
+    return "Explicá por qué necesitás inutilizar la numeración.";
   }
   if (action === "CREDIT_NOTE_DETAIL" || action === "CREDIT_NOTE_LIST") {
-    return "Ej: devolucion de mercaderia, error en monto o cliente.";
+    return "Ej: devolución de mercadería, error en monto o cliente.";
   }
-  return "Ej: error en datos del comprobante o anulacion solicitada por cliente.";
+  return "Ej: error en datos del comprobante o anulación solicitada por cliente.";
 }
 
 function mensajeNotaCredito(nota: DocumentoResponse): string {
-  if (nota.estado === "EMITIDA") return "Nota de credito emitida.";
-  if (nota.estado === "RECHAZADA") return "SIFEN rechazo la nota de credito.";
+  if (nota.estado === "EMITIDA") return "Nota de crédito emitida.";
+  if (nota.estado === "RECHAZADA") return "SIFEN rechazó la nota de crédito.";
   if (nota.accion_detalle?.acciones_sugeridas.includes("REINTENTAR_NOTA_CREDITO")) {
-    return "La nota de credito sigue sin confirmarse. Puede reintentar mas tarde, sin riesgo de duplicarla.";
+    return "La nota de crédito sigue sin confirmarse. Podés reintentar más tarde, sin riesgo de duplicarla.";
   }
-  return "La nota de credito esta pendiente de confirmacion SIFEN.";
+  return "La nota de crédito está pendiente de confirmación SIFEN.";
 }
 
 function getNotaCreditoSuccessMessage(estado: DocumentoEstado): string {
   if (estado === "EMITIDA") {
-    return "La nota de credito fue aceptada por SIFEN. El PDF ya esta disponible para compartir.";
+    return "La nota de crédito fue aceptada por SIFEN. El PDF ya está disponible para compartir.";
   }
   if (estado === "PENDIENTE_SIFEN" || estado === "EMITIENDO") {
-    return "La nota de credito fue enviada al sistema fiscal y esta pendiente de confirmacion SIFEN. Refrescar el estado es seguro — se usa la misma referencia idempotente.";
+    return "La nota de crédito fue enviada al sistema fiscal y está pendiente de confirmación SIFEN. Refrescar el estado es seguro — se usa la misma referencia idempotente.";
   }
-  return "La nota de credito fue procesada. Verificar el estado fiscal para continuar.";
+  return "La nota de crédito fue procesada. Verificar el estado fiscal para continuar.";
 }
 
 function getOperationalTitle(context: OperationalContextResponse | null): string {
@@ -7605,20 +7605,20 @@ function formatInutilizacion(inutilizacion: DocumentoInutilizacion): string {
 function getRejectedSifenMessage(summary: SifenSummary | null): string {
   const base = `Documento rechazado por SIFEN: ${formatSifenSummary(summary)}.`;
   if (summary?.code === "1306") {
-    return `${base} SIFEN no encontro el RUC del cliente: revise el numero y el digito verificador, o emita con la cedula si no tiene RUC. ${AVISO_INUTILIZACION}`;
+    return `${base} SIFEN no encontró el RUC del cliente: revisá el número y el dígito verificador, o emití con la cédula si no tiene RUC. ${AVISO_INUTILIZACION}`;
   }
-  return `${base} Revise los datos del receptor y el detalle fiscal antes de reintentar. ${AVISO_INUTILIZACION}`;
+  return `${base} Revisá los datos del receptor y el detalle fiscal antes de reintentar. ${AVISO_INUTILIZACION}`;
 }
 
 function getRecoverableMessage(documento: DocumentoResponse): string | null {
   if (documento.estado === "EMITIENDO") {
-    return "La factura quedo en cola. Puede consultar el detalle o refrescar cuando el backend fiscal responda.";
+    return "La factura quedó en cola. Puede consultar el detalle o refrescar cuando el backend fiscal responda.";
   }
   if (documento.estado === "PENDIENTE_SIFEN") {
-    return "La confirmacion fiscal esta pendiente. Refrescar estado o reintentar es seguro porque se usa la misma referencia idempotente.";
+    return "La confirmación fiscal está pendiente. Refrescar estado o reintentar es seguro porque se usa la misma referencia idempotente.";
   }
   if (documento.estado === "ERROR_TEMPORAL") {
-    return "Hubo un error temporal de comunicacion fiscal. Puede reintentar sin duplicar el documento operativo.";
+    return "Hubo un error temporal de comunicación fiscal. Podés reintentar sin duplicar el documento operativo.";
   }
   return null;
 }
@@ -7652,7 +7652,7 @@ function formatIntegerInput(value: string): string {
 
 /** SPEC_NOTA_CREDITO_TRABADA_v0.1, RN-06: una nota trabada nunca se muestra como "en proceso". */
 function formatEstadoDocumento(documento: DocumentoResponse): string {
-  if (esNotaSinConfirmar(documento)) return "🟠 Nota credito sin confirmar";
+  if (esNotaSinConfirmar(documento)) return "🟠 Nota de crédito sin confirmar";
   // SPEC_CORRECCION_INUTILIZACION_RECHAZADAS_v0.1, RN-C1.
   if (documento.tipo === "FACTURA" && documento.estado === "RECHAZADA") {
     const inutilizada = documento.inutilizacion?.status === "ACCEPTED";
@@ -7676,7 +7676,7 @@ function formatDocumentoEstadoSimple(value: DocumentoEstado, tipo?: DocumentoRes
     case "CANCELADO_LOCAL":
       return "⚪ Cancelada antes de enviar";
     default:
-      return "🔴 Requiere revision";
+      return "🔴 Requiere revisión";
   }
 }
 
@@ -8099,7 +8099,7 @@ function NotasView({
   async function saveQuickCatalogItem(fila: NotaFilaDraft): Promise<boolean> {
     const precio = Number(fila.precio_unitario);
     if (!Number.isInteger(precio) || precio <= 0) {
-      setCatalogMessage(c => ({ ...c, [fila._id]: "Ingrese un precio entero mayor a cero." }));
+      setCatalogMessage(c => ({ ...c, [fila._id]: "Ingresá un precio entero mayor a cero." }));
       return false;
     }
     setCatalogSaving(c => ({ ...c, [fila._id]: true }));
@@ -8453,7 +8453,7 @@ function NotasView({
                   <article key={fila._id} className="sale-item-card nota-fila-contexto">
                     <div className="nota-fila-inline">
                       <span className="nota-fila-badge">Título</span>
-                      <textarea className="nota-fila-textarea" rows={2} placeholder="Descripción de sección (aparece en negrita en el PDF)..." value={fila.descripcion} onChange={e => updateFila(fila._id, { descripcion: e.target.value })} />
+                      <textarea aria-label="Título de la sección" className="nota-fila-textarea" rows={2} placeholder="Descripción de sección (aparece en negrita en el PDF)..." value={fila.descripcion} onChange={e => updateFila(fila._id, { descripcion: e.target.value })} />
                     </div>
                     <div className="sale-item-actions">
                       <button type="button" className="icon-action" onClick={() => moveFila(fila._id, -1)} disabled={isFirst} aria-label="Subir">↑</button>
@@ -8469,7 +8469,7 @@ function NotasView({
                   <article key={fila._id} className="sale-item-card nota-fila-sin-precio">
                     <div className="nota-fila-inline">
                       <span className="nota-fila-badge">Sin precio</span>
-                      <textarea className="nota-fila-textarea" rows={2} placeholder="Descripción del item (sin precio)..." value={fila.descripcion} onChange={e => updateFila(fila._id, { descripcion: e.target.value })} />
+                      <textarea aria-label="Descripción del ítem sin precio" className="nota-fila-textarea" rows={2} placeholder="Descripción del item (sin precio)..." value={fila.descripcion} onChange={e => updateFila(fila._id, { descripcion: e.target.value })} />
                     </div>
                     <div className="sale-item-actions">
                       <button type="button" className="icon-action" onClick={() => moveFila(fila._id, -1)} disabled={isFirst} aria-label="Subir">↑</button>
@@ -8961,7 +8961,7 @@ function RecibosView({
       setFormPagadorDocTipo(result.cliente.documento_tipo);
       setFormPagadorDoc(result.cliente.documento);
       setFormPagadorNombre(result.cliente.razon_social);
-      setClienteMessage("Nombre o razon social autocompletado.");
+      setClienteMessage("Nombre o razón social autocompletado.");
     } catch {
       // No interrumpir el flujo operativo cuando DNIT no esta disponible.
     } finally {
@@ -9081,7 +9081,7 @@ function RecibosView({
     setSaving(true);
     setError(null);
     try {
-      if (!(await confirmar({ titulo: `¿Emitir el recibo para ${r.pagador_nombre}?`, texto: "Esta accion no se puede deshacer.", textoConfirmar: "Emitir" }))) return;
+      if (!(await confirmar({ titulo: `¿Emitir el recibo para ${r.pagador_nombre}?`, texto: "Esta acción no se puede deshacer.", textoConfirmar: "Emitir" }))) return;
       const emitido = await api.request<ReciboRecord>(`/recibos/${r.id}/emitir`, { method: "POST" });
       setSelectedRecibo(emitido);
       setWhatsappPhone("");
@@ -9147,7 +9147,7 @@ function RecibosView({
   const submitAnular = async () => {
     if (!anularTarget) return;
     if (anularMotivo.trim().length < 3) {
-      setError("Ingrese un motivo de al menos 3 caracteres.");
+      setError("Ingresá un motivo de al menos 3 caracteres.");
       return;
     }
     setSaving(true);
@@ -9191,7 +9191,7 @@ function RecibosView({
           <section className="modal-panel" aria-labelledby="recibo-delete-title" role="dialog" aria-modal="true">
             <header>
               <h3 id="recibo-delete-title">Eliminar recibo</h3>
-              <p className="muted">¿Eliminar el borrador de recibo para {deleteTarget.pagador_nombre}? Esta accion no se puede deshacer.</p>
+              <p className="muted">¿Eliminar el borrador de recibo para {deleteTarget.pagador_nombre}? Esta acción no se puede deshacer.</p>
             </header>
             {error ? <p className="form-error">{error}</p> : null}
             <div className="result-actions">
@@ -9210,11 +9210,11 @@ function RecibosView({
         <div className="modal-backdrop" role="presentation">
           <section className="modal-panel" aria-labelledby="recibo-anular-title" role="dialog" aria-modal="true">
             <header>
-              <p className="eyebrow">Confirmacion</p>
+              <p className="eyebrow">Confirmación</p>
               <h3 id="recibo-anular-title">Anular recibo</h3>
               <p className="muted">
-                El recibo N° {anularTarget.numero != null ? String(anularTarget.numero).padStart(7, "0") : ""} para {anularTarget.pagador_nombre} quedara anulado.
-                Se genera un recibo de anulacion firmado; el original no se modifica.
+                El recibo N° {anularTarget.numero != null ? String(anularTarget.numero).padStart(7, "0") : ""} para {anularTarget.pagador_nombre} quedará anulado.
+                Se genera un recibo de anulación firmado; el original no se modifica.
               </p>
             </header>
             <label className="credit-note-motivo">
@@ -9267,7 +9267,7 @@ function RecibosView({
                   <option value="RUC">RUC</option>
                   <option value="CI">CI</option>
                   <option value="PASAPORTE">Pasaporte</option>
-                  <option value="CEDULA_EXTRANJERA">Cedula extranjera</option>
+                  <option value="CEDULA_EXTRANJERA">Cédula extranjera</option>
                   <option value="NO_ESPECIFICADO">No especificado</option>
                 </select>
                 <input
@@ -9285,7 +9285,7 @@ function RecibosView({
                   }}
                   onBlur={() => void tryAutocompleteDnit()}
                   onKeyDown={(e) => { if (e.key === "Enter" || e.key === "Tab") void tryAutocompleteDnit(); }}
-                  placeholder="Ingrese numero de documento"
+                  placeholder="Ingresá el número de documento"
                 />
               </div>
               {clienteSearching || clienteAutocompleting ? (
@@ -9304,15 +9304,15 @@ function RecibosView({
               ) : null}
             </label>
             <label className="required-field">
-              Pagador (nombre o razon social)
+              Pagador (nombre o razón social)
               <input type="text" value={formPagadorNombre} onChange={(e) => setFormPagadorNombre(e.target.value)} placeholder="Juan Perez" />
             </label>
             <label>
-              Direccion <small>(opcional)</small>
+              Dirección <small>(opcional)</small>
               <input type="text" value={formPagadorDireccion} onChange={(e) => setFormPagadorDireccion(e.target.value)} />
             </label>
             <label>
-              Telefono <small>(opcional)</small>
+              Teléfono <small>(opcional)</small>
               <input type="text" inputMode="tel" value={formPagadorTelefono} onChange={(e) => setFormPagadorTelefono(e.target.value)} />
             </label>
             <label>
@@ -9353,7 +9353,7 @@ function RecibosView({
             </label>
             {formFormaPago !== "EFECTIVO" ? (
               <label>
-                Referencia bancaria / numero de cheque
+                Referencia bancaria / número de cheque
                 <input type="text" value={formRefBancaria} onChange={(e) => setFormRefBancaria(e.target.value)} placeholder="Nro. transferencia, cheque, etc." />
               </label>
             ) : null}
@@ -9372,14 +9372,14 @@ function RecibosView({
             <section className="modal-panel" aria-labelledby="recibo-cliente-modal-title" role="dialog" aria-modal="true">
               <div className="editor-heading">
                 <div>
-                  <p className="eyebrow">Alta rapida</p>
+                  <p className="eyebrow">Alta rápida</p>
                   <h2 id="recibo-cliente-modal-title">Guardar cliente</h2>
                 </div>
                 <button className="ghost-action" onClick={() => setClienteModalOpen(false)} type="button">Cerrar</button>
               </div>
               <dl className="confirm-dl">
                 <div><dt>Documento</dt><dd>{formPagadorDoc || "-"}</dd></div>
-                <div><dt>Razon social</dt><dd>{formPagadorNombre || "-"}</dd></div>
+                <div><dt>Razón social</dt><dd>{formPagadorNombre || "-"}</dd></div>
               </dl>
               {clienteMessage ? <p className="form-error">{clienteMessage}</p> : null}
               <button className="primary-action wide" disabled={clienteSaving} onClick={() => void saveClienteRapido()} type="button">
@@ -9426,7 +9426,7 @@ function RecibosView({
             <div className="delivery-inline-form">
               <label>
                 WhatsApp
-                <input inputMode="tel" placeholder="Numero de celular" value={whatsappPhone} onChange={(e) => setWhatsappPhone(e.target.value)} />
+                <input inputMode="tel" placeholder="Número de celular" value={whatsappPhone} onChange={(e) => setWhatsappPhone(e.target.value)} />
               </label>
             </div>
             <a
@@ -9462,7 +9462,7 @@ function RecibosView({
       {loading ? (
         <p className="muted">Cargando recibos...</p>
       ) : recibos.length === 0 ? (
-        <p className="muted empty-state">No hay recibos aun. Crea el primero con el boton de arriba.</p>
+        <p className="muted empty-state">No hay recibos aún. Creá el primero con el botón de arriba.</p>
       ) : (
         <div className="notas-list">
           {recibos.map((r) => (

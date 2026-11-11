@@ -217,21 +217,21 @@ async function main() {
   await page.goto(baseUrl, { waitUntil: "networkidle" });
 
   await page.getByLabel("Usuario").fill("operador");
-  await page.getByLabel("Contrasena").fill("password");
+  await page.getByLabel("Contraseña").fill("password");
   await page.getByRole("button", { name: "Ingresar" }).click();
   await page.getByText("Puede emitir").waitFor();
 
   await page.getByRole("button", { name: "Nueva factura" }).click();
   await page.getByPlaceholder("80123456-7").fill(cliente.documento);
-  await page.getByLabel("Nombre o razon social").fill(cliente.razon_social);
-  await page.getByLabel("Direccion").fill(cliente.direccion);
-  await page.getByLabel("Telefono").fill(cliente.telefono);
+  await page.getByLabel("Nombre o razón social").fill(cliente.razon_social);
+  await page.getByLabel("Dirección").fill(cliente.direccion);
+  await page.getByLabel("Teléfono").fill(cliente.telefono);
   await page.getByLabel("Correo").fill(cliente.email);
   await page.getByRole("button", { name: "Guardar cliente" }).click();
   await page.getByRole("button", { name: "Confirmar alta" }).click();
   await page.getByText("Cliente guardado").waitFor();
 
-  await page.getByLabel("Codigo").fill("SERV");
+  await page.getByLabel("Código").fill("SERV");
   await page.getByText(item.descripcion).waitFor();
   await page.getByRole("button", { name: new RegExp(item.descripcion) }).click();
   await page.getByRole("button", { name: "Editar como nuevo" }).click();
@@ -253,8 +253,8 @@ async function main() {
   await page.getByRole("button", { name: new RegExp(cliente.razon_social) }).click();
   await page.getByText("Detalle").waitFor();
   await page.getByRole("link", { name: "KUDE/PDF" }).waitFor();
-  await page.getByRole("button", { name: "Nota credito" }).click();
-  await page.getByText("Nota de credito emitida.").waitFor();
+  await page.getByRole("button", { name: "Nota de crédito" }).click();
+  await page.getByText("Nota de crédito emitida.").waitFor();
 
   await page.getByRole("button", { name: "Volver" }).click();
   await page.getByRole("button", { name: "Ver documentos" }).click();

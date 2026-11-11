@@ -59,10 +59,10 @@ async function abrirNuevaFactura(page) {
 }
 
 async function cargarCliente(page) {
-  await page.getByPlaceholder("Ingrese numero de documento").fill(RUC);
-  await page.getByPlaceholder("Ingrese numero de documento").press("Tab");
+  await page.getByPlaceholder("Ingresá el número de documento").fill(RUC);
+  await page.getByPlaceholder("Ingresá el número de documento").press("Tab");
   await page.waitForTimeout(800);
-  const nombre = page.getByLabel("Nombre o razon social");
+  const nombre = page.getByLabel("Nombre o razón social");
   if (!(await nombre.inputValue()).trim()) await nombre.fill(NOMBRE);
 }
 
@@ -96,7 +96,7 @@ async function esperarAprobada(page, etiqueta) {
   while (Date.now() - inicio < ESPERA_APROBACION_MS) {
     const pasos = await page.locator(".paso.hecho").count();
     if (pasos === 4) break;
-    const resumen = page.locator("summary", { hasText: "Mas opciones" });
+    const resumen = page.locator("summary", { hasText: "Más opciones" });
     if ((await resumen.count()) && !(await page.locator("details.mas-opciones[open]").count())) await resumen.click();
     const verificar = page.getByRole("button", { name: "Verificar estado fiscal" });
     if (await verificar.isVisible().catch(() => false)) await verificar.click();
@@ -124,7 +124,7 @@ async function marco(page, v) {
     const { ctx, page } = await entrar(browser, 1440, 900, "completo");
     await abrirNuevaFactura(page);
     await marco(page, "1440");
-    check("CA-02 1440: modo completo con encabezado, banda, cliente, grilla y totales fijos", (await page.locator(".invoice-editor.completo").count()) === 1 && (await page.locator(".banda-comprobante").isVisible()) && (await page.locator("table.grilla-lineas th.col-numero").isVisible()) && (await page.locator("aside.totales-fija").isVisible()) && (await page.locator(".editor-subtitulo").innerText()).includes("Proximo numero"));
+    check("CA-02 1440: modo completo con encabezado, banda, cliente, grilla y totales fijos", (await page.locator(".invoice-editor.completo").count()) === 1 && (await page.locator(".banda-comprobante").isVisible()) && (await page.locator("table.grilla-lineas th.col-numero").isVisible()) && (await page.locator("aside.totales-fija").isVisible()) && (await page.locator(".editor-subtitulo").innerText()).includes("Próximo número"));
     check("CA-02 1440: sin Mostrar datos, invoice-band ni tarjeta Factura", (await page.getByRole("button", { name: /Mostrar datos/ }).count()) === 0 && (await page.locator(".invoice-band").count()) === 0 && (await page.getByText("Opciones de factura").count()) === 0);
     check("CA-03 1440: vacio, el motivo es el cliente", (await motivoBloqueo(page)).includes("Falta el cliente"), await motivoBloqueo(page));
     await page.screenshot({ path: path.join(outDir, "1440-vacio.png") });
@@ -133,10 +133,10 @@ async function marco(page, v) {
     await page.getByLabel("Tipo de cambio").fill("7350,5");
     await cargarCliente(page);
     await page.waitForTimeout(600);
-    check("CA-03 1440: con cliente y sin lineas, el motivo son las lineas", (await motivoBloqueo(page)).includes("Agrega al menos una linea"), await motivoBloqueo(page));
+    check("CA-03 1440: con cliente y sin lineas, el motivo son las lineas", (await motivoBloqueo(page)).includes("Agregá al menos una línea"), await motivoBloqueo(page));
     check("CA-04 1440: tilde de origen y casilla de agenda visibles", (await page.locator(".cliente-origen.ok").count()) === 1 && (await page.locator(".casilla-agenda input").count()) === 1);
     await page.getByRole("button", { name: /Direccion, telefono y correo/ }).click();
-    check("CA-04 1440: el desplegable abre direccion, telefono y correo", (await page.getByLabel("Direccion").isVisible()) && (await page.getByLabel("Telefono").isVisible()) && (await page.getByLabel("Correo").isVisible()));
+    check("CA-04 1440: el desplegable abre direccion, telefono y correo", (await page.getByLabel("Dirección").isVisible()) && (await page.getByLabel("Teléfono").isVisible()) && (await page.getByLabel("Correo").isVisible()));
 
     // Fila invalida: precio 0 en USD (la grilla recorta los decimales de mas, asi que el caso de precision es CA-05 del editor PC).
     await filaGrilla(page, 0, { descripcion: "UX linea 1", cantidad: "2", precio: "150,25" });
@@ -144,7 +144,7 @@ async function marco(page, v) {
     await filaGrilla(page, 2, { descripcion: "UX linea 3", cantidad: "3", precio: "0" });
     await page.locator('[data-grilla-fila="2"]').getByLabel(/^IVA, línea/).selectOption("IVA_5");
     await page.waitForTimeout(900);
-    check("CA-03 1440: fila invalida con motivo propio y bloqueo que la nombra", (await page.locator('tr.fila-motivo[data-grilla-motivo="2"]').count()) === 1 && (await motivoBloqueo(page)).includes("linea 3"), await motivoBloqueo(page));
+    check("CA-03 1440: fila invalida con motivo propio y bloqueo que la nombra", (await page.locator('tr.fila-motivo[data-grilla-motivo="2"]').count()) === 1 && (await motivoBloqueo(page)).includes("línea 3"), await motivoBloqueo(page));
     check("CA-05 1440: aviso de catalogo no disponible en USD", (await page.locator(".grilla-pie").innerText()).includes("no disponible en USD"));
     await page.screenshot({ path: path.join(outDir, "1440-fila-invalida.png") });
     await page.locator('[data-grilla-fila="2"]').getByLabel(/^Precio, línea/).fill("10");
@@ -159,7 +159,7 @@ async function marco(page, v) {
     if (fs.existsSync(basePreview)) {
       const [pedido] = await Promise.all([
         page.waitForRequest((r) => r.url().includes("/facturas/preview") && r.method() === "POST", { timeout: 20000 }),
-        page.getByRole("button", { name: "Credito", exact: true }).click().then(() => page.getByRole("button", { name: "Contado", exact: true }).click())
+        page.getByRole("button", { name: "Crédito", exact: true }).click().then(() => page.getByRole("button", { name: "Contado", exact: true }).click())
       ]);
       const cuerpo = JSON.parse(pedido.postData() ?? "{}");
       const esperado = JSON.parse(fs.readFileSync(basePreview, "utf8"));
@@ -171,14 +171,14 @@ async function marco(page, v) {
 
     const creadaUsd = await crear(page, "1440-usd");
     check("CA-06 1440: el resultado reemplaza al formulario", (await page.locator("table.grilla-lineas").count()) === 0 && (await page.locator(".resultado-emision").count()) === 1 && creadaUsd.includes("USD 480,49"), creadaUsd.slice(0, 200));
-    check("CA-06 1440: pasos, resumen con lineas, entrega y mas opciones", (await page.locator(".pasos .paso").count()) === 4 && (await page.locator(".resultado-lineas tbody tr").count()) === 3 && (await page.getByRole("link", { name: "Enviar por WhatsApp" }).count()) === 1 && (await page.locator("summary", { hasText: "Mas opciones" }).count()) === 1);
+    check("CA-06 1440: pasos, resumen con lineas, entrega y mas opciones", (await page.locator(".pasos .paso").count()) === 4 && (await page.locator(".resultado-lineas tbody tr").count()) === 3 && (await page.getByRole("link", { name: "Enviar por WhatsApp" }).count()) === 1 && (await page.locator("summary", { hasText: "Más opciones" }).count()) === 1);
     check("CA-07 1440: recien creada muestra Enviada a SIFEN o Esperando aprobacion", (await page.locator(".paso.activo, .paso.hecho").count()) >= 2);
     const usd = await esperarAprobada(page, "1440-usd");
     check("CA-11 1440: factura USD aprobada en SIFEN test con KUDE", usd.aprobada && usd.kude === 1, `numero ${usd.numero}`);
     check("CA-10 1440: sin emojis en el resultado", await sinEmojis(page));
 
     await page.getByRole("button", { name: "Crear nueva factura" }).click();
-    check("CA-06 1440: Crear nueva factura vuelve al formulario vacio en modo completo", (await page.locator("table.grilla-lineas").isVisible()) && (await page.getByPlaceholder("Ingrese numero de documento").inputValue()) === "" && (await page.locator('select[aria-label="Moneda"]').inputValue()) === "PYG");
+    check("CA-06 1440: Crear nueva factura vuelve al formulario vacio en modo completo", (await page.locator("table.grilla-lineas").isVisible()) && (await page.getByPlaceholder("Ingresá el número de documento").inputValue()) === "" && (await page.locator('select[aria-label="Moneda"]').inputValue()) === "PYG");
 
     // PYG con catalogo (CA-11).
     await cargarCliente(page);
@@ -225,7 +225,7 @@ async function marco(page, v) {
     await p.screenshot({ path: path.join(outDir, "390-simple.png") });
     await cargarCliente(p);
     await p.getByRole("button", { name: "+ Agregar producto" }).click();
-    await p.getByPlaceholder("Ingrese descripcion").fill("UX servicio simple");
+    await p.getByPlaceholder("Ingresá descripción").fill("UX servicio simple");
     await p.getByPlaceholder("0").fill("55000");
     await p.getByRole("button", { name: "AGREGAR Y NO GUARDAR" }).click();
     await p.waitForTimeout(1200);
@@ -243,8 +243,8 @@ async function marco(page, v) {
     await abrirNuevaFactura(v4.page);
     await v4.page.route("**/api/v1/clientes", (route) => route.request().method() === "POST" ? route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ error: { code: "INTERNAL_ERROR", message: "agenda caida (simulado)" } }) }) : route.continue());
     await v4.page.route("**/api/v1/facturas", (route) => route.request().method() === "POST" ? route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: { code: "SIMULADO", message: "emision cortada por el guion (no se emite)" } }) }) : route.continue());
-    await v4.page.getByPlaceholder("Ingrese numero de documento").fill("80000000-1");
-    await v4.page.getByLabel("Nombre o razon social").fill("Cliente UX de prueba");
+    await v4.page.getByPlaceholder("Ingresá el número de documento").fill("80000000-1");
+    await v4.page.getByLabel("Nombre o razón social").fill("Cliente UX de prueba");
     await filaGrilla(v4.page, 0, { descripcion: "UX linea", cantidad: "1", precio: "1000" });
     await v4.page.waitForTimeout(1200);
     const [pedidoFactura] = await Promise.all([

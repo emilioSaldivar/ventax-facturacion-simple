@@ -58,7 +58,7 @@ function check(vp, nombre, ok, detalle = "") {
       const aviso = page.locator(".invoice-editor .editor-alert", { hasText: "Corrigiendo la factura rechazada" });
       await aviso.waitFor();
       const textoAviso = await aviso.innerText();
-      check(vp.nombre, "CA-28.1: el editor avisa que corrige la rechazada y que sale con numero nuevo", textoAviso.includes(rechazada) && textoAviso.includes("numero nuevo"), textoAviso);
+      check(vp.nombre, "CA-28.1: el editor avisa que corrige la rechazada y que sale con numero nuevo", textoAviso.includes(rechazada) && textoAviso.includes("número nuevo"), textoAviso);
 
       const editor = await page.locator("main").innerText();
       const valores = await page.locator(".invoice-editor input").evaluateAll((els) => els.map((el) => el.value));

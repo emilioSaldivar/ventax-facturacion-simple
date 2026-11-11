@@ -50,7 +50,7 @@ async function escritorio(browser, ancho) {
   const proximamente = page.locator("button.pestana-proximamente");
   check(`CA-04 ${v}: Notas de debito y Autofacturas Próximamente, deshabilitadas`, (await proximamente.count()) === 2 && (await proximamente.evaluateAll((bs) => bs.every((b) => b.disabled))), (await proximamente.allInnerTexts()).join(" | "));
   // Fase B1: la pestaña de notas de remision esta habilitada y cambia las columnas.
-  await page.locator('.filter-tabs button:has-text("Notas de remision")').first().click();
+  await page.locator('.filter-tabs button:has-text("Notas de remisión")').first().click();
   await page.waitForTimeout(1500);
   const columnasNre = (await page.locator("table.documents-tabla thead th").allInnerTexts().catch(() => [])).map((t) => t.trim()).filter(Boolean);
   const vacia = await page.getByText("Sin documentos para los filtros actuales.").isVisible().catch(() => false);
@@ -62,7 +62,7 @@ async function escritorio(browser, ancho) {
     await page.getByRole("button", { name: /Volver a resultados/ }).waitFor({ timeout: 20000 });
     const ficha = await page.locator(".document-detail").innerText();
     check(`B1 ${v}: ficha de remision con motivo, transportista y mercaderia`, ["Motivo", "Transportista", "Vehículo", "Mercadería trasladada"].every((t) => ficha.includes(t)), ficha.slice(0, 200).replace(/\n+/g, " | "));
-    check(`B1 ${v}: la ficha de remision no ofrece nota de credito ni anular`, !ficha.includes("Crear nota de credito") && !ficha.includes("Anular nota"), "");
+    check(`B1 ${v}: la ficha de remision no ofrece nota de credito ni anular`, !ficha.includes("Crear nota de crédito") && !ficha.includes("Anular nota"), "");
     await page.screenshot({ path: path.join(outDir, `${v}-ficha-remision.png`), fullPage: true });
     await page.getByRole("button", { name: /Volver a resultados/ }).click();
   }
