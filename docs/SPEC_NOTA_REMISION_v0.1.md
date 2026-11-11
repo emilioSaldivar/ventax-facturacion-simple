@@ -1,0 +1,151 @@
+# SPEC - Nota de remision manual v0.1
+
+Estado: borrador para refinamiento con el usuario y FE (2026-11-11). Critico y urgente: compromiso del 2026-11-12 (`docs/HOJA_DE_RUTA_v0.1.md`, punto 3.1; BACKLOG FS-56).
+
+## Alineacion
+
+- `AGENTS.md` (limite de dominio: FE arma el XML y habla con SIFEN; FS solo reproduce las validaciones que FE publica).
+- Guia de consumidores de FE, paquete v0.49 (`segel-rc4.32`, el que corre en `segel-fs`): §53 Nota de Remision Electronica, §54 Actualizar los Datos del Transporte, §55 Carga Masiva de Notas de Remision, §38 Parametrizaciones, §42.3 Domicilio del receptor, §21 Export de configuracion. OpenAPI `tecnica/openapi.yaml` del mismo paquete (`EmitirNotaRemisionRequest`, `NotaRemisionTransporte`, `NotaRemisionLocal`, `NotaRemisionVehiculo`, `NotaRemisionTransportista`).
+- `docs/SPEC_VALIDACIONES_RECEPTOR_v0.1.md` (RV-01 a RV-08): formato de RUC con DV, CI, correo, telefono, razon social, direccion y geografia. Esta SPEC las referencia por ID y no las repite.
+- `docs/SPEC_DOCUMENTOS_ESCRITORIO_v0.1.md` fase B1 (RN-07 a RN-09): la nota de remision ya existe en FS como documento `NOTA_REMISION` incorporado desde la carga masiva, con listado y ficha en Documentos.
+- `docs/SPEC_UX_RESTO_APP_v0.1.md` §B.3 y "Patron comun" de los espacios de emision; `docs/PAUTAS_FRONTEND_v0.1.md`.
+- `docs/SPEC_MULTIPERFIL_USUARIO_v0.1.md`: la nota sale por el punto activo de la sesion.
+- `docs/PLAN_NOTA_REMISION_v0.1.md` y `docs/TASKS_NOTA_REMISION_v0.1.md`.
+
+## Origen
+
+El usuario fijo el 2026-11-11 como critico "el resto de documentos que vamos a tener en las proximas semanas", con la nota de remision **urgente** y primera. Hoy FS solo recibe notas de remision por planilla (carga masiva, fase B1): un operador que traslada mercaderia sin planilla no tiene como emitirla desde la app. FE publica `POST /v1/nota-remision` desde su v0.35 y el espacio "Notas de remision" del menu ya reserva la pestaña "Nueva nota de remision" (§B.3 de UX resto app).
+
+Regla del usuario para esta y las demas iniciativas de documentos: **FE define los valores y validaciones que espera SIFEN; FS los reproduce antes de emitir, con mensajes claros, para que el operador no cometa errores que recien aparecen en SIFEN.** La iniciativa nace con validaciones. Las direcciones se codifican con la geografia del MT150 que publica FE.
+
+## Contrato de FE (paquete v0.49, `segel-rc4.32`)
+
+Resumen de lo que FS consume. Lo normativo es la guia y el OpenAPI de FE.
+
+**Acceso.** `POST /v1/nota-remision` con la clave de consumidor del facturador y el permiso `NRE_EMIT`, que FE **no otorga por defecto**: lo habilita el administrador de FE por consumidor. En el export de configuracion (§21) el permiso aparece en `consumidor[].permisos`; el export es una foto, hay que re-exportar para ver un permiso nuevo. FE habilito `NRE_EMIT` el 2026-11-11 en el FE local `fe-segel` (SIFEN test) para el consumidor del ensayo de FS (`segel-fs-5057016`). En `segel-fs` (produccion) no esta habilitado para ningun facturador.
+
+**Idempotencia.** `client_reference.idempotency_key` obligatoria, `^[A-Za-z0-9_-]{8,80}$`, unica por consumidor **para todos los tipos de documento**: la misma clave devuelve la misma nota (`idempotent: true`); una clave usada por una factura responde `409 IDEMPOTENCY_KEY_REUSED`.
+
+**Cuerpo.** Sin precios, IVA, condicion de venta ni totales (MT150 1201, 1501, 1851, 2351); un articulo con `precioUnitario` o `ivaTipo` responde `422`.
+
+| Bloque | Campos y reglas que FS reproduce |
+|---|---|
+| `receptor` | Objeto **estricto** (un campo de mas da 422). `tipoDocumento` sin `INNOMINADO` (1331); `docNro`; `dv`; `razonSocial` 4 a 255; `naturaleza`; `tipoOperacion` B2B, B2C o B2G (B2B y B2G exigen RUC; B2F no se acepta); domicilio **obligatorio**: `direccion` 1 a 255, `numeroCasa` `^\d{1,6}$` ("0" si no tiene), `departamento`, `ciudad`, `distrito` opcional (sin el, FE toma el de la ciudad); los tres relacionados entre si (1328); `telefono` `^\d{6,15}$`; `email` con formato de correo |
+| `remision` | `motivo` 1 a 14 o 99 (catalogo `NRE_MOTIVO`); `motivoDescripcion` 5 a 60 solo con 99; `responsable` 1 a 5 (`NRE_RESPONSABLE`); `kilometros` entero 1 a 99999; `fechaFuturaFactura` fecha, **obligatoria con motivo 1 sin `documentosAsociados`** (2605) y su mes no posterior al de la nota (2604); `costoFlete` entero >= 0 en guaranies. Motivo 7: el receptor es el propio emisor, con su RUC (2606) |
+| `transporte` | `tipo` 1 propio, 2 tercero; `modalidad` 1 terrestre, 2 fluvial, 3 aereo, 4 multimodal; `responsableFlete` 1 a 5 (`FLETE_RESPONSABLE`); `condicionNegociacion` Incoterm opcional; `inicioTraslado` y `finTraslado` fechas, fin no anterior al inicio (2110), fecha real del traslado (2108); `paisDestino` en exportaciones; `salida` y `entregas[0]` (un solo local de entrega en esta version): `direccion` 1 a 255, `numeroCasa`, `departamento`, `ciudad`, `distrito` opcional, `complemento1/2` 1 a 255, `telefono` `^\d{6,15}$`; `vehiculos[0]` (uno solo): `tipo` 4 a 10 ("Camion"), `marca` 1 a 10, `tipoIdentificacion` 1 con `numeroIdentificacion` 1 a 20 o 2 con `matricula` 6 a 7, `numeroVuelo` 6 solo con modalidad aerea; `transportista` **siempre obligatorio** (SIFEN test rechaza sin el, 2300): `naturaleza` `CONTRIBUYENTE` con `ruc` `^[0-9A-Z]{3,8}-\d$` (FE verifica el DV con modulo 11 y responde 422 con el DV correcto) o `NO_CONTRIBUYENTE` con `tipoDocumento` 1 a 4 (`TRANSPORTISTA_TIPO_DOCUMENTO`) y `docNro` 1 a 20; `nombre` 4 a 60; `domicilioFiscal` 1 a 150; `chofer` obligatorio: `docNro` `^[^.]{1,20}$`, `nombre` 4 a 60, `direccion` 1 a 255; `agente` opcional |
+| `items[]` | `codigo`, `descripcion`, `cantidad`, `unidadMedida` (77 si no viene), `informacion`, `rastreo` opcional (lote, vencimiento, serie, etc.). Con destinatario B2G cada articulo lleva `catalogoDncp` |
+| `documentosAsociados[]` | Opcional. Electronico: `cdc` de una factura **propia, aprobada y del mismo receptor** (FE lo comprueba antes de numerar; SIFEN 2439, 2441). Impreso: timbrado, establecimiento, punto, numero y fecha; no puede tener timbrado electronico (2440) |
+| `informacionFisco` | 1 a 3000. La RG 41/2014 pide indicar "Mercaderias con cadena de Frio", "Carga Peligrosa" u otro dato de relevancia cuando corresponda; SIFEN test aprueba sin el |
+| `informacionAdicional` | 1 a 3000, texto del emisor |
+| `timbrado`, `numbering`, `emission_profile_code`, `envio.mode` | Como en `POST /v1/factura` |
+
+**Respuesta.** La de la emision de siempre (`document_uuid`, `cdc`, numero, `status`), con `tipo_documento: "NRE"`. En SYNC el estado de SIFEN; en BATCH `QUEUED_BATCH`. **Todos los rechazos de validacion responden antes de numerar**: ninguno consume numero.
+
+**Despues de emitir.** Cancelar con `POST /v1/evento/cancelar` hasta **168 horas** despues de la aprobacion (la factura, 48). Inutilizar un numero sin usar o rechazado con `POST /v1/evento/inutilizacionnumfactura` y `tipoDocumento: "NRE"`. KUDE con plantilla de remision (`files/kude.pdf`) y ticket sin totales. Evento de cambio de transporte (§54) sobre una nota aprobada.
+
+**Geografia (§38).** `GET /v1/parametrizaciones/geografia` devuelve los departamentos; `?departamento=N` sus distritos; `?distrito=N` sus ciudades. Cada item: `codigo`, `descripcion` y, segun el nivel, `departamento` y `distrito`. La respuesta trae `version`. Se lee con cualquier clave de consumidor activa, sin permiso. FE confirmo (2026-11-11) que los codigos son del MT150, estables, y que solo cambian con una version nueva del catalogo: FS puede guardarlos en su agenda y refrescar el catalogo una vez por dia.
+
+Catalogos que FS muestra con la descripcion de FE (leidos de FE test el 2026-11-11):
+
+- `NRE_MOTIVO`: 1 Traslado por ventas, 2 Traslado por consignacion, 3 Exportacion, 4 Traslado por compra, 5 Importacion, 6 Traslado por devolucion, 7 Traslado entre locales de la empresa, 8 Traslado de bienes por transformacion, 9 Traslado de bienes por reparacion, 10 Traslado por emisor movil, 11 Exhibicion o Demostracion, 12 Participacion en ferias, 13 Traslado de encomienda, 14 Decomiso, 99 Otro.
+- `NRE_RESPONSABLE`: 1 Emisor de la factura, 2 Poseedor de la factura y bienes, 3 Empresa transportista, 4 Despachante de Aduanas, 5 Agente de transporte o intermediario.
+- `FLETE_RESPONSABLE`: 1 Emisor de la Factura Electronica, 2 Receptor de la Factura Electronica, 3 Tercero, 4 Agente intermediario del transporte, 5 Transporte propio.
+- `TRANSPORTISTA_TIPO_DOCUMENTO`: 1 Cedula paraguaya, 2 Pasaporte, 3 Cedula extranjera, 4 Carnet de residencia.
+
+## Alcance v0.1 y decisiones del usuario (2026-11-11)
+
+| Id | Decision | Alcance |
+|---|---|---|
+| R-1 | Motivos ofrecidos: **1 Traslado por ventas** y **7 Traslado entre locales de la empresa**. Los demas motivos, en una etapa siguiente | El selector muestra solo 1 y 7. Los motivos 2, 4, 6, 8 a 14 no exigen campos extra en FE, pero no se ofrecen hasta validarlos en SIFEN test (ver "Decisiones pendientes") |
+| R-2 | FS guarda por facturador los datos de transporte reutilizables: **transportistas** (con su chofer), **vehiculos** y **locales** (salida y entrega propios) | Tablas nuevas; el formulario los elige de una lista y permite crear uno nuevo en el momento |
+| R-3 | El destinatario sale de la **agenda**; FS pide el domicilio que falte (direccion, numero de casa, departamento, ciudad; distrito opcional) y lo guarda en la agenda | Domicilio codificado en `facturador_clientes` |
+| R-4 | **Facturas asociadas** opcionales: se elige una factura aprobada del mismo cliente | Solo electronicas (`cdc`); las impresas quedan fuera |
+| R-5 | Evento de cambio de transporte (§54): **segunda etapa** | Fuera de v0.1 |
+| R-6 | "Asociar nota de remision" desde la factura (`notasRemision[]` de `POST /v1/factura`): **segunda etapa**, junto con FS-68 documentos asociados | Fuera de v0.1 |
+
+## Reglas
+
+### A. Habilitacion
+
+- **RN-01.** FS ofrece "Nueva nota de remision" solo si la clave de consumidor del facturador tiene `NRE_EMIT`. La fuente es el export de configuracion de FE (§21, `consumidor[].permisos`) que el backoffice importa (`SPEC_IMPORT_CONFIG_FACTURADOR_v0.3`). La importacion guarda los permisos del consumidor con alcance sobre el emisor en el facturador, y `GET /me/context` expone `nota_remision_habilitada: boolean`.
+- **RN-02.** Sin el permiso, el espacio "Notas de remision" sigue como hoy ("Emitidas" y "Por planilla") y la tarjeta del menu "Nuevo" y la pestaña dicen "Proximamente" con el texto "Tu clave fiscal todavia no tiene habilitada la nota de remision. Pedila a Segel." El motivo tambien se ve en Informacion y estado.
+- **RN-03.** Para un facturador ya importado, el permiso se incorpora **re-exportando** desde FE y re-importando en el backoffice (vista previa y aplicacion, como hoy). No hay bandera global de entorno: el permiso lo da FE, por facturador.
+
+### B. Modelo de datos
+
+- **RN-04.** La nota de remision manual es un documento `facturas_operativas` con `tipo = 'NOTA_REMISION'`, `condicion_venta = null`, `moneda = 'PYG'`, `totals_snapshot` en cero y lineas en `factura_items_snapshot` con `precio_unitario = 0`, `iva_tipo = 'EXENTA'`, `subtotal`, `base_imponible` e `iva_monto` en 0, exactamente como la nota incorporada desde la carga (fase B1, `comprobanteANotaRemision`). `cliente_snapshot` lleva el destinatario con su domicilio codificado.
+- **RN-05.** `fiscal_request_snapshot` guarda el pedido a FE en la forma del propio contrato de FE para los bloques `remision`, `transporte`, `items`, `documentosAsociados` e `informacionFisco`, de modo que `resumenRemision` (`nota-remision.resumen.ts`) y la ficha de Documentos funcionen sin cambios para las notas manuales y las de carga.
+- **RN-06.** Tablas nuevas por facturador (todas con `tenant_id`, `facturador_id`, `activo`, borrado logico y auditoria `created_by`/`updated_by`):
+  - `remision_transportistas`: `naturaleza` (`CONTRIBUYENTE` | `NO_CONTRIBUYENTE`), `nombre`, `ruc` (con DV; solo contribuyente), `tipo_documento` (1 a 4) y `doc_nro` (solo no contribuyente), `domicilio_fiscal`, `chofer_nombre`, `chofer_doc_nro`, `chofer_direccion`. Un transportista puede tener varios choferes solo en una etapa siguiente: v0.1 guarda un chofer por transportista y permite editarlo en el formulario antes de emitir.
+  - `remision_vehiculos`: `tipo` (4 a 10), `marca` (1 a 10), `tipo_identificacion` (1 | 2), `numero_identificacion`, `matricula`, `modalidad` por defecto (1 a 4).
+  - `remision_locales`: `nombre` (para la lista), `direccion`, `numero_casa`, `departamento`, `departamento_descripcion`, `distrito`, `distrito_descripcion`, `ciudad`, `ciudad_descripcion`, `complemento1`, `complemento2`, `telefono`, `uso` (`SALIDA` | `ENTREGA` | `AMBOS`).
+- **RN-07.** Domicilio codificado del cliente: `facturador_clientes` suma `domicilio jsonb` con `numero_casa`, `departamento`, `departamento_descripcion`, `distrito`, `distrito_descripcion`, `ciudad`, `ciudad_descripcion` y `geografia_version`. `direccion`, `telefono` y `email` siguen en sus columnas. La agenda (alta y edicion) muestra estos campos en "Domicilio" como opcionales; la nota de remision los exige (RN-14).
+- **RN-08.** Geografia: la API tiene `GET /geografia/departamentos`, `GET /geografia/distritos?departamento=N` y `GET /geografia/ciudades?distrito=N`, que proxean `GET /v1/parametrizaciones/geografia` de FE con la clave del facturador y guardan la respuesta en memoria 24 horas (por nivel y padre, con la `version` de FE). Si FE no responde y no hay cache, la API responde `503` con "No se pudo cargar la lista de ciudades. Reintenta en unos segundos." FS no copia el catalogo a su base: solo guarda, junto a cada domicilio, los codigos y descripciones elegidos y la `version`.
+
+### C. Formulario "Nueva nota de remision"
+
+Patron comun de `SPEC_UX_RESTO_APP_v0.1` §B: encabezado "Notas de remision" con el subtitulo "Traslado de mercaderia · Se emite por el <punto activo>", pestañas "Nueva nota de remision", "Emitidas · N" y "Por planilla"; grilla `1fr 320px` con las tarjetas (bloques) a la izquierda y el panel fijo a la derecha. Escritorio primero (1440 y 1280) y responsive en 390. Un solo formulario por bloques, sin pasos.
+
+- **RN-09. Bloque "Motivo del traslado".** Selector con los motivos de R-1: "Traslado por ventas" (1, por defecto) y "Traslado entre locales de la empresa" (7). Campo "Responsable" (`NRE_RESPONSABLE`, por defecto 1 "Emisor de la factura"). Campo "Kilometros estimados" (entero 1 a 99999, obligatorio). Con motivo 1: "Facturas asociadas" (RN-16) y, si no hay ninguna, "Fecha prevista de la factura" obligatoria (por defecto hoy; se valida que su mes no sea posterior al de la nota). Con motivo 7: el destinatario se fija en el propio facturador (RN-15).
+- **RN-10. Bloque "Destinatario".** Con motivo 1, buscador de la agenda (el mismo de Nueva factura) y sugerencias; no admite "Sin nombre" (INNOMINADO) ni clientes del exterior (B2F). Al elegir un cliente se muestran su documento, razon social, telefono, correo y domicilio. Si falta el domicilio codificado, el bloque pide direccion, numero de casa ("0" si no tiene), departamento, distrito (opcional) y ciudad con selectores encadenados cargados de RN-08, y una casilla marcada "Guardar el domicilio en la agenda" (RN-07). `tipoOperacion` se deriva: RUC con naturaleza juridica o persona fisica con RUC, B2B; CI, pasaporte, cedula extranjera o no especificado, B2C. B2G queda fuera (RN-28).
+- **RN-11. Bloque "Transporte".** "Tipo de transporte": propio (1, por defecto) o tercero (2). "Modalidad": terrestre (1, por defecto), fluvial, aereo, multimodal. "Responsable del flete": con transporte propio, 5 "Transporte propio"; con tercero, 1 "Emisor" por defecto, elegible entre 1 a 4. "Inicio del traslado" (fecha, por defecto hoy) y "Fin del traslado" (fecha, por defecto el inicio; no anterior al inicio). "Costo del flete" opcional (guaranies enteros >= 0). Incoterm, pais de destino, manifiesto y despacho de importacion no se muestran (sin exportacion ni importacion en v0.1).
+- **RN-12. Bloque "Salida y entrega".** "Local de salida": lista de `remision_locales` con uso SALIDA o AMBOS, con "Agregar local" que abre el mismo formulario de domicilio de RN-10 mas nombre y telefono. "Lugar de entrega": por defecto "El domicilio del destinatario" (motivo 1) y, como alternativa, un local de la lista (uso ENTREGA o AMBOS) o uno nuevo. Con motivo 7 la entrega es siempre un local propio de la lista.
+- **RN-13. Bloque "Vehiculo, transportista y chofer".** "Vehiculo": lista de `remision_vehiculos` o "Agregar vehiculo" (tipo, marca, identificacion por matricula de 6 o 7 caracteres o por numero). "Transportista": lista de `remision_transportistas` o "Agregar transportista" (naturaleza; con contribuyente, RUC con DV validado por RV-01; con no contribuyente, tipo y numero de documento; nombre 4 a 60; domicilio fiscal 1 a 150). "Chofer": el guardado con el transportista, editable (nombre 4 a 60, documento sin puntos 1 a 20, direccion 1 a 255). Con transporte propio, el transportista por defecto es el propio facturador (RUC y razon social del facturador, domicilio fiscal del local de salida), guardado la primera vez como un transportista mas.
+- **RN-14. Validaciones reproducidas antes de emitir.** El panel derecho bloquea "Emitir nota de remision" y muestra el primer motivo mientras falte algo. Reglas, con el mensaje para el operador:
+  - destinatario sin domicilio codificado: "Completa direccion, numero de casa, departamento y ciudad del destinatario" (RV-06);
+  - RUC del destinatario o del transportista con DV incorrecto: RV-01, con el DV calculado en el mensaje;
+  - telefono con menos de 6 o mas de 15 digitos: RV-04; correo invalido: RV-03; razon social fuera de 4 a 255: RV-05;
+  - kilometros fuera de 1 a 99999: "Los kilometros van de 1 a 99.999";
+  - fin del traslado anterior al inicio: "El fin del traslado no puede ser anterior al inicio";
+  - motivo 1 sin facturas asociadas y sin fecha prevista: "Indica la fecha prevista de la factura o asocia una factura"; mes de la fecha prevista posterior al de la nota: "La factura prevista no puede ser de un mes posterior a la nota";
+  - matricula fuera de 6 a 7 caracteres, tipo de vehiculo fuera de 4 a 10, marca fuera de 1 a 10, nombre del transportista o del chofer fuera de 4 a 60, documento del chofer con puntos, domicilio fiscal vacio o mayor a 150: mensaje con el rango exacto;
+  - sin articulos o con un articulo sin descripcion o con cantidad <= 0: "Agrega al menos un articulo con descripcion y cantidad";
+  - ciudad que no pertenece al distrito o departamento elegido (solo puede pasar con datos guardados viejos): "La ciudad no corresponde al departamento elegido: volve a elegirla".
+  Toda regla se valida en el cliente (mensaje inmediato) **y** en la API (`400 VALIDATION_ERROR` con la misma frase y la ruta del campo). La API es la que manda.
+- **RN-15. Motivo 7 (traslado entre locales propios).** El receptor se arma en el servidor con el RUC del facturador (`facturadores.ruc`, formato base-dv) como `tipoDocumento: "RUC"`, `razonSocial` del facturador, `naturaleza: "JURIDICA"` o `FISICA` segun el RUC (regla existente `sugerirNaturalezaPorLongitudRuc`), `tipoOperacion: "B2B"` y como domicilio el del **local de entrega** (RN-12). El operador no edita el destinatario. `fechaFuturaFactura` no aplica.
+- **RN-16. Facturas asociadas (R-4).** Lista de facturas del facturador con `tipo = 'FACTURA'`, `estado = 'EMITIDA'`, con `cdc`, y cuyo cliente tiene el mismo `documento_tipo` y `documento` normalizado que el destinatario (es la condicion de FE "del mismo receptor"). Se eligen de a una con un buscador por numero o fecha; se pueden asociar varias. Van como `documentosAsociados[]` con `tipo: "ELECTRONICO"` y `cdc`. Con al menos una asociada, "Fecha prevista de la factura" se oculta y no se envia.
+- **RN-17. Bloque "Articulos".** Tabla con columnas Codigo (opcional), Descripcion (obligatoria, 1 a 120), Cantidad (entero o hasta 4 decimales, > 0), Unidad (fija "Unidad", codigo 77; ver "Decisiones pendientes"). "Agregar articulo" y "Quitar". Busqueda en el catalogo de FS como en Nueva factura: toma codigo y descripcion, **nunca el precio**. Sin rastreo (lote, vencimiento, serie) en v0.1.
+- **RN-18. Bloque "Informacion para el Fisco".** Campo de texto opcional, 1 a 3000, con la ayuda "Si la carga lo requiere, indica por ejemplo 'Mercaderias con cadena de frio' o 'Carga peligrosa' (RG 41/2014)".
+- **RN-19. Panel derecho.** Resumen fijo: destinatario, motivo, traslado (inicio y fin, kilometros), vehiculo y transportista, cantidad de articulos y de facturas asociadas; el boton "Emitir nota de remision" y, debajo, el motivo de bloqueo (RN-14) o el aviso "Se emite por el <punto activo>". Sin totales: la nota no tiene montos.
+- **RN-20. Resultado.** Al emitir, el formulario se reemplaza por `ResultadoEmision` con pasos, estado y "Entregar al cliente" (KUDE, WhatsApp, enlace), como la factura. Con motivo 7, "Entregar al cliente" dice "Descargar para el traslado" y oculta correo y WhatsApp. "Crear nueva nota de remision" renueva la clave de idempotencia y conserva transporte, vehiculo, transportista y local de salida de la nota anterior (lo que mas se repite).
+
+### D. API y emision
+
+- **RN-21.** `POST /notas-remision` crea el documento y lo encola en `factura_emision_outbox` (mismo outbox, mismo worker, misma idempotencia por `Idempotency-Key` del cliente y `external_ref` derivado). Cuerpo: `cliente` (como en `POST /facturas`, mas `domicilio`), `remision` (`motivo`, `responsable`, `kilometros`, `fecha_futura_factura`, `costo_flete`), `transporte` (`tipo`, `modalidad`, `responsable_flete`, `inicio_traslado`, `fin_traslado`, `salida_local_id` o `salida`, `entrega_local_id` o `entrega` o `entrega_destinatario: true`, `vehiculo_id` o `vehiculo`, `transportista_id` o `transportista` con `chofer`), `items`, `facturas_asociadas_ids`, `informacion_fisco`, `guardar_domicilio_cliente`. Responde `DocumentoResponse` (`tipo: "NOTA_REMISION"`, `remision` resumido). El servidor resuelve los ids a sus datos guardados y arma el pedido a FE; nada del XML se arma en FS.
+- **RN-22.** `POST /notas-remision/validar` ejecuta las mismas validaciones de RN-14 sin crear nada y responde `{ ok: true }` o `400` con la lista de errores por campo. El cliente lo usa al pulsar "Emitir" antes del `POST` real; asi el mensaje del servidor es el que manda.
+- **RN-23.** El worker (`processNextQueuedFiscalEmission`) distingue el tipo del documento pendiente y llama a `emitNotaRemision` del gateway; el resto (completar, fallar, backoff, corte a 24 h, notificaciones, estados `EMITIENDO`, `PENDIENTE_SIFEN`, `EMITIDA`, `RECHAZADA`, `ERROR_TEMPORAL`, `ERROR_OPERATIVO`) es el existente. Un `422` de FE (validacion que FS no reprodujo) deja la nota en `ERROR_OPERATIVO` con el mensaje de FE visible en la ficha y la accion "Corregir y emitir de nuevo", que abre el formulario precargado.
+- **RN-24.** Gateway: `emitNotaRemision(request)` llama a `POST /v1/nota-remision` con la clave del facturador, `client_reference` con `entity_type: "nota_remision_operativa"`, `timbrado`, `numbering`, `emission_profile_code` y `envio` como la factura, y los bloques de RN-05. El mock del gateway responde una NRE aprobada con `tipo_documento: "NRE"` y reproduce los `422` de FE que FS debe prevenir (precio en un articulo, DV incorrecto del transportista, receptor sin domicilio, fin anterior al inicio) para las pruebas.
+- **RN-25.** Verificacion, KUDE, enlace publico y correo: los existentes por `document_uuid` (`/refresh-status`, `/artifacts`, `/delivery-link`, `/email-status`). El KUDE que entrega FE es el de remision.
+- **RN-26.** Cancelar: `POST /facturas/{id}/cancelar` acepta `tipo = 'NOTA_REMISION'` en estado `EMITIDA` con `cdc`; la ventana que FS muestra es **168 horas** desde la aprobacion (la factura sigue en 48). Inutilizar: `POST /facturas/{id}/inutilizar` manda `tipoDocumento: "NRE"` cuando el documento es una nota de remision. Nota de credito y correccion por reemision no se ofrecen (ya es asi en la fase B1).
+- **RN-27.** Datos reutilizables: `GET/POST/PATCH/DELETE /remision/transportistas`, `/remision/vehiculos`, `/remision/locales`, por facturador, con las mismas validaciones de RN-13 y RN-12. `PATCH /clientes/{id}` acepta `domicilio` (RN-07). Todo en `spec/openapi.yaml`.
+
+### E. Fuera de alcance (v0.1)
+
+- **RN-28.** No se ofrecen: motivos distintos de 1 y 7; destinatario B2G (DNCP) ni B2F (exterior); mas de una entrega o mas de un vehiculo; Incoterm, pais de destino, manifiesto, despacho de importacion, numero de vuelo; rastreo por articulo (lote, vencimiento, serie, SENAVE); agente de transporte; facturas impresas asociadas; `informacionAdicional`; evento de cambio de transporte (R-5); asociar la nota desde la factura (R-6); emision por planilla (ya existe y no cambia); varios choferes por transportista.
+- Listado y ficha de Documentos: no cambian (fase B1 ya los cubre). Solo se agrega en la ficha la accion "Anular" dentro de las 168 h (RN-26) y "Corregir y emitir de nuevo" para `ERROR_OPERATIVO`/`RECHAZADA` (RN-23).
+
+## Criterios de aceptacion
+
+- **CA-01.** Con un facturador cuyo export importado tiene `NRE_EMIT`, el espacio muestra la pestaña "Nueva nota de remision" y el menu "Nuevo" la tarjeta habilitada; sin el permiso, "Proximamente" con el texto de RN-02 y `GET /me/context` trae `nota_remision_habilitada: false`. Playwright, 1440.
+- **CA-02.** Motivo 1 con FE mock: elegir un cliente de la agenda sin domicilio, completar direccion, numero de casa, departamento, distrito y ciudad (listas cargadas por `GET /geografia/*`), transporte propio, vehiculo y transportista nuevos, dos articulos, una factura asociada del mismo cliente; emitir; resultado con numero, KUDE y enlace; el documento aparece en Documentos > Notas de remision con motivo, traslado, transportista y vehiculo en la ficha; el domicilio quedo guardado en la agenda y transportista, vehiculo y local quedaron en sus listas. Playwright en 1440, 1280 y 390.
+- **CA-03.** Motivo 7 con FE mock: receptor armado con el RUC del facturador y el domicilio del local de entrega; el bloque Destinatario no es editable; sin fecha prevista. Playwright 1440.
+- **CA-04.** Cada regla de RN-14 bloquea en el cliente con su mensaje y, forzando el envio, la API responde `400 VALIDATION_ERROR` con la misma frase y la ruta del campo: vitest por regla. Incluye RV-01 (DV incorrecto del destinatario y del transportista con el DV correcto en el mensaje), RV-03, RV-04, RV-05, RV-06.
+- **CA-05.** `POST /notas-remision` dos veces con la misma `Idempotency-Key` crea un solo documento y un solo registro de outbox; el `external_ref` enviado a FE es el mismo. vitest.
+- **CA-06.** Un `422` del gateway mock deja la nota en `ERROR_OPERATIVO`, con el mensaje de FE en la ficha y "Corregir y emitir de nuevo" que reabre el formulario con los datos cargados. vitest y Playwright.
+- **CA-07.** Cancelar una nota `EMITIDA` dentro de las 168 h pasa a `ANULADA` con el mock; una factura sigue con 48 h. Inutilizar una nota `RECHAZADA` manda `tipoDocumento: "NRE"`. vitest.
+- **CA-08.** Las notas incorporadas desde la carga masiva siguen listandose y mostrandose igual (`playwright-documentos-escritorio.cjs` y pruebas de cargas en verde).
+- **CA-09.** Geografia: `GET /geografia/departamentos` responde desde FE la primera vez y desde la cache las siguientes (una sola llamada a FE en 24 h); con FE caido y sin cache, `503` con el mensaje de RN-08. vitest con gateway mock.
+- **CA-10.** SIFEN test, con aviso previo a FE y al usuario, contra el FE local `fe-segel` con `NRE_EMIT`: una nota motivo 1 con factura asociada y una motivo 7, ambas aprobadas; el KUDE descargado es de remision y muestra transportista, vehiculo y chofer; la cancelacion de una de ellas es aceptada. Evidencia en TASKS (numero, CDC, capturas).
+- **CA-11.** `npm run test`, `typecheck`, `lint` de la API; `typecheck` y `build` del frontend; `playwright-ux-resto-app.cjs`, `playwright-documentos-escritorio.cjs` y `playwright-nc-cuerpo.cjs` sin regresiones; lista §12 de `PAUTAS_FRONTEND_v0.1` cumplida.
+
+## Decisiones pendientes
+
+| Id | Pregunta | Para quien | Propuesta |
+|---|---|---|---|
+| DP-1 | `unidadMedida`: FE toma 77 por defecto. ¿Se ofrece un selector de unidades (kg, litro, caja) en v0.1 o se fija 77 "Unidad"? ¿Cual es el codigo del catalogo de unidades en `GET /v1/parametrizaciones`? | Usuario y FE | v0.1 fija 77; selector en v0.2 con el catalogo de FE |
+| DP-2 | Formato de `fecha` de la nota: el OpenAPI de `/v1/nota-remision` dice `string` sin formato; la factura usa `date-time`. ¿FE acepta el mismo ISO `date-time` que la factura? | FE | Mandar `new Date().toISOString()` como la factura |
+| DP-3 | RUC con letras (`^[0-9A-Z]{3,8}-\d$`): para el modulo 11, ¿FE usa el codigo ASCII de la letra como la SET? | FE | Reproducir lo que FE haga; si no responde, FS valida con digitos y deja pasar las letras a FE |
+| DP-4 | Motivos sin campos extra (2, 4, 6, 8 a 14): ¿se agregan en v0.1 si cuestan solo una opcion mas en el selector, o se esperan a probarlos en SIFEN test? | Usuario | Esperar: cada motivo tiene reglas de SIFEN que no se probaron |
+| DP-5 | Transporte propio sin transportista: FE dice que SIFEN test rechaza sin transportista (2300). FS exige siempre transportista; con transporte propio lo precarga con el facturador (RN-13). ¿Correcto para el usuario? | Usuario | Si |
+| DP-6 | Permiso en produccion: ¿para que facturadores de `segel-fs` se pide `NRE_EMIT` a FE? | Usuario | Nombres concretos en la sesion de FE, antes del despliegue |
+| DP-7 | ¿La agenda deja editar el domicilio codificado para cualquier cliente aunque no use remisiones (RN-07), o solo aparece desde la nota? | Usuario | Visible en la agenda como bloque opcional "Domicilio" |
