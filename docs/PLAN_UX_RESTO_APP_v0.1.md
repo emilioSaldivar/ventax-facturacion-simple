@@ -5,22 +5,24 @@
 - `docs/SPEC_UX_RESTO_APP_v0.1.md`
 - Canvas de diseño: `https://claude.ai/artifact/R7AL4Ajj7oAX9PfydQDYWe`. Tiene nueve pantallas: Informacion y estado, el menu "Nuevo", Notas de credito, Notas de debito y Notas de remision en su estado futuro, Documentos, Elegir punto, Cambiar punto y Celular.
 - `docs/PLAN_UX_NUEVA_FACTURA_v0.1.md`: tokens, `Icono`, despliegue local con API y frontend del mismo commit (PLAN 7).
-- `docs/PLAN_MULTIPERFIL_USUARIO_v0.1.md`: la fase 3 de este plan va despues de esa cadena.
+- `docs/PLAN_MULTIPERFIL_USUARIO_v0.1.md` y `v0.2`: la fase 3 de este plan va despues de esa cadena (implementada en local el 2026-11-10).
+- `docs/PAUTAS_FRONTEND_v0.1.md`: reglas de frontend y catalogo de componentes; la fase 0 las adopta (§10).
 
 ## Estado
 
-Documentado el 2026-11-10. Sin implementar: espera que el usuario acepte el canvas y dé la indicacion. Las lineas de codigo citadas son de `84fb241`. Hay que releerlas antes de implementar, porque otra sesion trabaja en la misma rama.
+Documentado el 2026-11-10. Sin implementar: espera que el usuario acepte el canvas y dé la indicacion. Las lineas de codigo de §1 a §8 son de `84fb241`; las de §10 son de `90539ad`, despues de multiperfil (por ejemplo, `menuItems` paso a `main.tsx:2104`, `TIPOS_PROXIMAMENTE` a `:2488`, `DocumentsView` a `:2505`, `CreditNoteView` a `:4539`, `Icono` a `:6981`). Hay que releerlas antes de implementar, porque otra sesion trabaja en la misma rama.
 
 ## 0. Fases
 
 | Fase | Contenido | Depende de |
 |---|---|---|
+| 0 | Guion de reconocimiento, tokens, componentes base, cliente de API, accesibilidad, textos, ajustes de multiperfil, limpieza y particion (SPEC §G y §H) | Aceptacion de las pautas (URA-015) |
 | 1 | Base (R-1), menu y nombres (A), boton "Nuevo" (A.3), Notas de credito (B.1), Documentos (C), Informacion y estado (R-8) | Aceptacion del canvas |
 | 2 | Agenda (R-3), Catalogo (R-4), Presupuestos / Pedidos (R-5), Cobros / Recibos (R-6), carga masiva y paginas publicas (R-9, R-10) | Fase 1 (base y encabezado comun) |
 | 3 | Agregados de multiperfil (§F): menu de celular, columna y filtro "Punto", "Se emite por" | `SPEC_MULTIPERFIL_USUARIO_v0.1` implementada |
 | — | Emision de nota de debito, nota de remision manual y autofactura | Cadena propia de cada una (FS-55 a FS-57) |
 
-Toda la fase 1 y la 2 son solo de interfaz: no cambian la API, la base ni `spec/openapi.yaml` (SPEC RN-08).
+Las fases 0, 1 y 2 son solo de interfaz: no cambian la API, la base ni `spec/openapi.yaml` (SPEC RN-08).
 
 ## 1. Base comun (R-1)
 
@@ -122,7 +124,7 @@ Toda la fase 1 y la 2 son solo de interfaz: no cambian la API, la base ni `spec/
 
 - En el menu de celular, "Cambiar punto de expedicion" abre la ventana de `SPEC_MULTIPERFIL_USUARIO` C.3. Solo aparece con `perfiles.length > 1`, de `GET /me/perfiles`.
 - **Columna "Punto".**
-  - `DocumentoResponse` necesita el punto del documento. Hoy no lo trae: la API lo agrega como `establecimiento` y `punto_expedicion` en la respuesta de `GET /facturas`.
+  - Actualizado tras el reconocimiento: la columna de la tabla de escritorio ya existe (multiperfil) y lee `documento.perfil_emision`. Falta el respaldo por CDC para documentos sin perfil, que se resuelve en la API para no copiar la lectura del CDC en el frontend.
   - Salen del perfil guardado (`actividad_punto_perfil_id`, multiperfil RN-05). Si no hay perfil, salen del CDC, con `cdc.slice(11, 14)` y `cdc.slice(14, 17)`, la misma lectura de `facturas.inutilizacion.ts`. Si no hay ninguno, van en `null`.
   - Es un cambio de contrato: va en `spec/openapi.yaml`.
 - **Filtro "Punto".** `GET /facturas?punto=EST-PUNTO` filtra por el perfil o, para documentos sin perfil, por la subcadena del CDC. Necesita la entrada en `spec/openapi.yaml`, pruebas de la ruta y del repositorio, y un indice si el plan de consulta lo pide; ya existe `(facturador_id, actividad_punto_perfil_id, created_at desc)` de `0033`.
@@ -133,3 +135,22 @@ Toda la fase 1 y la 2 son solo de interfaz: no cambian la API, la base ni `spec/
 - **Archivos compartidos.** `main.tsx` y `styles.css` son compartidos con la otra sesion de la rama: hay que releer `git log` y el archivo antes de cada tarea.
 - **Cambio de comportamiento en Notas de credito.** Rehacer la pantalla puede cambiar sin querer el cuerpo de la nota. Lo cubre la linea de base de §7.
 - **Pastilla en lugar de emoji.** Puede romper guiones que buscan los emojis. Al 2026-11-10, el unico guion de `scripts/` que los busca es `playwright-ensayo-documentos.cjs`, que se actualiza en la misma tarea. Hay que repetir la busqueda antes de la tarea.
+- **Fase 0 sin cambio visible.** Tokens y componentes base pueden mover un pixel aca o alla. Se compara con las capturas del recorrido del 2026-11-10 en los tres anchos; una diferencia que no sea la buscada se corrige antes de cerrar.
+- **Particion de `main.tsx` con otra sesion trabajando.** Mover una vista a otro archivo choca con cualquier cambio en paralelo. Cada movimiento es un commit solo de movimiento (sin cambios dentro), anunciado antes a la otra sesion.
+
+## 10. Fase 0: pautas y base de componentes (SPEC §G y §H)
+
+Orden. Cada paso es un commit y no cambia lo que se envia a la API (SPEC RN-10).
+
+1. **Guion de reconocimiento (URA-024).** `scripts/segel-fs/playwright-reconocimiento-ux.cjs` versiona el recorrido del 2026-11-10: login, eleccion de punto, las pantallas del menu, la ficha y el cambio de punto, en 1440, 1280 y 390 px. Es de solo lectura (no emite ni guarda). En cada pantalla mide emojis visibles (`/\p{Extended_Pictographic}/u`), desplazamiento horizontal, controles sin nombre accesible, campos sin etiqueta, controles de menos de 44 px en 390 px y errores de consola, ignorando el 401 de `/auth/refresh` sin sesion (H-23). Escribe `test-results/reconocimiento-ux/hallazgos.json` y las capturas, y compara con un archivo de linea base versionado. Clave con `ENSAYO_PASSWORD_FILE`, fuera del repositorio. Va primero para medir cada paso siguiente.
+2. **Tokens (URA-016).** En `:root` de `styles.css`: `--esp-1` a `--esp-8`, `--fs-*`, `--z-barra`, `--z-menu`, `--z-dialogo`, `--z-aviso`. Se reemplazan los 221 hex por tokens (los grises de la familia `#e5e7eb`, `#c9d2d8`, `#c6d9df` pasan a `--color-line`; `#ffffff` a `--color-surface`; los rojos `#c53938` y `#c8102e` a `--color-danger`). Cortes: `1040px` pasa a `1024px`, `max-width:1023px` y `max-width:720px` se reescriben como `min-width`. Sin cambio visual buscado.
+3. **Componentes base (URA-017).** En `src/components/`: `EncabezadoPantalla`, `PastillaEstado` (sale de `EstadoDocumentoPill`, `main.tsx:7848`, y del mapa `src/lib/estados.ts`, que une las cuatro funciones de texto de estado), `Aviso`, `EstadoVacio`, `Dialogo` (Escape, foco inicial, foco atrapado, retorno del foco, `--z-dialogo`), `MenuFila`, `CampoFormulario` y `CampoContrasena` (el del login, con el boton de mostrar alcanzable con el teclado). Cada componente entra con un primer uso real y sin cambiar el comportamiento. Los tres `window.confirm` (`main.tsx:2725`, `:7083`, `:9511`) pasan a `Dialogo`.
+4. **Cliente de API (URA-018).** Hook `useApi()` con un solo cliente por sesion, en `src/api/`. Las descargas de `NotasView` y `RecibosView` (`main.tsx:8613`, `:9526`, `:9540`) pasan a `requestRaw`; las paginas publicas (`:727`, `:858`) a `API_BASE_URL`; el onboarding (`:1668`) recibe el `setAccessToken` real.
+5. **Accesibilidad (URA-019).** `:focus-visible` global; 44 px en 390 px para `.ghost-action`, `.icon-menu-action`, `.client-row-menu button`, `.secondary-action.compact`, `.link-action`, `.segmented-control button`, `.filter-tabs button`, `.grilla-icono` y `.sheet-close`; `aria-label`, `aria-haspopup` y `aria-expanded` en los ⋮ (`:3487`, `:4973`, `:9915`); boton de apertura en la fila de la tabla (`:3400`); Escape en el menu de celular; `index.html` sin bloqueo de zoom si se acepta D-14, con campos de 16 px en celular; sin `<div>` dentro de `<button>` (`:8911`, `:9148`).
+6. **Textos (URA-020).** Tildes y voz (D-13) en todos los textos visibles de `main.tsx` y `carga-masiva.tsx`; mapa de etiquetas para `condicion_venta` (`:4684`) y el estado de recibos (`:9834`, `:9904`); glosario de las pautas §8. Los guiones de `scripts/` que buscan textos sin tilde se actualizan en la misma tarea (RN-06); `scripts/guia-uso-segel.cjs` se coordina con su sesion.
+7. **Varios puntos (URA-021).** Funcion `nombrePunto(perfil)` en `src/lib/` con P-P1, usada por `SeleccionPerfilScreen`, `CambioPerfilDialog`, la barra, `StatusView` y el menu de celular. `StatusView` sin el codigo de perfil. Pie de la barra lateral (`:2245`) con el punto en lugar de "ultimo numero". Numero completo en las tarjetas de celular (`:3458-3510`) y en la ficha. Aviso de punto distinto en el modal de nota de credito de Documentos (`:3938`) igual al de `CreditNoteView` (`:4702`), y punto en cada candidata (`:4654`). El motivo de ese modal y el archivo elegido en la carga masiva se registran con `useBorradorSinEmitir`. Estos cambios tocan pantallas de multiperfil: se avisan a esa cadena y, si su dueña lo pide, se mueven a una v0.3 de multiperfil.
+8. **Limpieza (URA-022).** Borrar las ~21 clases sin uso y los 10 selectores duplicados de H-19 y `formatOperationViewTitle` (`main.tsx:7604`, sin llamadas). Antes de borrar cada clase, `grep` en `apps/` para confirmar que no se arma dinamicamente.
+9. **Particion (URA-023).** Por etapas, cada una solo de movimiento: `api/` (cliente y `useApi`), `lib/` (formatos y estados), `components/`, y despues las vistas que toque cada fase, empezando por `DocumentsView`, `CreditNoteView` y `StatusView` de la fase 1. Ninguna vista se mueve y se cambia en el mismo commit.
+
+Validacion de la fase 0: `typecheck`, `lint` y `build` por paso; despliegue local con API y frontend del mismo commit; guion de reconocimiento (CA-12, CA-15) y las regresiones de §7; con dos puntos, `playwright-multiperfil.cjs` y `playwright-multiperfil-v02.cjs` (CA-14).
+

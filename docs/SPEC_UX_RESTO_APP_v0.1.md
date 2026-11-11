@@ -2,13 +2,16 @@
 
 **Fecha:** 2026-11-10 · **Rama:** `feat/identidad-segel` · **Estado:** documentada, sin implementar. Propuesta de diseño en el canvas `https://claude.ai/artifact/R7AL4Ajj7oAX9PfydQDYWe`, pendiente de aceptacion del usuario. No se implementa hasta que el usuario lo indique.
 
+**Revision del 2026-11-10 (noche):** con multiperfil v0.1 y v0.2 implementadas, se hizo un recorrido de reconocimiento sobre el stack local (§G) y se fijaron las pautas de frontend y componentes (§H, `docs/PAUTAS_FRONTEND_v0.1.md`). Su adopcion es la fase 0 de esta cadena (URA-015 a URA-024).
+
 ## Alineacion
 
 - `docs/SPEC_UX_NUEVA_FACTURA_v0.1.md` (cerrada): tokens, iconos SVG, barra superior, menu lateral, banda, grilla, totales fijos y pantalla de resultado (`ResultadoEmision`). Esta SPEC lleva ese diseño al resto de la app.
 - `docs/BACKLOG.md`: FS-52 (P-1 a P-4), FS-53 (R-1 a R-10), FS-54 (varios perfiles por usuario) y los nuevos FS-55 a FS-57 (nota de debito, nota de remision manual, autofactura).
 - `docs/SPEC_DOCUMENTOS_ESCRITORIO_v0.1.md`: pestañas por tipo en Documentos ("Proximamente" mientras FS no incorpore el tipo, RN-03 y CA-04) y la fase B1, donde las notas de remision ya entran **por planilla** y tienen su pestaña.
 - `docs/SPEC_NOTA_CREDITO_PARCIAL_v0.1.md`: nota de credito total o parcial por lineas, con saldo.
-- `docs/SPEC_MULTIPERFIL_USUARIO_v0.1.md` (documentada por otra sesion, sin implementar): eleccion del punto de expedicion al entrar (C.1), punto activo como boton en la barra (C.2), ventana de cambio con contraseña (C.3, C.4), perfil guardado en cada documento (RN-05) y aviso cuando la nota de credito sale por otro punto que la factura (D-1). Esta SPEC **adopta** esas pantallas sin cambiarlas y propone tres agregados en §F.
+- `docs/PAUTAS_FRONTEND_v0.1.md`: reglas para todo cambio de frontend y catalogo de componentes (§H).
+- `docs/SPEC_MULTIPERFIL_USUARIO_v0.1.md` y `v0.2` (implementadas y validadas en local el 2026-11-10, frontend en `3d6c6e3`): eleccion del punto de expedicion al entrar (C.1), punto activo como boton en la barra (C.2), ventana de cambio con contraseña (C.3, C.4), perfil guardado en cada documento (RN-05) y aviso cuando la nota de credito sale por otro punto que la factura (D-1). Esta SPEC **adopta** esas pantallas sin cambiarlas y propone tres agregados en §F.
 - `docs/SPEC_PRESUPUESTOS_v0.2.md`: la pantalla que hoy se llama "Notas / Presupuestos".
 - Documentos de FE para consumidores (`facturacion-electronica-consumer-docs`, paquete v0.41 del 2026-11-10): nota de remision por API (`POST /v1/nota-remision`, permiso `NRE_EMIT` no otorgado por defecto, guia §53), nota de debito por API (`POST /v1/nota-debito`, permiso `NDE_EMIT` no otorgado por defecto, guia §59) y el catalogo `CARGA_TIPO_DOCUMENTO` (FACTURA, NOTA_REMISION, NOTA_CREDITO, NOTA_DEBITO, AUTOFACTURA). La autofactura **no** esta publicada para consumidores: FE la documenta en su rama `feat/autofactura` (SPEC v0.2, VE-F06).
 
@@ -138,6 +141,8 @@ Se toma tal cual el ajuste propuesto en `docs/BACKLOG.md`, seccion "UX en el res
 
 ### F. Varios perfiles de emision (`SPEC_MULTIPERFIL_USUARIO_v0.1`)
 
+> Actualizado tras el reconocimiento (§G): la columna "Punto" de la tabla de escritorio ya existe (multiperfil, lee `documento.perfil_emision`; sin perfil muestra "—"). De F.2 quedan la tarjeta de celular, la ficha, la lectura por CDC para documentos viejos y el filtro.
+
 Se adoptan sin cambios la pantalla "Elegir punto de expedicion" (C.1), el boton del punto activo en la barra (C.2), la ventana de cambio con contraseña y su aviso de documento sin emitir (C.3 y C.4) y la tarjeta de Informacion y estado (C.5). El canvas las dibuja con el diseño de esta SPEC.
 
 Hay tres agregados. Se proponen a la cadena de multiperfil y se implementan **despues** de ella:
@@ -149,12 +154,62 @@ Hay tres agregados. Se proponen a la cadena de multiperfil y se implementan **de
    - El filtro "Punto de expedicion" lista los puntos del facturador. Filtrar en el servidor pide un parametro nuevo en `GET /facturas` y su entrada en `spec/openapi.yaml` (RN-08).
 3. **"Se emite por"** al pie del menu "Nuevo" y en el subtitulo de cada espacio de §B. Recuerda el punto activo antes de emitir.
 
+### G. Reconocimiento del 2026-11-10
+
+Recorrido con Playwright sobre el stack local de Segel (frontend `3d6c6e3`, usuario de ensayo con los puntos 001-001 y 001-002) en 1440, 1280 y 390 px: login, eleccion de punto, las ocho pantallas del menu, la ficha de un documento y el cambio de punto. No emitio ni guardo nada. Se completo con una revision del codigo de `apps/web-operacion/src`. Las capturas marcadas estan en el canvas, en los tableros "Reconocimiento".
+
+**Varios puntos (multiperfil):**
+
+| ID | Hallazgo | Mejora | Tarea |
+|---|---|---|---|
+| H-01 | La descripcion fiscal del perfil ("Perfil para la emision de comprobantes para actividad economica…") es el titulo de Informacion y estado: 5 renglones en escritorio, 8 en celular, repetida tres veces | Titulo "Punto 001-001", actividad como texto secundario (P-P1) | URA-021 |
+| H-02 | Elegir y cambiar punto: la negrita es la descripcion larga, cortada a mitad de palabra ("Otras actividades de servi"); el punto, que es lo que distingue las opciones, va en gris chico | "Punto 001-002" en negrita, actividad y timbrado debajo, "…" con el texto completo en `title` | URA-021 |
+| H-03 | Informacion y estado muestra el codigo del perfil (`AC445203-E001-P001-FE-PTO`) | Sacarlo de la pantalla del operador | URA-021 |
+| H-04 | La barra lateral sigue diciendo "ultimo numero 0000001" (`main.tsx:2245`); la eleccion ya no lo muestra (multiperfil CA-23) y la barra no dice el punto | "Listo para facturar · Punto 001-001" | URA-021 |
+| H-05 | En el dialogo de cambio, el campo de contraseña no ocupa el ancho y el ojo queda suelto a la derecha (1440 y 390) | `CampoContrasena` comun con el login | URA-017, URA-021 |
+| H-06 | El menu de celular no tiene "Cambiar punto de expedicion" y su cabecera muestra la descripcion larga | §F.1 y P-P1 | URA-013, URA-021 |
+| H-07 | En las tarjetas de celular y en la ficha no se ve el punto: "1010619" y "0008487" son de puntos distintos | Numero completo `001-002-0008487` (P-E3) | URA-021 |
+| H-08 | La lista de facturas de Notas de credito no dice el punto de cada factura; el modal de nota de credito de Documentos no avisa si la factura es de otro punto (CreditNoteView si avisa) y su motivo no se registra como borrador | Punto en cada candidata; mismo aviso en los dos caminos; motivo y archivo de carga masiva registrados (P-P4) | URA-021 |
+
+**Marco y componentes:**
+
+| ID | Hallazgo | Mejora | Tarea |
+|---|---|---|---|
+| H-09 | Cuatro encabezados distintos: Documentos (rotulo, titulo y Volver a la derecha), Notas de credito y Presupuestos (columna angosta centrada), Cobros ("← Volver" arriba a la izquierda) | `EncabezadoPantalla` y dos anchos (P-L1, P-L2) | URA-017 |
+| H-10 | Tres estilos de pastilla ("🟢 Factura emitida", "Pendiente", "EMITIDO" en mayusculas) y 12 implementaciones del mapeo de estado | `PastillaEstado` y un mapa de estados (P-E1, P-E2) | URA-017 |
+| H-11 | La ficha repite el estado tres veces y apila botones de 1100 px; los datos van en una columna; "sistemasGs. 300.000" sin espacio | §C.4 con P-L4 y P-L7 | URA-007 |
+| H-12 | Textos sin tildes ("Informacion", "Catalogo", "Contrasena") junto a datos con tildes; voseo y usted mezclados; "Integracion con facturacion-electronica" a la vista | P-X1 a P-X4 | URA-020 |
+| H-13 | En 390 px hay controles de 16 a 38 px (Salir, ⋮, Contado, Credito, Mostrar contraseña, "Cambiar punto") | 44 px (P-A1) | URA-019 |
+| H-14 | En celular, las seis pestañas de Documentos ocupan tres renglones | Una fila con desplazamiento lateral | URA-007 |
+| H-15 | Informacion y estado repite el menu con cinco botones a todo el ancho | Solo la accion principal (§D R-8) | URA-008 |
+| H-16 | Emojis como iconos en Agenda (👤), Documentos (🟢) y la ficha (📄📱🔗📋↩⚠), aunque `Icono` ya tiene esos iconos | P-I1 | URA-007, URA-011 |
+| H-17 | Anular factura tiene el mismo estilo que Copiar enlace; tres confirmaciones con `window.confirm` | P-L6 y `Dialogo` | URA-017 |
+
+**Codigo:**
+
+| ID | Hallazgo | Mejora | Tarea |
+|---|---|---|---|
+| H-18 | `main.tsx` tiene 9979 lineas; `DocumentsView` (~1580) e `InvoiceEditor` (~1520) tienen 37 estados cada una; el backoffice ya separa `api/` y `components/` | Particion incremental (P-C2) | URA-023 |
+| H-19 | `styles.css`: 221 colores hex fuera de `:root`, 20 tamaños de letra, 52 paddings, 9 `z-index` sin escala (el menu de tarjetas, 100, queda sobre los dialogos), cortes en 720, 1024, 1040 y 1023 px con un solape en 720, 10 selectores duplicados y ~21 clases sin uso | Tokens y limpieza (P-T1 a P-T6, P-C6) | URA-016, URA-022 |
+| H-20 | Las descargas de PDF y XML de Presupuestos y Recibos y las paginas publicas usan `fetch` directo y no renuevan la sesion; el onboarding descarta el token renovado | Un solo cliente (P-D1, P-D2) | URA-018 |
+| H-21 | Accesibilidad: sin `:focus-visible` en los botones, ⋮ sin nombre ni `aria-haspopup`, fila de tabla que solo abre con el mouse, dialogos sin Escape ni foco atrapado (salvo el cambio de punto), zoom bloqueado en `index.html`, `<div>` dentro de `<button>` | P-A1 a P-A8 | URA-019 |
+| H-22 | No hay rutas por URL: el boton Atras del navegador y los enlaces directos no llevan a una pantalla | Fuera de esta cadena (FS-58 propuesto) | — |
+| H-23 | Al cargar sin sesion, la consola muestra un 401 de `/auth/refresh` | Esperado (sin cookie de renovacion); se documenta para que el guion de reconocimiento lo ignore | URA-024 |
+
+### H. Pautas de frontend y componentes
+
+1. `docs/PAUTAS_FRONTEND_v0.1.md` fija las reglas para todo cambio en `apps/web-operacion`: tokens (P-T), catalogo de componentes (P-C), pantallas (P-L), estados (P-E), iconos (P-I), accesibilidad (P-A), textos (P-X), punto de expedicion (P-P), datos y API (P-D) y validacion (P-V), con una lista para cerrar cada cambio y la linea base medida en §G.
+2. `AGENTS.md` la lista entre las fuentes de verdad y la hace obligatoria para cambios de frontend (D-10).
+3. Las fases 1 y 2 de esta cadena se construyen con los componentes del catalogo. Por eso la fase 0 (URA-016 a URA-019) va antes.
+4. El canvas tiene el tablero "Pautas de frontend" con los tokens y los componentes dibujados.
+
 ## Fuera de alcance (v0.1)
 
 - **La emision de tipos nuevos.** La emision de nota de debito, la nota de remision manual y la autofactura no se implementan aca. Cada una necesita su cadena SPEC, PLAN y TASKS (FS-55 a FS-57), con el contrato de FE vigente. La habilitacion por facturador desde el backoffice tambien va en esas cadenas, porque en FE los permisos `NDE_EMIT` y `NRE_EMIT` no se otorgan por defecto.
 - **El tipo de motivo de la nota de credito.** Depende de FS-44.
 - **El resto de FS-52.** P-2 (quitar "Calcular"), P-3 (guion de identidad) y P-4 (modo oscuro) siguen en ese item.
-- **Otras areas.** El backoffice, cualquier cambio en FE y cualquier logica fiscal.
+- **Otras areas.** El backoffice, cualquier cambio en FE y cualquier logica fiscal. Las pautas valen para el backoffice cuando se toque, pero esta cadena no lo cambia (sus 75 campos sin etiqueta asociada quedan anotados en el BACKLOG).
+- **Rutas por URL (H-22).** Se propone como FS-58 con su propia cadena.
 
 ## Decisiones
 
@@ -167,6 +222,11 @@ Hay tres agregados. Se proponen a la cadena de multiperfil y se implementan **de
 - **D-7 — Un patron, varias cadenas.** Esta SPEC fija el marco y el patron de §B. Los campos y validaciones de cada tipo nuevo son de su propia cadena.
 - **D-8 — Multiperfil se adopta, no se redefine.** Las pantallas de perfil son las de `SPEC_MULTIPERFIL_USUARIO`. Esta SPEC solo propone §F.1 a §F.3.
 - **D-9 — Cantidad solo en la pestaña activa.** Contar todos los tipos pediria un pedido por pestaña o un contrato nuevo. La pestaña activa ya trae su total.
+- **D-10 — Pautas obligatorias.** Todo cambio de frontend sigue `docs/PAUTAS_FRONTEND_v0.1.md`. El codigo existente se pone al dia cuando se toca, sin ampliar el alcance de la tarea sin anotarlo (pautas §0). Pendiente de aceptacion (URA-015).
+- **D-11 — Nombre corto del punto.** "Punto EST-PTO" y la actividad (`actividad_economica_descripcion`) como texto secundario. `titulo_operativo` y `perfil_emision_alias` traen hoy la descripcion fiscal larga (en la base, `alias_operativo` de los dos perfiles de ensayo); no se usan como titulo. Sin cambio de contrato.
+- **D-12 — Particion incremental.** `main.tsx` se divide en `api/`, `components/`, `lib/` y `views/` por etapas, empezando por lo que cada fase toca, y cada paso sin cambio de comportamiento, comprobado con las regresiones de Playwright. No hay un refactor de una sola vez.
+- **D-13 — Voseo (propuesta).** La interfaz usa voseo, como multiperfil y Nueva factura. Pendiente de aceptacion: la alternativa es usted en toda la app.
+- **D-14 — Zoom permitido (propuesta).** Se quita `maximum-scale=1.0, user-scalable=no` del `viewport`. El riesgo es que el celular agrande la pantalla al enfocar un campo de menos de 16 px; se cubre con campos de 16 px en celular. Pendiente de aceptacion.
 
 ## Reglas
 
@@ -179,6 +239,8 @@ Hay tres agregados. Se proponen a la cadena de multiperfil y se implementan **de
 - **RN-07 — El punto siempre a la vista.** Antes de emitir, el operador ve por que punto sale el documento: en la barra, en el pie del menu "Nuevo" y en el subtitulo de cada espacio.
 - **RN-08 — Contrato solo donde se dice.** El unico cambio de contrato de esta cadena es el filtro por punto de §F.2, que va despues de multiperfil y se documenta en `spec/openapi.yaml`. El resto es solo de interfaz.
 - **RN-09 — Escritorio primero.** Se valida primero en 1440 y 1280 px y despues en 390 px, sin desplazamiento horizontal (decision del 2026-11-09).
+- **RN-10 — Sin cambio de comportamiento en la fase 0.** Tokens, componentes base, cliente de API, accesibilidad, textos y particion no cambian lo que se envia a la API ni los flujos. Lo comprueban las regresiones de Playwright y la linea base de la nota de credito (URA-001).
+- **RN-11 — La linea base no sube.** El guion de reconocimiento (URA-024) corre al cerrar cada tarea de frontend. Ninguna cuenta del anexo de las pautas puede subir.
 
 ## Criterios de aceptacion
 
@@ -193,6 +255,10 @@ Hay tres agregados. Se proponen a la cadena de multiperfil y se implementan **de
 - **CA-09.** En 390 px: el menu sigue los grupos de A.1, no hay desplazamiento horizontal y Documentos conserva las tarjetas con la pastilla de estado.
 - **CA-10.** Despues de multiperfil (§F): con dos perfiles, la columna "Punto" muestra el punto de cada documento, tambien en los anteriores por su CDC. El filtro por punto devuelve solo los documentos de ese punto. El menu de celular ofrece "Cambiar punto de expedicion".
 - **CA-11.** Las regresiones de Nueva factura (`playwright-ux-nueva-factura.cjs`), Documentos escritorio y carga masiva pasan con los textos actualizados.
+- **CA-12.** Fase 0: `styles.css` sin colores hex fuera de `:root` y sin `z-index` numericos; cortes solo en 720 y 1024 px; sin las clases sin uso ni los selectores duplicados de H-19. Las capturas de 1440 y 390 px de las ocho pantallas no cambian a simple vista respecto del recorrido del 2026-11-10.
+- **CA-13.** `EncabezadoPantalla`, `PastillaEstado`, `Aviso`, `EstadoVacio`, `Dialogo`, `MenuFila`, `CampoFormulario` y `CampoContrasena` existen en `src/components/` y reemplazan a sus variantes (sin `window.confirm` en el codigo).
+- **CA-14.** Con dos puntos: la eleccion, el cambio, Informacion y estado y el menu de celular nombran el punto como "Punto 001-002" sin la descripcion larga ni el codigo del perfil; las tarjetas de celular y la ficha muestran el numero completo; el dialogo de cambio avisa si hay un motivo de nota de credito escrito.
+- **CA-15.** Guion de reconocimiento en 1440, 1280 y 390 px: 0 emojis, 0 desplazamiento horizontal, 0 controles sin nombre, 0 campos sin etiqueta y 0 controles de menos de 44 px en 390 px.
 
 ## Limitaciones conocidas
 
