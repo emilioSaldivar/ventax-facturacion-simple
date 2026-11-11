@@ -59,7 +59,7 @@ async function banderaApagada(browser, vp) {
   await page.locator('button:has-text("Documentos")').first().click();
   await page.getByRole("heading", { name: "Facturas y notas" }).waitFor();
   await page.getByRole("button", { name: "Notas de crédito" }).waitFor();
-  check(vp.nombre, "CA-12: sin pestana Carga masiva", (await page.getByRole("button", { name: "Carga masiva" }).count()) === 0);
+  check(vp.nombre, "CA-12: sin pestana Carga masiva", (await page.getByRole("button", { name: /^Cargas por planilla/ }).count()) === 0);
   const estados = await page.evaluate(async () => {
     const sesion = await fetch("/api/v1/auth/refresh", { method: "POST", credentials: "include" });
     const { access_token: token } = await sesion.json();

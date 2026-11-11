@@ -4708,3 +4708,97 @@ dd {
     top: calc(var(--altura-barra) + var(--esp-4));
   }
 }
+
+/* ─── Documentos: ficha lateral de 360 px (SPEC_UX_RESTO_APP_v0.1 C.4; PLAN §5, URA-007) ─────────────── */
+.documents-cuerpo {
+  display: grid;
+  gap: var(--esp-4);
+  min-width: 0;
+}
+
+.documents-principal {
+  display: grid;
+  gap: var(--esp-3);
+  min-width: 0;
+}
+
+@media (min-width: 1024px) {
+  .documents-cuerpo.con-ficha {
+    grid-template-columns: minmax(0, 1fr) 360px;
+    align-items: start;
+  }
+
+  .documents-cuerpo.con-ficha .document-ficha {
+    position: sticky;
+    top: calc(var(--altura-barra) + var(--esp-4));
+    max-height: calc(100vh - var(--altura-barra) - var(--esp-8));
+    overflow-y: auto;
+  }
+}
+
+.documents-tabla-fila.activa {
+  background: var(--nav-active-bg);
+}
+
+.ficha-cabecera {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--esp-3);
+}
+
+.ficha-cabecera h3 {
+  margin: 0;
+  font-size: var(--fs-18);
+  font-weight: 700;
+}
+
+.ficha-cabecera p {
+  margin: 2px 0 0;
+}
+
+.ficha-pasos {
+  margin: 0;
+}
+
+.document-ficha .receipt-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--esp-2) var(--esp-3);
+}
+
+/* Entrega en dos columnas, con iconos. */
+.ficha-entrega {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--esp-2);
+}
+
+.ficha-entrega .group-title {
+  grid-column: 1 / -1;
+}
+
+.ficha-entrega .secondary-link,
+.ficha-entrega .secondary-action,
+.document-ficha .action-group-secondary .secondary-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--esp-2);
+  text-align: center;
+}
+
+.document-ficha .action-group-secondary .secondary-action .menu-tag {
+  margin-left: 0;
+}
+
+.ficha-peligro {
+  border-top: 1px solid var(--color-line);
+  padding-top: var(--esp-3);
+}
+
+.ficha-peligro .danger-action {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--esp-2);
+}

@@ -14,15 +14,16 @@ export function mensajeResultadoReintento(documento: DocumentoResponse): string 
     : "La factura ya había llegado a facturación electrónica. Actualizamos su estado.";
 }
 
+/** Texto simple del estado, sin emojis (PAUTAS_FRONTEND_v0.1 P-I1, URA-007). */
 export function getSimpleDocumentoEstado(value: DocumentoEstado, tipo?: DocumentoResponse["tipo"]): string {
   const nombre = formatDocumentoTipo(tipo ?? "FACTURA");
   if (value === "EMITIDA") {
-    return `🟢 ${nombre} emitida`;
+    return `${nombre} emitida`;
   }
   if (value === "RECHAZADA" || value === "ERROR_OPERATIVO" || value === "ERROR_TEMPORAL" || value === "ANULADA" || value === "CANCELADO_LOCAL") {
-    return "🔴 Requiere revisión";
+    return "Requiere revisión";
   }
-  return `🟡 Procesando ${nombre.toLowerCase()}`;
+  return `Procesando ${nombre.toLowerCase()}`;
 }
 
 export function getDocumentoNombreLower(tipo: DocumentoResponse["tipo"]): string {

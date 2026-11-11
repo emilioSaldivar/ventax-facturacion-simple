@@ -8,7 +8,9 @@ import { EncabezadoPantalla } from "../components/EncabezadoPantalla";
 import { TIPOS_PROXIMAMENTE } from "../lib/tiposEmision";
 import { AvisoPuntoDistinto } from "../components/AvisoPuntoDistinto";
 import { useBorradorSinEmitir } from "../lib/borradores";
-import { etiquetaPunto, numeroConPunto } from "../lib/punto";
+import { etiquetaPunto, nombrePunto, numeroConPunto } from "../lib/punto";
+import { Icono } from "../components/Icono";
+import { pasosPorEstado } from "../components/ResultadoEmision";
 import { esNotaSinConfirmar, estadoDocumento, etiquetaCondicionVenta, formatDocumentoTipo } from "../lib/estados";
 import { useApi } from "../api/useApi";
 import { type UserSummary, type OperationView, type DocumentoEstado, type OperationalContextResponse, type DocumentoAccion, type DocumentoAccionSoportePayload, type DocumentoInutilizacion, type NotaCreditoSaldoResponse, type DocumentoResponse, type DocumentoListResponse, type DeliveryLinkResponse, type EmailStatusResponse, type DocumentoEventosListResponse, type DocumentoDecisionResponse, type DocumentoValidateCdcImpactResponse, type DocumentoGestionResendResponse, type DocumentoGestionCreateDerivedResponse, type DocumentoGestionCancelSendResponse, type DocumentoGestionVoidResponse, type BatchPendientesGestionResponse, type ReconciliacionFiscalResponse, type SifenSummary, type InvoiceInitialDraft } from "../tipos";
@@ -692,7 +694,9 @@ export function DocumentsView({
           }}
           type="button"
         >
-          {value === "FACTURAS" ? "Facturas" : value === "NOTAS_CREDITO" ? "Notas de crédito" : value === "NOTAS_REMISION" ? "Notas de remisión" : "Carga masiva"}
+          {value === "FACTURAS" ? "Facturas" : value === "NOTAS_CREDITO" ? "Notas de crédito" : value === "NOTAS_REMISION" ? "Notas de remisión" : "Cargas por planilla"}
+          {/* URA-007 (SPEC C.1, D-9): solo la pestaña activa muestra su cantidad, con el total que ya trae la lista. */}
+          {docKindTab === value && value !== "CARGA_MASIVA" && !loading ? ` · ${totalDocumentos}` : ""}
         </button>
       ))}
       {/* SPEC_DOCUMENTOS_ESCRITORIO_v0.1, RN-03: tipos que FS incorpora cuando FE los habilite (Fase B). */}
@@ -716,7 +720,7 @@ export function DocumentsView({
   if (docKindTab === "CARGA_MASIVA" && context) {
     return (
       <section className="documents-view documents-view-ancha" aria-labelledby="documents-title">
-        <EncabezadoPantalla id="documents-title" onVolver={onBack} rotulo="Documentos" titulo="Carga masiva" />
+        <EncabezadoPantalla id="documents-title" onVolver={onBack} rotulo="Documentos" titulo="Cargas por planilla" />
         {pestanasDocumentos}
         <CargaMasivaView
           api={api}
@@ -747,7 +751,11 @@ export function DocumentsView({
     <section className={esEscritorio ? "documents-view documents-view-ancha" : "documents-view"} aria-labelledby="documents-title">
       <EncabezadoPantalla id="documents-title" onVolver={onBack} rotulo="Documentos" titulo="Facturas y notas" />
 
-      {!selected ? (
+      {/* URA-007 (SPEC C.4): en escritorio la lista queda a la vista y la ficha se abre al costado; en celular la ficha
+          reemplaza a la lista, como antes. */}
+      <div className={esEscritorio && selected ? "documents-cuerpo con-ficha" : "documents-cuerpo"}>
+      <div className="documents-principal">
+      {!selected || esEscritorio ? (
       <section className={esEscritorio ? "documents-filters documents-filtros-escritorio" : "documents-filters"}>
         {pestanasDocumentos}
         <label>
@@ -896,7 +904,7 @@ export function DocumentsView({
       </section>
       ) : null}
 
-      {!selected && esEscritorio ? (
+      {esEscritorio ? (
       <section className="documents-layout documents-layout-escritorio">
         {documents.length === 0 && !loading ? <p className="muted empty-state">Sin documentos para los filtros actuales.</p> : null}
         {documents.length > 0 ? (
@@ -919,7 +927,7 @@ export function DocumentsView({
               </thead>
               <tbody>
                 {documents.map((documento) => (
-                  <tr className="documents-tabla-fila" key={documento.id} onClick={() => void openDetail(documento.id)}>
+                  <tr className={selected?.id === documento.id ? "documents-tabla-fila activa" : "documents-tabla-fila"} key={documento.id} onClick={() => void openDetail(documento.id)}>
                     <td>{formatShortDate(documento.created_at)}</td>
                     {mostrarPunto ? (
                       <td className="documents-tabla-punto">{documento.perfil_emision ? etiquetaPunto(documento.perfil_emision) : "—"}</td>
@@ -935,7 +943,7 @@ export function DocumentsView({
                         title={documento.accion_detalle?.titulo}
                         type="button"
                       >
-                        <strong>{`${getDocumentoAccionIcon(documento)} ${documento.numero_fiscal ?? "pendiente"}`}</strong>
+                        <strong>{documento.numero_fiscal ?? "pendiente"}</strong>
                       </button>
                       {documento.carga ? (
                         <button
@@ -987,7 +995,7 @@ export function DocumentsView({
             <article className="document-row document-row-rich" key={documento.id}>
               <button className="document-row-main" onClick={() => void openDetail(documento.id)} type="button">
                 <span>
-                  <strong title={documento.accion_detalle?.titulo}>{`${getDocumentoAccionIcon(documento)} ${formatDocumentoTipo(documento.tipo)} ${numeroConPunto(documento, mostrarPunto) ?? "pendiente"}`}</strong>
+                  <strong title={documento.accion_detalle?.titulo}>{`${formatDocumentoTipo(documento.tipo)} ${numeroConPunto(documento, mostrarPunto) ?? "pendiente"}`}</strong>
                   {documento.carga ? (
                     <span className="carga-marca">
                       <button
@@ -1025,7 +1033,7 @@ export function DocumentsView({
               type="button"
             >
               <span>
-                <strong title={documento.accion_detalle?.titulo}>{`${getDocumentoAccionIcon(documento)} ${numeroConPunto(documento, mostrarPunto) ?? "Número pendiente"}`}</strong>
+                <strong title={documento.accion_detalle?.titulo}>{numeroConPunto(documento, mostrarPunto) ?? "Número pendiente"}</strong>
                 <small>{documento.cliente.razon_social}</small>
                 {formatEmisor(documento) ? <small className="document-row-emisor">Emitio {formatEmisor(documento)}</small> : null}
               </span>
@@ -1041,20 +1049,33 @@ export function DocumentsView({
       </section>
       ) : null}
 
+      </div>
         {selected ? (
-        <aside className="document-detail" aria-live="polite">
+        <aside className="document-detail document-ficha" aria-label="Ficha del documento" aria-live="polite">
           {selected ? (
             <>
-              <div className="receipt-heading">
+              {/* URA-007 (SPEC C.4, H-11): numero y una sola pastilla de estado; los pasos debajo. */}
+              <div className="ficha-cabecera">
                 <div>
-                  <p className="eyebrow">Documento</p>
-                  <h3>{formatEstadoDocumento(selected)}</h3>
-                  <p className="muted">{formatDocumentoTipo(selected.tipo)} · Número {numeroConPunto(selected, mostrarPunto) ?? "pendiente"}</p>
+                  <h3>{formatDocumentoTipo(selected.tipo)} {numeroConPunto(selected, mostrarPunto) ?? "pendiente"}</h3>
+                  <p className="muted">
+                    {formatShortDate(selected.created_at)}
+                    {selected.perfil_emision ? ` · ${nombrePunto(selected.perfil_emision)}` : ""}
+                  </p>
                 </div>
-                <span className={selected.estado === "EMITIDA" ? "status-pill ready" : "status-pill blocked"}>
-                  {formatEstadoDocumento(selected)}
-                </span>
+                <PastillaEstado {...estadoDocumento(selected)} />
               </div>
+              {selected.tipo !== "NOTA_REMISION" ? (
+                <ol className="pasos ficha-pasos" aria-label="Pasos de la emisión">
+                  {pasosPorEstado(selected.estado).map((paso, indice, pasos) => (
+                    <li className={`paso ${paso.clase}`} key={paso.etiqueta}>
+                      <span className="paso-punto" aria-hidden="true">{paso.clase === "hecho" ? <Icono nombre="tilde" tamano={14} grosor={3} /> : null}</span>
+                      <span className="paso-texto">{paso.etiqueta}</span>
+                      {indice < pasos.length - 1 ? <span className="paso-linea" aria-hidden="true" /> : null}
+                    </li>
+                  ))}
+                </ol>
+              ) : null}
               <button
                 className="ghost-action"
                 onClick={() => {
@@ -1067,7 +1088,7 @@ export function DocumentsView({
                 }}
                 type="button"
               >
-                {volverACargaId ? "← Volver a la carga" : "← Volver a resultados"}
+                <Icono nombre="chevron-izquierda" /> {volverACargaId ? "Volver a la carga" : "Volver a resultados"}
               </button>
 
               <div className="receipt-summary">
@@ -1108,10 +1129,10 @@ export function DocumentsView({
                   <dt>Email</dt>
                   <dd>{formatEmailStatus(emailStatus?.status ?? selected.delivery.email_status)}</dd>
                 </div>
-                {formatEmisor(selected) ? (
+                {formatEmisor(selected) || selected.perfil_emision ? (
                   <div>
-                    <dt>Emitido por</dt>
-                    <dd>{formatEmisor(selected)}</dd>
+                    <dt>Emitida por</dt>
+                    <dd>{[selected.perfil_emision ? nombrePunto(selected.perfil_emision) : null, formatEmisor(selected)].filter(Boolean).join(" · ")}</dd>
                   </div>
                 ) : null}
                 {selected.corregida_por || selected.corrige_a ? (
@@ -1224,7 +1245,7 @@ export function DocumentsView({
                       ) : null}
                       {selected.accion_detalle.acciones_sugeridas.includes("CONTACTAR_SOPORTE") && selected.accion_detalle.soporte_payload ? (
                         <button className="secondary-action" onClick={() => void copySoportePayload(selected.accion_detalle!.soporte_payload!)} type="button">
-                          📋 Copiar datos para soporte
+                          <Icono nombre="copiar" /> Copiar datos para soporte
                         </button>
                       ) : null}
                     </div>
@@ -1280,26 +1301,28 @@ export function DocumentsView({
                 </p>
               ) : (
               <div className="delivery-actions">
-                <div className="action-group action-group-primary">
-                  <h4 className="group-title">Acciones frecuentes</h4>
+                {/* URA-007 (SPEC C.4, P-I1): entrega en una grilla de dos columnas, con iconos y sin emojis. */}
+                <div className="action-group action-group-primary ficha-entrega">
+                  <h4 className="group-title">Entregar al cliente</h4>
                   <a className={selectedKudeUrl ? "secondary-link" : "secondary-link disabled"} href={selectedKudeUrl ?? "#"} rel="noreferrer" target="_blank">
-                    📄 Ver {getDocumentoNombreLower(selected.tipo)} PDF
+                    <Icono nombre="pdf" /> Ver {getDocumentoNombreLower(selected.tipo)} PDF
                   </a>
                   <a className={deliveryLink ? "secondary-link" : "secondary-link disabled"} href={deliveryLink?.whatsapp_url ?? "#"} rel="noreferrer" target="_blank">
-                    📱 Enviar por WhatsApp
+                    <Icono nombre="whatsapp" /> Enviar por WhatsApp
                   </a>
                   <a className={deliveryLink ? "secondary-link" : "secondary-link disabled"} href={deliveryLink?.public_url ?? "#"} rel="noreferrer" target="_blank">
-                    🔗 Compartir {getDocumentoNombreLower(selected.tipo)}
+                    <Icono nombre="compartir" /> Compartir {getDocumentoNombreLower(selected.tipo)}
                   </a>
                   <button className="secondary-action" disabled={!deliveryLink} onClick={() => void copyDetailLink()} type="button">
-                    📋 Copiar enlace
+                    <Icono nombre="copiar" /> Copiar enlace
                   </button>
                 </div>
               </div>
               )}
 
               <div className="action-group action-group-secondary">
-                <h4 className="group-title">Acciones sobre esta {getDocumentoNombreLower(selected.tipo)}</h4>
+                {/* URA-007 (SPEC C.4): lo que se emite desde esta factura, con el estado de cada tipo (A.2). */}
+                <h4 className="group-title">{selected.tipo === "FACTURA" ? "Desde esta factura" : `Acciones sobre esta ${getDocumentoNombreLower(selected.tipo)}`}</h4>
                 {selected.tipo === "FACTURA" && selected.condicion_venta === "CREDITO" ? (
                   <button
                     className="secondary-action"
@@ -1316,23 +1339,36 @@ export function DocumentsView({
                     }}
                     type="button"
                   >
-                    💵 Emitir recibo de cobro
+                    <Icono nombre="recibos" /> Emitir recibo de cobro
                   </button>
                 ) : null}
                 {selected.tipo !== "NOTA_REMISION" ? (
                 <button className="secondary-action" disabled={actionLoading || !canEmitNotaCredito(selected, documents, Boolean(context?.nc_moneda_extranjera_habilitada))} onClick={() => void emitSelectedNotaCredito()} type="button">
-                  ↩ Crear nota de crédito
+                  <Icono nombre="credito" /> Crear nota de crédito
                 </button>
+                ) : null}
+                {selected.tipo === "FACTURA" ? (
+                  <>
+                    <button className="secondary-action" disabled title="Disponible próximamente" type="button">
+                      <Icono nombre="debito" /> Nota de débito <span className="menu-tag">Próximamente</span>
+                    </button>
+                    <button className="secondary-action" disabled title="La emisión manual llega con FS-56" type="button">
+                      <Icono nombre="remision" /> Nota de remisión para esta venta <span className="menu-tag">Próximamente</span>
+                    </button>
+                  </>
                 ) : null}
                 {(selected.totals?.anticipo ?? 0) > 0 ? <small className="muted">{AVISO_NOTA_CREDITO_CON_ANTICIPO}</small> : null}
                 {selected.moneda && selected.moneda !== "PYG" && !context?.nc_moneda_extranjera_habilitada ? <small className="muted">La nota de crédito de una factura en moneda extranjera se gestiona con soporte.</small> : null}
-                {/* SPEC_DOCUMENTOS_ESCRITORIO_v0.1, RN-09: la nota de remision no se anula desde FS en esta fase. */}
-                {selected.tipo !== "NOTA_REMISION" ? (
-                <button className="secondary-action" disabled={actionLoading || !canCancelDocumento(selected)} onClick={() => void cancelSelectedDocumento()} type="button">
-                  ⚠ Anular {getDocumentoNombreLower(selected.tipo)}
-                </button>
-                ) : null}
               </div>
+              {/* SPEC_DOCUMENTOS_ESCRITORIO_v0.1, RN-09: la nota de remision no se anula desde FS en esta fase.
+                  URA-007 (P-L6): anular se separa del resto, con estilo de peligro; pide motivo en su ventana. */}
+              {selected.tipo !== "NOTA_REMISION" ? (
+                <div className="ficha-peligro">
+                  <button className="danger-action" disabled={actionLoading || !canCancelDocumento(selected)} onClick={() => void cancelSelectedDocumento()} type="button">
+                    <Icono nombre="alerta" /> Anular {getDocumentoNombreLower(selected.tipo)}
+                  </button>
+                </div>
+              ) : null}
 
               {/* Resultado del ultimo intento de anulacion. Solo se muestra si hubo uno y no
                   termino aceptado: una anulacion exitosa ya se refleja en el estado. */}
@@ -1353,7 +1389,7 @@ export function DocumentsView({
                       type="button"
                       data-testid="reintentar-anulacion"
                     >
-                      ↻ Reintentar anulación
+                      <Icono nombre="reloj" /> Reintentar anulación
                     </button>
                   ) : null}
                   {selected.cancelacion.status === "FAILED" ? (
@@ -1364,7 +1400,7 @@ export function DocumentsView({
                       type="button"
                       data-testid="consultar-tras-failed"
                     >
-                      ⟳ Consultar estado en SIFEN
+                      <Icono nombre="reloj" /> Consultar estado en SIFEN
                     </button>
                   ) : null}
                 </section>
@@ -1418,7 +1454,7 @@ export function DocumentsView({
                   <summary>Administración fiscal</summary>
                 <section className="action-group action-group-internal" aria-label="Autogestion soporte">
                   <h4 className="group-title">Eventos y regularización fiscal</h4>
-                  <p className="muted">Flujo sugerido: decisión → validar impacto CDC → ejecutar acción.</p>
+                  <p className="muted">Flujo sugerido: decisión, validar el impacto en el CDC y ejecutar la acción.</p>
                   {decision ? (
                     <div className="support-decision-box">
                       <p><strong>Acción recomendada:</strong> {decision.recommended_action}</p>
@@ -1460,6 +1496,7 @@ export function DocumentsView({
           )}
         </aside>
         ) : null}
+      </div>
       {reasonModal ? (
         <div className="modal-backdrop" role="presentation">
           <section className="modal-panel" aria-labelledby="reason-modal-title" role="dialog" aria-modal="true">
@@ -1643,35 +1680,7 @@ export function accionBannerClass(accion: DocumentoAccion | undefined): string {
   }
 }
 
-export function getDocumentoStatusIcon(value: DocumentoEstado): string {
-  if (value === "EMITIDA") {
-    return "🟢";
-  }
-  if (value === "RECHAZADA" || value === "ERROR_OPERATIVO" || value === "ERROR_TEMPORAL" || value === "ANULADA" || value === "CANCELADO_LOCAL") {
-    return "🔴";
-  }
-  return "🟡";
-}
 
-// Semaforo por accion derivada (verificacion fiscal automatica): 4 colores que reflejan
-// que tiene que hacer el usuario, no el estado tecnico. Si el backend todavia no manda
-// `accion` (deploy parcial), cae al semaforo por estado de siempre.
-export function getDocumentoAccionIcon(documento: DocumentoResponse): string {
-  // FS-34: deriveAccion da OK a una anulada; no debe verse igual que una emitida.
-  if (documento.estado === "ANULADA") return "⚫";
-  switch (documento.accion) {
-    case "OK":
-      return "🟢";
-    case "EN_PROCESO":
-      return "🟡";
-    case "REQUIERE_ACCION":
-      return "🟠";
-    case "REQUIERE_SOPORTE":
-      return "🔴";
-    default:
-      return getDocumentoStatusIcon(documento.estado);
-  }
-}
 
 /**
  * El resultado de una anulacion no es binario: SIFEN puede aceptar, rechazar (de forma
@@ -1901,32 +1910,4 @@ export function getRecoverableMessage(documento: DocumentoResponse): string | nu
   return null;
 }
 
-/** SPEC_NOTA_CREDITO_TRABADA_v0.1, RN-06: una nota trabada nunca se muestra como "en proceso". */
-export function formatEstadoDocumento(documento: DocumentoResponse): string {
-  if (esNotaSinConfirmar(documento)) return "🟠 Nota de crédito sin confirmar";
-  // SPEC_CORRECCION_INUTILIZACION_RECHAZADAS_v0.1, RN-C1.
-  if (documento.tipo === "FACTURA" && documento.estado === "RECHAZADA") {
-    const inutilizada = documento.inutilizacion?.status === "ACCEPTED";
-    if (documento.corregida_por && inutilizada) return "⚪ Resuelta";
-    if (inutilizada) return "⚪ Número inutilizado";
-    if (documento.corregida_por) return "🟠 Corregida, falta inutilizar";
-  }
-  return formatDocumentoEstadoSimple(documento.estado, documento.tipo);
-}
 
-export function formatDocumentoEstadoSimple(value: DocumentoEstado, tipo?: DocumentoResponse["tipo"]): string {
-  const nombre = formatDocumentoTipo(tipo ?? "FACTURA");
-  switch (value) {
-    case "EMITIDA":
-      return `🟢 ${nombre} emitida`;
-    case "EMITIENDO":
-    case "PENDIENTE_SIFEN":
-      return `🟡 Procesando ${nombre.toLowerCase()}`;
-    case "ANULADA":
-      return "⚪ Anulada";
-    case "CANCELADO_LOCAL":
-      return "⚪ Cancelada antes de enviar";
-    default:
-      return "🔴 Requiere revisión";
-  }
-}

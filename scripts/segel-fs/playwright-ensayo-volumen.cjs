@@ -47,7 +47,7 @@ async function login(page) {
 async function irACargas(page) {
   await abrirVista(page, "Documentos");
   await page.getByRole("heading", { name: "Facturas y notas" }).waitFor({ timeout: 20000 });
-  await page.getByRole("button", { name: "Carga masiva" }).click();
+  await page.getByRole("button", { name: /^Cargas por planilla/ }).click();
   await page.getByRole("heading", { name: "Cargas de facturas" }).waitFor({ timeout: 20000 });
 }
 

@@ -97,7 +97,7 @@ async function escritorio(browser, ancho) {
   }
   // Fase B1: selector de tipo de documento en "Nueva carga".
   if (ancho === 1440) {
-    await page.locator('.filter-tabs button:has-text("Carga masiva")').first().click();
+    await page.locator('.filter-tabs button:has-text("Cargas por planilla")').first().click();
     await page.getByRole("button", { name: "Nueva carga" }).click();
     const selector = page.locator('select[aria-label="Tipo de documento"]');
     const opciones = await selector.locator("option").evaluateAll((os) => os.map((o) => `${o.textContent}${o.disabled ? " [deshabilitada]" : ""}`));

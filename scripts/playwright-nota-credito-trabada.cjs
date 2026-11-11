@@ -166,7 +166,8 @@ async function correr(browser, vp) {
     const banner = page.locator(".accion-banner").first();
     const titulo = (await banner.locator(".accion-banner-titulo").innerText()).trim();
     const verificar = await banner.getByRole("button", { name: "Verificar estado fiscal" }).count();
-    const encabezado = await page.locator("h3", { hasText: "Nota de crédito sin confirmar" }).count();
+    // URA-007: el estado esta en la pastilla de la ficha (el titulo es el tipo y el numero).
+    const encabezado = await page.locator(".document-ficha .estado-documento", { hasText: "Nota de crédito sin confirmar" }).count();
     const procesando = await page.getByText("Procesando nota de crédito").count();
     await foto("02-detalle-sin-confirmar");
     check(

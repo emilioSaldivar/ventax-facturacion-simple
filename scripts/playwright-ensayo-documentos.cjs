@@ -72,7 +72,7 @@ async function buscar(page, numero) {
 
       // FS-35: ayuda a soporte en un comprobante con error de una carga.
       await irADocumentos(page);
-      await page.getByRole("button", { name: "Carga masiva" }).click();
+      await page.getByRole("button", { name: /^Cargas por planilla/ }).click();
       await page.locator(".carga-enlace", { hasText: cargaConErrores }).first().click();
       await page.getByRole("button", { name: "Con errores" }).click();
       await page.getByRole("button", { name: "Copiar datos para soporte" }).first().click();

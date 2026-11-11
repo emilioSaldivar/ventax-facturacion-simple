@@ -318,7 +318,7 @@ async function casoPuntos(browser) {
       await modal.getByRole("button", { name: /Cancelar|Volver|Cerrar/ }).first().click();
 
       // Carga masiva: un archivo elegido y sin subir es un borrador para el cambio de punto (P-P4).
-      await page.getByRole("button", { name: "Carga masiva" }).click();
+      await page.getByRole("button", { name: /^Cargas por planilla/ }).click();
       await page.getByRole("button", { name: "Nueva carga" }).click();
       await page.getByLabel("Archivo de la carga").setInputFiles({ name: "prueba-ura021.csv", mimeType: "text/csv", buffer: Buffer.from("tipo_documento\n") });
       await page.locator("button.topbar-facturador--boton").click();
@@ -408,6 +408,7 @@ async function casoMenu(browser) {
         // URA-006: espacio propio con "Emitidas · N" y "Por planilla" (la carga masiva con NOTA_REMISION por defecto).
         await remision.click();
         await page.getByRole("heading", { name: "Notas de remisión" }).waitFor();
+        await page.getByRole("button", { name: /^Emitidas · \d+/ }).waitFor({ timeout: 10000 }).catch(() => undefined);
         const pestanas = await page.getByRole("group", { name: "Notas de remisión" }).innerText();
         check(`URA-006 ${ancho}: "Notas de remisión" abre su espacio con Emitidas y Por planilla`, /Emitidas · \d+/.test(pestanas) && pestanas.includes("Por planilla"), pestanas.replace(/\s+/g, " "));
         await page.getByRole("button", { name: "Nueva carga" }).click();

@@ -79,7 +79,7 @@ async function irADocumentos(page) {
 
 async function irACargas(page) {
   await irADocumentos(page);
-  await page.getByRole("button", { name: "Carga masiva" }).click();
+  await page.getByRole("button", { name: /^Cargas por planilla/ }).click();
   await page.getByRole("heading", { name: "Cargas de facturas" }).waitFor({ timeout: 15000 });
 }
 
@@ -374,7 +374,7 @@ async function correr(browser, vp) {
     check(nombre, "contexto CLIENTE: Notas de crédito sigue disponible", !(await pagCliente.locator('button.menu-item:has-text("Notas de crédito")').first().isDisabled()));
     await pagCliente.screenshot({ path: path.join(outDir, `${nombre}-14-cliente-menu.png`) });
     await pagCliente.locator('button:has-text("Documentos")').first().click();
-    await pagCliente.getByRole("button", { name: "Carga masiva" }).click();
+    await pagCliente.getByRole("button", { name: /^Cargas por planilla/ }).click();
     await pagCliente.getByRole("heading", { name: "Cargas de facturas" }).waitFor();
     const lista = await pagCliente.locator(".carga-masiva").innerText();
     check(nombre, "CA-04: otro contexto del facturador no ve las cargas ajenas", !lista.includes(`informe-${nombre}-${corrida}`), lista);
