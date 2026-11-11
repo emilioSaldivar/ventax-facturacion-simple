@@ -109,7 +109,7 @@ async function elegirEnPantalla(page, v, punto) {
   check(`D-8 ${v}: el token de eleccion no se guarda`, (await page.evaluate(() => localStorage.getItem("ventax_factura_access_token"))) === null);
   check(`CA-08 ${v}: sin desplazamiento horizontal en la eleccion`, await sinDesborde(page));
   await page.screenshot({ path: path.join(outDir, `${v}-eleccion.png`), fullPage: true });
-  await opciones.filter({ hasText: `Punto ${punto}` }).first().click();
+  await opciones.filter({ hasText: `Punto 001-${punto}` }).first().click();
   await esperarSesion(page);
   const linea = await lineaFiscal(page);
   check(`CA-08 ${v}: la barra muestra el punto ${punto}`, linea.includes(punto), linea);
@@ -124,7 +124,7 @@ async function cambiarPunto(page, punto, password, { esperaAdvertencia = false, 
   if (esperaAdvertencia) {
     check(`CA-09 ${v}: advertencia de documento sin emitir`, (await dialogo.innerText()).includes("Tenés un documento sin emitir"));
   }
-  await dialogo.locator(".perfil-opcion").filter({ hasText: `Punto ${punto}` }).click();
+  await dialogo.locator(".perfil-opcion").filter({ hasText: `Punto 001-${punto}` }).click();
   await dialogo.getByLabel("Tu contraseña").fill(password);
   const boton = dialogo.getByRole("button", { name: esperaAdvertencia ? "Descartar y cambiar" : "Cambiar", exact: true });
   check(`C.3 ${v}: boton "${esperaAdvertencia ? "Descartar y cambiar" : "Cambiar"}" habilitado`, await boton.isEnabled());

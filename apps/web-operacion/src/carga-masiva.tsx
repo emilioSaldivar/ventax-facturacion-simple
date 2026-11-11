@@ -1,6 +1,7 @@
 // Pestana "Carga masiva" de Documentos (SPEC_CARGA_MASIVA_FACTURAS_v0.1, seccion 4). PC primero.
 // Recibe el cliente de API por props: main.tsx no se importa desde aca, para no crear un ciclo.
 import { useCallback, useEffect, useRef, useState, type DragEvent } from "react";
+import { useBorradorSinEmitir } from "./lib/borradores";
 
 type EstadoCarga = "RECIBIDA" | "VALIDANDO" | "RECHAZADA" | "VALIDADA" | "EN_COLA" | "EN_PREPARACION" | "EN_SIFEN" | "FINALIZADA" | "CANCELADA";
 type EstadoComprobante = "PENDIENTE" | "INVALIDO" | "DUPLICADO" | "PREPARADO" | "ENVIADO" | "APROBADO" | "APROBADO_CON_OBS" | "RECHAZADO" | "ERROR" | "CANCELADO";
@@ -443,7 +444,7 @@ function ListadoCargas({
 
       {cargando ? <p className="muted">Cargando...</p> : null}
       {!cargando && cargas.length === 0 ? (
-        <p className="empty-state">Todavía no hay cargas. Empieza con "Nueva carga".</p>
+        <p className="empty-state">Todavía no hay cargas. Empezá con "Nueva carga".</p>
       ) : null}
 
       {cargas.length > 0 ? (
@@ -539,6 +540,8 @@ function NuevaCarga({
     return () => { vigente = false; };
   }, [api, tipo]);
   const [archivo, setArchivo] = useState<File | null>(null);
+  // URA-021 (P-P4): un archivo elegido y sin subir se descarta si se cambia de punto; el dialogo avisa.
+  useBorradorSinEmitir("carga-masiva-archivo", () => archivo !== null);
   const [encima, setEncima] = useState(false);
   const [subiendo, setSubiendo] = useState(false);
   const [problema, setProblema] = useState<string | null>(null);

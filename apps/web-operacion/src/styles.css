@@ -4593,3 +4593,19 @@ dd {
     align-items: center;
   }
 }
+
+/* ─── Punto de expedicion (PAUTAS_FRONTEND_v0.1 P-P1; PLAN_UX_RESTO_APP_v0.1 §10.7, URA-021) ─────────────── */
+
+/* El punto es el titulo de la opcion; la actividad va debajo, en dos renglones como maximo. */
+.perfil-opcion-texto strong {
+  font-size: var(--fs-16);
+}
+
+.perfil-opcion-texto .perfil-opcion-actividad {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  color: var(--color-ink);
+  font-size: var(--fs-13);
+}

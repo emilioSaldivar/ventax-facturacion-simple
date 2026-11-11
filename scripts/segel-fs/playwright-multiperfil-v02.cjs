@@ -98,7 +98,7 @@ async function login(ctx, u = usuario, c = clave) {
 
 async function elegir(page, punto) {
   await page.getByRole("heading", { name: "¿Desde qué punto vas a trabajar?" }).waitFor({ timeout: 20000 });
-  await page.locator(".perfil-eleccion .perfil-opcion").filter({ hasText: `Punto ${punto}` }).first().click();
+  await page.locator(".perfil-eleccion .perfil-opcion").filter({ hasText: `Punto 001-${punto}` }).first().click();
   await esperarSesion(page);
 }
 
@@ -129,7 +129,7 @@ async function api(metodo, ruta, token, cuerpo) {
       check("CA-23: la eleccion no muestra 'Ultimo numero'", !/[uú]ltimo n[uú]mero/i.test(textoEleccion), textoEleccion.replace(/\s+/g, " ").slice(0, 200));
       check("RN-15: la eleccion muestra el limite de 10 minutos", textoEleccion.includes("Tenés 10 minutos para elegir"));
       await page.screenshot({ path: path.join(outDir, "1440-eleccion.png"), fullPage: true });
-      await page.locator(".perfil-eleccion .perfil-opcion").filter({ hasText: "Punto 002" }).first().click();
+      await page.locator(".perfil-eleccion .perfil-opcion").filter({ hasText: "Punto 001-002" }).first().click();
       await esperarSesion(page);
       await page.locator("button.topbar-facturador--boton").click();
       const dialogo = page.getByRole("dialog", { name: "Cambiar punto de expedición" });
@@ -254,7 +254,7 @@ async function api(metodo, ruta, token, cuerpo) {
       check("CA-18: la segunda pestaña entra con el punto 002 sin pedir eleccion", (await lineaFiscal(b)).includes("Punto 002"), await lineaFiscal(b));
       await a.locator("button.topbar-facturador--boton").click();
       const dialogo = a.getByRole("dialog", { name: "Cambiar punto de expedición" });
-      await dialogo.locator(".perfil-opcion").filter({ hasText: "Punto 001" }).click();
+      await dialogo.locator(".perfil-opcion").filter({ hasText: "Punto 001-001" }).click();
       await dialogo.locator(".password-input input").fill(clave);
       await dialogo.getByRole("button", { name: "Cambiar", exact: true }).click();
       await a.locator(".aviso-perfil-banda").waitFor();
@@ -329,7 +329,7 @@ async function api(metodo, ruta, token, cuerpo) {
       check("CA-19: tras el onboarding aparece la eleccion de punto", eleccion);
       await p.screenshot({ path: path.join(outDir, "390-ca19-eleccion.png"), fullPage: true });
       if (eleccion) {
-        await p.locator(".perfil-eleccion .perfil-opcion").filter({ hasText: "Punto 002" }).first().click();
+        await p.locator(".perfil-eleccion .perfil-opcion").filter({ hasText: "Punto 001-002" }).first().click();
         await esperarSesion(p);
         check("CA-19: entra con el punto elegido", (await lineaFiscal(p)).includes("001-002"), await lineaFiscal(p));
         check("CA-19: sin desplazamiento horizontal en 390", await p.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1));

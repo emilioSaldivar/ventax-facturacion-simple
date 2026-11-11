@@ -4,7 +4,7 @@
 //
 //   ENSAYO_PASSWORD_FILE=/ruta/clave node scripts/segel-fs/playwright-ux-resto-app.cjs [caso ...]
 //
-// Sin argumentos corre todos los casos. Casos: componentes (URA-017, CA-13), api (URA-018), teclado (URA-019). URA-012 suma los de las fases 1 y 2.
+// Sin argumentos corre todos los casos. Casos: componentes (URA-017, CA-13), api (URA-018), teclado (URA-019), puntos (URA-021, CA-14). URA-012 suma los de las fases 1 y 2.
 // Escribe test-results/ux-resto-app/.
 const fs = require("node:fs");
 const path = require("node:path");
@@ -270,12 +270,113 @@ async function casoTeclado(browser) {
   }
 }
 
+// ─── URA-021: varios puntos (CA-14). El usuario de ensayo tiene 001-001 y 001-002 ─────────────────────
+const CODIGO_PERFIL = /[A-Z]{2}\d{5,}-E\d{3}-P\d{3}/;
+const DESCRIPCION_LARGA = /Perfil para la emisi[oó]n de comprobantes/i;
+
+async function entrarEligiendo(browser, ancho, alto, punto) {
+  const ctx = await browser.newContext({ viewport: { width: ancho, height: alto } });
+  const page = await ctx.newPage();
+  page.setDefaultTimeout(20000);
+  await page.goto(base, { waitUntil: "domcontentloaded" });
+  await page.locator('input[name="username"]').fill(usuario);
+  await page.locator('input[name="password"]').fill(clave);
+  await page.getByRole("button", { name: "Ingresar" }).click();
+  await page.locator(".perfil-eleccion .perfil-opcion").first().waitFor();
+  const titulos = await page.locator(".perfil-eleccion .perfil-opcion strong").allInnerTexts();
+  const texto = await page.locator(".perfil-eleccion").innerText();
+  await page.locator(".perfil-eleccion .perfil-opcion").filter({ hasText: `Punto ${punto}` }).first().click();
+  await esperarSesion(page);
+  return { ctx, page, titulos, texto };
+}
+
+async function casoPuntos(browser) {
+  // 1440: eleccion, Informacion y estado, pie del menu, Documentos con el aviso de punto distinto, carga como borrador.
+  {
+    const { ctx, page, titulos, texto } = await entrarEligiendo(browser, 1440, 900, "001-001");
+    try {
+      check("CA-14 1440 eleccion: cada opcion se titula con su punto", titulos.length >= 2 && titulos.every((t) => /^Punto \d{3}-\d{3}$/.test(t.trim())), titulos.join(" | "));
+      check("CA-14 1440 eleccion: sin la descripcion fiscal larga como titulo ni 'ultimo numero'", !titulos.some((t) => DESCRIPCION_LARGA.test(t)) && !/[uú]ltimo n[uú]mero/i.test(texto));
+      await page.screenshot({ path: path.join(outDir, "1440-puntos-informacion.png"), fullPage: true });
+      await abrirVista(page, "Información y estado");
+      const info = await page.locator("main").innerText();
+      const h1 = await page.locator("main h1").first().innerText();
+      check("CA-14 1440 Información y estado: sin el codigo del perfil", !CODIGO_PERFIL.test(info), info.match(CODIGO_PERFIL)?.[0] ?? "");
+      check("CA-14 1440 Información y estado: el titulo no es la descripcion fiscal", !DESCRIPCION_LARGA.test(h1), h1);
+      check("CA-14 1440 Información y estado: dice el punto activo", info.includes("Punto 001-001"));
+      const pie = await page.locator(".side-nav-pie").innerText();
+      check("CA-14 1440 pie del menu: el punto y no 'ultimo numero'", pie.includes("Punto 001-001") && !/n[uú]mero/i.test(pie), pie);
+
+      // Documentos: una factura del otro punto, nota de credito desde el menu de la fila.
+      await abrirVista(page, "Documentos");
+      const fila = page.locator("table.documents-tabla tbody tr", { has: page.locator("td.documents-tabla-punto", { hasText: "001-002" }) }).filter({ hasText: "Factura emitida" }).first();
+      await fila.waitFor();
+      await fila.locator(".menu-fila > button").click();
+      await page.getByRole("menuitem", { name: "Nota de crédito" }).click();
+      const modal = page.locator('[role="dialog"]#reason-modal-title, section[role="dialog"]').first();
+      await modal.waitFor();
+      const aviso = await modal.locator(".aviso").innerText().catch(() => "");
+      check("CA-14 1440 Documentos: el modal de nota de credito avisa que la factura es de otro punto", aviso.includes("Punto 001-002") && aviso.includes("Punto 001-001"), aviso);
+      await page.screenshot({ path: path.join(outDir, "1440-puntos-nc-otro-punto.png") });
+      await modal.getByRole("button", { name: /Cancelar|Volver|Cerrar/ }).first().click();
+
+      // Carga masiva: un archivo elegido y sin subir es un borrador para el cambio de punto (P-P4).
+      await page.getByRole("button", { name: "Carga masiva" }).click();
+      await page.getByRole("button", { name: "Nueva carga" }).click();
+      await page.getByLabel("Archivo de la carga").setInputFiles({ name: "prueba-ura021.csv", mimeType: "text/csv", buffer: Buffer.from("tipo_documento\n") });
+      await page.locator("button.topbar-facturador--boton").click();
+      const dialogo = page.getByRole("dialog", { name: "Cambiar punto de expedición" });
+      await dialogo.waitFor();
+      check("CA-14 1440 carga masiva: con un archivo elegido, el cambio ofrece 'Descartar y cambiar'", (await dialogo.innerText()).includes("Descartar y cambiar"));
+      const opciones = await dialogo.locator(".perfil-opcion strong").allInnerTexts();
+      check("CA-14 1440 dialogo: opciones tituladas con el punto", opciones.length >= 2 && opciones.every((t) => /^Punto \d{3}-\d{3}$/.test(t.trim())), opciones.join(" | "));
+      await dialogo.getByRole("button", { name: "Cancelar" }).click();
+    } finally {
+      await ctx.close();
+    }
+  }
+  // 390: menu de celular, tarjetas y ficha con el numero completo, candidatas de nota de credito con su punto.
+  {
+    const { ctx, page } = await entrarEligiendo(browser, 390, 844, "001-001");
+    try {
+      await page.getByRole("button", { name: "Abrir menu" }).click();
+      const menu = page.locator("nav.mobile-menu");
+      await menu.waitFor();
+      const cabecera = await menu.locator("div").first().innerText();
+      check("CA-14 390 menu: la cabecera dice el punto y no la descripcion fiscal", cabecera.includes("Punto 001-001") && !DESCRIPCION_LARGA.test(cabecera), cabecera.replace(/\s+/g, " "));
+      await page.screenshot({ path: path.join(outDir, "390-puntos-menu.png") });
+      await menu.getByRole("button", { name: /Cambiar punto de expedición/ }).click();
+      const dialogo = page.getByRole("dialog", { name: "Cambiar punto de expedición" });
+      check("CA-14 390 menu: 'Cambiar punto de expedición' abre el dialogo", await dialogo.waitFor({ timeout: 8000 }).then(() => true, () => false));
+      await dialogo.getByRole("button", { name: "Cancelar" }).click();
+
+      await abrirVista(page, "Documentos");
+      await page.locator(".document-row").first().waitFor();
+      const numeros = await page.locator(".document-row strong").allInnerTexts();
+      const conPunto = numeros.filter((t) => /\d{3}-\d{3}-\d{7}/.test(t));
+      check("CA-14 390 Documentos: las tarjetas muestran el numero con su punto", conPunto.length > 0 && conPunto.length === numeros.filter((t) => /\d{7}/.test(t)).length, numeros.slice(0, 3).join(" | "));
+      await page.locator(".document-row-main, button.document-row").first().click();
+      const ficha = await page.locator(".documents-view").innerText();
+      check("CA-14 390 ficha: numero con su punto", /Número \d{3}-\d{3}-\d{7}/.test(ficha), (ficha.match(/Número [^\n]*/) ?? [""])[0]);
+
+      await abrirVista(page, "Devolver factura");
+      await page.locator("button.document-row").first().waitFor();
+      const candidatas = await page.locator("button.document-row strong").allInnerTexts();
+      check("CA-14 390 Notas de crédito: cada factura candidata dice su punto", candidatas.some((t) => /^\d{3}-\d{3}-\d{7}$/.test(t.trim())), candidatas.slice(0, 4).join(" | "));
+      await page.screenshot({ path: path.join(outDir, "390-puntos-candidatas.png"), fullPage: true });
+    } finally {
+      await ctx.close();
+    }
+  }
+}
+
 (async () => {
   const browser = await chromium.launch();
   try {
     if (corre("componentes")) await casoComponentes(browser);
     if (corre("api")) await casoApi(browser);
     if (corre("teclado")) await casoTeclado(browser);
+    if (corre("puntos")) await casoPuntos(browser);
   } catch (e) {
     check("el guion termino sin excepciones", false, String(e));
   } finally {

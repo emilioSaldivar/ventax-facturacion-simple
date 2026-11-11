@@ -12,6 +12,9 @@ import { EstadoVacio } from "./components/EstadoVacio";
 import { Icono, type NombreIcono } from "./components/Icono";
 import { MenuFila } from "./components/MenuFila";
 import { PastillaEstado } from "./components/PastillaEstado";
+import { AvisoPuntoDistinto } from "./components/AvisoPuntoDistinto";
+import { hayBorradorSinEmitir, useBorradorSinEmitir } from "./lib/borradores";
+import { actividadPunto, etiquetaPunto, nombrePunto, numeroConPunto } from "./lib/punto";
 import { esNotaSinConfirmar, estadoDocumento, estadoRecibo, etiquetaCondicionVenta, formatDocumentoTipo } from "./lib/estados";
 import {
   ApiClientError,
@@ -29,29 +32,6 @@ import { ApiProvider, useApi } from "./api/useApi";
 import type { AuthResponse, PerfilDisponible, UserSummary } from "./tipos";
 
 const ACCESS_TOKEN_STORAGE_KEY = "ventax_factura_access_token";
-
-// RN-06: cada editor registra si tiene un documento cargado y sin emitir.
-const _borradores = new Map<string, () => boolean>();
-
-function useBorradorSinEmitir(nombre: string, tieneDatos: () => boolean): void {
-  useEffect(() => {
-    _borradores.set(nombre, tieneDatos);
-    return () => {
-      if (_borradores.get(nombre) === tieneDatos) _borradores.delete(nombre);
-    };
-  });
-}
-
-function hayBorradorSinEmitir(): boolean {
-  for (const tieneDatos of _borradores.values()) {
-    if (tieneDatos()) return true;
-  }
-  return false;
-}
-
-function etiquetaPunto(perfil: { establecimiento: string; punto_expedicion: string }): string {
-  return `${perfil.establecimiento}-${perfil.punto_expedicion}`;
-}
 
 type ViewState = "checking-session" | "login" | "loading-context" | "operacion" | "onboarding" | "select-perfil";
 type OperationView = "status" | "invoice" | "credit-note" | "documents" | "catalog" | "clients" | "notas" | "recibos";
@@ -1022,7 +1002,7 @@ function App() {
     const elegido = perfilesSesion.find((p) => p.operacion_config_id === operacionConfigId);
     await elegirPerfil(operacionConfigId, password);
     if (elegido) {
-      setAvisoPerfil(`Ahora estás facturando por ${etiquetaPunto(elegido)} · ${elegido.titulo_operativo}`);
+      setAvisoPerfil(`Ahora estás facturando por el ${[nombrePunto(elegido), actividadPunto(elegido)].filter(Boolean).join(" · ")}`);
     }
   }
 
@@ -1180,10 +1160,16 @@ function LoginScreen({
 function PerfilOpcionContenido({ perfil }: { perfil: PerfilDisponible }) {
   return (
     <>
+      {/* URA-021 (P-P1, H-02): el punto es el titulo; la actividad, en dos renglones como maximo, va debajo. */}
       <span className="perfil-opcion-texto">
-        <strong>{perfil.titulo_operativo}</strong>
+        <strong>{nombrePunto(perfil)}</strong>
+        {actividadPunto(perfil) ? (
+          <small className="perfil-opcion-actividad" title={actividadPunto(perfil)}>
+            {actividadPunto(perfil)}
+          </small>
+        ) : null}
         <small>
-          Establecimiento {perfil.establecimiento} · Punto {perfil.punto_expedicion} · Timbrado {perfil.timbrado}
+          Establecimiento {perfil.establecimiento} · Timbrado {perfil.timbrado}
         </small>
         {/* SPEC_MULTIPERFIL_USUARIO_v0.2 D-13: sin "Ultimo numero" (es la referencia local, no el numerador de FE). */}
         {perfil.numeracion_facturas === "CLIENTE" ? <small className="perfil-opcion-numero">Solo carga de archivo</small> : null}
@@ -1269,7 +1255,7 @@ function SeleccionPerfilScreen({
         <div className="perfil-lista" role="list">
           {perfiles.map((perfil) => (
             <button
-              aria-label={`Elegir ${perfil.titulo_operativo} ${etiquetaPunto(perfil)}`}
+              aria-label={`Elegir ${nombrePunto(perfil)} ${actividadPunto(perfil)}`.trim()}
               className="perfil-opcion"
               disabled={eligiendo !== null || vencida}
               key={perfil.operacion_config_id}
@@ -1962,10 +1948,11 @@ function OperationHome({
       {menuOpen && !esEscritorio ? (
         <div className="menu-scrim" onClick={() => setMenuOpen(false)} role="presentation">
           <nav className="mobile-menu" aria-label="Navegación principal" onClick={(event) => event.stopPropagation()}>
+            {/* URA-021 (H-06): operador y punto activo, sin la descripcion fiscal del perfil. */}
             <div>
-              <p className="eyebrow">Menu</p>
-              <h2>Operación</h2>
-              <p className="muted">{getOperationalTitle(context)}</p>
+              <p className="eyebrow">Menú</p>
+              <h2>{operadorNombre || "Operación"}</h2>
+              <p className="muted">{fc ? [nombrePunto(fc), actividadPunto(fc)].filter(Boolean).join(" · ") : getOperationalTitle(context)}</p>
             </div>
             <div className="menu-list">
               {menuSections.map((section) => (
@@ -1991,6 +1978,21 @@ function OperationHome({
                 </div>
               ))}
             </div>
+            {/* URA-021 (SPEC_UX_RESTO_APP §F.1): cambiar de punto desde el celular, solo con mas de uno. */}
+            {variosPerfiles ? (
+              <button
+                className="menu-item menu-cambiar-punto"
+                onClick={() => {
+                  setMenuOpen(false);
+                  abrirCambioPerfil();
+                }}
+                type="button"
+              >
+                <span className="menu-item-icon"><Icono nombre="punto" tamano={20} /></span>
+                <span>Cambiar punto de expedición</span>
+                <small>{fc ? `Ahora: ${nombrePunto(fc)}` : ""}</small>
+              </button>
+            ) : null}
             <button className="menu-exit-action wide" onClick={() => void onLogout()} type="button">
               <Icono nombre="salir" /> Salir
             </button>
@@ -2025,7 +2027,8 @@ function OperationHome({
             <span className="side-nav-punto" aria-hidden="true" />
             <span>
               {readiness?.ready ? "Listo para facturar" : "Revisar estado"}
-              {!numeracionDelCliente && context?.fiscal_context.documento_nro ? ` · último número ${context.fiscal_context.documento_nro}` : ""}
+              {/* URA-021 (H-04, P-P6): el punto activo; documento_nro es una referencia local, no el ultimo numero. */}
+              {context ? ` · ${nombrePunto(context.fiscal_context)}` : ""}
             </span>
           </div>
         </nav>
@@ -2069,26 +2072,22 @@ function OperationHome({
       {operationView === "invoice" ? (
         <InvoiceEditor
           key={invoiceInitialDraft?.corrige_numero ?? "factura"}
-         
           canEmit={canEmit}
           context={context}
           clientePrefillRequest={invoiceClientePrefill}
           initialDraft={invoiceInitialDraft}
           readiness={readiness}
-         
           onBack={() => { setInvoiceInitialDraft(null); goTo("status"); }}
           onVerDocumentos={() => { setInvoiceInitialDraft(null); goTo("documents"); }}
         />
       ) : operationView === "credit-note" ? (
         <CreditNoteView
-         
           context={context}
-         
+          mostrarPunto={variosPerfiles}
           onBack={() => goTo("status")}
         />
       ) : operationView === "documents" ? (
         <DocumentsView
-         
          
           onBack={() => goTo("invoice")}
           onGoTo={goTo}
@@ -2099,7 +2098,6 @@ function OperationHome({
         />
       ) : operationView === "clients" ? (
         <ClientesAgendaView
-         
           onBack={() => goTo("invoice")}
           onUseCliente={useClienteFromAgenda}
         />
@@ -2107,7 +2105,6 @@ function OperationHome({
         <CatalogView onBack={() => goTo("invoice")} />
       ) : operationView === "notas" ? (
         <NotasView
-         
          
           onBack={() => goTo("invoice")}
           onConvertirEnFactura={(draft) => { setInvoiceInitialDraft(draft); goTo("invoice"); }}
@@ -2122,7 +2119,6 @@ function OperationHome({
           readiness={readiness}
           user={user}
           onGoTo={goTo}
-          perfilActivo={perfilActivo}
           variosPerfiles={variosPerfiles}
           avisoPerfil={avisoPerfil}
           onCerrarAvisoPerfil={onCerrarAvisoPerfil}
@@ -2152,7 +2148,6 @@ function StatusView({
   readiness,
   user,
   onGoTo,
-  perfilActivo,
   variosPerfiles,
   avisoPerfil,
   onCerrarAvisoPerfil,
@@ -2164,7 +2159,6 @@ function StatusView({
   readiness: ReadinessResponse | null;
   user: UserSummary | null;
   onGoTo: (view: OperationView) => void;
-  perfilActivo?: PerfilDisponible | null;
   variosPerfiles?: boolean;
   avisoPerfil?: string | null;
   onCerrarAvisoPerfil?: () => void;
@@ -2187,14 +2181,15 @@ function StatusView({
       <section className="facturador-band" aria-label="Contexto operativo">
         <div>
           <p className="eyebrow">Facturador</p>
-          <h1>{getOperationalTitle(context)}</h1>
+          {/* URA-021 (H-01): el titulo es el facturador, no la descripcion fiscal del perfil. */}
+          <h1>{context ? firstText(context.facturador.nombre_fantasia, context.facturador.razon_social) ?? getOperationalTitle(context) : getOperationalTitle(context)}</h1>
           <p className="muted">
             {context ? `${context.facturador.razon_social} · RUC ${context.facturador.ruc}` : "Configuración operativa incompleta"}
           </p>
           {context ? (
             <p className="punto-activo">
-              Punto de expedición: <strong>{context.fiscal_context.establecimiento}-{context.fiscal_context.punto_expedicion}</strong>
-              {perfilActivo ? ` · ${perfilActivo.titulo_operativo}` : ""}
+              Punto de expedición: <strong>{nombrePunto(context.fiscal_context)}</strong>
+              {actividadPunto(context.fiscal_context) ? ` · ${actividadPunto(context.fiscal_context)}` : ""}
               {variosPerfiles ? (
                 <button className="enlace-accion" onClick={onCambiarPerfil} type="button">
                   Cambiar punto de expedición
@@ -2212,17 +2207,10 @@ function StatusView({
           <p className="eyebrow">Sesión</p>
           <h2>{user?.display_name ?? user?.username ?? "Operador"}</h2>
           <dl>
+            {/* URA-021 (H-03): sin el codigo del perfil; establecimiento y punto en un solo dato. */}
             <div>
-              <dt>Establecimiento</dt>
-              <dd>{context?.fiscal_context.establecimiento ?? "-"}</dd>
-            </div>
-            <div>
-              <dt>Punto</dt>
-              <dd>{context?.fiscal_context.punto_expedicion ?? "-"}</dd>
-            </div>
-            <div>
-              <dt>Perfil</dt>
-              <dd>{formatPerfilOperativo(context)}</dd>
+              <dt>Punto de expedición</dt>
+              <dd>{context ? nombrePunto(context.fiscal_context) : "-"}</dd>
             </div>
             <div>
               <dt>Actividad</dt>
@@ -2350,6 +2338,10 @@ function DocumentsView({
     reintentar?: boolean;
   } | null>(null);
   const [reasonDraft, setReasonDraft] = useState("");
+  // URA-021 (P-P4, H-08): un motivo escrito en el modal de nota de credito es un borrador para el cambio de punto.
+  useBorradorSinEmitir("nota-credito-documentos", () =>
+    Boolean(reasonModal && (reasonModal.action === "CREDIT_NOTE_DETAIL" || reasonModal.action === "CREDIT_NOTE_LIST") && reasonDraft.trim())
+  );
   const [reasonError, setReasonError] = useState<string | null>(null);
   const [notaCreditoPopup, setNotaCreditoPopup] = useState<DocumentoResponse | null>(null);
   // SPEC_NOTA_CREDITO_PARCIAL_v0.1: modo de la nota y cantidades a acreditar por linea.
@@ -3250,7 +3242,7 @@ function DocumentsView({
             <article className="document-row document-row-rich" key={documento.id}>
               <button className="document-row-main" onClick={() => void openDetail(documento.id)} type="button">
                 <span>
-                  <strong title={documento.accion_detalle?.titulo}>{`${getDocumentoAccionIcon(documento)} ${formatDocumentoTipo(documento.tipo)} ${documento.numero_fiscal ?? "pendiente"}`}</strong>
+                  <strong title={documento.accion_detalle?.titulo}>{`${getDocumentoAccionIcon(documento)} ${formatDocumentoTipo(documento.tipo)} ${numeroConPunto(documento, mostrarPunto) ?? "pendiente"}`}</strong>
                   {documento.carga ? (
                     <span className="carga-marca">
                       <button
@@ -3288,7 +3280,7 @@ function DocumentsView({
               type="button"
             >
               <span>
-                <strong title={documento.accion_detalle?.titulo}>{`${getDocumentoAccionIcon(documento)} ${documento.numero_fiscal ?? "Número pendiente"}`}</strong>
+                <strong title={documento.accion_detalle?.titulo}>{`${getDocumentoAccionIcon(documento)} ${numeroConPunto(documento, mostrarPunto) ?? "Número pendiente"}`}</strong>
                 <small>{documento.cliente.razon_social}</small>
                 {formatEmisor(documento) ? <small className="document-row-emisor">Emitio {formatEmisor(documento)}</small> : null}
               </span>
@@ -3312,7 +3304,7 @@ function DocumentsView({
                 <div>
                   <p className="eyebrow">Documento</p>
                   <h3>{formatEstadoDocumento(selected)}</h3>
-                  <p className="muted">{formatDocumentoTipo(selected.tipo)} · Número {selected.numero_fiscal ?? "pendiente"}</p>
+                  <p className="muted">{formatDocumentoTipo(selected.tipo)} · Número {numeroConPunto(selected, mostrarPunto) ?? "pendiente"}</p>
                 </div>
                 <span className={selected.estado === "EMITIDA" ? "status-pill ready" : "status-pill blocked"}>
                   {formatEstadoDocumento(selected)}
@@ -3823,6 +3815,12 @@ function DocumentsView({
                 value={reasonDraft}
               />
             </label>
+            {reasonModal.action === "CREDIT_NOTE_DETAIL" || reasonModal.action === "CREDIT_NOTE_LIST" ? (
+              <AvisoPuntoDistinto
+                perfilDocumento={(documents.find((d) => d.id === reasonModal.documentoId) ?? (selected?.id === reasonModal.documentoId ? selected : null))?.perfil_emision}
+                puntoActivo={context?.fiscal_context}
+              />
+            ) : null}
             {reasonError ? <p className="form-error">{reasonError}</p> : null}
             <div className="result-actions">
               <button className="secondary-action" disabled={actionLoading} onClick={closeReasonModal} type="button">
@@ -4325,9 +4323,11 @@ function ClientesAgendaView({
 
 function CreditNoteView({
   context,
+  mostrarPunto = false,
   onBack
 }: {
   context?: OperationalContextResponse | null;
+  mostrarPunto?: boolean;
   onBack: () => void;
 }) {
   const api = useApi();
@@ -4438,7 +4438,8 @@ function CreditNoteView({
               type="button"
             >
               <span>
-                <strong>{candidate.documento.numero_fiscal ?? "Número pendiente"}</strong>
+                {/* URA-021 (H-08): con varios puntos, cada factura dice de que punto es. */}
+                <strong>{numeroConPunto(candidate.documento, mostrarPunto) ?? "Número pendiente"}</strong>
                 <small>{candidate.documento.cliente.razon_social}</small>
               </span>
               <span>
@@ -4476,13 +4477,7 @@ function CreditNoteView({
               </div>
               {!selected.elegible ? <p className="editor-alert blocked">{selected.motivo_no_elegible}</p> : null}
               {/* SPEC_MULTIPERFIL_USUARIO_v0.1 RN-05 / D-1: la NC sale por el punto activo; se avisa si difiere. */}
-              {selected.documento.perfil_emision && context &&
-              etiquetaPunto(selected.documento.perfil_emision) !== etiquetaPunto(context.fiscal_context) ? (
-                <p className="aviso-perfil">
-                  La factura original se emitio por {etiquetaPunto(selected.documento.perfil_emision)}; la nota saldra por{" "}
-                  {etiquetaPunto(context.fiscal_context)} (punto activo).
-                </p>
-              ) : null}
+              <AvisoPuntoDistinto perfilDocumento={selected.documento.perfil_emision} puntoActivo={context?.fiscal_context} />
               <CampoFormulario className="credit-note-motivo" etiqueta="Motivo">
                 <textarea onChange={(event) => setMotivo(event.target.value)} rows={4} value={motivo} />
               </CampoFormulario>
@@ -7396,16 +7391,6 @@ function getOperationalTitle(context: OperationalContextResponse | null): string
       context?.facturador.razon_social
     ) ?? "Sin facturador asignado"
   );
-}
-
-function formatPerfilOperativo(context: OperationalContextResponse | null): string {
-  if (!context) {
-    return "-";
-  }
-
-  return context.fiscal_context.perfil_emision_alias
-    ? `${context.fiscal_context.perfil_emision_codigo} · ${context.fiscal_context.perfil_emision_alias}`
-    : context.fiscal_context.perfil_emision_codigo;
 }
 
 function formatActividadOperativa(context: OperationalContextResponse | null): string {

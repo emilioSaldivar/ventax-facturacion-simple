@@ -5,7 +5,7 @@ export type NombreIcono =
   | "factura" | "agenda" | "documentos" | "notas" | "recibos" | "catalogo" | "devolver" | "estado" | "menu" | "salir"
   | "buscar" | "mas" | "papelera" | "guardar" | "lapiz" | "tilde" | "reloj" | "alerta" | "whatsapp" | "copiar"
   | "compartir" | "pdf" | "chevron-abajo" | "chevron-derecha" | "chevron-izquierda"
-  | "mas-opciones" | "ojo" | "ojo-tachado";
+  | "mas-opciones" | "ojo" | "ojo-tachado" | "punto";
 
 const TRAZOS_ICONO: Record<NombreIcono, React.ReactNode> = {
   factura: <><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6" /><path d="M12 18v-6" /><path d="M9 15h6" /></>,
@@ -45,6 +45,13 @@ const TRAZOS_ICONO: Record<NombreIcono, React.ReactNode> = {
     <>
       <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z" />
       <circle cx="12" cy="12" r="3" />
+    </>
+  ),
+  // URA-021: marcador de lugar para el punto de expedicion.
+  punto: (
+    <>
+      <path d="M12 21s7-6.5 7-12a7 7 0 0 0-14 0c0 5.5 7 12 7 12z" />
+      <circle cx="12" cy="9" r="2.5" />
     </>
   ),
   "ojo-tachado": (
