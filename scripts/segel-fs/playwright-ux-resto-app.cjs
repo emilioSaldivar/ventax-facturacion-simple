@@ -589,9 +589,9 @@ async function casoEstado(browser) {
         const columnas = await page.locator(".estado-grilla").evaluate((e) => getComputedStyle(e).gridTemplateColumns.split(" ").length);
         check("CA-07 1440: dos columnas (facturador y estado)", columnas === 2, String(columnas));
       }
+      await page.screenshot({ path: path.join(outDir, `${ancho}-estado.png`), fullPage: true });
       await tarjeta.getByRole("button", { name: /Nota de crédito/ }).click();
       check(`CA-07 ${ancho}: desde la tarjeta se abre Notas de crédito`, await page.getByRole("heading", { name: "Notas de crédito" }).waitFor({ timeout: 10000 }).then(() => true, () => false));
-      await page.screenshot({ path: path.join(outDir, `${ancho}-estado.png`), fullPage: true });
     } finally {
       await ctx.close();
     }
