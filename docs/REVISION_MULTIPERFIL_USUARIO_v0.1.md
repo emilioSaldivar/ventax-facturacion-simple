@@ -1,6 +1,6 @@
 # REVISION De La Implementacion Un Usuario Con Varios Perfiles De Emision v0.1
 
-**Fecha:** 2026-11-10 · **Rama:** `feat/identidad-segel` · **Alcance revisado:** commits `0b24e51` a `e09d3d2` (52 archivos, +3295 / -329), contra `docs/SPEC_MULTIPERFIL_USUARIO_v0.1.md`, `docs/PLAN_MULTIPERFIL_USUARIO_v0.1.md` y `docs/TASKS_MULTIPERFIL_USUARIO_v0.1.md`. **Solo documenta.** No cambia codigo. Cada hallazgo se refina en SPEC/PLAN/TASKS antes de tocar nada.
+**Fecha:** 2026-11-10 · **Rama:** `feat/identidad-segel` · **Alcance revisado:** commits `0b24e51` a `e09d3d2` (52 archivos, +3295 / -329), contra `docs/SPEC_MULTIPERFIL_USUARIO_v0.1.md`, `docs/PLAN_MULTIPERFIL_USUARIO_v0.1.md` y `docs/TASKS_MULTIPERFIL_USUARIO_v0.1.md`. **Solo documenta.** No cambia codigo. Cada hallazgo se refino en `SPEC/PLAN/TASKS_MULTIPERFIL_USUARIO_v0.2` y **se cerro el 2026-11-10**: F-1, F-2, F-3, F-5, M-1, M-2, M-3, M-7, M-8 en `3d6c6e3`; F-4 en `8193fd1`; M-4, M-5 y M-6 (pruebas) en `43255a8`. Evidencia en `TASKS_MULTIPERFIL_USUARIO_v0.2.md`. Las DEUDAS D-1 a D-3 siguen abiertas; D-4 quedo resuelta con F-1.
 
 ## 1. Metodo
 
