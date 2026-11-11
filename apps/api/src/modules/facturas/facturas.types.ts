@@ -1,7 +1,7 @@
 import type { AccionSugerida } from "./sifen-causa-catalogo";
 import type { FiscalCancelStatus } from "../fiscal-gateway/fiscal-gateway.types";
 import type { TaxCalculatedLine, TaxTotals, TipoIva } from "@facturacion-simple/shared";
-import type { ClienteNaturaleza, DocumentoIdentidadTipo } from "../clientes/clientes.types";
+import { documentoIdentidadTipos, type ClienteNaturaleza } from "../clientes/clientes.types";
 import type {
   FiscalDeliveryMode,
   FiscalEmitFacturaRequest,
@@ -12,12 +12,24 @@ import type {
   FiscalEnvioModo
 } from "../fiscal-gateway/fiscal-gateway.types";
 
+/**
+ * SPEC_COMPRADOR_INNOMINADO_v0.1: la factura admite ademas el comprador sin nombre (MT150 D208 = 5).
+ * La agenda no lo admite: `documentoIdentidadTipos` no cambia.
+ */
+export const facturaDocumentoTipos = [...documentoIdentidadTipos, "INNOMINADO"] as const;
+export type FacturaDocumentoTipo = (typeof facturaDocumentoTipos)[number];
+/** RN-03/RN-05: documento y nombre que FE documenta para el innominado. */
+export const INNOMINADO_DOCUMENTO = "0";
+export const INNOMINADO_NOMBRE = "Sin Nombre";
+/** RN-04: NT024, SIFEN 1321; FE responde 422 desde este total en guaranies. */
+export const TOPE_INNOMINADO_GS = 7_000_000;
+
 export const condicionesVenta = ["CONTADO", "CREDITO"] as const;
 export type CondicionVenta = (typeof condicionesVenta)[number];
 
 export interface FacturaClienteInput {
   cliente_id?: string | null;
-  documento_tipo: DocumentoIdentidadTipo;
+  documento_tipo: FacturaDocumentoTipo;
   documento: string;
   razon_social: string;
   direccion?: string | null;

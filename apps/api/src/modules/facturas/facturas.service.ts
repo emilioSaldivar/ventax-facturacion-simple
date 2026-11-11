@@ -54,11 +54,13 @@ import type {
   NotaCreditoCandidateListResponse,
   ReconciliacionFiscalResponse
 } from "./facturas.types";
+import { INNOMINADO_DOCUMENTO, INNOMINADO_NOMBRE, TOPE_INNOMINADO_GS } from "./facturas.types";
 
 export function previewFactura(
   _context: OperationalContextResponse,
-  input: FacturaPreviewInput
+  rawInput: FacturaPreviewInput
 ): FacturaPreviewResponse {
+  const input = normalizarClienteInnominado(rawInput);
   validateCliente(input);
 
   const taxLines: TaxInputLine[] = input.items.map((item) => {
@@ -84,11 +86,16 @@ export function previewFactura(
       catalogo_item_id: input.items[index]?.catalogo_item_id?.trim() || null
     }));
 
+    validarTopeInnominado(input, calculated.totals.total);
+
     return {
       items,
       totals: calculated.totals
     };
   } catch (error) {
+    if (error instanceof HttpError) {
+      throw error;
+    }
     if (error instanceof Error) {
       throw new HttpError(400, "VALIDATION_ERROR", error.message);
     }
@@ -106,11 +113,44 @@ function validateCliente(input: FacturaPreviewInput): void {
   }
 }
 
+/** SPEC_COMPRADOR_INNOMINADO_v0.1, RN-03: documento y nombre los fija el servidor; sin agenda ni naturaleza. */
+export function normalizarClienteInnominado(input: FacturaPreviewInput): FacturaPreviewInput {
+  if (input.cliente.documento_tipo !== "INNOMINADO") {
+    return input;
+  }
+  return {
+    ...input,
+    cliente: {
+      ...input.cliente,
+      cliente_id: null,
+      documento: INNOMINADO_DOCUMENTO,
+      razon_social: INNOMINADO_NOMBRE,
+      naturaleza: null
+    }
+  };
+}
+
+export const MENSAJE_TOPE_INNOMINADO =
+  "Una factura sin nombre tiene que ser menor a Gs. 7.000.000. Identificá al comprador con su RUC o CI.";
+
+/** RN-04: NT024 / SIFEN 1321. Fuera de PYG el tope es sobre el total por el tipo de cambio. */
+function validarTopeInnominado(input: FacturaPreviewInput, total: number): void {
+  if (input.cliente.documento_tipo !== "INNOMINADO") {
+    return;
+  }
+  const moneda = input.moneda ?? "PYG";
+  const totalGs = moneda === "PYG" ? total : Math.round(total * Number(input.tipo_cambio ?? 0));
+  if (totalGs >= TOPE_INNOMINADO_GS) {
+    throw new HttpError(400, "VALIDATION_ERROR", MENSAJE_TOPE_INNOMINADO, { reason: "INNOMINADO_SOBRE_TOPE", tope: TOPE_INNOMINADO_GS, total_gs: totalGs });
+  }
+}
+
 async function resolveFacturaInputCliente(
   context: OperationalContextResponse,
-  input: FacturaPreviewInput,
+  rawInput: FacturaPreviewInput,
   clienteRepository?: ClienteRepository
 ): Promise<FacturaPreviewInput> {
+  const input = normalizarClienteInnominado(rawInput);
   const clienteId = input.cliente.cliente_id?.trim();
 
   if (!clienteId || !clienteRepository) {
@@ -221,6 +261,9 @@ function getNotaCreditoIneligibility(documento: DocumentoResponse, creditedFactu
   if (documento.estado !== "EMITIDA") {
     return "La factura debe estar emitida.";
   }
+  if (esFacturaInnominada(documento)) {
+    return MENSAJE_NOTA_CREDITO_INNOMINADA;
+  }
   if (!documento.cdc) {
     return "La factura no tiene CDC confirmado.";
   }
@@ -234,6 +277,20 @@ function getNotaCreditoIneligibility(documento: DocumentoResponse, creditedFactu
     return MENSAJE_NOTA_CREDITO_MONEDA_EXTRANJERA;
   }
   return null;
+}
+
+/** SPEC_COMPRADOR_INNOMINADO_v0.1, RN-06: SIFEN rechaza con 1331 la NC sobre una factura sin nombre (FE 422). */
+export const MENSAJE_NOTA_CREDITO_INNOMINADA =
+  "SIFEN no admite nota de crédito de una factura sin nombre. Para anularla, usá Anular dentro de las 48 horas.";
+
+export function esFacturaInnominada(documento: Pick<DocumentoResponse, "cliente">): boolean {
+  return documento.cliente?.documento_tipo === "INNOMINADO";
+}
+
+function rechazarNotaCreditoInnominada(documento: Pick<DocumentoResponse, "cliente">): void {
+  if (esFacturaInnominada(documento)) {
+    throw new HttpError(409, "CONFLICT", MENSAJE_NOTA_CREDITO_INNOMINADA, { reason: "NOTA_CREDITO_INNOMINADA" });
+  }
 }
 
 /** SPEC_TOTALES_FE_EN_CARGA_v0.1, RN-08: FE no admite la nota total por referencia con anticipo. */
@@ -1210,6 +1267,7 @@ export async function emitNotaCreditoTotal(
   if (original.tipo !== "FACTURA" || original.estado !== "EMITIDA" || !original.cdc) {
     throw new HttpError(409, "CONFLICT", "Factura no elegible para nota de credito.");
   }
+  rechazarNotaCreditoInnominada(original);
   if (original.moneda && original.moneda !== "PYG" && !env.FE_NC_MONEDA_EXTRANJERA) {
     // D-1: FE anterior a rc4.27 saldria en guaranies con los precios en la moneda de la factura y consumiria el numero.
     throw new HttpError(409, "CONFLICT", MENSAJE_NOTA_CREDITO_MONEDA_EXTRANJERA, { reason: "NOTA_CREDITO_MONEDA_EXTRANJERA" });
@@ -1291,6 +1349,7 @@ export async function emitNotaCreditoParcial(
   if (original.tipo !== "FACTURA" || original.estado !== "EMITIDA" || !original.cdc) {
     throw new HttpError(409, "CONFLICT", "Factura no elegible para nota de credito.");
   }
+  rechazarNotaCreditoInnominada(original);
   if (original.moneda && original.moneda !== "PYG" && !env.FE_NC_MONEDA_EXTRANJERA) {
     // RN-04 (D-4): misma bandera que la total.
     throw new HttpError(409, "CONFLICT", MENSAJE_NOTA_CREDITO_MONEDA_EXTRANJERA, { reason: "NOTA_CREDITO_MONEDA_EXTRANJERA" });

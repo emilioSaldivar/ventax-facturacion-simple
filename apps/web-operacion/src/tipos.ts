@@ -57,6 +57,8 @@ export type CondicionVenta = "CONTADO" | "CREDITO";
 export type TipoTransaccionServicio = 1 | 2 | 3;
 
 export type DocumentoIdentidadTipo = "RUC" | "CI" | "PASAPORTE" | "CEDULA_EXTRANJERA" | "NO_ESPECIFICADO";
+/** SPEC_COMPRADOR_INNOMINADO_v0.1: la factura admite ademas el comprador sin nombre; la agenda no. */
+export type FacturaDocumentoTipo = DocumentoIdentidadTipo | "INNOMINADO";
 
 export type TipoIva = "IVA_10" | "IVA_5" | "EXENTA";
 
@@ -128,7 +130,7 @@ export type ClienteNaturaleza = "FISICA" | "JURIDICA";
 
 export interface FacturaClienteInput {
   cliente_id?: string | null;
-  documento_tipo: DocumentoIdentidadTipo;
+  documento_tipo: FacturaDocumentoTipo;
   documento: string;
   razon_social: string;
   direccion?: string | null;

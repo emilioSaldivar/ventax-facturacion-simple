@@ -276,6 +276,37 @@ describe("fiscal gateway", () => {
     });
   });
 
+  it("SPEC_COMPRADOR_INNOMINADO_v0.1 RN-05: el innominado va a FE como INNOMINADO / 0 / Sin Nombre, sin dv ni naturaleza", async () => {
+    const calls: Array<{ payload: Record<string, unknown> }> = [];
+    const gateway = new RealFiscalGateway({
+      mode: "real",
+      baseUrl: "https://fe-api.ventax.app/fcws",
+      apiKey: "secret",
+      timeoutMs: 20000,
+      environment: "test",
+    });
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init: RequestInit) => {
+        calls.push({ payload: JSON.parse(String(init.body)) as Record<string, unknown> });
+        return new Response(
+          JSON.stringify({ document_id: "doc-innominado", cdc: "K".repeat(44), nro_factura: "001-002-0000014", status: "APPROVED" }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        );
+      })
+    );
+
+    await gateway.emitFactura({
+      ...request,
+      cliente: { ...request.cliente, documento_tipo: "INNOMINADO", documento: "0", razon_social: "Sin Nombre", naturaleza: null }
+    });
+
+    expect(calls[0]?.payload.receptor).toMatchObject({ tipoDocumento: "INNOMINADO", docNro: "0", razonSocial: "Sin Nombre" });
+    expect(calls[0]?.payload.receptor).not.toHaveProperty("dv");
+    expect(calls[0]?.payload.receptor).not.toHaveProperty("naturaleza");
+  });
+
   it("omits receptor naturaleza when documento_tipo is not RUC even if the client has it set", async () => {
     const calls: Array<{ payload: Record<string, unknown> }> = [];
     const gateway = new RealFiscalGateway({

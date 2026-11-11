@@ -1,5 +1,6 @@
 // Movido de main.tsx sin cambios (PLAN_UX_RESTO_APP_v0.1 §10.9, URA-023).
 import { Icono, type NombreIcono } from "./Icono";
+import { esClienteInnominado } from "../lib/innominado";
 import { etiquetaCondicionVenta, formatDocumentoTipo } from "../lib/estados";
 import { type DocumentoEstado, type OperationalContextResponse, type DocumentoResponse, type DeliveryLinkResponse, type EmailStatusResponse, type ClasePaso } from "../tipos";
 import { formatMonto, formatGuaranies, formatCantidad, formatHora, buildWhatsAppShareUrl, formatIva } from "../lib/formato";
@@ -153,7 +154,7 @@ export function ResultadoEmision({
             <div>
               <dt>Cliente</dt>
               <dd>{documento.cliente.razon_social}</dd>
-              <small>{documento.cliente.documento_tipo} {documento.cliente.documento}{documento.cliente.naturaleza ? ` · ${documento.cliente.naturaleza === "JURIDICA" ? "Jurídica" : "Física"}` : ""}</small>
+              <small>{esClienteInnominado(documento.cliente) ? "Sin nombre (consumidor final)" : `${documento.cliente.documento_tipo} ${documento.cliente.documento}`}{documento.cliente.naturaleza ? ` · ${documento.cliente.naturaleza === "JURIDICA" ? "Jurídica" : "Física"}` : ""}</small>
             </div>
             <div>
               <dt>Condición</dt>

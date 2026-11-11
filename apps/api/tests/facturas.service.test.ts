@@ -31,6 +31,7 @@ import {
   emitFacturaAgainstFiscalGateway,
   cancelDocumento,
   emitNotaCreditoTotal,
+  emitNotaCredito,
   getBatchPendientesGestion,
   getDocumentoDecision,
   validateDocumentoCdcImpact,
@@ -46,6 +47,8 @@ import {
   MENSAJE_NOTA_CREDITO_MONEDA_EXTRANJERA,
   listDocumentos,
   previewFactura,
+  MENSAJE_TOPE_INNOMINADO,
+  MENSAJE_NOTA_CREDITO_INNOMINADA,
   refreshDocumentoStatus
 } from "../src/modules/facturas/facturas.service";
 import {
@@ -1400,6 +1403,73 @@ describe("facturas service", () => {
     repo.list = async () => ({ total: 1, items: [repo.findByIdResponse!] });
     const candidates = await listNotaCreditoCandidates(context, { limit: 30, offset: 0 }, repo);
     expect(candidates.items[0]).toMatchObject({ elegible: true });
+  });
+
+  describe("comprador sin nombre (SPEC_COMPRADOR_INNOMINADO_v0.1)", () => {
+    const innominado = { documento_tipo: "INNOMINADO" as const, documento: "xxx", razon_social: "Juan", cliente_id: "11111111-1111-4111-8111-111111111111", naturaleza: "JURIDICA" as const };
+
+    it("RN-03: el servidor fija documento 0 y nombre Sin Nombre, sin agenda ni naturaleza", async () => {
+      const repo = new FakeFacturaRepository();
+      await enqueueFacturaEmission(context, { ...emitInput, cliente: innominado }, repo, { idempotencyKey: "idem-innominado" });
+      expect(repo.lastQueuedInput?.fiscalRequest.cliente).toMatchObject({
+        documento_tipo: "INNOMINADO",
+        documento: "0",
+        razon_social: "Sin Nombre",
+        cliente_id: null,
+        naturaleza: null
+      });
+    });
+
+    it("RN-04: en guaranies, justo debajo del tope pasa y en el tope se rechaza sin encolar", async () => {
+      const debajo = previewFactura(context, {
+        condicion_venta: "CONTADO",
+        cliente: innominado,
+        items: [{ descripcion: "Venta", cantidad: 1, precio_unitario: 6_999_999, iva_tipo: "IVA_10" }]
+      });
+      expect(debajo.totals.total).toBe(6_999_999);
+      const repo = new FakeFacturaRepository();
+      await expect(
+        enqueueFacturaEmission(
+          context,
+          { ...emitInput, cliente: innominado, items: [{ descripcion: "Venta", cantidad: 1, precio_unitario: 7_000_000, iva_tipo: "IVA_10" }] },
+          repo,
+          { idempotencyKey: "idem-innominado-tope" }
+        )
+      ).rejects.toMatchObject({ statusCode: 400, code: "VALIDATION_ERROR", message: MENSAJE_TOPE_INNOMINADO, details: { reason: "INNOMINADO_SOBRE_TOPE" } });
+      expect(repo.lastQueuedInput).toBeNull();
+    });
+
+    it("RN-04: en USD el tope es sobre el total por el tipo de cambio", () => {
+      const base = { condicion_venta: "CONTADO" as const, moneda: "USD" as const, tipo_cambio: 7000, cliente: innominado };
+      expect(previewFactura(context, { ...base, items: [{ descripcion: "Venta", cantidad: 1, precio_unitario: 999.99, iva_tipo: "IVA_10" }] }).totals.total).toBe(999.99);
+      expect(() => previewFactura(context, { ...base, items: [{ descripcion: "Venta", cantidad: 1, precio_unitario: 1000, iva_tipo: "IVA_10" }] })).toThrow(MENSAJE_TOPE_INNOMINADO);
+    });
+
+    it("RN-04: el tope no aplica a otros tipos de documento", () => {
+      const result = previewFactura(context, {
+        condicion_venta: "CONTADO",
+        cliente: { documento_tipo: "RUC", documento: "80136968-1", razon_social: "Cliente Demo" },
+        items: [{ descripcion: "Venta", cantidad: 1, precio_unitario: 9_000_000, iva_tipo: "IVA_10" }]
+      });
+      expect(result.totals.total).toBe(9_000_000);
+    });
+
+    it("RN-06: la factura innominada no admite nota de credito (total, parcial y candidatos) y no llama a FE", async () => {
+      const repo = new FakeFacturaRepository();
+      const base = buildDocumento({ estado: "EMITIDA", cdc: "A".repeat(44) });
+      repo.findByIdResponse = { ...base, cliente: { documento_tipo: "INNOMINADO", documento: "0", razon_social: "Sin Nombre" } };
+      const gateway = new FakeFiscalGateway(new FiscalGatewayError("UPSTREAM_ERROR", "Should not emit"));
+      await expect(
+        emitNotaCreditoTotal(context, "66666666-6666-4666-8666-666666666666", { motivo: "Error" }, repo, gateway, { idempotencyKey: "x" })
+      ).rejects.toMatchObject({ statusCode: 409, details: { reason: "NOTA_CREDITO_INNOMINADA" } });
+      await expect(
+        emitNotaCredito(context, "66666666-6666-4666-8666-666666666666", { motivo: "Error", lineas: [{ line_no: 1, cantidad: 1 }] }, repo, gateway)
+      ).rejects.toMatchObject({ statusCode: 409, details: { reason: "NOTA_CREDITO_INNOMINADA" } });
+      expect(gateway.lastNotaCreditoRequest).toBeNull();
+      repo.list = async () => ({ total: 1, items: [repo.findByIdResponse!] });
+      const candidates = await listNotaCreditoCandidates(context, { limit: 30, offset: 0 }, repo);
+      expect(candidates.items[0]).toMatchObject({ elegible: false, motivo_no_elegible: MENSAJE_NOTA_CREDITO_INNOMINADA });
+    });
   });
 
   describe("moneda extranjera (SPEC_MONEDA_EXTRANJERA_v0.1)", () => {

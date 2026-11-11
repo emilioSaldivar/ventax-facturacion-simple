@@ -152,6 +152,9 @@ La fuente de verdad de este proyecto es:
 - `docs/SPEC_AJUSTES_TEXTOS_OPERADOR_v0.1.md`
 - `docs/PLAN_AJUSTES_TEXTOS_OPERADOR_v0.1.md`
 - `docs/TASKS_AJUSTES_TEXTOS_OPERADOR_v0.1.md`
+- `docs/SPEC_COMPRADOR_INNOMINADO_v0.1.md`
+- `docs/PLAN_COMPRADOR_INNOMINADO_v0.1.md`
+- `docs/TASKS_COMPRADOR_INNOMINADO_v0.1.md`
 - `spec/openapi.yaml`
 
 Los documentos bajo `contexto_facturacion_electronica/` y `contexto_pos_graciela/` son antecedentes. No son la especificacion final del nuevo producto.

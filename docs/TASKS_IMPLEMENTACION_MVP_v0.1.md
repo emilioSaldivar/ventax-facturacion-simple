@@ -333,3 +333,8 @@ stack local. Marca tomada de `segel.com.py`; kit reutilizable en `packages/share
 Validacion: 445 tests (mismos 6 fallos preexistentes), Playwright 8 pantallas en 390x844 y 1280x800,
 PWA instalable por CDP. `playwright-mock-flow` falla igual en `f08037d`, por lo que el flujo de emision completo queda
 sin validar por Playwright.
+
+### Hotfix comprador sin nombre (2026-11-11)
+
+Matriz y evidencia en `docs/TASKS_COMPRADOR_INNOMINADO_v0.1.md`. Rama `hotfix/comprador-innominado` desde `b252627` (FS de
+`segel-fs`). API 774 tests OK; web typecheck, lint y build OK; Playwright 21/21 en 1440, 1280 y 390 contra stack aislado con FE mock.

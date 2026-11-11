@@ -17,6 +17,7 @@ import { type UserSummary, type OperationView, type DocumentoEstado, type Operat
 import { formatMonto, formatGuaranies, formatCantidad, formatShortDate, formatYmdFromDate, formatUltimaVerificacion, cantidadValida, normalizeDecimalInput } from "../lib/formato";
 import { useEsEscritorio } from "../lib/useEsEscritorio";
 import { mensajeResultadoReintento, mensajeNotaCredito, formatEmailStatus, getDocumentoNombreLower, getSimpleDocumentoEstado, esEstadoFinalOperador } from "../lib/documentos";
+import { AVISO_NOTA_CREDITO_INNOMINADA, esClienteInnominado } from "../lib/innominado";
 
 export const POR_PAGINA_DOCUMENTOS = 30;
 
@@ -1359,6 +1360,7 @@ export function DocumentsView({
                     </button>
                   </>
                 ) : null}
+                {selected.tipo === "FACTURA" && esClienteInnominado(selected.cliente) ? <small className="muted">{AVISO_NOTA_CREDITO_INNOMINADA}</small> : null}
                 {(selected.totals?.anticipo ?? 0) > 0 ? <small className="muted">{AVISO_NOTA_CREDITO_CON_ANTICIPO}</small> : null}
                 {selected.moneda && selected.moneda !== "PYG" && !context?.nc_moneda_extranjera_habilitada ? <small className="muted">La nota de crédito de una factura en moneda extranjera se gestiona con soporte.</small> : null}
               </div>
@@ -1759,6 +1761,10 @@ export const AVISO_NOTA_CREDITO_CON_ANTICIPO = "Esta factura tiene anticipo: la 
 
 export function canEmitNotaCredito(documento: DocumentoResponse, documents: DocumentoResponse[], ncMonedaExtranjera = false): boolean {
   if (documento.tipo !== "FACTURA" || documento.estado !== "EMITIDA" || !documento.cdc) {
+    return false;
+  }
+  // SPEC_COMPRADOR_INNOMINADO_v0.1, RN-06: SIFEN no admite NC sobre una factura sin nombre.
+  if (esClienteInnominado(documento.cliente)) {
     return false;
   }
   if ((documento.totals?.anticipo ?? 0) > 0) {

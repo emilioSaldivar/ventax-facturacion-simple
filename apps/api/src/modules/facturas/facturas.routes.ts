@@ -3,7 +3,7 @@ import { cantidadEscalada, monedasFactura, tieneDecimalesValidos } from "@factur
 import { z } from "zod";
 import { requireAuth } from "../auth/auth.middleware";
 import { clienteRepository } from "../clientes/clientes.repository";
-import { clienteNaturalezaTipos, documentoIdentidadTipos } from "../clientes/clientes.types";
+import { clienteNaturalezaTipos } from "../clientes/clientes.types";
 import { operationalContextRepository } from "../context/context.repository";
 import { getOperationalContext } from "../context/context.service";
 import { validateRequest } from "../../shared/validation/validate-request";
@@ -35,7 +35,7 @@ import {
   validateDocumentoCdcImpact,
   voidDocumentoNumber
 } from "./facturas.service";
-import { condicionesVenta, type DocumentoListFilters, type FacturaPreviewInput } from "./facturas.types";
+import { condicionesVenta, facturaDocumentoTipos, type DocumentoListFilters, type FacturaPreviewInput } from "./facturas.types";
 import { HttpError } from "../../shared/errors/http-error";
 
 const ivaTipos = ["IVA_10", "IVA_5", "EXENTA"] as const;
@@ -50,7 +50,7 @@ const facturaBaseSchema = z.object({
   credito_plazo_dias: z.coerce.number().int().min(1).max(365).nullable().optional(),
   cliente: z.object({
     cliente_id: z.string().uuid().nullable().optional(),
-    documento_tipo: z.enum(documentoIdentidadTipos),
+    documento_tipo: z.enum(facturaDocumentoTipos),
     documento: z.string().trim().min(1).max(40),
     razon_social: z.string().trim().min(1).max(240),
     direccion: z.string().trim().max(240).nullable().optional(),

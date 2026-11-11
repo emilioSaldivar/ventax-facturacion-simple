@@ -1308,7 +1308,7 @@ paths:
           description: >-
             Factura no elegible (`details.reason`: `NOTA_CREDITO_YA_EMITIDA` si se pide la total con una nota
             viva, `NOTA_CREDITO_SOLO_TOTAL`, `NOTA_CREDITO_TRABADA`, `NOTA_CREDITO_MONEDA_EXTRANJERA`,
-            `NOTA_CREDITO_CON_ANTICIPO`), o FE responde `CREDIT_NOTE_TOTAL_EXCEEDED` o
+            `NOTA_CREDITO_CON_ANTICIPO`, `NOTA_CREDITO_INNOMINADA` si la factura es a un comprador sin nombre), o FE responde `CREDIT_NOTE_TOTAL_EXCEEDED` o
             `INVALID_REFERENCED_DOCUMENT` (`details.fe_code`; FE no numero)
           content:
             application/json:
@@ -3158,6 +3158,16 @@ components:
       type: string
       enum: [RUC, CI, PASAPORTE, CEDULA_EXTRANJERA, NO_ESPECIFICADO]
 
+    FacturaDocumentoTipo:
+      type: string
+      description: >-
+        Tipo de documento del cliente de una factura. Ademas de los de la agenda admite `INNOMINADO`
+        (comprador sin nombre, MT150 D208 = 5; SPEC_COMPRADOR_INNOMINADO_v0.1): el servidor fija
+        `documento = "0"`, `razon_social = "Sin Nombre"`, `cliente_id = null` y sin naturaleza. Con un total
+        en guaranies de 7.000.000 o mas (fuera de PYG, total por tipo de cambio) responde `400 VALIDATION_ERROR`
+        con `details.reason: INNOMINADO_SOBRE_TOPE`. No se guarda en la agenda.
+      enum: [RUC, CI, PASAPORTE, CEDULA_EXTRANJERA, NO_ESPECIFICADO, INNOMINADO]
+
     ClienteNaturaleza:
       type: string
       enum: [FISICA, JURIDICA]
@@ -3318,7 +3328,7 @@ components:
           type: string
           nullable: true
         documento_tipo:
-          $ref: "#/components/schemas/DocumentoIdentidadTipo"
+          $ref: "#/components/schemas/FacturaDocumentoTipo"
         documento:
           type: string
         razon_social:

@@ -24,7 +24,7 @@ import {
 import { _updatePending, applyUpdate, startVersionPolling, useUpdatePending } from "./api/version";
 import { ApiProvider, useApi } from "./api/useApi";
 import type { AuthResponse, PerfilDisponible, UserSummary } from "./tipos";
-import { type ViewState, type OperationView, type CondicionVenta, type TipoTransaccionServicio, type DocumentoIdentidadTipo, type TipoIva, type DocumentoEstado, type BeforeInstallPromptEvent, type OperationalContextResponse, type ReadinessResponse, type ClienteNaturaleza, type FacturaClienteInput, type FacturaPreviewRequest, type FacturaPreviewResponse, type DocumentoResponse, type DeliveryLinkResponse, type EmailStatusResponse, type InvoiceLineDraft, type ClienteSearchResult, type ClienteResponse, type DnitAutocompleteResponse, type CatalogoItem, type InvoiceClientePrefillRequest, type TycCurrentData, type ClasePaso, type MonedaFactura, type NotaTipo, type NotaEstadoComercial, type NotaEstadoVisual, type NotaFilaTipo, type NotaFilaDraft, type NotaClienteDraft, type NotaListItem, type NotaConItems, type InvoiceInitialDraft, type ReciboFormaPago, type ReciboRecord } from "./tipos";
+import { type ViewState, type OperationView, type CondicionVenta, type TipoTransaccionServicio, type DocumentoIdentidadTipo, type FacturaDocumentoTipo, type TipoIva, type DocumentoEstado, type BeforeInstallPromptEvent, type OperationalContextResponse, type ReadinessResponse, type ClienteNaturaleza, type FacturaClienteInput, type FacturaPreviewRequest, type FacturaPreviewResponse, type DocumentoResponse, type DeliveryLinkResponse, type EmailStatusResponse, type InvoiceLineDraft, type ClienteSearchResult, type ClienteResponse, type DnitAutocompleteResponse, type CatalogoItem, type InvoiceClientePrefillRequest, type TycCurrentData, type ClasePaso, type MonedaFactura, type NotaTipo, type NotaEstadoComercial, type NotaEstadoVisual, type NotaFilaTipo, type NotaFilaDraft, type NotaClienteDraft, type NotaListItem, type NotaConItems, type InvoiceInitialDraft, type ReciboFormaPago, type ReciboRecord } from "./tipos";
 import { formatMonto, formatGuaranies, formatCantidad, fmtFecha, formatHora, formatIntegerInput, normalizeIntegerInput, buildWhatsAppShareUrl, firstText, iniciales } from "./lib/formato";
 import { BrandMark } from "./components/BrandMark";
 import { LoadingScreen } from "./components/LoadingScreen";
@@ -34,6 +34,7 @@ import { cantidadValida, normalizeDecimalInput } from "./lib/formato";
 import { mensajeResultadoReintento, formatEmailStatus, getDocumentoNombreLower, getSimpleDocumentoEstado, esEstadoFinalOperador } from "./lib/documentos";
 import { getOperationalTitle, mapBusinessReadinessChecks } from "./lib/contexto";
 import { FORMAS_PAGO_LABELS } from "./lib/etiquetas";
+import { INNOMINADO_DOCUMENTO, INNOMINADO_NOMBRE, MENSAJE_TOPE_INNOMINADO, TOPE_INNOMINADO_GS, esClienteInnominado } from "./lib/innominado";
 import { RemisionView } from "./views/RemisionView";
 import { StatusView } from "./views/StatusView";
 import { CreditNoteView } from "./views/CreditNoteView";
@@ -1254,6 +1255,7 @@ function InvoiceEditor({
   const [clienteOrigen, setClienteOrigen] = useState<"AGENDA" | "PADRON" | null>(null);
   const [opcionalesAbiertos, setOpcionalesAbiertos] = useState(false);
   const [guardarEnAgenda, setGuardarEnAgenda] = useState(true);
+  const esInnominado = esClienteInnominado(cliente);
   const [clienteSuggestions, setClienteSuggestions] = useState<ClienteSearchResult[]>([]);
   const [clienteSearching, setClienteSearching] = useState(false);
   const [clienteAutocompleting, setClienteAutocompleting] = useState(false);
@@ -1515,7 +1517,8 @@ function InvoiceEditor({
 
   useEffect(() => {
     const q = cliente.documento.trim();
-    if (q.length < 2) {
+    // SPEC_COMPRADOR_INNOMINADO_v0.1, RN-01: el comprador sin nombre no se busca en la agenda.
+    if (q.length < 2 || cliente.documento_tipo === "INNOMINADO") {
       setClienteSuggestions([]);
       return;
     }
@@ -1533,7 +1536,7 @@ function InvoiceEditor({
     }, 300);
 
     return () => window.clearTimeout(timeout);
-  }, [api, cliente.documento]);
+  }, [api, cliente.documento, cliente.documento_tipo]);
 
   useEffect(() => {
     const timeouts = lines.map((line) => {
@@ -1634,7 +1637,7 @@ function InvoiceEditor({
     // SPEC_UX_NUEVA_FACTURA_v0.1, D-3: la casilla guarda o actualiza el cliente en la agenda antes de emitir;
     // si falla, la factura sale igual y el aviso queda en la tarjeta Cliente.
     let clienteGuardado: ClienteResponse | null = null;
-    if (guardarEnAgenda && cliente.documento.trim() && cliente.razon_social.trim()) {
+    if (guardarEnAgenda && !esInnominado && cliente.documento.trim() && cliente.razon_social.trim()) {
       clienteGuardado = await saveClienteRapido();
     }
 
@@ -1777,6 +1780,35 @@ function InvoiceEditor({
       setActiveLineId(null);
       setLineSheetOpen(false);
     }
+  }
+
+  /**
+   * SPEC_COMPRADOR_INNOMINADO_v0.1, RN-01/RN-02: "Sin nombre" fija 0 y Sin Nombre, sin agenda ni DNIT;
+   * al salir de "Sin nombre" documento y nombre quedan vacios.
+   */
+  function cambiarTipoDocumento(tipo: FacturaDocumentoTipo) {
+    setClienteNaturalezaTouched(false);
+    setClienteOrigen(null);
+    setClienteSuggestions([]);
+    setClienteMessage(null);
+    if (tipo === "INNOMINADO") {
+      setGuardarEnAgenda(false);
+      setCliente((current) => ({
+        ...current,
+        documento_tipo: "INNOMINADO",
+        cliente_id: null,
+        documento: INNOMINADO_DOCUMENTO,
+        razon_social: INNOMINADO_NOMBRE,
+        naturaleza: undefined
+      }));
+      return;
+    }
+    setGuardarEnAgenda(true);
+    setCliente((current) =>
+      current.documento_tipo === "INNOMINADO"
+        ? { ...current, documento_tipo: tipo, cliente_id: null, documento: "", razon_social: "" }
+        : { ...current, documento_tipo: tipo }
+    );
   }
 
   /** SPEC_UX_NUEVA_FACTURA_v0.1, B.3: editar un cliente de la agenda vuelve a marcar la casilla de actualizar. */
@@ -2069,7 +2101,12 @@ function InvoiceEditor({
   const lineasConDatos = lines.filter(lineaTieneDatos);
   const primeraInvalida = lines.findIndex((line) => lineasInvalidasIds.has(line.id));
   const equivalenteGs = enMonedaExtranjera && tipoCambioValido && preview ? Math.round(preview.totals.total * Number(tipoCambio)) : null;
-  const crearDeshabilitado = !canEmit || !preview || emitting || hasEmissionResult || lineasInvalidasIds.size > 0;
+  // SPEC_COMPRADOR_INNOMINADO_v0.1, RN-04: el tope se mira sobre las lineas validas, sin esperar la vista previa.
+  const totalLineasGs = request
+    ? Math.round(request.items.reduce((suma, item) => suma + item.cantidad * item.precio_unitario, 0) * (enMonedaExtranjera ? Number(tipoCambio) : 1))
+    : 0;
+  const innominadoSobreTope = esInnominado && totalLineasGs >= TOPE_INNOMINADO_GS;
+  const crearDeshabilitado = !canEmit || !preview || emitting || hasEmissionResult || lineasInvalidasIds.size > 0 || innominadoSobreTope;
   // SPEC_UX_NUEVA_FACTURA_v0.1, RN-04: un unico motivo, el primero que aplica.
   const motivoBloqueo: string | null = (() => {
     if (hasEmissionResult || emitting) return null;
@@ -2078,6 +2115,7 @@ function InvoiceEditor({
       return `No se puede facturar: ${falla?.message ?? "revisá Información y estado."}`;
     }
     if (!cliente.documento.trim() || !cliente.razon_social.trim()) return "Falta el cliente (documento y nombre)";
+    if (innominadoSobreTope) return MENSAJE_TOPE_INNOMINADO;
     if (!tipoCambioValido) return "Falta el tipo de cambio";
     if (lineasConDatos.length === 0) return "Agregá al menos una línea";
     if (primeraInvalida >= 0) return `Corregí la línea ${primeraInvalida + 1} para poder crear la factura`;
@@ -2086,8 +2124,9 @@ function InvoiceEditor({
   })();
   const textoCrear = emitting ? "Procesando..." : "Crear factura";
   const etiquetaMoneda = moneda === "PYG" ? "Gs." : moneda;
-  const textoOrigenCliente =
-    clienteOrigen === "AGENDA"
+  const textoOrigenCliente = esInnominado
+    ? "Consumidor final sin datos: no se guarda en la agenda y no admite nota de crédito"
+    : clienteOrigen === "AGENDA"
       ? guardarEnAgenda ? "En tu agenda: se actualiza al emitir" : "En tu agenda"
       : clienteOrigen === "PADRON"
         ? "Del padron de la DNIT: se guarda en tu agenda al emitir"
@@ -2264,7 +2303,7 @@ function InvoiceEditor({
           <label>
             Documento
             <select
-              onChange={(event) => setCliente((current) => ({ ...current, documento_tipo: event.target.value as DocumentoIdentidadTipo }))}
+              onChange={(event) => cambiarTipoDocumento(event.target.value as FacturaDocumentoTipo)}
               value={cliente.documento_tipo}
             >
               <option value="RUC">RUC</option>
@@ -2272,6 +2311,7 @@ function InvoiceEditor({
               <option value="PASAPORTE">Pasaporte</option>
               <option value="CEDULA_EXTRANJERA">Cédula extranjera</option>
               <option value="NO_ESPECIFICADO">No especificado</option>
+              <option value="INNOMINADO">Sin nombre</option>
             </select>
           </label>
           <label className="cliente-numero">
@@ -2280,6 +2320,7 @@ function InvoiceEditor({
               <input
                 inputMode={cliente.documento_tipo === "RUC" || cliente.documento_tipo === "CI" ? "numeric" : "text"}
                 onBlur={() => void tryAutocompleteDnit()}
+                readOnly={esInnominado}
                 onChange={(event) => {
                   setClienteNaturalezaTouched(false);
                   setClienteOrigen(null);
@@ -2330,7 +2371,7 @@ function InvoiceEditor({
           </label>
           <label className="cliente-nombre">
             Nombre o razón social
-            <input onChange={(event) => editarCliente({ razon_social: event.target.value })} value={cliente.razon_social} />
+            <input onChange={(event) => editarCliente({ razon_social: event.target.value })} readOnly={esInnominado} value={cliente.razon_social} />
           </label>
         </div>
         <div className="cliente-estado">
@@ -2356,10 +2397,10 @@ function InvoiceEditor({
             <Icono nombre={opcionalesAbiertos ? "chevron-abajo" : "chevron-derecha"} tamano={14} />
             {modoCompleto ? "Dirección, teléfono y correo (opcionales)" : "Tipo de persona, dirección, teléfono y correo"}
           </button>
-          {modoCompleto ? casillaAgenda : null}
+          {modoCompleto && !esInnominado ? casillaAgenda : null}
         </div>
         {opcionalesAbiertos ? camposOpcionales : null}
-        {!modoCompleto ? casillaAgenda : null}
+        {!modoCompleto && !esInnominado ? casillaAgenda : null}
       </section>
 
       <section className="form-section products-section" aria-label="Productos y servicios" ref={productsSectionRef}>

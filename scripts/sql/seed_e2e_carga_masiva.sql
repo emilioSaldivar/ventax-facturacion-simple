@@ -82,7 +82,7 @@ join facturadores f on f.emisor_id = '80099999-1'
 join facturador_perfiles_emision pe on pe.facturador_id = f.id and pe.codigo = case when u.username = 'e2e.cm.cliente' then 'E2E-P002' else 'E2E-P001' end
 join actividad_punto_perfiles app on app.perfil_emision_id = pe.id
 where u.username like 'e2e.cm.%'
-on conflict (usuario_id) where activo = true and deleted_at is null do nothing;
+on conflict (usuario_id, actividad_punto_perfil_id) where activo = true and deleted_at is null do nothing;
 
 insert into tyc_aceptaciones (
   usuario_id, tenant_id, tyc_version_id, tyc_version_texto, tyc_document_hash, plan_snapshot,
