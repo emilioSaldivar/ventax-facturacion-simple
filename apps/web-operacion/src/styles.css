@@ -4976,3 +4976,93 @@ dd {
   font-size: var(--fs-13);
   font-weight: 600;
 }
+
+/* ─── Catalogo: tabla y panel lateral (SPEC_UX_RESTO_APP_v0.1 D R-4; PLAN §6, URA-009) ─────────────────── */
+.catalogo-form {
+  display: grid;
+  gap: var(--esp-3);
+}
+
+.catalogo-form label {
+  display: grid;
+  gap: var(--esp-1);
+  min-width: 0;
+}
+
+.catalogo-form-fila {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--esp-3);
+}
+
+.catalogo-form .enlace-accion {
+  justify-self: start;
+}
+
+.catalogo-form-acciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--esp-2);
+}
+
+.catalogo-form .ficha-peligro {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--esp-2);
+}
+
+.catalogo-espacio .floating-create-client {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--esp-2);
+}
+
+.catalogo-espacio .primary-action {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--esp-2);
+}
+
+.catalogo-codigo {
+  white-space: nowrap;
+  color: var(--color-muted);
+  font-size: var(--fs-12);
+}
+
+@media (min-width: 1024px) {
+  .catalogo-filtros {
+    grid-template-columns: minmax(240px, 420px) auto;
+    align-items: end;
+    justify-content: start;
+    column-gap: var(--esp-4);
+  }
+
+  .catalogo-filtros .filter-tabs {
+    border-bottom: 0;
+  }
+
+  .catalogo-panel {
+    display: grid;
+    gap: var(--esp-3);
+  }
+}
+
+/* Agenda / Clientes en tabla (SPEC_UX_RESTO_APP_v0.1 D R-3; URA-009). */
+.agenda-direccion {
+  display: block;
+  margin-top: 2px;
+  color: var(--color-muted);
+  font-size: var(--fs-12);
+}
+
+.agenda-correo {
+  overflow-wrap: anywhere;
+}
+
+.agenda-usar {
+  width: 1%;
+  white-space: nowrap;
+  cursor: default;
+}
+
