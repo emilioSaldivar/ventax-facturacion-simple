@@ -13,7 +13,7 @@ SPEC: `docs/SPEC_COMPRADOR_INNOMINADO_v0.1.md` · PLAN: `docs/PLAN_COMPRADOR_INN
 | INN-007 | Web: ficha sin nota de credito y aviso; etiqueta "Sin nombre" | RN-06, RN-07 | Playwright | Hecha |
 | INN-008 | Regresion: suites existentes de api y web | CA-04 | `npm run test`, `typecheck`, `lint`, `build` | Hecha |
 | INN-009 | Despliegue solo FS en `segel-fs` con respaldo e imagenes `:antes-innominado` | PLAN | health, `X-App-Version`, 0 errores; sin emitir | Hecha |
-| INN-010 | Integrar en `feat/identidad-segel` | PLAN | typecheck/build en la rama | Pendiente |
+| INN-010 | Integrar en `feat/identidad-segel` | PLAN | typecheck/build en la rama | Hecha |
 
 ## Evidencia
 
@@ -39,4 +39,11 @@ SPEC: `docs/SPEC_COMPRADOR_INNOMINADO_v0.1.md` · PLAN: `docs/PLAN_COMPRADOR_INN
 - **Arranque:** `migrate`, `api` y `frontend` de FS con `APP_ENV_FILE=.env.segel`, mas `restart frontend` (como `up.sh`).
 - **Verificacion sin emitir:** API y frontend `healthy`; contenedores con los ID de imagen de `ed8b493`; `X-App-Version: ed8b493` y bundle `index-BJdUVv7l.js` (igual al build local); `/app/` 200; `/api/v1/health` OK; FE por la red interna OK; 0 errores (nivel 50/60) en la API en los primeros minutos. No se emitio nada (produccion).
 - **Vuelta atras:** volver a etiquetar `:antes-innominado` como `:latest` y recrear `api` y `frontend` (no hay migraciones que revertir).
+
+### 2026-11-11 - INN-010, integracion en `feat/identidad-segel`
+
+- `cherry-pick` de `ed8b493` y `812a200` sobre `2f64a39`. Conflictos solo en listas: `AGENTS.md` (se conservan las cadenas de tutoriales, ajustes de textos e innominado) y el `import` de tipos de `main.tsx` (se agrega `FacturaDocumentoTipo` al de la rama).
+- API: typecheck OK, `vitest run` 774 pasan, 48 omitidas. Web: typecheck y build OK.
+- Playwright `scripts/playwright-comprador-innominado.cjs` contra el stack aislado `fs-inn` reconstruido desde la rama (editor con URA-009 y textos A-1..A-8): **21/21 OK** en 1440, 1280 y 390.
+- `segel-fs` sigue en `ed8b493` (rama `hotfix/comprador-innominado`); el proximo despliegue desde `feat/identidad-segel` ya lo incluye.
 
