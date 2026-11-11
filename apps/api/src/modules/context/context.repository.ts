@@ -1,5 +1,5 @@
 import { pool } from "../../db/pool";
-import type { OperationalContextRepository, OperationalContextResponse, ReadinessCheck } from "./context.types";
+import type { OperationalContextRepository, OperationalContextResponse, PerfilDisponible, ReadinessCheck } from "./context.types";
 
 interface ContextRow {
   user_id: string;
@@ -30,6 +30,22 @@ interface ContextRow {
   actividad_punto_perfil_id: string;
 }
 
+interface PerfilRow {
+  operacion_config_id: string;
+  establecimiento: string;
+  punto_expedicion: string;
+  perfil_emision_codigo: string;
+  perfil_emision_alias: string | null;
+  actividad_economica_codigo: string;
+  actividad_economica_descripcion: string | null;
+  actividad_economica_alias: string | null;
+  timbrado: string;
+  documento_nro: string;
+  numeracion_facturas: "SERVICIO" | "CLIENTE";
+  razon_social: string;
+  nombre_fantasia: string | null;
+}
+
 interface ReadinessRow {
   tenant_activo: boolean;
   tenant_estado: string;
@@ -40,7 +56,7 @@ interface ReadinessRow {
 }
 
 export class PgOperationalContextRepository implements OperationalContextRepository {
-  async getOperationalContext(userId: string): Promise<OperationalContextResponse | null> {
+  async getOperationalContext(userId: string, operacionConfigId: string | null = null): Promise<OperationalContextResponse | null> {
     const result = await pool.query<ContextRow>(
       `
         select
@@ -100,6 +116,7 @@ export class PgOperationalContextRepository implements OperationalContextReposit
           and pe.activo = true
           and pe.deleted_at is null
         where u.id = $1
+          and ($2::uuid is null or uoc.id = $2::uuid)
           and u.activo = true
           and u.deleted_at is null
           and u.bloqueado_at is null
@@ -128,7 +145,7 @@ export class PgOperationalContextRepository implements OperationalContextReposit
           end
         limit 1
       `,
-      [userId]
+      [userId, operacionConfigId]
     );
 
     const row = result.rows[0];
@@ -185,7 +202,7 @@ export class PgOperationalContextRepository implements OperationalContextReposit
     };
   }
 
-  async getReadinessChecks(userId: string): Promise<ReadinessCheck[]> {
+  async getReadinessChecks(userId: string, operacionConfigId: string | null = null): Promise<ReadinessCheck[]> {
     const result = await pool.query<ReadinessRow>(
       `
         select
@@ -219,6 +236,7 @@ export class PgOperationalContextRepository implements OperationalContextReposit
         from usuarios u
         left join tenants t on t.id = u.tenant_id and t.deleted_at is null
         left join usuario_operacion_config uoc on uoc.usuario_id = u.id and uoc.activo = true and uoc.deleted_at is null
+          and ($2::uuid is null or uoc.id = $2::uuid)
         left join facturadores f on f.id = uoc.facturador_id
         left join actividad_punto_perfiles app on app.id = uoc.actividad_punto_perfil_id
         left join facturador_actividades a on a.id = app.actividad_id
@@ -227,9 +245,10 @@ export class PgOperationalContextRepository implements OperationalContextReposit
         left join facturador_perfiles_emision pe on pe.id = app.perfil_emision_id
         where u.id = $1
           and u.deleted_at is null
+        order by uoc.created_at asc nulls last
         limit 1
       `,
-      [userId]
+      [userId, operacionConfigId]
     );
 
     const row = result.rows[0];
@@ -272,6 +291,98 @@ export class PgOperationalContextRepository implements OperationalContextReposit
           : "Falta asociacion activa o configuracion de timbrado/numeracion/plazo credito."
       }
     ];
+  }
+
+  /**
+   * SPEC_MULTIPERFIL_USUARIO_v0.1 §B.4: configuraciones EMITIBLES del usuario, con las mismas
+   * condiciones que getOperationalContext. `activo_en_sesion` lo completa quien llama.
+   */
+  async listPerfilesDisponibles(userId: string): Promise<PerfilDisponible[]> {
+    const result = await pool.query<PerfilRow>(
+      `
+        select
+          uoc.id as operacion_config_id,
+          e.codigo as establecimiento,
+          p.codigo as punto_expedicion,
+          pe.codigo as perfil_emision_codigo,
+          app.alias_operativo as perfil_emision_alias,
+          a.codigo as actividad_economica_codigo,
+          a.descripcion as actividad_economica_descripcion,
+          a.alias_operativo as actividad_economica_alias,
+          app.timbrado,
+          app.documento_nro,
+          app.numeracion_facturas,
+          f.razon_social,
+          f.nombre_fantasia
+        from usuarios u
+        join tenants t on t.id = u.tenant_id
+        join usuario_operacion_config uoc on uoc.usuario_id = u.id
+          and uoc.activo = true
+          and uoc.deleted_at is null
+        join facturadores f on f.id = uoc.facturador_id
+          and f.activo = true
+          and f.deleted_at is null
+        join actividad_punto_perfiles app on app.id = uoc.actividad_punto_perfil_id
+          and app.activo = true
+          and app.deleted_at is null
+        join facturador_actividades a on a.id = app.actividad_id
+          and a.activo = true
+          and a.deleted_at is null
+        join facturador_establecimientos e on e.id = app.establecimiento_id
+          and e.activo = true
+          and e.deleted_at is null
+        join facturador_puntos_expedicion p on p.id = app.punto_expedicion_id
+          and p.activo = true
+          and p.deleted_at is null
+        join facturador_perfiles_emision pe on pe.id = app.perfil_emision_id
+          and pe.activo = true
+          and pe.deleted_at is null
+        where u.id = $1
+          and u.activo = true
+          and u.deleted_at is null
+          and u.bloqueado_at is null
+          and app.timbrado is not null
+          and app.timbrado_inicio is not null
+          and app.documento_nro is not null
+          and app.credito_plazo_dias > 0
+          and t.activo = true
+          and t.deleted_at is null
+          and t.estado = 'ACTIVO'
+          and exists (
+            select 1
+            from tenant_suscripciones ts
+            where ts.tenant_id = t.id
+              and ts.activo = true
+              and ts.deleted_at is null
+              and ts.estado = 'ACTIVA'
+              and (ts.fecha_fin is null or ts.fecha_fin >= current_date)
+          )
+        order by e.codigo, p.codigo, pe.codigo
+      `,
+      [userId]
+    );
+
+    return result.rows.map((row) => ({
+      operacion_config_id: row.operacion_config_id,
+      establecimiento: row.establecimiento,
+      punto_expedicion: row.punto_expedicion,
+      perfil_emision_codigo: row.perfil_emision_codigo,
+      perfil_emision_alias: row.perfil_emision_alias,
+      actividad_economica_codigo: row.actividad_economica_codigo,
+      actividad_economica_descripcion: row.actividad_economica_descripcion,
+      actividad_economica_alias: row.actividad_economica_alias,
+      titulo_operativo: deriveTituloOperativo({
+        actividadPerfilAlias: row.perfil_emision_alias,
+        nombreFantasia: row.nombre_fantasia,
+        actividadAlias: row.actividad_economica_alias,
+        actividadDescripcion: row.actividad_economica_descripcion,
+        razonSocial: row.razon_social
+      }),
+      timbrado: row.timbrado,
+      numeracion_facturas: row.numeracion_facturas,
+      documento_nro: row.numeracion_facturas === "CLIENTE" ? null : row.documento_nro,
+      activo_en_sesion: false
+    }));
   }
 
   async updateTipoTransaccionDefault(actividadPuntoPerfilId: string, valor: 1 | 2 | 3): Promise<void> {

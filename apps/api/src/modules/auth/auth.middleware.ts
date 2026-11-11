@@ -14,6 +14,8 @@ declare global {
 
 // Rutas accesibles con JWT de scope onboarding_only
 const ONBOARDING_WHITELIST = ["/onboarding/", "/auth/logout"];
+// SPEC_MULTIPERFIL_USUARIO_v0.1 §B.1: con scope perfil_select solo se elige el perfil o se sale.
+const PERFIL_SELECT_WHITELIST = ["/auth/perfil", "/me/perfiles", "/auth/logout"];
 
 export const requireAuth = createRequireAuth(authRepository);
 
@@ -39,12 +41,19 @@ export function createRequireAuth(repository: Pick<AuthRepository, "findActiveUs
         }
       }
 
+      if (payload.scope === "perfil_select") {
+        const isAllowed = PERFIL_SELECT_WHITELIST.some((ruta) => req.path === ruta);
+        if (!isAllowed) {
+          throw new HttpError(403, "FORBIDDEN", "Elegi el punto de expedicion para continuar.", { reason: "PERFIL_REQUERIDO" });
+        }
+      }
+
       const user = await repository.findActiveUserById(payload.sub);
       if (!user) {
         throw new HttpError(401, "AUTH_REQUIRED", "Usuario no autenticado o inactivo.");
       }
 
-      req.user = user;
+      req.user = { ...user, operacionConfigId: payload.uoc ?? null, scope: payload.scope };
       next();
     } catch (error) {
       if (error instanceof HttpError) {

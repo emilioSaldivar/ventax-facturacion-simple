@@ -211,7 +211,7 @@ export const facturasRouter = Router();
 
 facturasRouter.get("/facturas", requireAuth, validateRequest("query", documentoListQuerySchema), async (req, res, next) => {
   try {
-    const context = await getOperationalContext(req.user!.id, operationalContextRepository);
+    const context = await getOperationalContext(req.user!, operationalContextRepository);
     const result = await listDocumentos(context, req.query as unknown as DocumentoListFilters, facturasRepository);
     res.json(result);
   } catch (error) {
@@ -225,7 +225,7 @@ facturasRouter.get(
   validateRequest("query", notaCreditoCandidatesQuerySchema),
   async (req, res, next) => {
     try {
-      const context = await getOperationalContext(req.user!.id, operationalContextRepository);
+      const context = await getOperationalContext(req.user!, operationalContextRepository);
       const result = await listNotaCreditoCandidates(context, req.query as unknown as { q?: string; limit: number; offset: number }, facturasRepository);
       res.json(result);
     } catch (error) {
@@ -241,7 +241,7 @@ facturasRouter.post(
   validateRequest("body", validateCdcSchema),
   async (req, res, next) => {
     try {
-      const context = await getOperationalContext(req.user!.id, operationalContextRepository);
+      const context = await getOperationalContext(req.user!, operationalContextRepository);
       const result = await validateDocumentoCdcImpact(
         context,
         String(req.params.documentoId),
@@ -263,7 +263,7 @@ facturasRouter.post(
   validateRequest("body", gestionActionSchema),
   async (req, res, next) => {
     try {
-      const context = await getOperationalContext(req.user!.id, operationalContextRepository);
+      const context = await getOperationalContext(req.user!, operationalContextRepository);
       const result = await retryDocumentoSameCdc(
         context,
         String(req.params.documentoId),
@@ -285,7 +285,7 @@ facturasRouter.post(
   validateRequest("body", gestionActionSchema),
   async (req, res, next) => {
     try {
-      const context = await getOperationalContext(req.user!.id, operationalContextRepository);
+      const context = await getOperationalContext(req.user!, operationalContextRepository);
       const result = await createDocumentoDerived(
         context,
         String(req.params.documentoId),
@@ -307,7 +307,7 @@ facturasRouter.post(
   validateRequest("body", cancelSendSchema),
   async (req, res, next) => {
     try {
-      const context = await getOperationalContext(req.user!.id, operationalContextRepository);
+      const context = await getOperationalContext(req.user!, operationalContextRepository);
       const result = await cancelDocumentoSend(
         context,
         String(req.params.documentoId),
@@ -329,7 +329,7 @@ facturasRouter.post(
   validateRequest("body", voidNumberSchema),
   async (req, res, next) => {
     try {
-      const context = await getOperationalContext(req.user!.id, operationalContextRepository);
+      const context = await getOperationalContext(req.user!, operationalContextRepository);
       const result = await voidDocumentoNumber(
         context,
         String(req.params.documentoId),
@@ -346,7 +346,7 @@ facturasRouter.post(
 
 facturasRouter.get("/facturas/:documentoId", requireAuth, validateRequest("params", documentoParamsSchema), async (req, res, next) => {
   try {
-    const context = await getOperationalContext(req.user!.id, operationalContextRepository);
+    const context = await getOperationalContext(req.user!, operationalContextRepository);
     const result = await getDocumentoById(context, String(req.params.documentoId), facturasRepository);
     res.json(result);
   } catch (error) {
@@ -360,7 +360,7 @@ facturasRouter.get(
   validateRequest("params", documentoParamsSchema),
   async (req, res, next) => {
     try {
-      const context = await getOperationalContext(req.user!.id, operationalContextRepository);
+      const context = await getOperationalContext(req.user!, operationalContextRepository);
       const result = await getDocumentoDecision(context, String(req.params.documentoId), facturasRepository, fiscalGateway);
       res.json(result);
     } catch (error) {
@@ -375,7 +375,7 @@ facturasRouter.get(
   validateRequest("params", documentoParamsSchema),
   async (req, res, next) => {
     try {
-      const context = await getOperationalContext(req.user!.id, operationalContextRepository);
+      const context = await getOperationalContext(req.user!, operationalContextRepository);
       const result = await getDocumentoEventos(context, String(req.params.documentoId), facturasRepository, fiscalGateway);
       res.json(result);
     } catch (error) {
@@ -390,7 +390,7 @@ facturasRouter.get(
   validateRequest("query", gestionBatchQuerySchema),
   async (req, res, next) => {
     try {
-      const context = await getOperationalContext(req.user!.id, operationalContextRepository);
+      const context = await getOperationalContext(req.user!, operationalContextRepository);
       const result = await getBatchPendientesGestion(
         context,
         {
@@ -412,7 +412,7 @@ facturasRouter.get(
   validateRequest("query", reconciliacionQuerySchema),
   async (req, res, next) => {
     try {
-      const context = await getOperationalContext(req.user!.id, operationalContextRepository);
+      const context = await getOperationalContext(req.user!, operationalContextRepository);
       const result = await getReconciliacionFiscal(
         context,
         {
@@ -436,7 +436,7 @@ facturasRouter.post(
   validateRequest("params", documentoParamsSchema),
   async (req, res, next) => {
     try {
-      const context = await getOperationalContext(req.user!.id, operationalContextRepository);
+      const context = await getOperationalContext(req.user!, operationalContextRepository);
       const result = await refreshDocumentoStatus(context, String(req.params.documentoId), facturasRepository, fiscalGateway);
       res.json(result);
     } catch (error) {
@@ -451,7 +451,7 @@ facturasRouter.post(
   validateRequest("params", documentoParamsSchema),
   async (req, res, next) => {
     try {
-      const context = await getOperationalContext(req.user!.id, operationalContextRepository);
+      const context = await getOperationalContext(req.user!, operationalContextRepository);
       const result = await retryDocumentoEmission(context, String(req.params.documentoId), facturasRepository, {
         consumerGateway: await resolveConsumerGateway(context.facturador.id),
         sharedGateway: fiscalGateway,
@@ -470,7 +470,7 @@ facturasRouter.get(
   validateRequest("params", documentoParamsSchema),
   async (req, res, next) => {
     try {
-      const context = await getOperationalContext(req.user!.id, operationalContextRepository);
+      const context = await getOperationalContext(req.user!, operationalContextRepository);
       const documento = await getDocumentoById(context, String(req.params.documentoId), facturasRepository);
       if (!documento.document_uuid) {
         throw new HttpError(404, "NOT_FOUND", "PDF no disponible para este documento.");
@@ -491,7 +491,7 @@ facturasRouter.get(
   validateRequest("params", documentoParamsSchema),
   async (req, res, next) => {
     try {
-      const context = await getOperationalContext(req.user!.id, operationalContextRepository);
+      const context = await getOperationalContext(req.user!, operationalContextRepository);
       const documento = await getDocumentoById(context, String(req.params.documentoId), facturasRepository);
       if (!documento.document_uuid) {
         throw new HttpError(404, "NOT_FOUND", "XML no disponible para este documento.");
@@ -513,7 +513,7 @@ facturasRouter.post(
   validateRequest("body", cancelacionSchema),
   async (req, res, next) => {
     try {
-      const context = await getOperationalContext(req.user!.id, operationalContextRepository);
+      const context = await getOperationalContext(req.user!, operationalContextRepository);
       const result = await cancelDocumento(context, String(req.params.documentoId), req.body, facturasRepository, fiscalGateway);
       res.json(result);
     } catch (error) {
@@ -529,7 +529,7 @@ facturasRouter.post(
   validateRequest("body", notaCreditoSchema),
   async (req, res, next) => {
     try {
-      const context = await getOperationalContext(req.user!.id, operationalContextRepository);
+      const context = await getOperationalContext(req.user!, operationalContextRepository);
       // SPEC_NOTA_CREDITO_TRABADA_v0.1, RN-01: la clave la deriva el servidor; el encabezado se ignora.
       const { documento, reintento } = await emitNotaCredito(
         context,
@@ -552,7 +552,7 @@ facturasRouter.get(
   validateRequest("params", documentoParamsSchema),
   async (req, res, next) => {
     try {
-      const context = await getOperationalContext(req.user!.id, operationalContextRepository);
+      const context = await getOperationalContext(req.user!, operationalContextRepository);
       res.json(await getNotaCreditoSaldo(context, String(req.params.documentoId), facturasRepository));
     } catch (error) {
       next(error);
@@ -567,7 +567,7 @@ facturasRouter.post(
   validateRequest("body", inutilizarSchema),
   async (req, res, next) => {
     try {
-      const context = await getOperationalContext(req.user!.id, operationalContextRepository);
+      const context = await getOperationalContext(req.user!, operationalContextRepository);
       const { motivo } = req.body as z.infer<typeof inutilizarSchema>;
       res.json(await inutilizarNumeroFactura(context, String(req.params.documentoId), { motivo }, facturasRepository, fiscalGateway));
     } catch (error) {
@@ -582,7 +582,7 @@ facturasRouter.post(
   validateRequest("params", documentoParamsSchema),
   async (req, res, next) => {
     try {
-      const context = await getOperationalContext(req.user!.id, operationalContextRepository);
+      const context = await getOperationalContext(req.user!, operationalContextRepository);
       const result = await reintentarNotaCreditoPorId(context, String(req.params.documentoId), facturasRepository, fiscalGateway);
       res.json(result);
     } catch (error) {
@@ -593,7 +593,7 @@ facturasRouter.post(
 
 facturasRouter.post("/facturas/preview", requireAuth, validateRequest("body", facturaPreviewSchema), async (req, res, next) => {
   try {
-    const context = await getOperationalContext(req.user!.id, operationalContextRepository);
+    const context = await getOperationalContext(req.user!, operationalContextRepository);
     const result = previewFactura(context, req.body);
     res.json(result);
   } catch (error) {
@@ -603,7 +603,7 @@ facturasRouter.post("/facturas/preview", requireAuth, validateRequest("body", fa
 
 facturasRouter.post("/facturas", requireAuth, validateRequest("body", facturaEmisionSchema), async (req, res, next) => {
   try {
-    const context = await getOperationalContext(req.user!.id, operationalContextRepository);
+    const context = await getOperationalContext(req.user!, operationalContextRepository);
     const idempotencyKey = parseIdempotencyKey(req.get("idempotency-key"));
     const { corrige_documento_id: corrigeDocumentoId, ...factura } = req.body as FacturaPreviewInput & { corrige_documento_id?: string | null };
     const result = await enqueueFacturaEmission(context, factura, facturasRepository, {

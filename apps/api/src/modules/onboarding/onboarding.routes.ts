@@ -1,8 +1,9 @@
 import { Router } from "express";
 import { z } from "zod";
-import { env } from "../../config/env";
 import { requireAuth } from "../auth/auth.middleware";
-import { refreshCookieName } from "../auth/auth.routes";
+import { setRefreshCookie } from "../auth/auth.routes";
+import { emitirSesion } from "../auth/auth.service";
+import { operationalContextRepository } from "../context/context.repository";
 import { authRepository } from "../auth/auth.repository";
 import { validateRequest } from "../../shared/validation/validate-request";
 import { onboardingRepository } from "./onboarding.repository";
@@ -77,23 +78,24 @@ onboardingRouter.post(
         onboardingRepository
       );
 
-      await authRepository.createRefreshToken({
-        userId: req.user!.id,
-        tokenHash: result.refreshToken.tokenHash,
-        expiresAt: result.refreshToken.expiresAt,
-        ip: req.ip,
-        userAgent: req.get("user-agent")
-      });
+      // SPEC_MULTIPERFIL_USUARIO_v0.1 §B.6: misma regla de sesion que el login.
+      const sesion = await emitirSesion(
+        {
+          id: req.user!.id,
+          tenantId: req.user!.tenantId,
+          username: result.response.user.username,
+          displayName: result.response.user.display_name,
+          role: result.response.user.role
+        },
+        { ip: req.ip, userAgent: req.get("user-agent") },
+        authRepository,
+        operationalContextRepository
+      );
+      if (sesion.refreshToken) {
+        setRefreshCookie(res, sesion.refreshToken.rawToken, sesion.refreshToken.expiresAt);
+      }
 
-      res.cookie(refreshCookieName, result.refreshToken.rawToken, {
-        httpOnly: true,
-        secure: env.NODE_ENV === "production",
-        sameSite: "lax",
-        expires: result.refreshToken.expiresAt,
-        path: "/api/v1/auth"
-      });
-
-      res.json(result.response);
+      res.json(sesion.response);
     } catch (error) {
       next(error);
     }
@@ -112,23 +114,24 @@ onboardingRouter.post("/onboarding/admin/accept-direct", requireAuth, async (req
       onboardingRepository
     );
 
-    await authRepository.createRefreshToken({
-      userId: req.user!.id,
-      tokenHash: result.refreshToken.tokenHash,
-      expiresAt: result.refreshToken.expiresAt,
-      ip: req.ip,
-      userAgent: req.get("user-agent")
-    });
+    // SPEC_MULTIPERFIL_USUARIO_v0.1 §B.6: misma regla de sesion que el login.
+    const sesion = await emitirSesion(
+      {
+        id: req.user!.id,
+        tenantId: req.user!.tenantId,
+        username: result.response.user.username,
+        displayName: result.response.user.display_name,
+        role: result.response.user.role
+      },
+      { ip: req.ip, userAgent: req.get("user-agent") },
+      authRepository,
+      operationalContextRepository
+    );
+    if (sesion.refreshToken) {
+      setRefreshCookie(res, sesion.refreshToken.rawToken, sesion.refreshToken.expiresAt);
+    }
 
-    res.cookie(refreshCookieName, result.refreshToken.rawToken, {
-      httpOnly: true,
-      secure: env.NODE_ENV === "production",
-      sameSite: "lax",
-      expires: result.refreshToken.expiresAt,
-      path: "/api/v1/auth"
-    });
-
-    res.json(result.response);
+    res.json(sesion.response);
   } catch (error) {
     next(error);
   }

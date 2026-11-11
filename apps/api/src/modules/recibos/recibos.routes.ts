@@ -96,7 +96,7 @@ recibosRouter.post(
   validateRequest("body", createBodySchema),
   async (req, res, next) => {
     try {
-      const context = await getOperationalContext(req.user!.id, operationalContextRepository);
+      const context = await getOperationalContext(req.user!, operationalContextRepository);
       const idempotencyKey = parseIdempotencyKey(req.get("idempotency-key"));
       const recibo = await crearRecibo(context, req.body, recibosRepository, await resolveGateway(context.facturador.id), { idempotencyKey });
       res.status(201).json(recibo);
@@ -110,7 +110,7 @@ recibosRouter.get(
   validateRequest("query", listQuerySchema),
   async (req, res, next) => {
     try {
-      const context = await getOperationalContext(req.user!.id, operationalContextRepository);
+      const context = await getOperationalContext(req.user!, operationalContextRepository);
       const { limit, offset } = req.query as unknown as z.infer<typeof listQuerySchema>;
       const result = await listRecibos(context.facturador.id, { limit, offset }, recibosRepository);
       res.json(result);
@@ -124,7 +124,7 @@ recibosRouter.get(
   validateRequest("params", reciboIdSchema),
   async (req, res, next) => {
     try {
-      const context = await getOperationalContext(req.user!.id, operationalContextRepository);
+      const context = await getOperationalContext(req.user!, operationalContextRepository);
       const { reciboId } = req.params as z.infer<typeof reciboIdSchema>;
       const recibo = await getRecibo(reciboId, context.facturador.id, recibosRepository);
       res.json(recibo);
@@ -139,7 +139,7 @@ recibosRouter.patch(
   validateRequest("body", updateBodySchema),
   async (req, res, next) => {
     try {
-      const context = await getOperationalContext(req.user!.id, operationalContextRepository);
+      const context = await getOperationalContext(req.user!, operationalContextRepository);
       const { reciboId } = req.params as z.infer<typeof reciboIdSchema>;
       const recibo = await editarRecibo(reciboId, context, req.body, recibosRepository, await resolveGateway(context.facturador.id));
       res.json(recibo);
@@ -153,7 +153,7 @@ recibosRouter.post(
   validateRequest("params", reciboIdSchema),
   async (req, res, next) => {
     try {
-      const context = await getOperationalContext(req.user!.id, operationalContextRepository);
+      const context = await getOperationalContext(req.user!, operationalContextRepository);
       const { reciboId } = req.params as z.infer<typeof reciboIdSchema>;
       const recibo = await emitirRecibo(reciboId, context, recibosRepository, await resolveGateway(context.facturador.id));
       res.json(recibo);
@@ -168,7 +168,7 @@ recibosRouter.post(
   validateRequest("body", anularBodySchema),
   async (req, res, next) => {
     try {
-      const context = await getOperationalContext(req.user!.id, operationalContextRepository);
+      const context = await getOperationalContext(req.user!, operationalContextRepository);
       const { reciboId } = req.params as z.infer<typeof reciboIdSchema>;
       const recibo = await anularRecibo(reciboId, context, req.body, recibosRepository, await resolveGateway(context.facturador.id));
       res.json(recibo);
@@ -182,7 +182,7 @@ recibosRouter.get(
   validateRequest("params", reciboIdSchema),
   async (req, res, next) => {
     try {
-      const context = await getOperationalContext(req.user!.id, operationalContextRepository);
+      const context = await getOperationalContext(req.user!, operationalContextRepository);
       const { reciboId } = req.params as z.infer<typeof reciboIdSchema>;
       const artifact = await getReciboPdf(reciboId, context, recibosRepository, await resolveGateway(context.facturador.id));
       res.setHeader("Content-Type", artifact.content_type);
@@ -198,7 +198,7 @@ recibosRouter.get(
   validateRequest("params", reciboIdSchema),
   async (req, res, next) => {
     try {
-      const context = await getOperationalContext(req.user!.id, operationalContextRepository);
+      const context = await getOperationalContext(req.user!, operationalContextRepository);
       const { reciboId } = req.params as z.infer<typeof reciboIdSchema>;
       const artifact = await getReciboXml(reciboId, context, recibosRepository, await resolveGateway(context.facturador.id));
       res.setHeader("Content-Type", artifact.content_type);
@@ -214,7 +214,7 @@ recibosRouter.delete(
   validateRequest("params", reciboIdSchema),
   async (req, res, next) => {
     try {
-      const context = await getOperationalContext(req.user!.id, operationalContextRepository);
+      const context = await getOperationalContext(req.user!, operationalContextRepository);
       const { reciboId } = req.params as z.infer<typeof reciboIdSchema>;
       await eliminarRecibo(reciboId, context, recibosRepository, await resolveGateway(context.facturador.id));
       res.status(204).send();
@@ -229,7 +229,7 @@ recibosRouter.post(
   validateRequest("params", facturaIdSchema),
   async (req, res, next) => {
     try {
-      const context = await getOperationalContext(req.user!.id, operationalContextRepository);
+      const context = await getOperationalContext(req.user!, operationalContextRepository);
       const { documentoId } = req.params as z.infer<typeof facturaIdSchema>;
 
       const factura = await facturasRepository.findById({

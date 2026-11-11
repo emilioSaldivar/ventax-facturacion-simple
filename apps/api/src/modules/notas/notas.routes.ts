@@ -73,7 +73,7 @@ notasRouter.post(
   validateRequest("body", createBodySchema),
   async (req, res, next) => {
     try {
-      const context = await getOperationalContext(req.user!.id, operationalContextRepository);
+      const context = await getOperationalContext(req.user!, operationalContextRepository);
       const result = await createNota(context.facturador.id, req.body, notasRepository);
       res.status(201).json(result);
     } catch (error) {
@@ -88,7 +88,7 @@ notasRouter.get(
   validateRequest("query", listQuerySchema),
   async (req, res, next) => {
     try {
-      const context = await getOperationalContext(req.user!.id, operationalContextRepository);
+      const context = await getOperationalContext(req.user!, operationalContextRepository);
       const query = req.query as unknown as z.infer<typeof listQuerySchema>;
       const result = await listNotas(context.facturador.id, query, notasRepository);
       res.json(result);
@@ -104,7 +104,7 @@ notasRouter.get(
   validateRequest("params", idParamsSchema),
   async (req, res, next) => {
     try {
-      const context = await getOperationalContext(req.user!.id, operationalContextRepository);
+      const context = await getOperationalContext(req.user!, operationalContextRepository);
       const { id } = req.params as z.infer<typeof idParamsSchema>;
       const result = await getNota(id, context.facturador.id, notasRepository);
       res.json(result);
@@ -121,7 +121,7 @@ notasRouter.patch(
   validateRequest("body", updateBodySchema),
   async (req, res, next) => {
     try {
-      const context = await getOperationalContext(req.user!.id, operationalContextRepository);
+      const context = await getOperationalContext(req.user!, operationalContextRepository);
       const { id } = req.params as z.infer<typeof idParamsSchema>;
       const result = await updateNota(id, context.facturador.id, req.body, notasRepository);
       res.json(result);
@@ -137,7 +137,7 @@ notasRouter.post(
   validateRequest("params", idParamsSchema),
   async (req, res, next) => {
     try {
-      const context = await getOperationalContext(req.user!.id, operationalContextRepository);
+      const context = await getOperationalContext(req.user!, operationalContextRepository);
       const { id } = req.params as z.infer<typeof idParamsSchema>;
       const result = await emitirNota(id, context.facturador.id, notasRepository);
       res.json(result);
@@ -153,7 +153,7 @@ notasRouter.get(
   validateRequest("params", idParamsSchema),
   async (req, res, next) => {
     try {
-      const context = await getOperationalContext(req.user!.id, operationalContextRepository);
+      const context = await getOperationalContext(req.user!, operationalContextRepository);
       const { id } = req.params as z.infer<typeof idParamsSchema>;
       const nota = await getNota(id, context.facturador.id, notasRepository);
 
@@ -186,7 +186,7 @@ notasRouter.patch(
   validateRequest("body", estadoComercialBodySchema),
   async (req, res, next) => {
     try {
-      const context = await getOperationalContext(req.user!.id, operationalContextRepository);
+      const context = await getOperationalContext(req.user!, operationalContextRepository);
       const { id } = req.params as z.infer<typeof idParamsSchema>;
       const { estado_comercial } = req.body as z.infer<typeof estadoComercialBodySchema>;
       const result = await actualizarEstadoComercial(id, context.facturador.id, estado_comercial, notasRepository);
@@ -203,7 +203,7 @@ notasRouter.post(
   validateRequest("params", idParamsSchema),
   async (req, res, next) => {
     try {
-      const context = await getOperationalContext(req.user!.id, operationalContextRepository);
+      const context = await getOperationalContext(req.user!, operationalContextRepository);
       const { id } = req.params as z.infer<typeof idParamsSchema>;
       const result = await duplicarNota(id, context.facturador.id, notasRepository);
       res.status(201).json(result);
@@ -219,7 +219,7 @@ notasRouter.delete(
   validateRequest("params", idParamsSchema),
   async (req, res, next) => {
     try {
-      const context = await getOperationalContext(req.user!.id, operationalContextRepository);
+      const context = await getOperationalContext(req.user!, operationalContextRepository);
       const { id } = req.params as z.infer<typeof idParamsSchema>;
       await deleteNota(id, context.facturador.id, notasRepository);
       res.status(204).send();

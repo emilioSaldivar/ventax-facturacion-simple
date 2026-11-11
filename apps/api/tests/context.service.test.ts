@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { clearFiscalReadinessCacheForTests, getOperationalContext, getReadiness } from "../src/modules/context/context.service";
 import { deriveTituloOperativo } from "../src/modules/context/context.repository";
-import type { OperationalContextRepository, OperationalContextResponse, ReadinessCheck } from "../src/modules/context/context.types";
+import type { OperationalContextRepository, OperationalContextResponse, PerfilDisponible, ReadinessCheck } from "../src/modules/context/context.types";
 import type { FiscalGateway } from "../src/modules/fiscal-gateway/fiscal-gateway.types";
 
 const contextFixture: OperationalContextResponse = {
@@ -53,8 +53,103 @@ class FakeContextRepository implements OperationalContextRepository {
     return this.checks;
   }
 
+  async listPerfilesDisponibles(): Promise<PerfilDisponible[]> {
+    return this.context ? [perfil(this.context.actividad_punto_perfil_id)] : [];
+  }
+
   async updateTipoTransaccionDefault(): Promise<void> {}
 }
+
+function perfil(id: string, punto = "001"): PerfilDisponible {
+  return {
+    operacion_config_id: id,
+    establecimiento: "001",
+    punto_expedicion: punto,
+    perfil_emision_codigo: `P${punto}`,
+    perfil_emision_alias: null,
+    actividad_economica_codigo: "82110",
+    actividad_economica_descripcion: null,
+    actividad_economica_alias: null,
+    titulo_operativo: "Facturador Demo",
+    timbrado: "80136968",
+    numeracion_facturas: "SERVICIO",
+    documento_nro: "0000000",
+    activo_en_sesion: false
+  };
+}
+
+/** SPEC_MULTIPERFIL_USUARIO_v0.1: repositorio con N configuraciones, por id. */
+class MultiPerfilRepository implements OperationalContextRepository {
+  public pedidos: Array<string | null | undefined> = [];
+  public readinessPedidos: Array<string | null | undefined> = [];
+  constructor(private readonly ids: string[]) {}
+
+  async getOperationalContext(_userId: string, operacionConfigId?: string | null) {
+    this.pedidos.push(operacionConfigId);
+    if (!operacionConfigId || !this.ids.includes(operacionConfigId)) return null;
+    return { ...contextFixture, actividad_punto_perfil_id: operacionConfigId };
+  }
+
+  async getReadinessChecks(_userId: string, operacionConfigId?: string | null) {
+    this.readinessPedidos.push(operacionConfigId);
+    return [];
+  }
+
+  async listPerfilesDisponibles() {
+    return this.ids.map((id, i) => perfil(id, String(i + 1).padStart(3, "0")));
+  }
+
+  async updateTipoTransaccionDefault(): Promise<void> {}
+}
+
+describe("context service: varios perfiles (SPEC_MULTIPERFIL_USUARIO_v0.1 §B.7)", () => {
+  const A = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+  const B = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+
+  it("con uoc resuelve exactamente esa configuracion", async () => {
+    const repo = new MultiPerfilRepository([A, B]);
+    const ctx = await getOperationalContext({ id: "u", operacionConfigId: B }, repo);
+    expect(ctx.actividad_punto_perfil_id).toBe(B);
+    expect(repo.pedidos).toEqual([B]);
+  });
+
+  it("con uoc que ya no es emitible responde 409 PERFIL_NO_DISPONIBLE", async () => {
+    const repo = new MultiPerfilRepository([A]);
+    await expect(getOperationalContext({ id: "u", operacionConfigId: B }, repo)).rejects.toMatchObject({
+      statusCode: 409,
+      details: { reason: "PERFIL_NO_DISPONIBLE" }
+    });
+  });
+
+  it("sin uoc y una sola configuracion la resuelve sola (D-6)", async () => {
+    const repo = new MultiPerfilRepository([A]);
+    const ctx = await getOperationalContext({ id: "u", operacionConfigId: null }, repo);
+    expect(ctx.actividad_punto_perfil_id).toBe(A);
+  });
+
+  it("sin uoc y dos configuraciones responde 409 PERFIL_REQUERIDO", async () => {
+    const repo = new MultiPerfilRepository([A, B]);
+    await expect(getOperationalContext({ id: "u" }, repo)).rejects.toMatchObject({
+      statusCode: 409,
+      details: { reason: "PERFIL_REQUERIDO" }
+    });
+    expect(repo.pedidos).toEqual([]);
+  });
+
+  it("sin uoc y sin configuraciones responde el 409 de siempre", async () => {
+    const repo = new MultiPerfilRepository([]);
+    await expect(getOperationalContext({ id: "u" }, repo)).rejects.toMatchObject({
+      statusCode: 409,
+      message: "Usuario sin configuracion operativa completa."
+    });
+  });
+
+  it("readiness filtra por el uoc de la sesion", async () => {
+    const repo = new MultiPerfilRepository([A, B]);
+    await getReadiness({ id: "u", operacionConfigId: B }, repo);
+    expect(repo.readinessPedidos).toEqual([B]);
+  });
+});
 
 class FakeFiscalGateway implements FiscalGateway {
   public healthCalls = 0;
@@ -166,13 +261,13 @@ describe("context service", () => {
   it("returns operational context", async () => {
     const repo = new FakeContextRepository(contextFixture, []);
 
-    await expect(getOperationalContext(contextFixture.user.id, repo)).resolves.toEqual(contextFixture);
+    await expect(getOperationalContext({ id: contextFixture.user.id }, repo)).resolves.toEqual(contextFixture);
   });
 
   it("rejects missing operational context", async () => {
     const repo = new FakeContextRepository(null, []);
 
-    await expect(getOperationalContext(contextFixture.user.id, repo)).rejects.toMatchObject({
+    await expect(getOperationalContext({ id: contextFixture.user.id }, repo)).rejects.toMatchObject({
       statusCode: 409,
       code: "CONFLICT"
     });
@@ -184,7 +279,7 @@ describe("context service", () => {
       { code: "suscripcion_activa", ok: true, message: "Suscripcion activa." }
     ]);
 
-    await expect(getReadiness(contextFixture.user.id, repo)).resolves.toEqual({
+    await expect(getReadiness({ id: contextFixture.user.id }, repo)).resolves.toEqual({
       ready: true,
       checks: [
         { code: "tenant_activo", ok: true, message: "Tenant activo." },
@@ -199,7 +294,7 @@ describe("context service", () => {
       { code: "usuario_config_operativa", ok: false, message: "Falta configuracion operativa del usuario." }
     ]);
 
-    const readiness = await getReadiness(contextFixture.user.id, repo);
+    const readiness = await getReadiness({ id: contextFixture.user.id }, repo);
 
     expect(readiness.ready).toBe(false);
   });
@@ -212,8 +307,8 @@ describe("context service", () => {
     ]);
     const gateway = new FakeFiscalGateway(true);
 
-    const first = await getReadiness(contextFixture.user.id, repo, gateway);
-    const second = await getReadiness(contextFixture.user.id, repo, gateway);
+    const first = await getReadiness({ id: contextFixture.user.id }, repo, gateway);
+    const second = await getReadiness({ id: contextFixture.user.id }, repo, gateway);
 
     expect(first.ready).toBe(true);
     expect(first.checks).toContainEqual({
@@ -232,7 +327,7 @@ describe("context service", () => {
     ]);
     const gateway = new FakeFiscalGateway(false);
 
-    const readiness = await getReadiness(contextFixture.user.id, repo, gateway);
+    const readiness = await getReadiness({ id: contextFixture.user.id }, repo, gateway);
 
     expect(readiness.ready).toBe(false);
     expect(readiness.checks).toContainEqual({
@@ -249,7 +344,7 @@ describe("context service", () => {
     ]);
     const gateway = new FakeFiscalGateway(false, true);
 
-    const readiness = await getReadiness(contextFixture.user.id, repo, gateway);
+    const readiness = await getReadiness({ id: contextFixture.user.id }, repo, gateway);
 
     expect(readiness.ready).toBe(false);
     expect(readiness.checks).toContainEqual({

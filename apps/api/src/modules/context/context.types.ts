@@ -1,4 +1,6 @@
-import type { UserSummary } from "@facturacion-simple/shared";
+import type { PerfilDisponible, UserSummary } from "@facturacion-simple/shared";
+
+export type { PerfilDisponible };
 
 export interface TenantSummary {
   id: string;
@@ -66,7 +68,9 @@ export interface ReadinessResponse {
 }
 
 export interface OperationalContextRepository {
-  getOperationalContext(userId: string): Promise<OperationalContextResponse | null>;
-  getReadinessChecks(userId: string): Promise<ReadinessCheck[]>;
+  /** SPEC_MULTIPERFIL_USUARIO_v0.1: con `operacionConfigId`, solo esa configuracion. */
+  getOperationalContext(userId: string, operacionConfigId?: string | null): Promise<OperationalContextResponse | null>;
+  getReadinessChecks(userId: string, operacionConfigId?: string | null): Promise<ReadinessCheck[]>;
+  listPerfilesDisponibles(userId: string): Promise<PerfilDisponible[]>;
   updateTipoTransaccionDefault(actividadPuntoPerfilId: string, valor: 1 | 2 | 3): Promise<void>;
 }

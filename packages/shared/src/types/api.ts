@@ -37,4 +37,24 @@ export interface AuthResponse {
   expires_in: number;
   user: UserSummary;
   pending_actions?: string[];
+  /** SPEC_MULTIPERFIL_USUARIO_v0.1 §B.1: viene con `pending_actions: ["SELECT_PERFIL"]`. */
+  perfiles?: PerfilDisponible[];
+}
+
+/** SPEC_MULTIPERFIL_USUARIO_v0.1 §B.4: una configuracion operativa emitible del usuario. */
+export interface PerfilDisponible {
+  operacion_config_id: string;
+  establecimiento: string;
+  punto_expedicion: string;
+  perfil_emision_codigo: string;
+  perfil_emision_alias: string | null;
+  actividad_economica_codigo: string;
+  actividad_economica_descripcion: string | null;
+  actividad_economica_alias: string | null;
+  titulo_operativo: string;
+  timbrado: string;
+  numeracion_facturas: "SERVICIO" | "CLIENTE";
+  /** Solo con numeracion del servicio. */
+  documento_nro: string | null;
+  activo_en_sesion: boolean;
 }

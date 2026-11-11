@@ -5,25 +5,60 @@ import type { OperationalContextRepository, OperationalContextResponse, Readines
 const fiscalReadinessCacheTtlMs = 10_000;
 let fiscalReadinessCache: { expiresAt: number; health: FiscalGatewayHealth } | null = null;
 
+/** Quien pide el contexto: el usuario autenticado y el `uoc` de su token (SPEC_MULTIPERFIL_USUARIO_v0.1). */
+export interface SesionOperativa {
+  id: string;
+  operacionConfigId?: string | null;
+}
+
+export const MENSAJE_SIN_CONFIGURACION = "Usuario sin configuracion operativa completa.";
+export const MENSAJE_PERFIL_REQUERIDO = "Elegi el punto de expedicion para continuar. Cerra sesion y volve a entrar.";
+export const MENSAJE_PERFIL_NO_DISPONIBLE = "El punto de expedicion de tu sesion ya no esta disponible.";
+
+/**
+ * SPEC_MULTIPERFIL_USUARIO_v0.1 §B.7. Con `uoc`, esa configuracion o 409 PERFIL_NO_DISPONIBLE.
+ * Sin `uoc` (token anterior al despliegue, D-6): una emitible se resuelve sola; varias, 409
+ * PERFIL_REQUERIDO; ninguna, el 409 de siempre.
+ */
 export async function getOperationalContext(
-  userId: string,
+  sesion: SesionOperativa,
   repository: OperationalContextRepository
 ): Promise<OperationalContextResponse> {
-  const context = await repository.getOperationalContext(userId);
+  const operacionConfigId = await resolverOperacionConfig(sesion, repository);
+  const context = await repository.getOperationalContext(sesion.id, operacionConfigId);
 
   if (!context) {
-    throw new HttpError(409, "CONFLICT", "Usuario sin configuracion operativa completa.");
+    if (sesion.operacionConfigId) {
+      throw new HttpError(409, "CONFLICT", MENSAJE_PERFIL_NO_DISPONIBLE, { reason: "PERFIL_NO_DISPONIBLE" });
+    }
+    throw new HttpError(409, "CONFLICT", MENSAJE_SIN_CONFIGURACION);
   }
 
   return context;
 }
 
+async function resolverOperacionConfig(sesion: SesionOperativa, repository: OperationalContextRepository): Promise<string | null> {
+  if (sesion.operacionConfigId) {
+    return sesion.operacionConfigId;
+  }
+  const perfiles = await repository.listPerfilesDisponibles(sesion.id);
+  if (perfiles.length === 0) {
+    throw new HttpError(409, "CONFLICT", MENSAJE_SIN_CONFIGURACION);
+  }
+  if (perfiles.length > 1) {
+    throw new HttpError(409, "CONFLICT", MENSAJE_PERFIL_REQUERIDO, { reason: "PERFIL_REQUERIDO" });
+  }
+  return perfiles[0]!.operacion_config_id;
+}
+
 export async function getReadiness(
-  userId: string,
+  sesion: SesionOperativa,
   repository: OperationalContextRepository,
   gateway?: FiscalGateway
 ): Promise<ReadinessResponse> {
-  const checks = await repository.getReadinessChecks(userId);
+  // Sin `uoc` y con varias configuraciones, el readiness mira la primera: es informativo y
+  // /me/context ya responde PERFIL_REQUERIDO en ese caso.
+  const checks = await repository.getReadinessChecks(sesion.id, sesion.operacionConfigId ?? null);
   const allChecks = gateway ? [...checks, await getFiscalReadinessCheck(gateway)] : checks;
 
   return {

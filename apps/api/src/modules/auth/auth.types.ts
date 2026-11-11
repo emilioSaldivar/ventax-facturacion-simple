@@ -19,6 +19,8 @@ export interface LoginUserRecord {
   failedLoginCount: number;
   mustChangePassword: boolean;
   hasAcceptedCurrentTyc: boolean;
+  /** SPEC_MULTIPERFIL_USUARIO_v0.1 §B.5: configuracion guardada en el refresh token rotado. */
+  operacionConfigId?: string | null;
 }
 
 export interface RefreshTokenRecord {
@@ -32,6 +34,9 @@ export interface AuthenticatedUser {
   tenantId: string;
   username: string;
   role: UserSummary["role"];
+  /** SPEC_MULTIPERFIL_USUARIO_v0.1: `uoc` del token; null si el token no lo trae. */
+  operacionConfigId?: string | null;
+  scope?: "full" | "onboarding_only" | "perfil_select";
 }
 
 export interface AuthRepository {
@@ -57,6 +62,7 @@ export interface AuthRepository {
     expiresAt: Date;
     ip?: string;
     userAgent?: string;
+    operacionConfigId?: string | null;
   }): Promise<void>;
   rotateRefreshToken(input: {
     currentTokenHash: string;
@@ -66,5 +72,9 @@ export interface AuthRepository {
     userAgent?: string;
   }): Promise<LoginUserRecord | null>;
   revokeRefreshToken(input: { tokenHash: string }): Promise<boolean>;
+  /** SPEC_MULTIPERFIL_USUARIO_v0.1. Opcionales para no romper repositorios de prueba existentes. */
+  setRefreshTokenOperacionConfig?(input: { tokenHash: string; operacionConfigId: string | null }): Promise<void>;
+  revokeRefreshTokensByOperacionConfig?(operacionConfigId: string): Promise<number>;
+  resetFailedLogin?(userId: string): Promise<void>;
   findActiveUserById(userId: string): Promise<AuthenticatedUser | null>;
 }

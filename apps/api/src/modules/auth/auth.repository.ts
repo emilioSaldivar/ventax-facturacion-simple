@@ -150,13 +150,14 @@ export class PgAuthRepository implements AuthRepository {
     expiresAt: Date;
     ip?: string;
     userAgent?: string;
+    operacionConfigId?: string | null;
   }): Promise<void> {
     await pool.query(
       `
-        insert into refresh_tokens (usuario_id, token_hash, expires_at, created_by_ip, user_agent)
-        values ($1, $2, $3, $4::inet, $5)
+        insert into refresh_tokens (usuario_id, token_hash, expires_at, created_by_ip, user_agent, operacion_config_id)
+        values ($1, $2, $3, $4::inet, $5, $6)
       `,
-      [input.userId, input.tokenHash, input.expiresAt, input.ip ?? null, input.userAgent ?? null]
+      [input.userId, input.tokenHash, input.expiresAt, input.ip ?? null, input.userAgent ?? null, input.operacionConfigId ?? null]
     );
   }
 
@@ -172,9 +173,9 @@ export class PgAuthRepository implements AuthRepository {
     try {
       await client.query("begin");
 
-      const currentToken = await client.query<{ id: string; usuario_id: string }>(
+      const currentToken = await client.query<{ id: string; usuario_id: string; operacion_config_id: string | null }>(
         `
-          select id, usuario_id
+          select id, usuario_id, operacion_config_id
           from refresh_tokens
           where token_hash = $1
             and revoked_at is null
@@ -232,11 +233,11 @@ export class PgAuthRepository implements AuthRepository {
 
       const newToken = await client.query<{ id: string }>(
         `
-          insert into refresh_tokens (usuario_id, token_hash, expires_at, created_by_ip, user_agent)
-          values ($1, $2, $3, $4::inet, $5)
+          insert into refresh_tokens (usuario_id, token_hash, expires_at, created_by_ip, user_agent, operacion_config_id)
+          values ($1, $2, $3, $4::inet, $5, $6)
           returning id
         `,
-        [userRow.id, input.newTokenHash, input.newExpiresAt, input.ip ?? null, input.userAgent ?? null]
+        [userRow.id, input.newTokenHash, input.newExpiresAt, input.ip ?? null, input.userAgent ?? null, tokenRow.operacion_config_id]
       );
 
       await client.query(
@@ -250,7 +251,7 @@ export class PgAuthRepository implements AuthRepository {
 
       await client.query("commit");
 
-      return mapUserRow(userRow);
+      return { ...mapUserRow(userRow), operacionConfigId: tokenRow.operacion_config_id };
     } catch (error) {
       await client.query("rollback");
       throw error;
@@ -271,6 +272,28 @@ export class PgAuthRepository implements AuthRepository {
     );
 
     return (result.rowCount ?? 0) > 0;
+  }
+
+  /** SPEC_MULTIPERFIL_USUARIO_v0.1 §B.5: el refresh rotado pasa a otra configuracion (o a ninguna). */
+  async setRefreshTokenOperacionConfig(input: { tokenHash: string; operacionConfigId: string | null }): Promise<void> {
+    await pool.query(
+      `update refresh_tokens set operacion_config_id = $2 where token_hash = $1 and revoked_at is null`,
+      [input.tokenHash, input.operacionConfigId]
+    );
+  }
+
+  /** D-9: quitar un perfil revoca los refresh emitidos con el. */
+  async revokeRefreshTokensByOperacionConfig(operacionConfigId: string): Promise<number> {
+    const result = await pool.query(
+      `update refresh_tokens set revoked_at = now() where operacion_config_id = $1 and revoked_at is null`,
+      [operacionConfigId]
+    );
+    return result.rowCount ?? 0;
+  }
+
+  /** Tras confirmar la contraseña en el cambio de perfil, el contador vuelve a cero como en el login. */
+  async resetFailedLogin(userId: string): Promise<void> {
+    await pool.query(`update usuarios set failed_login_count = 0 where id = $1 and failed_login_count <> 0`, [userId]);
   }
 
   async findActiveUserById(userId: string): Promise<AuthenticatedUser | null> {

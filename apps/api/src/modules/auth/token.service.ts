@@ -8,7 +8,9 @@ export interface AccessTokenPayload {
   tenant_id: string;
   username: string;
   role: UserSummary["role"];
-  scope: "full" | "onboarding_only";
+  scope: "full" | "onboarding_only" | "perfil_select";
+  /** SPEC_MULTIPERFIL_USUARIO_v0.1 RN-09: id de usuario_operacion_config activo en la sesion. */
+  uoc?: string;
 }
 
 export function signAccessToken(payload: AccessTokenPayload): string {
@@ -24,6 +26,16 @@ export function signOnboardingToken(payload: Omit<AccessTokenPayload, "scope">):
     expiresIn: "30m"
   });
 }
+
+/** SPEC_MULTIPERFIL_USUARIO_v0.1 §B.1: solo sirve para elegir el perfil; 10 minutos, sin refresh (D-8). */
+export function signPerfilSelectToken(payload: Omit<AccessTokenPayload, "scope" | "uoc">): string {
+  return jwt.sign({ ...payload, scope: "perfil_select" }, getAccessSecret(), {
+    algorithm: "HS256",
+    expiresIn: "10m"
+  });
+}
+
+export const PERFIL_SELECT_TTL_SECONDS = 600;
 
 export function verifyAccessToken(token: string): AccessTokenPayload {
   const payload = jwt.verify(token, getAccessSecret(), {
@@ -74,6 +86,7 @@ function isAccessTokenPayload(payload: unknown): payload is AccessTokenPayload {
     (candidate.role === "OPERADOR_FACTURACION" ||
       candidate.role === "SOPORTE_INTERNO" ||
       candidate.role === "ADMIN_INTERNO") &&
-    (candidate.scope === "full" || candidate.scope === "onboarding_only")
+    (candidate.scope === "full" || candidate.scope === "onboarding_only" || candidate.scope === "perfil_select") &&
+    (candidate.uoc === undefined || (typeof candidate.uoc === "string" && candidate.uoc.length > 0))
   );
 }

@@ -5,7 +5,7 @@ import { HttpError } from "../../shared/errors/http-error";
 import { validateRequest } from "../../shared/validation/validate-request";
 import { requireAuth } from "../auth/auth.middleware";
 import { operationalContextRepository } from "../context/context.repository";
-import { getOperationalContext, getReadiness } from "../context/context.service";
+import { getOperationalContext, getReadiness, type SesionOperativa } from "../context/context.service";
 import type { OperationalContextResponse, ReadinessResponse } from "../context/context.types";
 import { createFiscalGateway, fiscalGateway } from "../fiscal-gateway/fiscal-gateway.client";
 import { buildFiscalGatewayConfig } from "../fiscal-gateway/fiscal-gateway.config";
@@ -39,8 +39,8 @@ function tipoDeDocumento(valor: unknown): (typeof TIPOS_DE_DOCUMENTO)[number] {
 
 export interface CargasRouterDeps extends CargasDeps {
   requireAuth: RequestHandler;
-  getContext: (userId: string) => Promise<OperationalContextResponse>;
-  getReadiness: (userId: string) => Promise<ReadinessResponse>;
+  getContext: (sesion: SesionOperativa) => Promise<OperationalContextResponse>;
+  getReadiness: (sesion: SesionOperativa) => Promise<ReadinessResponse>;
   enabled: () => boolean;
   maxBytes: number;
   subidasSimultaneas: number;
@@ -127,8 +127,8 @@ export function createCargasRouter(deps: CargasRouterDeps): Router {
   };
 
   async function contextoListo(req: Request): Promise<OperationalContextResponse> {
-    const context = await deps.getContext(req.user!.id);
-    const readiness = await deps.getReadiness(req.user!.id);
+    const context = await deps.getContext(req.user!);
+    const readiness = await deps.getReadiness(req.user!);
     if (!readiness.ready) {
       throw new HttpError(409, "CONFLICT", "El contexto operativo no esta listo para emitir.", {
         reason: "CONTEXTO_NO_LISTO",
@@ -145,7 +145,7 @@ export function createCargasRouter(deps: CargasRouterDeps): Router {
 
   router.get("/cargas/plantilla", async (req, res, next) => {
     try {
-      enviarArchivo(res, await descargarPlantilla(await deps.getContext(req.user!.id), deps, tipoDeDocumento(req.query.tipo_documento)));
+      enviarArchivo(res, await descargarPlantilla(await deps.getContext(req.user!), deps, tipoDeDocumento(req.query.tipo_documento)));
     } catch (error) {
       fallar(res, next, error);
     }
@@ -154,7 +154,7 @@ export function createCargasRouter(deps: CargasRouterDeps): Router {
   // SPEC_PLANILLAS_EJEMPLO_v0.1: ejemplos y documentacion de la planilla del tipo elegido.
   router.get("/cargas/ejemplos", async (req, res, next) => {
     try {
-      res.json(await listarEjemplos(await deps.getContext(req.user!.id), deps, tipoDeDocumento(req.query.tipo_documento)));
+      res.json(await listarEjemplos(await deps.getContext(req.user!), deps, tipoDeDocumento(req.query.tipo_documento)));
     } catch (error) {
       fallar(res, next, error);
     }
@@ -164,7 +164,7 @@ export function createCargasRouter(deps: CargasRouterDeps): Router {
     try {
       const codigo = String(req.params.codigo);
       if (!/^[A-Z0-9_]{1,60}$/.test(codigo)) throw new HttpError(400, "VALIDATION_ERROR", "Codigo de ejemplo invalido.");
-      enviarArchivo(res, await descargarEjemplo(await deps.getContext(req.user!.id), deps, codigo, tipoDeDocumento(req.query.tipo_documento)));
+      enviarArchivo(res, await descargarEjemplo(await deps.getContext(req.user!), deps, codigo, tipoDeDocumento(req.query.tipo_documento)));
     } catch (error) {
       fallar(res, next, error);
     }
@@ -174,7 +174,7 @@ export function createCargasRouter(deps: CargasRouterDeps): Router {
     try {
       const formato = req.query.formato === "md" ? "md" : req.query.formato === undefined || req.query.formato === "pdf" ? "pdf" : null;
       if (!formato) throw new HttpError(400, "VALIDATION_ERROR", "Formato invalido: pdf o md.");
-      enviarArchivo(res, await descargarDiccionario(await deps.getContext(req.user!.id), deps, tipoDeDocumento(req.query.tipo_documento), formato));
+      enviarArchivo(res, await descargarDiccionario(await deps.getContext(req.user!), deps, tipoDeDocumento(req.query.tipo_documento), formato));
     } catch (error) {
       fallar(res, next, error);
     }
@@ -200,7 +200,7 @@ export function createCargasRouter(deps: CargasRouterDeps): Router {
   router.get("/cargas", validateRequest("query", listQuerySchema), async (req, res, next) => {
     try {
       const query = req.query as unknown as z.infer<typeof listQuerySchema>;
-      const context = await deps.getContext(req.user!.id);
+      const context = await deps.getContext(req.user!);
       res.json(await listarCargas(context, {
         estados: query.estado?.split(",").map((estado) => estado.trim()).filter(Boolean),
         desde: query.desde,
@@ -215,7 +215,7 @@ export function createCargasRouter(deps: CargasRouterDeps): Router {
 
   router.get("/cargas/:id", validateRequest("params", idSchema), async (req, res, next) => {
     try {
-      res.json(await obtenerCarga(await deps.getContext(req.user!.id), String(req.params.id), deps));
+      res.json(await obtenerCarga(await deps.getContext(req.user!), String(req.params.id), deps));
     } catch (error) {
       fallar(res, next, error);
     }
@@ -228,7 +228,7 @@ export function createCargasRouter(deps: CargasRouterDeps): Router {
     async (req, res, next) => {
       try {
         const query = req.query as unknown as z.infer<typeof comprobantesQuerySchema>;
-        res.json(await listarComprobantes(await deps.getContext(req.user!.id), String(req.params.id), {
+        res.json(await listarComprobantes(await deps.getContext(req.user!), String(req.params.id), {
           estado: query.estado,
           con_advertencias: query.con_advertencias === "true",
           detalle: query.detalle === "true",
@@ -252,7 +252,7 @@ export function createCargasRouter(deps: CargasRouterDeps): Router {
   for (const accion of ["cancelar", "reintentar"] as const) {
     router.post(`/cargas/:id/${accion}`, validateRequest("params", idSchema), async (req, res, next) => {
       try {
-        res.json(await accionSobreCarga(await deps.getContext(req.user!.id), String(req.params.id), accion, deps));
+        res.json(await accionSobreCarga(await deps.getContext(req.user!), String(req.params.id), accion, deps));
       } catch (error) {
         fallar(res, next, error);
       }
@@ -267,7 +267,7 @@ export function createCargasRouter(deps: CargasRouterDeps): Router {
       try {
         const { motivo } = req.body as z.infer<typeof inutilizarBodySchema>;
         res.json(await inutilizarComprobante(
-          await deps.getContext(req.user!.id),
+          await deps.getContext(req.user!),
           String(req.params.id),
           Number(req.params.orden),
           motivo,
@@ -281,7 +281,7 @@ export function createCargasRouter(deps: CargasRouterDeps): Router {
 
   router.get("/cargas/:id/resultado", validateRequest("params", idSchema), async (req, res, next) => {
     try {
-      enviarArchivo(res, await descargarResultado(await deps.getContext(req.user!.id), String(req.params.id), deps));
+      enviarArchivo(res, await descargarResultado(await deps.getContext(req.user!), String(req.params.id), deps));
     } catch (error) {
       fallar(res, next, error);
     }
@@ -289,7 +289,7 @@ export function createCargasRouter(deps: CargasRouterDeps): Router {
 
   router.get("/cargas/:id/lotes", validateRequest("params", idSchema), async (req, res, next) => {
     try {
-      res.json(await obtenerLotes(await deps.getContext(req.user!.id), String(req.params.id), deps));
+      res.json(await obtenerLotes(await deps.getContext(req.user!), String(req.params.id), deps));
     } catch (error) {
       fallar(res, next, error);
     }
@@ -302,8 +302,8 @@ export const cargasRouter = createCargasRouter({
   repository: cargaRepository,
   gatewayFor: (facturadorId) => gatewayDeCargas(facturadorId),
   requireAuth,
-  getContext: (userId) => getOperationalContext(userId, operationalContextRepository),
-  getReadiness: (userId) => getReadiness(userId, operationalContextRepository, fiscalGateway),
+  getContext: (sesion) => getOperationalContext(sesion, operationalContextRepository),
+  getReadiness: (sesion) => getReadiness(sesion, operationalContextRepository, fiscalGateway),
   enabled: () => env.CARGA_MASIVA_ENABLED,
   maxBytes: env.CARGA_MAX_BYTES,
   subidasSimultaneas: env.CARGA_SUBIDAS_SIMULTANEAS

@@ -43,7 +43,7 @@ catalogoRouter.get(
   validateRequest("query", searchQuerySchema),
   async (req, res, next) => {
     try {
-      const context = await getOperationalContext(req.user!.id, operationalContextRepository);
+      const context = await getOperationalContext(req.user!, operationalContextRepository);
       const result = await searchCatalogoItems(
         context,
         req.query as unknown as z.infer<typeof searchQuerySchema>,
@@ -58,7 +58,7 @@ catalogoRouter.get(
 
 catalogoRouter.get("/catalogo/items", requireAuth, validateRequest("query", listQuerySchema), async (req, res, next) => {
   try {
-    const context = await getOperationalContext(req.user!.id, operationalContextRepository);
+    const context = await getOperationalContext(req.user!, operationalContextRepository);
     const result = await listCatalogoItems(context, req.query as unknown as z.infer<typeof listQuerySchema>, catalogoRepository);
     res.json(result);
   } catch (error) {
@@ -68,7 +68,7 @@ catalogoRouter.get("/catalogo/items", requireAuth, validateRequest("query", list
 
 catalogoRouter.post("/catalogo/items", requireAuth, validateRequest("body", catalogoItemSchema), async (req, res, next) => {
   try {
-    const context = await getOperationalContext(req.user!.id, operationalContextRepository);
+    const context = await getOperationalContext(req.user!, operationalContextRepository);
     const result = await createCatalogoItem(context, req.body, catalogoRepository);
     res.status(201).json(result);
   } catch (error) {
@@ -83,7 +83,7 @@ catalogoRouter.patch(
   validateRequest("body", catalogoItemSchema),
   async (req, res, next) => {
     try {
-      const context = await getOperationalContext(req.user!.id, operationalContextRepository);
+      const context = await getOperationalContext(req.user!, operationalContextRepository);
       const params = req.params as unknown as z.infer<typeof itemParamsSchema>;
       const result = await updateCatalogoItem(context, params.itemId, req.body, catalogoRepository);
       res.json(result);
@@ -99,7 +99,7 @@ catalogoRouter.delete(
   validateRequest("params", itemParamsSchema),
   async (req, res, next) => {
     try {
-      const context = await getOperationalContext(req.user!.id, operationalContextRepository);
+      const context = await getOperationalContext(req.user!, operationalContextRepository);
       const params = req.params as unknown as z.infer<typeof itemParamsSchema>;
       await deleteCatalogoItem(context, params.itemId, catalogoRepository);
       res.status(204).send();

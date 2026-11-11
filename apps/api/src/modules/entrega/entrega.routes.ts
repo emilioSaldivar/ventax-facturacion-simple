@@ -33,7 +33,7 @@ entregaRouter.post(
   validateRequest("body", deliveryLinkBodySchema),
   async (req, res, next) => {
     try {
-      const context = await getOperationalContext(req.user!.id, operationalContextRepository);
+      const context = await getOperationalContext(req.user!, operationalContextRepository);
       const result = await createOrGetDeliveryLink(context, String(req.params.documentoId), req.body, {
         facturas: facturasRepository,
         deliveryLinks: deliveryLinkRepository
@@ -51,7 +51,7 @@ entregaRouter.get(
   validateRequest("params", documentoParamsSchema),
   async (req, res, next) => {
     try {
-      const context = await getOperationalContext(req.user!.id, operationalContextRepository);
+      const context = await getOperationalContext(req.user!, operationalContextRepository);
       const result = await getEmailStatus(context, String(req.params.documentoId), facturasRepository, fiscalGateway);
       res.json(result);
     } catch (error) {

@@ -46,7 +46,7 @@ clientesRouter.get(
   validateRequest("query", searchQuerySchema),
   async (req, res, next) => {
     try {
-      const context = await getOperationalContext(req.user!.id, operationalContextRepository);
+      const context = await getOperationalContext(req.user!, operationalContextRepository);
       const result = await searchClientes(context, req.query as unknown as z.infer<typeof searchQuerySchema>, clienteRepository);
       res.json(result);
     } catch (error) {
@@ -57,7 +57,7 @@ clientesRouter.get(
 
 clientesRouter.get("/clientes", requireAuth, validateRequest("query", listQuerySchema), async (req, res, next) => {
   try {
-    const context = await getOperationalContext(req.user!.id, operationalContextRepository);
+    const context = await getOperationalContext(req.user!, operationalContextRepository);
     const result = await listClientes(context, req.query as unknown as z.infer<typeof listQuerySchema>, clienteRepository);
     res.json(result);
   } catch (error) {
@@ -84,7 +84,7 @@ clientesRouter.get(
 
 clientesRouter.post("/clientes", requireAuth, validateRequest("body", clienteUpsertSchema), async (req, res, next) => {
   try {
-    const context = await getOperationalContext(req.user!.id, operationalContextRepository);
+    const context = await getOperationalContext(req.user!, operationalContextRepository);
     const result = await createCliente(context, req.body, clienteRepository);
     res.status(201).json(result);
   } catch (error) {
@@ -99,7 +99,7 @@ clientesRouter.patch(
   validateRequest("body", clienteUpsertSchema),
   async (req, res, next) => {
     try {
-      const context = await getOperationalContext(req.user!.id, operationalContextRepository);
+      const context = await getOperationalContext(req.user!, operationalContextRepository);
       const params = req.params as unknown as z.infer<typeof clienteParamsSchema>;
       const result = await updateCliente(context, params.clienteId, req.body, clienteRepository);
       res.json(result);
@@ -115,7 +115,7 @@ clientesRouter.delete(
   validateRequest("params", clienteParamsSchema),
   async (req, res, next) => {
     try {
-      const context = await getOperationalContext(req.user!.id, operationalContextRepository);
+      const context = await getOperationalContext(req.user!, operationalContextRepository);
       const params = req.params as unknown as z.infer<typeof clienteParamsSchema>;
       await deleteCliente(context, params.clienteId, clienteRepository);
       res.status(204).send();
