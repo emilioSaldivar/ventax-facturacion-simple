@@ -9,7 +9,8 @@
 | P-1 | Que cedula se usa para mostrar el autocompletado por CI. | **Resuelta (2026-11-11):** `5057016`, del usuario, y `SEGEL SA` para empresas (SPEC D-6) |
 | P-2 | Si los hallazgos se corrigen antes de grabar. | **Resuelta (2026-11-11):** primero las correcciones, con su cadena, y despues los tutoriales; ademas, quitar el "Próximo número" estimado. Hecho en `SPEC_AJUSTES_TEXTOS_OPERADOR_v0.1` (SPEC D-8) |
 | P-3 | Buzon que recibe el codigo de V1. | **Resuelta (2026-11-11):** `emilio.saldivar@segel.com.py`; en pantalla, `ejemplo@ejemplo.com`; usuario demo `operador.ejemplo` (SPEC D-7) |
-| P-4 | Formato y ubicacion de los videos (SPEC D-4 y D-5, hoy "propuesta"): MP4 1440 x 900, de 2 a 6 minutos, fuera de git. | Abierta. No bloquea la grabacion: si cambia, se vuelve a montar desde `bruto.webm` |
+| P-5 | Si se abren las paginas publicas de presupuesto y recibo en V6 (SPEC §3.9). | **Resuelta (2026-11-11):** el usuario lo delega a la prueba de TUT-001 |
+| P-4 | Formato y ubicacion de los videos (SPEC D-4 y D-5, hoy "propuesta"): MP4 1440 x 900, de 2 a 6 minutos, fuera de git. | **Resuelta (2026-11-11):** se acepta la propuesta |
 
 ## Matriz
 
