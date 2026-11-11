@@ -4,7 +4,7 @@
 //
 //   ENSAYO_PASSWORD_FILE=/ruta/clave node scripts/segel-fs/playwright-ux-resto-app.cjs [caso ...]
 //
-// Sin argumentos corre todos los casos. Casos: componentes (URA-017, CA-13), api (URA-018), teclado (URA-019), puntos (URA-021, CA-14), menu (URA-003), nuevo (URA-004), busqueda (URA-025), ficha (URA-007). URA-012 suma los de las fases 1 y 2.
+// Sin argumentos corre todos los casos. Casos: componentes (URA-017, CA-13), api (URA-018), teclado (URA-019), puntos (URA-021, CA-14), menu (URA-003), nuevo (URA-004), busqueda (URA-025), ficha (URA-007), estado (URA-008). URA-012 suma los de las fases 1 y 2.
 // Escribe test-results/ux-resto-app/.
 const fs = require("node:fs");
 const path = require("node:path");
@@ -568,6 +568,36 @@ async function casoFicha(browser) {
   }
 }
 
+// ─── URA-008: Información y estado (CA-07) ─────────────────────────────────────────────────────────────
+async function casoEstado(browser) {
+  for (const [ancho, alto] of [
+    [1440, 900],
+    [390, 844]
+  ]) {
+    const { ctx, page } = await entrar(browser, ancho, alto);
+    try {
+      await abrirVista(page, "Información y estado");
+      const tarjeta = page.getByRole("region", { name: "Documentos que podés emitir" });
+      await tarjeta.waitFor();
+      const texto = await tarjeta.innerText();
+      check(`CA-07 ${ancho}: "Documentos que podés emitir" lista los cinco tipos con su estado`, ["Factura", "Nota de crédito", "Nota de débito", "Nota de remisión", "Autofactura"].every((t) => texto.includes(t)) && texto.includes("Próximamente") && texto.includes("Disponible"), texto.replace(/\s+/g, " ").slice(0, 200));
+      const main = await page.locator("main").innerText();
+      check(`CA-07 ${ancho}: sin emojis ni "✓"`, !EMOJI.test(main) && !main.includes("✓"));
+      const botones = await page.locator(".estado-espacio > .editor-heading button, .estado-espacio .next-panel button").allInnerTexts();
+      check(`CA-07 ${ancho}: una sola accion principal (sin botones que repiten el menu)`, (await page.locator(".next-panel").count()) === 0 && botones.join("|").includes("Nueva factura"), botones.join(" | "));
+      if (ancho === 1440) {
+        const columnas = await page.locator(".estado-grilla").evaluate((e) => getComputedStyle(e).gridTemplateColumns.split(" ").length);
+        check("CA-07 1440: dos columnas (facturador y estado)", columnas === 2, String(columnas));
+      }
+      await tarjeta.getByRole("button", { name: /Nota de crédito/ }).click();
+      check(`CA-07 ${ancho}: desde la tarjeta se abre Notas de crédito`, await page.getByRole("heading", { name: "Notas de crédito" }).waitFor({ timeout: 10000 }).then(() => true, () => false));
+      await page.screenshot({ path: path.join(outDir, `${ancho}-estado.png`), fullPage: true });
+    } finally {
+      await ctx.close();
+    }
+  }
+}
+
 (async () => {
   const browser = await chromium.launch();
   try {
@@ -579,6 +609,7 @@ async function casoFicha(browser) {
     if (corre("nuevo")) await casoNuevo(browser);
     if (corre("busqueda")) await casoBusqueda(browser);
     if (corre("ficha")) await casoFicha(browser);
+    if (corre("estado")) await casoEstado(browser);
   } catch (e) {
     check("el guion termino sin excepciones", false, String(e));
   } finally {

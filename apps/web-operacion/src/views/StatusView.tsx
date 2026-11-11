@@ -1,8 +1,15 @@
-// Movido de main.tsx sin cambios (PLAN_UX_RESTO_APP_v0.1 §10.9, URA-023).
-import { actividadPunto, nombrePunto } from "../lib/punto";
-import { type UserSummary, type OperationView, type OperationalContextResponse, type ReadinessResponse } from "../tipos";
-import { firstText } from "../lib/formato";
+// Informacion y estado (SPEC_UX_RESTO_APP_v0.1 D R-8; PLAN §5, URA-008): encabezado con el facturador y la accion
+// principal, dos columnas ("Facturador y sesión" y "Estado para facturar", con iconos) y "Documentos que podés emitir"
+// desde TIPOS_EMISION. Sin los botones que repetian el menu (H-15). Conserva la banda .aviso-perfil-banda y el enlace
+// "Cambiar punto de expedición" de SPEC_MULTIPERFIL_USUARIO (C.5).
+import { EncabezadoPantalla } from "../components/EncabezadoPantalla";
+import { Icono } from "../components/Icono";
+import { PastillaEstado } from "../components/PastillaEstado";
 import { getOperationalTitle, mapBusinessReadinessChecks } from "../lib/contexto";
+import { firstText, formatShortDate } from "../lib/formato";
+import { actividadPunto, nombrePunto } from "../lib/punto";
+import { ETIQUETA_ESTADO_TIPO, TIPOS_EMISION } from "../lib/tiposEmision";
+import { type OperationalContextResponse, type OperationView, type ReadinessResponse, type UserSummary } from "../tipos";
 
 export function StatusView({
   canEmit,
@@ -29,9 +36,12 @@ export function StatusView({
 }) {
   const businessChecks = mapBusinessReadinessChecks(readiness?.checks ?? []);
   const statusLabel = canEmit ? "Listo para facturar" : "Faltan requisitos para facturar";
+  const fc = context?.fiscal_context;
+  const numeracionDelCliente = fc?.numeracion_facturas === "CLIENTE";
+  const titulo = context ? firstText(context.facturador.nombre_fantasia, context.facturador.razon_social) ?? getOperationalTitle(context) : getOperationalTitle(context);
 
   return (
-    <>
+    <section className="nc-espacio estado-espacio" aria-labelledby="estado-title">
       {avisoPerfil ? (
         <section className="aviso-perfil aviso-perfil-banda" role="status">
           <span>{avisoPerfil}</span>
@@ -40,87 +50,90 @@ export function StatusView({
           </button>
         </section>
       ) : null}
-      <section className="facturador-band" aria-label="Contexto operativo">
-        <div>
-          <p className="eyebrow">Facturador</p>
-          {/* URA-021 (H-01): el titulo es el facturador, no la descripcion fiscal del perfil. */}
-          <h1>{context ? firstText(context.facturador.nombre_fantasia, context.facturador.razon_social) ?? getOperationalTitle(context) : getOperationalTitle(context)}</h1>
-          <p className="muted">
-            {context ? `${context.facturador.razon_social} · RUC ${context.facturador.ruc}` : "Configuración operativa incompleta"}
-          </p>
-          {context ? (
-            <p className="punto-activo">
-              Punto de expedición: <strong>{nombrePunto(context.fiscal_context)}</strong>
-              {actividadPunto(context.fiscal_context) ? ` · ${actividadPunto(context.fiscal_context)}` : ""}
-              {variosPerfiles ? (
-                <button className="enlace-accion" onClick={onCambiarPerfil} type="button">
-                  Cambiar punto de expedición
-                </button>
-              ) : null}
-            </p>
-          ) : null}
-          {perfilesError ? <p className="form-error">No se pudo cargar la lista de puntos de expedición. Recargá la página.</p> : null}
-        </div>
-        <span className={canEmit ? "status-pill ready" : "status-pill blocked"}>{canEmit ? "Listo" : "Bloqueado"}</span>
-      </section>
+      <EncabezadoPantalla
+        acciones={
+          <button className="primary-action" disabled={!canEmit || numeracionDelCliente} onClick={() => onGoTo("invoice")} type="button">
+            Nueva factura
+          </button>
+        }
+        id="estado-title"
+        nivel="h1"
+        subtitulo={context ? `${context.facturador.razon_social} · RUC ${context.facturador.ruc}` : "Configuración operativa incompleta"}
+        titulo={titulo}
+      />
 
-      <section className="readiness-grid">
-        <article className="context-card">
-          <p className="eyebrow">Sesión</p>
-          <h2>{user?.display_name ?? user?.username ?? "Operador"}</h2>
-          <dl>
-            {/* URA-021 (H-03): sin el codigo del perfil; establecimiento y punto en un solo dato. */}
+      <div className="estado-grilla">
+        <section className="nc-tarjeta" aria-labelledby="estado-facturador">
+          <h2 id="estado-facturador">Facturador y sesión</h2>
+          <dl className="estado-datos">
             <div>
+              <dt>Operador</dt>
+              <dd>{user?.display_name ?? user?.username ?? "Operador"}</dd>
+            </div>
+            <div className="punto-activo">
               <dt>Punto de expedición</dt>
-              <dd>{context ? nombrePunto(context.fiscal_context) : "-"}</dd>
+              <dd>
+                <strong>{fc ? nombrePunto(fc) : "-"}</strong>
+                {variosPerfiles ? (
+                  <button className="enlace-accion" onClick={onCambiarPerfil} type="button">
+                    Cambiar punto de expedición
+                  </button>
+                ) : null}
+              </dd>
             </div>
             <div>
               <dt>Actividad</dt>
-              <dd>{formatActividadOperativa(context)}</dd>
+              <dd>{fc ? [fc.actividad_economica_codigo, actividadPunto(fc)].filter(Boolean).join(" · ") : "-"}</dd>
+            </div>
+            <div>
+              <dt>Timbrado</dt>
+              <dd>{fc ? `${fc.timbrado}${fc.timbrado_inicio ? ` · vigente desde ${formatShortDate(fc.timbrado_inicio)}` : ""}` : "-"}</dd>
             </div>
           </dl>
-        </article>
+          {perfilesError ? <p className="form-error">No se pudo cargar la lista de puntos de expedición. Recargá la página.</p> : null}
+        </section>
 
-        <article className="context-card">
-          <p className="eyebrow">Estado para facturar</p>
-          <h2>{statusLabel}</h2>
-          <ul className="check-list">
+        <section className="nc-tarjeta" aria-labelledby="estado-facturar">
+          <div className="estado-titulo">
+            <h2 id="estado-facturar">Estado para facturar</h2>
+            <PastillaEstado codigo={canEmit ? "LISTO" : "BLOQUEADO"} texto={canEmit ? "Listo" : "Bloqueado"} tono={canEmit ? "ready" : "blocked"} />
+          </div>
+          <p className="estado-resumen">{statusLabel}</p>
+          <ul className="check-list estado-checks">
             {businessChecks.map((check) => (
               <li key={check.code} className={check.ok ? "check-ok" : "check-fail"}>
-                <span aria-hidden="true">{check.ok ? "✓" : "!"}</span>
+                <Icono nombre={check.ok ? "tilde" : "alerta"} tamano={16} />
                 {check.message}
               </li>
             ))}
           </ul>
-        </article>
-      </section>
+        </section>
+      </div>
 
-      <section className="next-panel">
-        <button className="primary-action wide" disabled={!canEmit} onClick={() => onGoTo("invoice")} type="button">
-          Nueva factura
-        </button>
-        <button className="secondary-action wide" onClick={() => onGoTo("clients")} type="button">
-          Agenda / Clientes
-        </button>
-        <button className="secondary-action wide" onClick={() => onGoTo("documents")} type="button">
-          Documentos
-        </button>
-        <button className="secondary-action wide" onClick={() => onGoTo("catalog")} type="button">
-          Catálogo
-        </button>
-        <button className="secondary-action wide" disabled={!canEmit} onClick={() => onGoTo("credit-note")} type="button">
-          Nueva nota de crédito
-        </button>
+      <section className="nc-tarjeta" aria-labelledby="estado-documentos">
+        <h2 id="estado-documentos">Documentos que podés emitir</h2>
+        <ul className="estado-tipos">
+          {TIPOS_EMISION.map((t) => {
+            const estado = t.estado(context);
+            const bloqueado = t.tipo === "FACTURA" ? !canEmit || numeracionDelCliente : t.tipo === "NOTA_CREDITO" ? !canEmit : false;
+            const deshabilitado = estado === "PROXIMAMENTE" || t.vista === null || bloqueado;
+            return (
+              <li key={t.tipo}>
+                <button className="estado-tipo" disabled={deshabilitado} onClick={() => (t.vista ? onGoTo(t.vista) : undefined)} type="button">
+                  <span className="menu-nuevo-icono"><Icono nombre={t.icono} /></span>
+                  <span className="menu-nuevo-texto">
+                    <span className="menu-texto">
+                      <strong className="menu-nombre">{t.etiquetaSingular}</strong>
+                      <span className="menu-tag">{estado === "DISPONIBLE" ? "Disponible" : ETIQUETA_ESTADO_TIPO[estado]}</span>
+                    </span>
+                    <small>{t.tipo === "FACTURA" && numeracionDelCliente ? "Este punto emite por carga masiva" : t.descripcion}</small>
+                  </span>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
       </section>
-    </>
+    </section>
   );
-}
-
-export function formatActividadOperativa(context: OperationalContextResponse | null): string {
-  if (!context) {
-    return "-";
-  }
-
-  const label = firstText(context.fiscal_context.actividad_economica_alias, context.fiscal_context.actividad_economica_descripcion);
-  return label ? `${context.fiscal_context.actividad_economica_codigo} · ${label}` : context.fiscal_context.actividad_economica_codigo;
 }
