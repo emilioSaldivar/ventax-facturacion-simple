@@ -238,7 +238,7 @@ Validacion: `typecheck`, `lint`, `build`; `grep -n 'window.confirm\|[^a-zA-Z.]co
 3. Glosario (pautas §8): "Nota credito" (`formatDocumentoTipo:7597`, `:8075`) → "Nota de crédito"; `Devolver factura`/`Notas / Presupuestos` **no** se tocan aca (son de URA-003, con el menu nuevo); "Integracion con facturacion-electronica lista para operar" → "Conexión fiscal lista" (viene de `mapBusinessReadinessChecks:7327` o del texto de la API: si viene de la API se traduce en el mapa de la web, sin tocar la API).
 4. Enums: `condicion_venta` (`:4684`) pasa por un mapa `{ CONTADO: "Contado", CREDITO: "Crédito" }` en `lib/estados.ts`; el estado de recibos ya pasa por `estadoRecibo` (URA-017).
 5. Scripts: antes de cerrar, `grep -rn 'has-text("\|name: "\|hasText:' scripts/*.cjs scripts/segel-fs/*.cjs | grep -i 'informacion\|catalogo\|credito\|contrasena\|numero\|seleccione\|ingrese'` y actualizar cada literal en el mismo commit. `scripts/guia-uso-segel.cjs` no se versiona ni se toca sin la otra sesion.
-6. Validacion: `typecheck`, `build`; `grep -c` de cada palabra sin tilde en literales visibles = 0; regresiones sin emision: `playwright-documentos-escritorio.cjs`, `playwright-editor-pc.cjs` y `playwright-multiperfil-v02.cjs`. `playwright-ux-nueva-factura.cjs` emite facturas reales y se corre recien en URA-012.
+6. Validacion: `typecheck`, `build`; `grep -c` de cada palabra sin tilde en literales visibles = 0; regresiones sin emision: `playwright-documentos-escritorio.cjs` y `playwright-multiperfil-v02.cjs`. `playwright-ux-nueva-factura.cjs` emite facturas reales y se corre recien en URA-012.
 
 ### 10.7 Varios puntos (URA-021)
 
@@ -263,7 +263,7 @@ Toca pantallas de la cadena de multiperfil (`SPEC_MULTIPERFIL_USUARIO_v0.1` C.1 
 
 ### 10.9 Particion de `main.tsx` (URA-023)
 
-Solo movimientos: cada commit mueve codigo sin cambiarlo. Verificacion de cada commit: `git diff --color-moved=dimmed-zebra HEAD~1` muestra los bloques movidos atenuados y ninguna linea agregada o quitada fuera de `import`/`export`; `typecheck`, `build`; `playwright-documentos-escritorio.cjs` y `playwright-editor-pc.cjs`.
+Solo movimientos: cada commit mueve codigo sin cambiarlo. Verificacion de cada commit: `git diff --color-moved=dimmed-zebra HEAD~1` muestra los bloques movidos atenuados y ninguna linea agregada o quitada fuera de `import`/`export`; `typecheck`, `build`; `playwright-documentos-escritorio.cjs`.
 
 Orden y destino:
 
@@ -277,7 +277,7 @@ Antes de cada movimiento: `git log -3 -- apps/web-operacion/src/main.tsx` y avis
 
 ### 10.10 Validacion de la fase 0
 
-Por tarea: `npm run typecheck`, `npm run lint`, `npm run build` (raiz). Al cerrar URA-017, URA-019, URA-020, URA-021 y URA-023: despliegue local (§12.3), guion de reconocimiento contra la linea base, `scripts/segel-fs/playwright-ux-resto-app.cjs` (casos de la fase 0) y las regresiones sin emision (`playwright-documentos-escritorio.cjs`, `playwright-editor-pc.cjs`, `playwright-multiperfil-v02.cjs`). Las emisiones reales en SIFEN test quedan para URA-012.
+Por tarea: `npm run typecheck`, `npm run lint`, `npm run build` (raiz). Al cerrar URA-017, URA-019, URA-020, URA-021 y URA-023: despliegue local (§12.3), guion de reconocimiento contra la linea base, `scripts/segel-fs/playwright-ux-resto-app.cjs` (casos de la fase 0) y las regresiones sin emision (`playwright-documentos-escritorio.cjs`, `playwright-multiperfil-v02.cjs`). Las emisiones reales en SIFEN test quedan para URA-012: `playwright-editor-pc.cjs`, `playwright-ux-nueva-factura.cjs` y `playwright-multiperfil.cjs` sin `MPU_SIN_NC` emiten documentos y no son regresiones de la fase 0. Con dos puntos, `scripts/lib/navegacion.cjs` (`esperarSesion`) elige el punto de `ENSAYO_PUNTO` (por defecto `001-001`) en la pantalla de eleccion, asi que los guiones viejos no se traban.
 
 ## 11. Guion de reconocimiento (URA-024)
 
