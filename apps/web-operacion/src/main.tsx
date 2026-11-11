@@ -36,6 +36,11 @@ import { formatMonto, formatGuaranies, formatCantidad, formatShortDate, fmtFecha
 import { BrandMark } from "./components/BrandMark";
 import { LoadingScreen } from "./components/LoadingScreen";
 import { TotalRow } from "./components/TotalRow";
+import { useEsEscritorio } from "./lib/useEsEscritorio";
+import { cantidadValida, normalizeDecimalInput } from "./lib/formato";
+import { mensajeResultadoReintento, mensajeNotaCredito, formatEmailStatus, getDocumentoNombreLower, getSimpleDocumentoEstado, esEstadoFinalOperador } from "./lib/documentos";
+import { getOperationalTitle, mapBusinessReadinessChecks } from "./lib/contexto";
+import { FORMAS_PAGO_LABELS } from "./lib/etiquetas";
 
 const ACCESS_TOKEN_STORAGE_KEY = "ventax_factura_access_token";
 
@@ -1731,21 +1736,6 @@ function StatusView({
 
 const POR_PAGINA_DOCUMENTOS = 30;
 const TIPOS_PROXIMAMENTE = ["Notas de débito", "Autofacturas"] as const;
-
-/** SPEC_DOCUMENTOS_ESCRITORIO_v0.1, RN-01: 1024 px separa escritorio (menu lateral, tablas) de celular. */
-const MEDIA_ESCRITORIO = "(min-width: 1024px)";
-
-function useEsEscritorio(): boolean {
-  const [esEscritorio, setEsEscritorio] = useState(() => typeof window !== "undefined" && window.matchMedia(MEDIA_ESCRITORIO).matches);
-  useEffect(() => {
-    const consulta = window.matchMedia(MEDIA_ESCRITORIO);
-    const alCambiar = () => setEsEscritorio(consulta.matches);
-    alCambiar();
-    consulta.addEventListener("change", alCambiar);
-    return () => consulta.removeEventListener("change", alCambiar);
-  }, []);
-  return esEscritorio;
-}
 
 function DocumentsView({
   onBack,
@@ -6427,50 +6417,6 @@ function getNextFiscalNumber(current: string | undefined): string {
 
   return String(numeric + 1).padStart(current.length, "0");
 }
-
-function mapBusinessReadinessChecks(
-  checks: Array<{
-    code: string;
-    ok: boolean;
-    message: string;
-  }>
-): Array<{ code: string; ok: boolean; message: string }> {
-  const byCode = new Map(checks.map((check) => [check.code, check]));
-
-  const tenant = byCode.get("tenant_activo");
-  const suscripcion = byCode.get("suscripcion_activa");
-  const facturador = byCode.get("facturador_activo");
-  const contexto = byCode.get("fiscal_context_local") ?? byCode.get("contexto_fiscal_local_completo");
-  const backendFiscal = byCode.get("fiscal_backend_ready");
-  const integracionFiscalOk = Boolean(contexto?.ok) && Boolean(backendFiscal?.ok);
-
-  return [
-    {
-      code: "membresia_activa",
-      ok: tenant?.ok ?? false,
-      message: tenant?.ok ? "Membresía activa" : "Membresía inactiva. Contactá a soporte para reactivarla."
-    },
-    {
-      code: "suscripcion_al_dia",
-      ok: suscripcion?.ok ?? false,
-      message: suscripcion?.ok ? "Suscripción al día" : "Suscripción con pagos pendientes. Regularizá para facturar."
-    },
-    {
-      code: "facturador_activo",
-      ok: facturador?.ok ?? false,
-      message: facturador?.ok ? "Facturador activo" : "Facturador inactivo. Solicitá activación al administrador."
-    },
-    {
-      code: "operacion_fiscal_habilitada",
-      ok: integracionFiscalOk,
-      message: integracionFiscalOk
-        ? "Conexión fiscal lista"
-        : !contexto?.ok
-          ? "Faltan datos fiscales. Contactá al equipo de configuración."
-          : "Conexión fiscal no disponible. Intentá nuevamente o contactá a soporte."
-    }
-  ];
-}
 /** SPEC_MONEDA_EXTRANJERA_v0.1, D-4: el selector ofrece Guarani y Dolar; la API sigue aceptando EUR y BRL. */
 const MONEDAS_FACTURA: Array<{ codigo: MonedaFactura; nombre: string }> = [
   { codigo: "PYG", nombre: "Guaraní" },
@@ -6484,19 +6430,6 @@ function precioValido(valor: number, moneda: string): boolean {
   return Math.abs(valor * 100 - Math.round(valor * 100)) < 1e-6;
 }
 
-/** Digitos y un separador decimal (coma o punto), hasta `decimales`; se guarda con punto. Precio: 2; cantidad: 4. */
-function normalizeDecimalInput(value: string, decimales = 2): string {
-  const limpio = value.replace(/[^\d.,]/g, "").replace(",", ".");
-  const [entero, ...resto] = limpio.split(".");
-  if (resto.length === 0) return entero ?? "";
-  return `${entero ?? ""}.${resto.join("").replace(/\./g, "").slice(0, decimales)}`;
-}
-
-/** SPEC_MONEDA_EXTRANJERA_v0.1, RN-06 (MT150 E711): cantidad mayor que cero con hasta 4 decimales. */
-function cantidadValida(valor: number): boolean {
-  return Number.isFinite(valor) && valor > 0 && Math.abs(valor * 10000 - Math.round(valor * 10000)) < 1e-6;
-}
-
 /** RN-08: con identidad fiscal y aun sin respuesta de SIFEN, el operador puede adelantarse al worker. */
 function puedeVerificarAhora(documento: DocumentoResponse): boolean {
   // Una nota de credito trabada se destraba con "Reintentar nota de credito" (SPEC_NOTA_CREDITO_TRABADA_v0.1).
@@ -6504,21 +6437,9 @@ function puedeVerificarAhora(documento: DocumentoResponse): boolean {
   return (documento.estado === "EMITIENDO" || documento.estado === "PENDIENTE_SIFEN") && Boolean(documento.document_uuid || documento.cdc);
 }
 
-/** RN-10: estados en los que verificar ya no le aporta nada al operador. */
-function esEstadoFinalOperador(estado: DocumentoEstado): boolean {
-  return estado === "EMITIDA" || estado === "ANULADA" || estado === "CANCELADO_LOCAL";
-}
-
 /** RN-10: en proceso el boton vive en el aviso; aca solo para otros estados no finales con identidad. */
 function verificarEnOpcionesAvanzadas(documento: DocumentoResponse): boolean {
   return Boolean(documento.document_uuid || documento.cdc) && !puedeVerificarAhora(documento) && !esEstadoFinalOperador(documento.estado);
-}
-
-/** RN-03: el backend solo reencola con confirmacion de FE; si FE ya lo tenia, devuelve el estado refrescado. */
-function mensajeResultadoReintento(documento: DocumentoResponse): string {
-  return documento.estado === "EMITIENDO"
-    ? "Reintento de emisión enviado."
-    : "La factura ya había llegado a facturación electrónica. Actualizamos su estado.";
 }
 
 function accionBannerClass(accion: DocumentoAccion | undefined): string {
@@ -6615,17 +6536,6 @@ function formatDocumentoEstado(value: DocumentoEstado, tipo?: DocumentoResponse[
   return labels[value];
 }
 
-function getSimpleDocumentoEstado(value: DocumentoEstado, tipo?: DocumentoResponse["tipo"]): string {
-  const nombre = formatDocumentoTipo(tipo ?? "FACTURA");
-  if (value === "EMITIDA") {
-    return `🟢 ${nombre} emitida`;
-  }
-  if (value === "RECHAZADA" || value === "ERROR_OPERATIVO" || value === "ERROR_TEMPORAL" || value === "ANULADA" || value === "CANCELADO_LOCAL") {
-    return "🔴 Requiere revisión";
-  }
-  return `🟡 Procesando ${nombre.toLowerCase()}`;
-}
-
 function getSimpleDocumentoHint(value: DocumentoEstado, tipo?: DocumentoResponse["tipo"]): string {
   const nombre = formatDocumentoTipo(tipo ?? "FACTURA");
   if (value === "EMITIDA") {
@@ -6642,10 +6552,6 @@ function formatEmisor(documento: DocumentoResponse): string | null {
   const emisor = documento.emitido_por;
   if (!emisor) return null;
   return emisor.display_name ?? emisor.username;
-}
-
-function getDocumentoNombreLower(tipo: DocumentoResponse["tipo"]): string {
-  return tipo === "NOTA_CREDITO" ? "nota de crédito" : tipo === "NOTA_REMISION" ? "nota de remisión" : "factura";
 }
 
 function getOperationViewHint(value: OperationView): string {
@@ -6687,15 +6593,6 @@ function getReasonModalPlaceholder(
   return "Ej: error en datos del comprobante o anulación solicitada por cliente.";
 }
 
-function mensajeNotaCredito(nota: DocumentoResponse): string {
-  if (nota.estado === "EMITIDA") return "Nota de crédito emitida.";
-  if (nota.estado === "RECHAZADA") return "SIFEN rechazó la nota de crédito.";
-  if (nota.accion_detalle?.acciones_sugeridas.includes("REINTENTAR_NOTA_CREDITO")) {
-    return "La nota de crédito sigue sin confirmarse. Podés reintentar más tarde, sin riesgo de duplicarla.";
-  }
-  return "La nota de crédito está pendiente de confirmación SIFEN.";
-}
-
 function getNotaCreditoSuccessMessage(estado: DocumentoEstado): string {
   if (estado === "EMITIDA") {
     return "La nota de crédito fue aceptada por SIFEN. El PDF ya está disponible para compartir.";
@@ -6704,19 +6601,6 @@ function getNotaCreditoSuccessMessage(estado: DocumentoEstado): string {
     return "La nota de crédito fue enviada al sistema fiscal y está pendiente de confirmación SIFEN. Refrescar el estado es seguro — se usa la misma referencia idempotente.";
   }
   return "La nota de crédito fue procesada. Verificar el estado fiscal para continuar.";
-}
-
-function getOperationalTitle(context: OperationalContextResponse | null): string {
-  return (
-    firstText(
-      context?.display?.titulo_operativo,
-      context?.fiscal_context.perfil_emision_alias,
-      context?.facturador.nombre_fantasia,
-      context?.fiscal_context.actividad_economica_alias,
-      context?.fiscal_context.actividad_economica_descripcion,
-      context?.facturador.razon_social
-    ) ?? "Sin facturador asignado"
-  );
 }
 
 function formatActividadOperativa(context: OperationalContextResponse | null): string {
@@ -6751,25 +6635,6 @@ function canEmitNotaCredito(documento: DocumentoResponse, documents: DocumentoRe
   // (GET /nota-credito/saldo) y ofrece la parcial o avisa que esta acreditada por completo.
   void documents;
   return true;
-}
-
-function formatEmailStatus(value: string): string {
-  if (value === "DELEGATED") {
-    return "Delegado";
-  }
-  if (value === "PENDING") {
-    return "En cola";
-  }
-  if (value === "SENT") {
-    return "Enviado";
-  }
-  if (value === "FAILED") {
-    return "Fallido";
-  }
-  if (value === "NOT_APPLICABLE") {
-    return "Sin email";
-  }
-  return "Desconocido";
 }
 
 function getSifenSummary(documento: DocumentoResponse): SifenSummary | null {
@@ -7995,15 +7860,6 @@ function NotasView({
     </section>
   );
 }
-
-const FORMAS_PAGO_LABELS: Record<ReciboFormaPago, string> = {
-  EFECTIVO: "Efectivo",
-  TRANSFERENCIA: "Transferencia",
-  CHEQUE: "Cheque",
-  TARJETA_CREDITO: "Tarjeta de Crédito",
-  TARJETA_DEBITO: "Tarjeta de Débito",
-  OTRO: "Otro",
-};
 
 // ─── Componente RecibosView ───────────────────────────────────────────────────
 

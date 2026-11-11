@@ -136,3 +136,16 @@ export function formatIntegerInput(value: string): string {
   }
   return Number(digits).toLocaleString("es-PY");
 }
+
+/** Digitos y un separador decimal (coma o punto), hasta `decimales`; se guarda con punto. Precio: 2; cantidad: 4. */
+export function normalizeDecimalInput(value: string, decimales = 2): string {
+  const limpio = value.replace(/[^\d.,]/g, "").replace(",", ".");
+  const [entero, ...resto] = limpio.split(".");
+  if (resto.length === 0) return entero ?? "";
+  return `${entero ?? ""}.${resto.join("").replace(/\./g, "").slice(0, decimales)}`;
+}
+
+/** SPEC_MONEDA_EXTRANJERA_v0.1, RN-06 (MT150 E711): cantidad mayor que cero con hasta 4 decimales. */
+export function cantidadValida(valor: number): boolean {
+  return Number.isFinite(valor) && valor > 0 && Math.abs(valor * 10000 - Math.round(valor * 10000)) < 1e-6;
+}
