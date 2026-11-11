@@ -80,7 +80,7 @@ async function irADocumentos(page) {
 async function irACargas(page) {
   await irADocumentos(page);
   await page.getByRole("button", { name: /^Cargas por planilla/ }).click();
-  await page.getByRole("heading", { name: "Cargas de facturas" }).waitFor({ timeout: 15000 });
+  await page.getByRole("heading", { name: "Cargas por planilla" }).waitFor({ timeout: 15000 });
 }
 
 async function sinDesplazamiento(page) {
@@ -95,7 +95,7 @@ async function subir(page, ruta) {
 
 async function volverALista(page) {
   await page.getByRole("button", { name: "Volver a las cargas" }).click();
-  await page.getByRole("heading", { name: "Cargas de facturas" }).waitFor();
+  await page.getByRole("heading", { name: "Cargas por planilla" }).waitFor();
 }
 
 async function esperarEstado(page, texto, timeout = 45000) {
@@ -137,7 +137,7 @@ async function correr(browser, vp) {
     await page.locator('input[type="file"]').setInputFiles({ name: "ventas.txt", mimeType: "text/plain", buffer: Buffer.from("x") });
     check(nombre, "extension no admitida se avisa antes de subir", await page.getByText("El archivo debe ser .csv o .zip.").isVisible());
     await page.locator(".carga-masiva").getByRole("button", { name: "Volver", exact: true }).click();
-    await page.getByRole("heading", { name: "Cargas de facturas" }).waitFor();
+    await page.getByRole("heading", { name: "Cargas por planilla" }).waitFor();
   });
 
   await escenario(nombre, "archivo rechazado con motivo, fila y columna", async () => {
@@ -375,7 +375,7 @@ async function correr(browser, vp) {
     await pagCliente.screenshot({ path: path.join(outDir, `${nombre}-14-cliente-menu.png`) });
     await pagCliente.locator('button:has-text("Documentos")').first().click();
     await pagCliente.getByRole("button", { name: /^Cargas por planilla/ }).click();
-    await pagCliente.getByRole("heading", { name: "Cargas de facturas" }).waitFor();
+    await pagCliente.getByRole("heading", { name: "Cargas por planilla" }).waitFor();
     const lista = await pagCliente.locator(".carga-masiva").innerText();
     check(nombre, "CA-04: otro contexto del facturador no ve las cargas ajenas", !lista.includes(`informe-${nombre}-${corrida}`), lista);
     await pagCliente.getByRole("button", { name: "Nueva carga" }).click();

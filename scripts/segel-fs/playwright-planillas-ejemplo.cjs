@@ -33,7 +33,7 @@ async function nuevaCarga(browser, ancho, alto) {
   await esperarSesion(page);
   await abrirVista(page, "Documentos");
   await page.getByRole("button", { name: /^Cargas por planilla/ }).click();
-  await page.getByRole("heading", { name: "Cargas de facturas" }).waitFor();
+  await page.getByRole("heading", { name: "Cargas por planilla" }).waitFor();
   await page.getByRole("button", { name: "Nueva carga" }).click();
   await page.locator('select[aria-label="Tipo de documento"]').waitFor();
   return { ctx, page };

@@ -1333,8 +1333,9 @@ export function DocumentsView({
                         try {
                           await api.request(`/facturas/${selected.id}/recibo`, { method: "POST" });
                           onGoTo?.("recibos");
-                        } catch {
-                          // error silencioso — el usuario puede ir manualmente a Cobros
+                        } catch (err) {
+                          // SPEC_AJUSTES_TEXTOS_OPERADOR_v0.1, A-8: el error se muestra, como en las demas acciones.
+                          setError(err instanceof Error ? err.message : "No se pudo emitir el recibo de cobro.");
                         }
                       })();
                     }}

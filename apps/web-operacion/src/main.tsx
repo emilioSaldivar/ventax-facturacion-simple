@@ -2108,7 +2108,6 @@ function InvoiceEditor({
 
   const api = useApi();
   const today = useMemo(() => new Date().toLocaleDateString("es-PY"), []);
-  const nextFiscalNumber = useMemo(() => getNextFiscalNumber(context?.fiscal_context.documento_nro), [context?.fiscal_context.documento_nro]);
 
   // SPEC_MONEDA_EXTRANJERA_v0.1, RN-08: cambiar la moneda no convierte montos; las lineas que dejan de ser validas
   // se marcan y bloquean la emision hasta corregirlas (antes la vista previa las omitia en silencio).
@@ -2879,10 +2878,9 @@ function InvoiceEditor({
     scrollSection(comprobanteSectionRef);
   }
 
-  // SPEC_UX_NUEVA_FACTURA_v0.1, B.1: el numero estimado va en el subtitulo; la numeracion del cliente no se estima.
+  // SPEC_AJUSTES_TEXTOS_OPERADOR_v0.1, A-1: sin numero estimado. documento_nro es una referencia fija y el numero
+  // lo asigna el servicio fiscal al emitir; con numeracion del cliente lo trae el archivo.
   const numeracionDelCliente = context?.fiscal_context.numeracion_facturas === "CLIENTE";
-  const numeroEstimado =
-    context && !numeracionDelCliente ? `${context.fiscal_context.establecimiento}-${context.fiscal_context.punto_expedicion}-${nextFiscalNumber}` : null;
   const lineasConDatos = lines.filter(lineaTieneDatos);
   const primeraInvalida = lines.findIndex((line) => lineasInvalidasIds.has(line.id));
   const equivalenteGs = enMonedaExtranjera && tipoCambioValido && preview ? Math.round(preview.totals.total * Number(tipoCambio)) : null;
@@ -2918,9 +2916,8 @@ function InvoiceEditor({
       <div>
         <h2 id="invoice-title">Nueva factura</h2>
         <p className="muted editor-subtitulo">
-          {numeroEstimado ? `Próximo número ${numeroEstimado} · ` : ""}
           {today}
-          {numeroEstimado && modoCompleto ? " · el número final lo asigna el sistema al emitir" : ""}
+          {context && !numeracionDelCliente ? " · el número lo asigna el sistema al emitir" : ""}
         </p>
       </div>
       <div className="header-actions">
@@ -3060,7 +3057,12 @@ function InvoiceEditor({
               value={tipoCambio.replace(".", ",")}
             />
             {/* SPEC_MONEDA_EXTRANJERA_v0.1, RN-02: el tipo de cambio va en guaranies (hasta 4 decimales, MT150 D018). */}
-            {tipoCambioValido ? null : <small className="field-hint">Obligatorio al facturar en {moneda}. Hasta 4 decimales.</small>}
+            {/* SPEC_AJUSTES_TEXTOS_OPERADOR_v0.1, A-7: regla informada por el usuario (cotizacion del dia anterior, DNIT). */}
+            {tipoCambioValido ? (
+              <small className="field-hint">Según la DNIT, va la cotización del día anterior.</small>
+            ) : (
+              <small className="field-hint">Obligatorio al facturar en {moneda}. Hasta 4 decimales.</small>
+            )}
           </label>
         ) : null}
       </section>
@@ -3806,18 +3808,6 @@ function createIdempotencyKey(): string {
 // SPEC_NOTA_CREDITO_TRABADA_v0.1, RN-01: la clave de la nota de credito la deriva el servidor a partir de la
 // factura y el intento. Reemplaza la clave por factura en memoria de la pagina (SPEC_CONTRATO_FE_SOBRECARGA RN-05).
 
-function getNextFiscalNumber(current: string | undefined): string {
-  if (!current) {
-    return "-";
-  }
-
-  const numeric = Number(current);
-  if (!Number.isInteger(numeric)) {
-    return current;
-  }
-
-  return String(numeric + 1).padStart(current.length, "0");
-}
 /** SPEC_MONEDA_EXTRANJERA_v0.1, D-4: el selector ofrece Guarani y Dolar; la API sigue aceptando EUR y BRL. */
 const MONEDAS_FACTURA: Array<{ codigo: MonedaFactura; nombre: string }> = [
   { codigo: "PYG", nombre: "Guaraní" },
@@ -4768,7 +4758,8 @@ function NotasView({
       <div className="editor-heading">
         <div>
           <p className="eyebrow">Documentos comerciales</p>
-          <h2 id="notas-list-title">Presupuestos</h2>
+          {/* SPEC_AJUSTES_TEXTOS_OPERADOR_v0.1, A-6: el titulo sigue a la pestaña activa. */}
+          <h2 id="notas-list-title">{filtroTipo === "PEDIDO" ? "Pedidos" : "Presupuestos"}</h2>
         </div>
         <button className="ghost-action" onClick={onBack} type="button">Volver</button>
       </div>

@@ -41,7 +41,7 @@ async function irACargas(page) {
   await abrirVista(page, "Documentos");
   await page.getByRole("heading", { name: "Facturas y notas" }).waitFor({ timeout: 20000 });
   await page.getByRole("button", { name: /^Cargas por planilla/ }).click();
-  await page.getByRole("heading", { name: "Cargas de facturas" }).waitFor({ timeout: 20000 });
+  await page.getByRole("heading", { name: "Cargas por planilla" }).waitFor({ timeout: 20000 });
 }
 
 const estado = async (page) => (await page.locator(".carga-encabezado .status-pill").first().innerText().catch(() => "")).trim();
@@ -121,7 +121,7 @@ async function rechazo(browser) {
 
   const cerrada = await esperar(page, async () => (await estado(page)).includes("Finalizada"), "CA-02: la carga termina al inutilizar");
   await page.getByRole("button", { name: "Volver a las cargas" }).click();
-  await page.getByRole("heading", { name: "Cargas de facturas" }).waitFor({ timeout: 20000 });
+  await page.getByRole("heading", { name: "Cargas por planilla" }).waitFor({ timeout: 20000 });
   const filaLista = page.locator("tr", { hasText: path.basename(rutaRechazo) }).first();
   check("RN-10: en la lista, la carga cerrada vuelve a Finalizada", (await filaLista.locator(".status-pill").innerText()).includes("Finalizada"), "");
   await page.locator(".carga-enlace", { hasText: path.basename(rutaRechazo) }).first().click();

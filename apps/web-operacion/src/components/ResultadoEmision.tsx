@@ -103,12 +103,14 @@ export function ResultadoEmision({
     moneda !== "PYG" && documento.tipo_cambio ? formatGuaranies(documento.totals.total_guaranies ?? Math.round(documento.totals.total * documento.tipo_cambio)) : null;
   const items = documento.items ?? [];
   const nombreTipo = getDocumentoNombreLower(documento.tipo);
+  // SPEC_AJUSTES_TEXTOS_OPERADOR_v0.1, A-2: el titulo y el boton dicen el tipo del documento.
+  const nombreTitulo = nombreTipo.charAt(0).toUpperCase() + nombreTipo.slice(1);
 
   return (
     <div className="resultado-emision" aria-live="polite">
       <div className="editor-heading">
         <div>
-          <h2 id="invoice-title">{documento.numero_fiscal ? `Factura ${documento.numero_fiscal}` : "Factura creada · número pendiente"}</h2>
+          <h2 id="invoice-title">{documento.numero_fiscal ? `${nombreTitulo} ${documento.numero_fiscal}` : `${nombreTitulo} creada · número pendiente`}</h2>
           <p className="muted editor-subtitulo">
             Creada hoy{hora ? ` ${hora}` : ""}{operador ? ` por ${operador}` : ""} · {documento.cliente.razon_social} · {total}
           </p>
@@ -120,7 +122,7 @@ export function ResultadoEmision({
             </button>
           ) : null}
           <button className="primary-action con-icono" onClick={onCrearNueva} type="button">
-            <Icono nombre="mas" tamano={16} grosor={2.5} /> Crear nueva factura
+            <Icono nombre="mas" tamano={16} grosor={2.5} /> Crear nueva {nombreTipo}
           </button>
         </div>
       </div>

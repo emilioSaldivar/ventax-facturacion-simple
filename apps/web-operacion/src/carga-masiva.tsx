@@ -314,7 +314,8 @@ export function CargaMasivaView({
         <ListadoCargas
           api={api}
           onAbrir={(id) => abrir(id)}
-          onDescargarPlantilla={() => void descargar("/cargas/plantilla", "plantilla-carga-facturas.csv")}
+          onDescargarPlantilla={(tipo) => void descargar(`/cargas/plantilla?tipo_documento=${tipo}`, PLANTILLA_POR_TIPO[tipo])}
+          tipo={tipoPorDefecto ?? "FACTURA"}
           onError={fallar}
           onNueva={() => {
             setAviso(null);
@@ -368,12 +369,14 @@ function ListadoCargas({
   onAbrir,
   onNueva,
   onDescargarPlantilla,
-  onError
+  onError,
+  tipo
 }: {
   api: CargaApi;
   onAbrir: (id: string) => void;
   onNueva: () => void;
-  onDescargarPlantilla: () => void;
+  onDescargarPlantilla: (tipo: TipoDeCarga) => void;
+  tipo: TipoDeCarga;
   onError: (causa: unknown) => void;
 }) {
   const [cargas, setCargas] = useState<Carga[]>([]);
@@ -414,11 +417,12 @@ function ListadoCargas({
     <>
       <div className="carga-encabezado">
         <div>
-          <h3>Cargas de facturas</h3>
-          <p className="muted">Sube un archivo con tus ventas, revisa los errores y confirma para emitir.</p>
+          {/* SPEC_AJUSTES_TEXTOS_OPERADOR_v0.1, A-3: el listado tiene cargas de todos los tipos. */}
+          <h3>Cargas por planilla</h3>
+          <p className="muted">Subí un archivo con tus ventas, revisá los errores y confirmá para emitir.</p>
         </div>
         <div className="carga-acciones">
-          <button className="secondary-action" onClick={onDescargarPlantilla} type="button">Descargar plantilla</button>
+          <button className="secondary-action" onClick={() => onDescargarPlantilla(tipo)} type="button">Descargar plantilla de {tipoDeCarga(tipo).plural}</button>
           <button className="primary-action" onClick={onNueva} type="button">Nueva carga</button>
         </div>
       </div>
@@ -1148,7 +1152,7 @@ function DetalleCarga({
                     <td data-label="Correo">{comprobante.correo ? ETIQUETA_CORREO[comprobante.correo] : "-"}</td>
                     <td data-label="Documento">
                       {comprobante.documento_id ? (
-                        <button className="carga-enlace" onClick={() => onVerDocumento(comprobante.documento_id!, cargaId)} type="button">Ver factura</button>
+                        <button className="carga-enlace" onClick={() => onVerDocumento(comprobante.documento_id!, cargaId)} type="button">Ver {tipoDeCarga(carga?.tipo_documento).etiqueta.toLowerCase()}</button>
                       ) : "-"}
                     </td>
                   </tr>

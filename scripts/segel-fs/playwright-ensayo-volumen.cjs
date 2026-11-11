@@ -48,7 +48,7 @@ async function irACargas(page) {
   await abrirVista(page, "Documentos");
   await page.getByRole("heading", { name: "Facturas y notas" }).waitFor({ timeout: 20000 });
   await page.getByRole("button", { name: /^Cargas por planilla/ }).click();
-  await page.getByRole("heading", { name: "Cargas de facturas" }).waitFor({ timeout: 20000 });
+  await page.getByRole("heading", { name: "Cargas por planilla" }).waitFor({ timeout: 20000 });
 }
 
 async function estado(page) {
@@ -97,7 +97,7 @@ async function seguir(page, nombreArchivo, etiqueta) {
     if (/Finalizada|Cancelada|Archivo rechazado/.test(st)) return st;
     await page.waitForTimeout(15000);
     await page.getByRole("button", { name: "Volver a las cargas" }).click().catch(() => {});
-    await page.getByRole("heading", { name: "Cargas de facturas" }).waitFor({ timeout: 20000 }).catch(() => {});
+    await page.getByRole("heading", { name: "Cargas por planilla" }).waitFor({ timeout: 20000 }).catch(() => {});
     await abrirCarga(page, nombreArchivo).catch(() => {});
   }
   return `TIEMPO AGOTADO (${anterior})`;
@@ -154,7 +154,7 @@ async function vistas(browser) {
         const filasC = fs.readFileSync(rutaC, "utf8").trim().split("\n").length - 1;
         const nombreB = await subirYConfirmar(page, rutaB, "B");
         await page.getByRole("button", { name: "Volver a las cargas" }).click();
-        await page.getByRole("heading", { name: "Cargas de facturas" }).waitFor();
+        await page.getByRole("heading", { name: "Cargas por planilla" }).waitFor();
         const nombreC = await subirYConfirmar(page, rutaC, "C");
         // La pantalla tarda un ciclo en dejar "Lista para confirmar" tras confirmar.
         await page.locator('.carga-encabezado .status-pill:not(:has-text("Lista para confirmar"))').first().waitFor({ timeout: 20000 }).catch(() => {});
@@ -166,7 +166,7 @@ async function vistas(browser) {
           check("C: carga Finalizada", st.includes("Finalizada"), st);
           await resultado(page, "C", filasC);
           await page.getByRole("button", { name: "Volver a las cargas" }).click();
-          await page.getByRole("heading", { name: "Cargas de facturas" }).waitFor();
+          await page.getByRole("heading", { name: "Cargas por planilla" }).waitFor();
           await abrirCarga(page, nombreB);
           const stB = await seguir(page, nombreB, "B");
           check("B: carga Finalizada", stB.includes("Finalizada"), stB);

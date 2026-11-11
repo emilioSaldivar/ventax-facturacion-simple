@@ -124,7 +124,7 @@ async function marco(page, v) {
     const { ctx, page } = await entrar(browser, 1440, 900, "completo");
     await abrirNuevaFactura(page);
     await marco(page, "1440");
-    check("CA-02 1440: modo completo con encabezado, banda, cliente, grilla y totales fijos", (await page.locator(".invoice-editor.completo").count()) === 1 && (await page.locator(".banda-comprobante").isVisible()) && (await page.locator("table.grilla-lineas th.col-numero").isVisible()) && (await page.locator("aside.totales-fija").isVisible()) && (await page.locator(".editor-subtitulo").innerText()).includes("Próximo número"));
+    check("CA-02 1440: modo completo con encabezado, banda, cliente, grilla y totales fijos", (await page.locator(".invoice-editor.completo").count()) === 1 && (await page.locator(".banda-comprobante").isVisible()) && (await page.locator("table.grilla-lineas th.col-numero").isVisible()) && (await page.locator("aside.totales-fija").isVisible()) && (await page.locator(".editor-subtitulo").innerText()).includes("el número lo asigna el sistema al emitir") && !(await page.locator(".editor-subtitulo").innerText()).includes("Próximo número"));
     check("CA-02 1440: sin Mostrar datos, invoice-band ni tarjeta Factura", (await page.getByRole("button", { name: /Mostrar datos/ }).count()) === 0 && (await page.locator(".invoice-band").count()) === 0 && (await page.getByText("Opciones de factura").count()) === 0);
     check("CA-03 1440: vacio, el motivo es el cliente", (await motivoBloqueo(page)).includes("Falta el cliente"), await motivoBloqueo(page));
     await page.screenshot({ path: path.join(outDir, "1440-vacio.png") });
