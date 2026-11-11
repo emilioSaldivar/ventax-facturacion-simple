@@ -16,6 +16,7 @@ import type {
   FacturaRepository,
   DocumentoEmisor,
   DocumentoInutilizacionStatus,
+  DocumentoPerfilEmision,
   DocumentoResponse,
   DocumentoVinculo,
   InutilizacionPersistInput
@@ -23,6 +24,8 @@ import type {
 
 interface FacturaRow {
   id: string;
+  /** SPEC_MULTIPERFIL_USUARIO_v0.1 §E.7 */
+  perfil_emision?: DocumentoPerfilEmision | null;
   carga_masiva_id?: string | null;
   carga_numero_archivo?: string | null;
   document_uuid: string | null;
@@ -149,6 +152,19 @@ const COLUMNAS_DOCUMENTO = `
           inutilizacion_last_at,
           carga_masiva_id,
           carga_numero_archivo,
+          (
+            select jsonb_build_object(
+                     'establecimiento', e.codigo,
+                     'punto_expedicion', p.codigo,
+                     'perfil_emision_codigo', pe.codigo,
+                     'alias', app.alias_operativo
+                   )
+              from actividad_punto_perfiles app
+              join facturador_establecimientos e on e.id = app.establecimiento_id
+              join facturador_puntos_expedicion p on p.id = app.punto_expedicion_id
+              join facturador_perfiles_emision pe on pe.id = app.perfil_emision_id
+             where app.id = facturas_operativas.actividad_punto_perfil_id
+          ) as perfil_emision,
           created_at`.trim();
 
 interface EmisorRow {
@@ -516,14 +532,16 @@ export class PgFacturaRepository implements FacturaRepository {
             sifen_result_message,
             sifen_last_checked_at,
             verificacion_next_at,
-            emitted_at
+            emitted_at,
+            actividad_punto_perfil_id
           )
           values (
             $1, $2, $3, 'FACTURA', $4, $5, $6, $7, $8::jsonb, $9::jsonb, $10::jsonb,
             $11::jsonb, $12, $13, $14, $15, $16, $17, $18, $19,
             case when $17::text is not null then now() end,
             case when $5 in ('PENDIENTE_SIFEN', 'EMITIENDO') and $13::text is not null then now() + interval '5 minutes' end,
-            now()
+            now(),
+            $20
           )
           returning
             ${COLUMNAS_DOCUMENTO}
@@ -547,7 +565,8 @@ export class PgFacturaRepository implements FacturaRepository {
           input.fiscalResponse?.email_status === "NOT_APPLICABLE" ? null : input.fiscalResponse?.email_status ?? null,
           input.fiscalResponse?.status_raw ?? null,
           input.fiscalResponse?.result_code ?? null,
-          input.fiscalResponse?.result_message ?? null
+          input.fiscalResponse?.result_message ?? null,
+          input.actividadPuntoPerfilId ?? null
         ]
       );
 
@@ -666,10 +685,11 @@ export class PgFacturaRepository implements FacturaRepository {
             email_estado,
             documento_relacionado_id,
             moneda,
-            tipo_cambio
+            tipo_cambio,
+            actividad_punto_perfil_id
           )
           values (
-            $1, $2, $3, 'FACTURA', $4, 'EMITIENDO', $5, $6, $7::jsonb, $8::jsonb, $9::jsonb, '{}'::jsonb, $10, $11, $12, $13
+            $1, $2, $3, 'FACTURA', $4, 'EMITIENDO', $5, $6, $7::jsonb, $8::jsonb, $9::jsonb, '{}'::jsonb, $10, $11, $12, $13, $14
           )
           returning
             ${COLUMNAS_DOCUMENTO}
@@ -687,7 +707,8 @@ export class PgFacturaRepository implements FacturaRepository {
           input.input.cliente.email?.trim() ? "DELEGATED" : null,
           input.documentoRelacionadoId ?? null,
           input.input.moneda ?? "PYG",
-          input.input.moneda && input.input.moneda !== "PYG" ? input.input.tipo_cambio ?? null : null
+          input.input.moneda && input.input.moneda !== "PYG" ? input.input.tipo_cambio ?? null : null,
+          input.actividadPuntoPerfilId ?? null
         ]
       );
 
@@ -825,7 +846,8 @@ export class PgFacturaRepository implements FacturaRepository {
             verificacion_next_at,
             emitted_at,
             moneda,
-            tipo_cambio
+            tipo_cambio,
+            actividad_punto_perfil_id
           )
           values (
             $1, $2, $3, 'NOTA_CREDITO', $4, $5, $6, $7, $8, $9, $10::jsonb, $11::jsonb, $12::jsonb,
@@ -833,7 +855,7 @@ export class PgFacturaRepository implements FacturaRepository {
             case when $19::text is not null then now() end,
             case when $22::boolean then null when $5 in ('PENDIENTE_SIFEN', 'EMITIENDO') and $15::text is not null then now() + interval '5 minutes' end,
             now(),
-            $23, $24
+            $23, $24, $25
           )
           returning
             ${COLUMNAS_DOCUMENTO}
@@ -863,7 +885,8 @@ export class PgFacturaRepository implements FacturaRepository {
           input.trabada ?? false,
           // SPEC_MONEDA_EXTRANJERA_v0.1, D-1: la NC esta en la moneda de su factura.
           input.original.moneda ?? "PYG",
-          input.original.moneda && input.original.moneda !== "PYG" ? input.original.tipo_cambio ?? null : null
+          input.original.moneda && input.original.moneda !== "PYG" ? input.original.tipo_cambio ?? null : null,
+          input.actividadPuntoPerfilId ?? null
         ]
       );
 
@@ -1879,6 +1902,7 @@ function mapFacturaRow(
   return {
     id: row.id,
     document_uuid: row.document_uuid,
+    perfil_emision: row.perfil_emision ?? null,
     tipo: row.tipo,
     estado: row.estado,
     condicion_venta: row.condicion_venta,

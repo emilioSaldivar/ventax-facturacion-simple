@@ -164,9 +164,19 @@ export interface DocumentoRemision {
   vehiculo: string | null;
 }
 
+/** SPEC_MULTIPERFIL_USUARIO_v0.1 §E.7: punto por el que se emitio el documento. */
+export interface DocumentoPerfilEmision {
+  establecimiento: string;
+  punto_expedicion: string;
+  perfil_emision_codigo: string;
+  alias: string | null;
+}
+
 export interface DocumentoResponse {
   id: string;
   document_uuid: string | null;
+  /** null en documentos historicos sin perfil atribuido. */
+  perfil_emision?: DocumentoPerfilEmision | null;
   tipo: DocumentoTipo;
   estado: DocumentoEstado;
   /** Null en una nota de remision. */
@@ -361,6 +371,8 @@ export interface FacturaPersistInput {
   tenantId: string;
   facturadorId: string;
   userId: string;
+  /** SPEC_MULTIPERFIL_USUARIO_v0.1 RN-05: perfil del contexto del pedido (la NC, el activo: D-1). */
+  actividadPuntoPerfilId?: string | null;
   externalRef: string;
   idempotencyKey?: string;
   input: FacturaPreviewInput;
@@ -384,6 +396,8 @@ export interface FacturaQueuedPersistInput {
   tenantId: string;
   facturadorId: string;
   userId: string;
+  /** SPEC_MULTIPERFIL_USUARIO_v0.1 RN-05: perfil del contexto del pedido (la NC, el activo: D-1). */
+  actividadPuntoPerfilId?: string | null;
   externalRef: string;
   idempotencyKey?: string;
   input: FacturaPreviewInput;
@@ -409,6 +423,8 @@ export interface NotaCreditoPersistInput {
   tenantId: string;
   facturadorId: string;
   userId: string;
+  /** SPEC_MULTIPERFIL_USUARIO_v0.1 RN-05: perfil del contexto del pedido (la NC, el activo: D-1). */
+  actividadPuntoPerfilId?: string | null;
   original: DocumentoResponse;
   motivo: string;
   externalRef: string;

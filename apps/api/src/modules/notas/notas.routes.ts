@@ -74,7 +74,7 @@ notasRouter.post(
   async (req, res, next) => {
     try {
       const context = await getOperationalContext(req.user!, operationalContextRepository);
-      const result = await createNota(context.facturador.id, req.body, notasRepository);
+      const result = await createNota(context.facturador.id, req.body, notasRepository, context.actividad_punto_perfil_id);
       res.status(201).json(result);
     } catch (error) {
       next(error);
@@ -205,7 +205,7 @@ notasRouter.post(
     try {
       const context = await getOperationalContext(req.user!, operationalContextRepository);
       const { id } = req.params as z.infer<typeof idParamsSchema>;
-      const result = await duplicarNota(id, context.facturador.id, notasRepository);
+      const result = await duplicarNota(id, context.facturador.id, notasRepository, context.actividad_punto_perfil_id);
       res.status(201).json(result);
     } catch (error) {
       next(error);

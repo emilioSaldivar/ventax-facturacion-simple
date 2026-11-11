@@ -89,6 +89,8 @@ export interface ReciboListResponse {
 
 export interface UpsertReciboFromFiscalInput {
   facturadorId: string;
+  /** SPEC_MULTIPERFIL_USUARIO_v0.1 RN-05: solo al crear; un upsert posterior no lo pisa. */
+  actividadPuntoPerfilId?: string | null;
   fiscal: FiscalReciboResult;
   /** No viene en la respuesta fiscal (solo el _display); se preserva del request original. */
   referenciaDocumentoUuid?: string | null;

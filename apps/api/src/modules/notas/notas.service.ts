@@ -30,12 +30,13 @@ export function calcularEstadoVisual(nota: NotaRecord): NotaEstadoVisual {
 export async function createNota(
   facturadorId: string,
   input: NotaCreateInput,
-  repository: NotasRepository
+  repository: NotasRepository,
+  actividadPuntoPerfilId: string | null = null
 ): Promise<NotaConItems> {
   if (!input.cliente_nombre?.trim()) {
     throw new HttpError(400, "VALIDATION_ERROR", "El nombre del cliente es requerido.");
   }
-  return repository.create(facturadorId, input);
+  return repository.create(facturadorId, input, actividadPuntoPerfilId);
 }
 
 export async function getNota(
@@ -105,9 +106,10 @@ export async function actualizarEstadoComercial(
 export async function duplicarNota(
   id: string,
   facturadorId: string,
-  repository: NotasRepository
+  repository: NotasRepository,
+  actividadPuntoPerfilId: string | null = null
 ): Promise<NotaRecord> {
-  return repository.duplicar(id, facturadorId);
+  return repository.duplicar(id, facturadorId, actividadPuntoPerfilId);
 }
 
 export async function verificarNota(

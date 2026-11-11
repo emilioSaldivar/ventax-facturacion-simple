@@ -61,8 +61,8 @@ export class PgRecibosRepository implements RecibosRepository {
           pagador_documento, concepto, importe, moneda, forma_pago, referencia_bancaria,
           referencia_documento_uuid, referencia_documento_numero_display,
           external_ref, idempotency_key, fiscal_request_snapshot, fiscal_response_snapshot,
-          xml_hash, pdf_hash, anulacion_motivo, verification_token, emitido_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24)
+          xml_hash, pdf_hash, anulacion_motivo, verification_token, emitido_at, actividad_punto_perfil_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25)
        ON CONFLICT (id) DO UPDATE SET
          numero = EXCLUDED.numero,
          estado = EXCLUDED.estado,
@@ -86,6 +86,7 @@ export class PgRecibosRepository implements RecibosRepository {
          anulacion_motivo = COALESCE(EXCLUDED.anulacion_motivo, recibos_dinero.anulacion_motivo),
          verification_token = COALESCE(EXCLUDED.verification_token, recibos_dinero.verification_token),
          emitido_at = COALESCE(EXCLUDED.emitido_at, recibos_dinero.emitido_at),
+         actividad_punto_perfil_id = COALESCE(recibos_dinero.actividad_punto_perfil_id, EXCLUDED.actividad_punto_perfil_id),
          updated_at = now()
        RETURNING *`,
       [
@@ -113,6 +114,7 @@ export class PgRecibosRepository implements RecibosRepository {
         fiscal.anulacion_motivo,
         fiscal.verification_token,
         fiscal.emitido_at,
+        input.actividadPuntoPerfilId ?? null,
       ]
     );
     return mapRow(rows[0]!);

@@ -110,15 +110,15 @@ async function insertItems(
 }
 
 export class PgNotasRepository implements NotasRepository {
-  async create(facturadorId: string, input: NotaCreateInput): Promise<NotaConItems> {
+  async create(facturadorId: string, input: NotaCreateInput, actividadPuntoPerfilId: string | null = null): Promise<NotaConItems> {
     const client = await pool.connect();
     try {
       await client.query("BEGIN");
 
       const notaResult = await client.query(
         `INSERT INTO notas_comerciales
-           (facturador_id, tipo, cliente_nombre, cliente_ruc, valido_hasta, observaciones)
-         VALUES ($1, $2, $3, $4, $5, $6)
+           (facturador_id, tipo, cliente_nombre, cliente_ruc, valido_hasta, observaciones, actividad_punto_perfil_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
          RETURNING *`,
         [
           facturadorId,
@@ -127,6 +127,7 @@ export class PgNotasRepository implements NotasRepository {
           input.cliente_ruc ?? null,
           input.valido_hasta ?? null,
           input.observaciones ?? null,
+          actividadPuntoPerfilId,
         ]
       );
       const nota = notaResult.rows[0] as Record<string, unknown>;
@@ -343,7 +344,7 @@ export class PgNotasRepository implements NotasRepository {
     return rowToRecord(result.rows[0] as Record<string, unknown>);
   }
 
-  async duplicar(id: string, facturadorId: string): Promise<NotaRecord> {
+  async duplicar(id: string, facturadorId: string, actividadPuntoPerfilId: string | null = null): Promise<NotaRecord> {
     const client = await pool.connect();
     try {
       await client.query("BEGIN");
@@ -357,10 +358,10 @@ export class PgNotasRepository implements NotasRepository {
 
       const newNota = await client.query(
         `INSERT INTO notas_comerciales
-           (facturador_id, tipo, cliente_nombre, cliente_ruc, observaciones)
-         VALUES ($1, $2, $3, $4, $5)
+           (facturador_id, tipo, cliente_nombre, cliente_ruc, observaciones, actividad_punto_perfil_id)
+         VALUES ($1, $2, $3, $4, $5, $6)
          RETURNING *`,
-        [facturadorId, src.tipo, src.cliente_nombre, src.cliente_ruc ?? null, src.observaciones ?? null]
+        [facturadorId, src.tipo, src.cliente_nombre, src.cliente_ruc ?? null, src.observaciones ?? null, actividadPuntoPerfilId]
       );
       const newId = newNota.rows[0].id as string;
 

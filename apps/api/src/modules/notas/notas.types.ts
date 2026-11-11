@@ -87,7 +87,8 @@ export interface FacturadorParaPdf {
 }
 
 export interface NotasRepository {
-  create(facturadorId: string, input: NotaCreateInput): Promise<NotaConItems>;
+  /** SPEC_MULTIPERFIL_USUARIO_v0.1 RN-05: `actividadPuntoPerfilId` del contexto del pedido. */
+  create(facturadorId: string, input: NotaCreateInput, actividadPuntoPerfilId?: string | null): Promise<NotaConItems>;
   findById(id: string, facturadorId: string): Promise<NotaConItems | null>;
   list(facturadorId: string, filters: NotaListFilters): Promise<NotaListResponse>;
   update(id: string, facturadorId: string, input: NotaUpdateInput): Promise<NotaConItems>;
@@ -95,6 +96,6 @@ export interface NotasRepository {
   softDelete(id: string, facturadorId: string): Promise<void>;
   findByVerificationToken(token: string): Promise<NotaConItems | null>;
   actualizarEstadoComercial(id: string, facturadorId: string, estado: NotaEstadoComercial): Promise<NotaRecord>;
-  duplicar(id: string, facturadorId: string): Promise<NotaRecord>;
+  duplicar(id: string, facturadorId: string, actividadPuntoPerfilId?: string | null): Promise<NotaRecord>;
   getFacturadorParaPdf(facturadorId: string): Promise<FacturadorParaPdf | null>;
 }

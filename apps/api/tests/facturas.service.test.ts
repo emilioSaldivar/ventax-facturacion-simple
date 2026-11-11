@@ -2799,3 +2799,50 @@ describe("nota de credito trabada (FS-38)", () => {
     expect(resultados.filter((r) => r.status === "fulfilled").length).toBeGreaterThanOrEqual(1);
   });
 });
+
+describe("perfil de emision en el documento (SPEC_MULTIPERFIL_USUARIO_v0.1 RN-05, D-1)", () => {
+  const PERFIL_002 = "99999999-0002-4999-8999-999999999999";
+  const contexto002: OperationalContextResponse = {
+    ...context,
+    actividad_punto_perfil_id: PERFIL_002,
+    fiscal_context: { ...context.fiscal_context, punto_expedicion: "002", perfil_emision_codigo: "P002" }
+  };
+
+  it("la factura encolada persiste el perfil del contexto del pedido", async () => {
+    const repo = new FakeFacturaRepository();
+    await enqueueFacturaEmission(contexto002, emitInput, repo, { idempotencyKey: "idem-perfil-002" });
+    expect(repo.lastQueuedInput?.actividadPuntoPerfilId).toBe(PERFIL_002);
+    expect(repo.lastQueuedInput?.fiscalRequest.fiscal_context).toMatchObject({ punto_expedicion: "002", perfil_emision_codigo: "P002" });
+  });
+
+  it("la NC sobre una factura de otro punto sale y se guarda con el perfil ACTIVO", async () => {
+    const repo = new FakeFacturaRepository();
+    repo.findByIdResponse = buildDocumento({
+      estado: "EMITIDA",
+      cdc: "A".repeat(44),
+      numero_fiscal: "001-001-0000001",
+      perfil_emision: { establecimiento: "001", punto_expedicion: "001", perfil_emision_codigo: "P001", alias: null }
+    });
+    const gateway = new FakeFiscalGateway(new FiscalGatewayError("UPSTREAM_ERROR", "Should not emit"));
+
+    await emitNotaCreditoTotal(contexto002, "66666666-6666-4666-8666-666666666666", { motivo: "Devolucion" }, repo, gateway, {
+      idempotencyKey: "nce-perfil-002"
+    });
+
+    expect(repo.lastNotaCreditoInput?.actividadPuntoPerfilId).toBe(PERFIL_002);
+    expect(gateway.lastNotaCreditoRequest?.fiscal_context).toMatchObject({ punto_expedicion: "002", perfil_emision_codigo: "P002" });
+  });
+
+  it("la idempotencia de la NC no depende del perfil (RN-12)", async () => {
+    const repo = new FakeFacturaRepository();
+    const factura = buildDocumento({ estado: "EMITIDA", cdc: "A".repeat(44), numero_fiscal: "001-001-0000001" });
+    repo.findByIdResponse = factura;
+    const g1 = new FakeFiscalGateway(new FiscalGatewayError("UPSTREAM_ERROR", "x"));
+    await emitNotaCreditoTotal(context, factura.id, { motivo: "a" }, repo, g1, { idempotencyKey: "k" });
+    const clave1 = repo.lastNotaCreditoInput?.externalRef;
+    const repo2 = new FakeFacturaRepository();
+    repo2.findByIdResponse = factura;
+    await emitNotaCreditoTotal(contexto002, factura.id, { motivo: "a" }, repo2, new FakeFiscalGateway(new FiscalGatewayError("UPSTREAM_ERROR", "x")), { idempotencyKey: "k" });
+    expect(repo2.lastNotaCreditoInput?.externalRef).toBe(clave1);
+  });
+});

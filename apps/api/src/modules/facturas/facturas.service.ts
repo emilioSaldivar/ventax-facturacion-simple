@@ -1237,6 +1237,7 @@ export async function emitNotaCreditoTotal(
 
   const created = await repository.createNotaCreditoFromFactura({
     tenantId: context.tenant.id,
+    actividadPuntoPerfilId: context.actividad_punto_perfil_id,
     facturadorId: context.facturador.id,
     userId: context.user.id,
     original,
@@ -1323,6 +1324,7 @@ export async function emitNotaCreditoParcial(
 
   const created = await repository.createNotaCreditoFromFactura({
     tenantId: context.tenant.id,
+    actividadPuntoPerfilId: context.actividad_punto_perfil_id,
     facturadorId: context.facturador.id,
     userId: context.user.id,
     original,
@@ -1498,6 +1500,7 @@ export async function emitFacturaAgainstFiscalGateway(
 
   return repository.createFromEmission({
     tenantId: context.tenant.id,
+    actividadPuntoPerfilId: context.actividad_punto_perfil_id,
     facturadorId: context.facturador.id,
     userId: context.user.id,
     externalRef,
@@ -1556,6 +1559,7 @@ export async function enqueueFacturaEmission(
 
   const created = await repository.createQueuedEmission({
     tenantId: context.tenant.id,
+    actividadPuntoPerfilId: context.actividad_punto_perfil_id,
     facturadorId: context.facturador.id,
     userId: context.user.id,
     externalRef,

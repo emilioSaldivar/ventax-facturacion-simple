@@ -120,6 +120,7 @@ export async function crearRecibo(
     const fiscalResult = await gateway.crearRecibo(fiscalRequest);
     return repository.upsertFromFiscal({
       facturadorId: context.facturador.id,
+      actividadPuntoPerfilId: context.actividad_punto_perfil_id,
       fiscal: fiscalResult,
       referenciaDocumentoUuid: input.referencia_documento_uuid ?? null,
       externalRef,

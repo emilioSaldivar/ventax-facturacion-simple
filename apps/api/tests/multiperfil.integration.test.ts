@@ -115,6 +115,31 @@ describeDb("multiperfil: base de datos (integracion)", () => {
     expect(revocada.revoked_at).not.toBeNull();
   });
 
+  it("un documento con perfil se lee con perfil_emision (MPU-007, §E.7)", async () => {
+    const { facturasRepository } = await import("../src/modules/facturas/facturas.repository");
+    const doc = await fila<{ id: string }>(
+      `insert into facturas_operativas (tenant_id, facturador_id, usuario_id, tipo, condicion_venta, estado,
+         cliente_snapshot, totals_snapshot, external_ref, fiscal_response_snapshot, actividad_punto_perfil_id)
+       values ($1, $2, $3, 'FACTURA', 'CONTADO', 'EMITIENDO',
+         '{"documento_tipo":"CI","documento":"1234567","razon_social":"IT multiperfil"}'::jsonb,
+         '{"subtotal":1100,"total_sin_iva":1000,"iva_5":0,"iva_10":100,"total_iva":100,"total":1100}'::jsonb,
+         $4, '{}'::jsonb, $5) returning id`,
+      [tenantId, facturadorId, usuarioId, `fac_itmpu${Date.now()}`, perfilNuevo]
+    );
+    try {
+      const leido = await facturasRepository.findById({ facturadorId, documentoId: doc.id });
+      const esperado = await fila<{ est: string; pto: string }>(
+        `select e.codigo as est, p.codigo as pto from actividad_punto_perfiles app
+           join facturador_establecimientos e on e.id = app.establecimiento_id
+           join facturador_puntos_expedicion p on p.id = app.punto_expedicion_id where app.id = $1`,
+        [perfilNuevo]
+      );
+      expect(leido?.perfil_emision).toMatchObject({ establecimiento: esperado.est, punto_expedicion: esperado.pto });
+    } finally {
+      await pool.query("delete from facturas_operativas where id = $1", [doc.id]);
+    }
+  });
+
   it("el indice impide repetir el mismo perfil activo y el disparador otro facturador (RN-01)", async () => {
     await expect(
       pool.query(
