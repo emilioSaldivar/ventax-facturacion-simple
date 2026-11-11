@@ -65,6 +65,7 @@ describeDb("multiperfil: base de datos (integracion)", () => {
   it("listPerfilesDisponibles devuelve las dos configuraciones del usuario", async () => {
     const perfiles = await ctxRepo.listPerfilesDisponibles(usuarioId);
     expect(perfiles.map((p) => p.operacion_config_id).sort()).toEqual([configOriginal, configNueva].sort());
+    expect(perfiles.every((p) => p.facturador_id === facturadorId)).toBe(true);
     for (const p of perfiles) {
       expect(p.titulo_operativo).toBeTruthy();
       expect(p.timbrado).toBeTruthy();

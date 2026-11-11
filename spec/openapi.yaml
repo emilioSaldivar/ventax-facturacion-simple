@@ -2842,9 +2842,10 @@ components:
     PerfilDisponible:
       type: object
       description: Configuracion operativa emitible del usuario (SPEC_MULTIPERFIL_USUARIO_v0.1 §B.4).
-      required: [operacion_config_id, establecimiento, punto_expedicion, perfil_emision_codigo, actividad_economica_codigo, titulo_operativo, timbrado, numeracion_facturas, activo_en_sesion]
+      required: [operacion_config_id, facturador_id, establecimiento, punto_expedicion, perfil_emision_codigo, actividad_economica_codigo, titulo_operativo, timbrado, numeracion_facturas, activo_en_sesion]
       properties:
         operacion_config_id: { type: string, format: uuid }
+        facturador_id: { type: string, format: uuid }
         establecimiento: { type: string, example: "001" }
         punto_expedicion: { type: string, example: "002" }
         perfil_emision_codigo: { type: string }

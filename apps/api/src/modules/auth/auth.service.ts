@@ -260,7 +260,8 @@ export async function refreshSession(
     if (unico && audit) {
       await audit.insertEvent({
         tenantId: user.tenantId,
-        facturadorId: null,
+        // SPEC_MULTIPERFIL_USUARIO_v0.2 A.1 (F-4): mismo formato que los eventos de login y app.
+        facturadorId: lista[0]!.facturador_id ?? null,
         usuarioId: user.id,
         entityType: "usuario_operacion_config",
         entityId: unico,

@@ -16,6 +16,7 @@ const AJENO = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 function perfil(id: string, punto: string): PerfilDisponible {
   return {
     operacion_config_id: id,
+    facturador_id: "fac-1",
     establecimiento: "001",
     punto_expedicion: punto,
     perfil_emision_codigo: `P${punto}`,
@@ -243,7 +244,9 @@ describe("refresh con perfil (§B.5, CA-05)", () => {
     const r = await refreshSession("cookie", repo, new Perfiles([A]), audit);
     expect(verifyAccessToken(r.response.access_token)).toMatchObject({ uoc: A });
     expect(repo.refresh.at(-1)).toMatchObject({ operacionConfigId: A, revocado: false });
-    expect(audit.eventos).toEqual([expect.objectContaining({ eventType: "PERFIL_SELECCIONADO", metadata: expect.objectContaining({ origen: "REFRESH" }) })]);
+    expect(audit.eventos).toEqual([
+      expect.objectContaining({ eventType: "PERFIL_SELECCIONADO", facturadorId: "fac-1", metadata: expect.objectContaining({ origen: "REFRESH" }) })
+    ]);
   });
 
   it("refresh anterior al despliegue (sin perfil) y una configuracion: la asigna (D-6)", async () => {

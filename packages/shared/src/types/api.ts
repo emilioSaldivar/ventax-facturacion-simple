@@ -44,6 +44,8 @@ export interface AuthResponse {
 /** SPEC_MULTIPERFIL_USUARIO_v0.1 §B.4: una configuracion operativa emitible del usuario. */
 export interface PerfilDisponible {
   operacion_config_id: string;
+  /** SPEC_MULTIPERFIL_USUARIO_v0.2 A.3: la API siempre lo manda. */
+  facturador_id?: string;
   establecimiento: string;
   punto_expedicion: string;
   perfil_emision_codigo: string;

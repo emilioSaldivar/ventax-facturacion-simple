@@ -32,6 +32,7 @@ interface ContextRow {
 
 interface PerfilRow {
   operacion_config_id: string;
+  facturador_id: string;
   establecimiento: string;
   punto_expedicion: string;
   perfil_emision_codigo: string;
@@ -302,6 +303,7 @@ export class PgOperationalContextRepository implements OperationalContextReposit
       `
         select
           uoc.id as operacion_config_id,
+          uoc.facturador_id,
           e.codigo as establecimiento,
           p.codigo as punto_expedicion,
           pe.codigo as perfil_emision_codigo,
@@ -364,6 +366,7 @@ export class PgOperationalContextRepository implements OperationalContextReposit
 
     return result.rows.map((row) => ({
       operacion_config_id: row.operacion_config_id,
+      facturador_id: row.facturador_id,
       establecimiento: row.establecimiento,
       punto_expedicion: row.punto_expedicion,
       perfil_emision_codigo: row.perfil_emision_codigo,
