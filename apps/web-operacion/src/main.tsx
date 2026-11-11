@@ -24,6 +24,8 @@ import {
   requierePerfil
 } from "./api/cliente";
 import { _updatePending, applyUpdate, startVersionPolling, useUpdatePending } from "./api/version";
+import { API_BASE_URL } from "./api/config";
+import { ApiProvider, useApi } from "./api/useApi";
 import type { AuthResponse, PerfilDisponible, UserSummary } from "./tipos";
 
 const ACCESS_TOKEN_STORAGE_KEY = "ventax_factura_access_token";
@@ -557,7 +559,7 @@ function NotaPublicaView({ token }: { token: string }) {
   const [data, setData] = useState<NotaPublicaPayload | null>(null);
 
   useEffect(() => {
-    fetch(`/api/v1/verificar/nota/${token}`)
+    fetch(`${API_BASE_URL}/verificar/nota/${token}`)
       .then(r => r.json() as Promise<NotaPublicaPayload>)
       .then(d => { setData(d); setLoading(false); })
       .catch(() => { setData({ valido: false }); setLoading(false); });
@@ -688,7 +690,7 @@ function ReciboPublicaView({ token }: { token: string }) {
   const [data, setData] = useState<ReciboPublicaPayload | null>(null);
 
   useEffect(() => {
-    fetch(`/api/v1/verificar/recibo/${token}`)
+    fetch(`${API_BASE_URL}/verificar/recibo/${token}`)
       .then(r => r.json() as Promise<ReciboPublicaPayload>)
       .then(d => { setData(d); setLoading(false); })
       .catch(() => { setData({ valido: false }); setLoading(false); });
@@ -1078,16 +1080,19 @@ function App() {
   }
 
   if (view === "onboarding") {
-    return <OnboardingFlow accessToken={accessToken} onComplete={handleOnboardingComplete} pendingActions={pendingActions} username={user?.username ?? ""} userRole={user?.role ?? "OPERADOR_FACTURACION"} />;
+    return (
+      <ApiProvider accessToken={accessToken} setAccessToken={setAccessToken}>
+        <OnboardingFlow onComplete={handleOnboardingComplete} pendingActions={pendingActions} username={user?.username ?? ""} userRole={user?.role ?? "OPERADOR_FACTURACION"} />
+      </ApiProvider>
+    );
   }
 
   return (
-    <>
+    <ApiProvider accessToken={accessToken} setAccessToken={setAccessToken}>
     <OperationHome
       accessToken={accessToken}
       context={context}
       readiness={readiness}
-      setAccessToken={setAccessToken}
       user={user}
       onLogout={handleLogout}
       perfiles={perfilesSesion}
@@ -1106,7 +1111,7 @@ function App() {
         }}
       />
     ) : null}
-    </>
+    </ApiProvider>
   );
 }
 
@@ -1423,13 +1428,11 @@ interface TycCurrentData {
 }
 
 function OnboardingFlow({
-  accessToken,
   onComplete,
   pendingActions,
   username,
   userRole
 }: {
-  accessToken: string | null;
   onComplete: (newAccessToken: string, newUser: UserSummary, respuesta?: AuthResponse) => void;
   pendingActions: string[];
   username: string;
@@ -1437,7 +1440,8 @@ function OnboardingFlow({
 }) {
   const isAdminRole = userRole === "ADMIN_INTERNO" || userRole === "SOPORTE_INTERNO";
   const needsPasswordChange = pendingActions.includes("CHANGE_PASSWORD");
-  const api = useMemo(() => createApiClient(accessToken, () => undefined), [accessToken]);
+  // URA-018 (H-20): el onboarding usa el cliente de la sesion; antes descartaba el token renovado.
+  const api = useApi();
   const [phase, setPhase] = useState<"password" | "tyc" | "otp">(needsPasswordChange ? "password" : "tyc");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -1706,7 +1710,6 @@ function OperationHome({
   accessToken,
   context,
   readiness,
-  setAccessToken,
   user,
   onLogout,
   perfiles,
@@ -1719,7 +1722,6 @@ function OperationHome({
   accessToken: string | null;
   context: OperationalContextResponse | null;
   readiness: ReadinessResponse | null;
-  setAccessToken: (token: string | null) => void;
   user: UserSummary | null;
   onLogout: () => Promise<void>;
   /** SPEC_MULTIPERFIL_USUARIO_v0.1: perfiles emitibles del usuario; con mas de uno se puede cambiar. */
@@ -2058,27 +2060,27 @@ function OperationHome({
       {operationView === "invoice" ? (
         <InvoiceEditor
           key={invoiceInitialDraft?.corrige_numero ?? "factura"}
-          accessToken={accessToken}
+         
           canEmit={canEmit}
           context={context}
           clientePrefillRequest={invoiceClientePrefill}
           initialDraft={invoiceInitialDraft}
           readiness={readiness}
-          setAccessToken={setAccessToken}
+         
           onBack={() => { setInvoiceInitialDraft(null); goTo("status"); }}
           onVerDocumentos={() => { setInvoiceInitialDraft(null); goTo("documents"); }}
         />
       ) : operationView === "credit-note" ? (
         <CreditNoteView
-          accessToken={accessToken}
+         
           context={context}
-          setAccessToken={setAccessToken}
+         
           onBack={() => goTo("status")}
         />
       ) : operationView === "documents" ? (
         <DocumentsView
-          accessToken={accessToken}
-          setAccessToken={setAccessToken}
+         
+         
           onBack={() => goTo("invoice")}
           onGoTo={goTo}
           onCorregirFactura={(draft) => { setInvoiceInitialDraft(draft); goTo("invoice"); }}
@@ -2088,23 +2090,22 @@ function OperationHome({
         />
       ) : operationView === "clients" ? (
         <ClientesAgendaView
-          accessToken={accessToken}
+         
           onBack={() => goTo("invoice")}
           onUseCliente={useClienteFromAgenda}
-          setAccessToken={setAccessToken}
         />
       ) : operationView === "catalog" ? (
-        <CatalogView accessToken={accessToken} setAccessToken={setAccessToken} onBack={() => goTo("invoice")} />
+        <CatalogView onBack={() => goTo("invoice")} />
       ) : operationView === "notas" ? (
         <NotasView
-          accessToken={accessToken}
-          setAccessToken={setAccessToken}
+         
+         
           onBack={() => goTo("invoice")}
           onConvertirEnFactura={(draft) => { setInvoiceInitialDraft(draft); goTo("invoice"); }}
           numeracionDelCliente={numeracionDelCliente}
         />
       ) : operationView === "recibos" ? (
-        <RecibosView accessToken={accessToken} setAccessToken={setAccessToken} onBack={() => goTo("invoice")} />
+        <RecibosView onBack={() => goTo("invoice")} />
       ) : (
         <StatusView
           canEmit={canEmit}
@@ -2275,8 +2276,6 @@ function useEsEscritorio(): boolean {
 }
 
 function DocumentsView({
-  accessToken,
-  setAccessToken,
   onBack,
   onGoTo,
   role,
@@ -2284,8 +2283,6 @@ function DocumentsView({
   onCorregirFactura,
   mostrarPunto = false
 }: {
-  accessToken: string | null;
-  setAccessToken: (token: string | null) => void;
   onBack: () => void;
   onGoTo?: (view: OperationView) => void;
   role: UserSummary["role"];
@@ -2294,7 +2291,7 @@ function DocumentsView({
   /** SPEC_MULTIPERFIL_USUARIO_v0.1 §C.8: columna "Punto" solo con mas de un perfil. */
   mostrarPunto?: boolean;
 }) {
-  const api = useMemo(() => createApiClient(accessToken, setAccessToken), [accessToken, setAccessToken]);
+  const api = useApi();
   const todayYmd = useMemo(() => formatYmdFromDate(new Date()), []);
   const last7DaysYmd = useMemo(() => {
     const date = new Date();
@@ -3858,17 +3855,13 @@ function DocumentsView({
 }
 
 function ClientesAgendaView({
-  accessToken,
-  setAccessToken,
   onBack,
   onUseCliente
 }: {
-  accessToken: string | null;
-  setAccessToken: (token: string | null) => void;
   onBack: () => void;
   onUseCliente: (cliente: ClienteResponse) => void;
 }) {
-  const api = useMemo(() => createApiClient(accessToken, setAccessToken), [accessToken, setAccessToken]);
+  const api = useApi();
   const [items, setItems] = useState<ClienteResponse[]>([]);
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<ClienteResponse | null>(null);
@@ -4312,17 +4305,13 @@ function ClientesAgendaView({
 }
 
 function CreditNoteView({
-  accessToken,
   context,
-  setAccessToken,
   onBack
 }: {
-  accessToken: string | null;
   context?: OperationalContextResponse | null;
-  setAccessToken: (token: string | null) => void;
   onBack: () => void;
 }) {
-  const api = useMemo(() => createApiClient(accessToken, setAccessToken), [accessToken, setAccessToken]);
+  const api = useApi();
   const [candidates, setCandidates] = useState<NotaCreditoCandidate[]>([]);
   const [selected, setSelected] = useState<NotaCreditoCandidate | null>(null);
   const [query, setQuery] = useState("");
@@ -4501,15 +4490,11 @@ function CreditNoteView({
 }
 
 function CatalogView({
-  accessToken,
-  setAccessToken,
   onBack
 }: {
-  accessToken: string | null;
-  setAccessToken: (token: string | null) => void;
   onBack: () => void;
 }) {
-  const api = useMemo(() => createApiClient(accessToken, setAccessToken), [accessToken, setAccessToken]);
+  const api = useApi();
   const [items, setItems] = useState<CatalogoItem[]>([]);
   const [query, setQuery] = useState("");
   const [statusChip, setStatusChip] = useState<"ACTIVE" | "ARCHIVED" | "ALL">("ACTIVE");
@@ -4873,23 +4858,19 @@ function CatalogView({
 }
 
 function InvoiceEditor({
-  accessToken,
   canEmit,
   clientePrefillRequest,
   initialDraft,
   context,
   readiness,
-  setAccessToken,
   onBack,
   onVerDocumentos
 }: {
-  accessToken: string | null;
   canEmit: boolean;
   clientePrefillRequest: InvoiceClientePrefillRequest | null;
   initialDraft?: InvoiceInitialDraft | null;
   context: OperationalContextResponse | null;
   readiness: ReadinessResponse | null;
-  setAccessToken: (token: string | null) => void;
   onBack: () => void;
   onVerDocumentos?: () => void;
 }) {
@@ -4971,7 +4952,7 @@ function InvoiceEditor({
   const initialDraftAppliedRef = useRef(false);
   const correccionEmitidaRef = useRef(false);
 
-  const api = useMemo(() => createApiClient(accessToken, setAccessToken), [accessToken, setAccessToken]);
+  const api = useApi();
   const today = useMemo(() => new Date().toLocaleDateString("es-PY"), []);
   const nextFiscalNumber = useMemo(() => getNextFiscalNumber(context?.fiscal_context.documento_nro), [context?.fiscal_context.documento_nro]);
 
@@ -7785,19 +7766,15 @@ function createNotaFila(tipo: NotaFilaTipo): NotaFilaDraft {
 // ─── Componente NotasView ──────────────────────────────────────────────────────
 
 function NotasView({
-  accessToken,
-  setAccessToken,
   onBack,
   onConvertirEnFactura,
   numeracionDelCliente = false,
 }: {
-  accessToken: string | null;
-  setAccessToken: (token: string | null) => void;
   onBack: () => void;
   onConvertirEnFactura: (draft: InvoiceInitialDraft) => void;
   numeracionDelCliente?: boolean;
 }) {
-  const api = useMemo(() => createApiClient(accessToken, setAccessToken), [accessToken, setAccessToken]);
+  const api = useApi();
   type SubView = "list" | "form" | "detail";
   const [subView, setSubView] = useState<SubView>("list");
 
@@ -8190,8 +8167,8 @@ function NotasView({
   function openPdf(nota: NotaListItem) {
     void (async () => {
       try {
-        const res = await fetch(`/api/v1/notas/${nota.id}/pdf`, { headers: { Authorization: `Bearer ${accessToken ?? ""}` } });
-        if (!res.ok) throw new Error("No se pudo generar el PDF.");
+        // URA-018 (H-20): por el cliente, con renovacion de sesion y manejo del punto (PAUTAS P-D1).
+        const res = await api.requestRaw(`/notas/${nota.id}/pdf`);
         window.open(URL.createObjectURL(await res.blob()), "_blank");
       } catch (e) { setError(e instanceof Error ? e.message : "Error al abrir el PDF."); }
     })();
@@ -8842,15 +8819,11 @@ interface ReciboRecord {
 // ─── Componente RecibosView ───────────────────────────────────────────────────
 
 function RecibosView({
-  accessToken,
-  setAccessToken,
   onBack,
 }: {
-  accessToken: string | null;
-  setAccessToken: (token: string | null) => void;
   onBack: () => void;
 }) {
-  const api = useMemo(() => createApiClient(accessToken, setAccessToken), [accessToken, setAccessToken]);
+  const api = useApi();
   const [recibos, setRecibos] = useState<ReciboRecord[]>([]);
   const [confirmar, dialogoConfirmar] = useConfirmar();
   const [total, setTotal] = useState(0);
@@ -9104,10 +9077,7 @@ function RecibosView({
   const openPdf = (r: ReciboRecord) => {
     void (async () => {
       try {
-        const res = await fetch(`/api/v1/recibos/${r.id}/pdf`, {
-          headers: { Authorization: `Bearer ${accessToken ?? ""}` },
-        });
-        if (!res.ok) throw new Error("No se pudo generar el PDF.");
+        const res = await api.requestRaw(`/recibos/${r.id}/pdf`);
         window.open(URL.createObjectURL(await res.blob()), "_blank");
       } catch (e) {
         setError(e instanceof Error ? e.message : "Error al abrir el PDF.");
@@ -9118,10 +9088,7 @@ function RecibosView({
   const openXml = (r: ReciboRecord) => {
     void (async () => {
       try {
-        const res = await fetch(`/api/v1/recibos/${r.id}/xml`, {
-          headers: { Authorization: `Bearer ${accessToken ?? ""}` },
-        });
-        if (!res.ok) throw new Error("No se pudo descargar el documento electrónico.");
+        const res = await api.requestRaw(`/recibos/${r.id}/xml`);
         const blob = await res.blob();
         const url = URL.createObjectURL(blob);
         const nroStr = r.numero != null ? String(r.numero).padStart(7, "0") : "borrador";

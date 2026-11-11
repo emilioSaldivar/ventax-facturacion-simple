@@ -4,7 +4,7 @@
 //
 //   ENSAYO_PASSWORD_FILE=/ruta/clave node scripts/segel-fs/playwright-ux-resto-app.cjs [caso ...]
 //
-// Sin argumentos corre todos los casos. Casos: componentes (URA-017, CA-13). URA-012 suma los de las fases 1 y 2.
+// Sin argumentos corre todos los casos. Casos: componentes (URA-017, CA-13), api (URA-018). URA-012 suma los de las fases 1 y 2.
 // Escribe test-results/ux-resto-app/.
 const fs = require("node:fs");
 const path = require("node:path");
@@ -182,10 +182,49 @@ async function casoComponentes(browser) {
   }
 }
 
+// ─── URA-018: descargas por el cliente de API, con renovacion de sesion ─────────
+async function casoApi(browser) {
+  const { ctx, page } = await entrar(browser, 1440, 900);
+  try {
+    await abrirVista(page, "Cobros / Recibos");
+    const emitido = page.locator(".nota-card", { has: page.locator('.estado-documento[data-estado="EMITIDO"]') }).first();
+    await emitido.waitFor();
+    await emitido.getByRole("button", { name: "Ver", exact: true }).click();
+    const verPdf = page.getByRole("button", { name: "Ver PDF" }).first();
+    await verPdf.waitFor();
+    // El primer pedido del PDF responde 401 como si el token hubiera vencido: el cliente renueva una vez y reintenta.
+    let forzado = false;
+    await page.route(/\/recibos\/[^/]+\/pdf$/, (route) => {
+      if (forzado) return route.continue();
+      forzado = true;
+      return route.fulfill({ status: 401, contentType: "application/json", body: JSON.stringify({ error: { code: "UNAUTHORIZED", message: "Token vencido" } }) });
+    });
+    let refrescos = 0;
+    const pdfs = [];
+    page.on("request", (r) => {
+      if (r.url().includes("/auth/refresh") && r.method() === "POST") refrescos += 1;
+    });
+    page.on("response", (r) => {
+      if (/\/recibos\/[^/]+\/pdf$/.test(r.url())) pdfs.push(r.status());
+    });
+    const ventana = ctx.waitForEvent("page", { timeout: 15000 }).catch(() => null);
+    await verPdf.click();
+    const nueva = await ventana;
+    await page.waitForTimeout(1500);
+    check("URA-018: el PDF del recibo pasa por el cliente y se renueva la sesion una sola vez", refrescos === 1, `refresh=${refrescos}`);
+    check("URA-018: tras renovar, el PDF responde 200 y se abre", pdfs.includes(200) && nueva !== null, `respuestas=${pdfs.join(",")} ventana=${nueva ? "si" : "no"}`);
+    check("URA-018: sin aviso de error en la pantalla", (await page.locator(".error-banner").count()) === 0);
+    if (nueva) await nueva.close();
+  } finally {
+    await ctx.close();
+  }
+}
+
 (async () => {
   const browser = await chromium.launch();
   try {
     if (corre("componentes")) await casoComponentes(browser);
+    if (corre("api")) await casoApi(browser);
   } catch (e) {
     check("el guion termino sin excepciones", false, String(e));
   } finally {
