@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { validarNotaRemision } from "../src/modules/notas-remision/notas-remision.validacion";
 import { construirPedidoFe, emitirNotaRemision, fechaHoraAsuncion } from "../src/modules/notas-remision/notas-remision.service";
 import { notaRemisionSchema } from "../src/modules/notas-remision/notas-remision.routes";
@@ -276,5 +276,35 @@ describe("RN-08 geografia: cache 24 h y 503 sin FE", () => {
     // Vencido el cache y con FE caido, sirve lo ultimo guardado.
     const r = await leerGeografia(caido, {}, 1000 + 25 * 60 * 60 * 1000);
     expect(r.items[0]!.descripcion).toBe("CAPITAL");
+  });
+});
+
+describe("RN-24 gateway real: POST /v1/nota-remision", () => {
+  it("manda el pedido sin precio ni IVA y lee el numero de nro_documento", async () => {
+    const { RealFiscalGateway } = await import("../src/modules/fiscal-gateway/fiscal-gateway.client");
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({ cdc: "07050570161001001000050912026111117678303244", status: "QUEUED_BATCH", document_id: "679", document_uuid: "a8bd7974-77c0-40fe-98cc-c998516fdde1", nro_documento: "0000509", tipo_documento: "NRE" }),
+        { status: 200 }
+      )
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      // Valor sintetico, no es una clave real.
+      const gw = new RealFiscalGateway({ mode: "real", baseUrl: "http://fe.test/v1", apiKey: "clave-sintetica", timeoutMs: 1000, environment: "test" } as never);
+      const { pedido } = construirPedidoFe(context, base(), "nre_r", AHORA);
+      const r = await gw.emitNotaRemision(pedido);
+      const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+      expect(url).toBe("http://fe.test/v1/nota-remision");
+      const cuerpo = JSON.parse(String(init.body));
+      expect(cuerpo.client_reference.entity_type).toBe("nota_remision_operativa");
+      expect(cuerpo.items[0]).not.toHaveProperty("precioUnitario");
+      expect(cuerpo.items[0]).not.toHaveProperty("ivaTipo");
+      expect(cuerpo).not.toHaveProperty("tipo_documento");
+      expect(cuerpo.receptor.email).toBeUndefined();
+      expect(r.numero_fiscal).toBe("0000509");
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

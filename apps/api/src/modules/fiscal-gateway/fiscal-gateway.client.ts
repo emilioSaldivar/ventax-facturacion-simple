@@ -1980,7 +1980,8 @@ function mapFiscalEmitResponse(body: unknown): FiscalEmitFacturaResponse {
     fiscal_document_id: stringOrNull(data.document_id),
     document_uuid: stringOrNull(data.document_uuid),
     cdc: stringOrNull(data.cdc),
-    numero_fiscal: stringOrNull(data.nro_factura) ?? buildNumeroFiscalFromTimbrado(timbrado),
+    numero_fiscal: stringOrNull(data.nro_factura) ?? stringOrNull(data.nro_documento) ?? buildNumeroFiscalFromTimbrado(timbrado),
+    // SPEC_NOTA_REMISION_v0.1: la NRE informa su numero en `nro_documento` (FE segel-rc4.32), no en `nro_factura`.
     estado: mapDocumentStatusWithCode(status, fiscalCode),
     status_raw: status,
     result_code: fiscalCode,

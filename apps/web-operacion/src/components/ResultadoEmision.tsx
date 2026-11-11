@@ -107,13 +107,14 @@ export function ResultadoEmision({
   // SPEC_AJUSTES_TEXTOS_OPERADOR_v0.1, A-2: el titulo y el boton dicen el tipo del documento.
   const nombreTitulo = nombreTipo.charAt(0).toUpperCase() + nombreTipo.slice(1);
 
+  const esRemision = documento.tipo === "NOTA_REMISION";
   return (
     <div className="resultado-emision" aria-live="polite">
       <div className="editor-heading">
         <div>
           <h2 id="invoice-title">{documento.numero_fiscal ? `${nombreTitulo} ${documento.numero_fiscal}` : `${nombreTitulo} creada · número pendiente`}</h2>
           <p className="muted editor-subtitulo">
-            Creada hoy{hora ? ` ${hora}` : ""}{operador ? ` por ${operador}` : ""} · {documento.cliente.razon_social} · {total}
+            Creada hoy{hora ? ` ${hora}` : ""}{operador ? ` por ${operador}` : ""} · {documento.cliente.razon_social}{esRemision ? "" : ` · ${total}`}
           </p>
         </div>
         <div className="header-actions">
@@ -149,28 +150,49 @@ export function ResultadoEmision({
       </section>
 
       <div className="resultado-cuerpo">
-        <section className="resultado-resumen" aria-label="Resumen de la factura">
+        <section className="resultado-resumen" aria-label={esRemision ? "Resumen de la nota de remisión" : "Resumen de la factura"}>
           <div className="resultado-datos">
             <div>
               <dt>Cliente</dt>
               <dd>{documento.cliente.razon_social}</dd>
               <small>{esClienteInnominado(documento.cliente) ? "Sin nombre (consumidor final)" : `${documento.cliente.documento_tipo} ${documento.cliente.documento}`}{documento.cliente.naturaleza ? ` · ${documento.cliente.naturaleza === "JURIDICA" ? "Jurídica" : "Física"}` : ""}</small>
             </div>
-            <div>
-              <dt>Condición</dt>
-              <dd>{etiquetaCondicionVenta(documento.condicion_venta)}</dd>
-              <small>{context?.fiscal_context.actividad_economica_descripcion ?? ""}</small>
-            </div>
-            <div>
-              <dt>Moneda</dt>
-              <dd>{moneda}</dd>
-              <small>{documento.tipo_cambio ? `Cambio ${String(documento.tipo_cambio).replace(".", ",")} Gs. por 1 ${moneda}` : "Guaranies"}</small>
-            </div>
-            <div className="resultado-total">
-              <dt>Total a pagar</dt>
-              <dd className="cifra">{total}</dd>
-              {equivalenteGs ? <small className="cifra">{equivalenteGs}</small> : null}
-            </div>
+            {/* SPEC_NOTA_REMISION_v0.1 RN-20: la nota de remision no tiene montos; muestra motivo y traslado. */}
+            {esRemision ? (
+              <>
+                <div>
+                  <dt>Motivo</dt>
+                  <dd>{documento.remision?.motivo_descripcion ?? "—"}</dd>
+                  <small>{documento.remision?.transportista ?? ""}</small>
+                </div>
+                <div>
+                  <dt>Traslado</dt>
+                  <dd>
+                    {documento.remision?.inicio_traslado ?? "—"}
+                    {documento.remision?.fin_traslado && documento.remision.fin_traslado !== documento.remision.inicio_traslado ? ` a ${documento.remision.fin_traslado}` : ""}
+                  </dd>
+                  <small>{[documento.remision?.kilometros ? `${documento.remision.kilometros} km` : null, documento.remision?.vehiculo].filter(Boolean).join(" · ")}</small>
+                </div>
+              </>
+            ) : (
+              <>
+                <div>
+                  <dt>Condición</dt>
+                  <dd>{etiquetaCondicionVenta(documento.condicion_venta)}</dd>
+                  <small>{context?.fiscal_context.actividad_economica_descripcion ?? ""}</small>
+                </div>
+                <div>
+                  <dt>Moneda</dt>
+                  <dd>{moneda}</dd>
+                  <small>{documento.tipo_cambio ? `Cambio ${String(documento.tipo_cambio).replace(".", ",")} Gs. por 1 ${moneda}` : "Guaranies"}</small>
+                </div>
+                <div className="resultado-total">
+                  <dt>Total a pagar</dt>
+                  <dd className="cifra">{total}</dd>
+                  {equivalenteGs ? <small className="cifra">{equivalenteGs}</small> : null}
+                </div>
+              </>
+            )}
           </div>
           {items.length > 0 ? (
             <div className="resultado-lineas-wrap">
@@ -180,9 +202,13 @@ export function ResultadoEmision({
                     <th className="col-numero">#</th>
                     <th>Descripción</th>
                     <th className="cifra">Cantidad</th>
-                    <th className="cifra">Precio</th>
-                    <th>IVA</th>
-                    <th className="cifra">Subtotal</th>
+                    {esRemision ? null : (
+                      <>
+                        <th className="cifra">Precio</th>
+                        <th>IVA</th>
+                        <th className="cifra">Subtotal</th>
+                      </>
+                    )}
                   </tr>
                 </thead>
                 <tbody>
@@ -191,21 +217,25 @@ export function ResultadoEmision({
                       <td className="col-numero">{indice + 1}</td>
                       <td>{item.descripcion}{item.codigo ? <small className="muted"> · {item.codigo}</small> : null}</td>
                       <td className="cifra">{formatCantidad(item.cantidad)}</td>
-                      <td className="cifra">{formatMonto(item.precio_unitario, moneda).replace(/^(Gs\.|[A-Z]{3}) /, "")}</td>
-                      <td>{formatIva(item.iva_tipo)}</td>
-                      <td className="cifra">{formatMonto(item.subtotal, moneda).replace(/^(Gs\.|[A-Z]{3}) /, "")}</td>
+                      {esRemision ? null : (
+                        <>
+                          <td className="cifra">{formatMonto(item.precio_unitario, moneda).replace(/^(Gs\.|[A-Z]{3}) /, "")}</td>
+                          <td>{formatIva(item.iva_tipo)}</td>
+                          <td className="cifra">{formatMonto(item.subtotal, moneda).replace(/^(Gs\.|[A-Z]{3}) /, "")}</td>
+                        </>
+                      )}
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
           ) : null}
-          <div className="resultado-totales">
+          {esRemision ? null : <div className="resultado-totales">
             <div><span>Total sin IVA</span><strong className="cifra">{formatMonto(documento.totals.total_sin_iva, moneda)}</strong></div>
             <div><span>IVA 5%</span><strong className="cifra">{formatMonto(documento.totals.iva_5, moneda)}</strong></div>
             <div><span>IVA 10%</span><strong className="cifra">{formatMonto(documento.totals.iva_10, moneda)}</strong></div>
             <div><span>Total IVA</span><strong className="cifra">{formatMonto(documento.totals.total_iva, moneda)}</strong></div>
-          </div>
+          </div>}
           <p className="muted resultado-cdc">
             {documento.cdc ? <span title={documento.cdc}>CDC {documento.cdc.slice(0, 8)}…{documento.cdc.slice(-4)}</span> : "CDC pendiente hasta la aprobación"}
             {" · el enlace público siempre entrega la versión vigente del XML y el KUDE"}
