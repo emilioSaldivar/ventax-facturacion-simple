@@ -31,6 +31,18 @@ Todas las tareas estan **Pendiente** (2026-11-11). La implementacion arranca cua
 |---|---|---|---|---|
 | NRE-030 | Habilitar la remision solo con `NRE_EMIT` y `NRE` en `tipos_documento_habilitados` (migracion `0049`); 4xx de FE a una remision queda `ERROR_OPERATIVO` sin reintentos | RN-01b, RN-23 | vitest: mapper (tipos del emisor), `remisionHabilitada`, worker con "No existe numerador configurado"; suite 912 en verde | Hecha (2026-11-11), stack `dde3d27`: con solo `NRE_EMIT` la pestaña queda deshabilitada (el caso que la abre no pudo hacerlo); con `NRE_EMIT` y `NRE` en los tipos, `playwright-nota-remision.cjs permiso validaciones pantallas` 25/25. Los tipos del stack local se cargaron por SQL, como los permisos |
 
+## Cierre de E1 (refinado el 2026-11-11 con el usuario; pruebas con SALUMAX, PLAN §5.1)
+
+| ID | Tarea | Reglas | Validacion | Estado |
+|---|---|---|---|---|
+| NRE-031 | Motivo 7: el resultado dice "Descargar para el traslado" y no ofrece WhatsApp ni correo | RN-20 | Playwright `motivo7` (comprobacion del texto tras la aprobacion) | Hecha (2026-11-11, `f31afc7`); falta la corrida |
+| NRE-032 | Guion: esperar la aprobacion por estado hasta el lote de FE test (17 min), con estados finales | — | `playwright-nota-remision.cjs` `emitirYEsperar` | Hecha (2026-11-11, `f31afc7`) |
+| NRE-033 | Anular una nota de remision aprobada en SIFEN test desde la ficha | RN-26 | Playwright `anular` con SALUMAX | Pendiente: corrida en curso |
+| NRE-034 | Emision desde celular (390 px), motivo 1 | CA-02 | Playwright `motivo1-390` con SALUMAX | Pendiente: corrida en curso |
+| NRE-035 | Punto sin numerador tipo 7 con un emisor que si lo tiene en otro punto (SALUMAX 003) | RN-01b, RN-23 | Playwright `sin-numerador` como `slx-licitaciones`: la nota queda `ERROR_OPERATIVO` con "Pedila a Segel" y sin numero tomado | Pendiente: corrida en curso |
+| NRE-036 | Importacion real del export con permisos y tipos (sin SQL) | RN-03 | re-export desde `fe-altas` e import EXISTENTE en `altas-fs`: `fe_consumer_permisos` con `NRE_EMIT` y `fe_tipos_documento` con `NRE` | Hecha (2026-11-11): advertencias `URL_NO_VERIFICADA`, `BASE_URL_DISTINTA`, `CONSUMIDOR_ESTADO_DESCONOCIDO`; `$.consumidor[].permisos` ya no figura entre los ignorados |
+| NRE-014 | "Corregir y emitir de nuevo" abre el formulario precargado | RN-23 | Playwright `corregir` | Pendiente |
+
 ## Entrega E2 — datos reutilizables y agenda
 
 | ID | Tarea | Reglas | Validacion | Estado |

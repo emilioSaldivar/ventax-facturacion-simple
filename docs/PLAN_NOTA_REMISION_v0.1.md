@@ -111,6 +111,24 @@ Sin emojis; voseo segun `PAUTAS_FRONTEND_v0.1` §8; tildes en los textos de inte
 - **Playwright** (`scripts/segel-fs/playwright-nota-remision.cjs`, contra el stack local `bash .../desplegar.sh` con FE mock): casos `permiso` (CA-01), `motivo1` (CA-02), `motivo7` (CA-03), `validaciones` (los bloqueos visibles de RN-14), `corregir` (CA-06), en 1440, 1280 y 390; `reutilizables` y `agenda` en E2. Regresion: `playwright-documentos-escritorio.cjs`, `playwright-ux-resto-app.cjs`, `playwright-nc-cuerpo.cjs`.
 - **SIFEN test (E3, CA-10):** stack local con `FE_GATEWAY_MODE=real` contra `fe-segel` (red `segel_fiscal`), con aviso previo al usuario y a la sesion de FE. Una nota motivo 1 (cliente de prueba con domicilio real de Asuncion, factura asociada emitida en el mismo ensayo) y una motivo 7; cancelar una. Guardar numero, CDC, KUDE y capturas como evidencia. No se emite nada en `segel-fs`.
 
+### 5.1 Banco de pruebas SALUMAX (decision del usuario, 2026-11-11)
+
+Las pruebas de la remision, del catalogo en USD y de las validaciones se hacen ademas con **SALUMAX SA (80018828-4)** en la pila local de altas (`fe-local-data/altas-clientes/`: FE `fe-altas` en `segel-rc4.32` contra SIFEN test, FS `altas-fs` en `http://localhost:18692/app/`, API 18691, base `altas-fs-postgres-1`). SALUMAX cubre las casuisticas que el facturador del ensayo no tiene:
+
+| Casuistica | Como la cubre SALUMAX | Que verifica |
+|---|---|---|
+| Varios puntos de expedicion | 001, 002 y 003 | multiperfil en el login, "Se emite por el punto" |
+| Numerador tipo 7 en algunos puntos y no en otros | NRE en 001 y 002; **003 sin NRE** (igual que su timbrado de produccion) | RN-01b: a Licitaciones (003) se le ofrece la remision y FE responde 500 `ISSUE_NRE_FAILED` sin tomar numero; FS la deja en `ERROR_OPERATIVO` con "Pedila a Segel" |
+| Usuarios por area con perfiles distintos | `slx-logistica` (NRE 001 y 002), `slx-licitaciones` (003), `slx-tics` (001, todos los tipos) | la pestaña y el menu por contexto |
+| Actividades distintas por punto | 001/002 con 5 actividades, 003 solo 68100 | el pedido a FE lleva la actividad del perfil |
+| Importacion real del export de FE | re-export desde `fe-altas` e import en modo EXISTENTE (`reimport-salumax.mjs` del scratchpad de la sesion; mismo flujo que `alta-fs.mjs`) | RN-03: `fe_consumer_permisos` y `fe_tipos_documento` llegan por el export, sin SQL |
+
+Para probar la rama en esa pila se construyen imagenes `altas-fs-*:rama` desde HEAD y se levanta con un override que solo cambia las imagenes (`desplegar-altas.sh` del scratchpad); las imagenes del tag de produccion quedan intactas y se vuelve levantando sin el override. Las claves de los usuarios de prueba estan en `salumax/fs-usuarios.json` (fuera de git); los guiones las leen de archivos `ENSAYO_PASSWORD_FILE*`.
+
+Variables de los guiones para SALUMAX: `SEGEL_APP_URL=http://localhost:18692/app/`, `ENSAYO_USER=slx-logistica`, `ENSAYO_PUNTO=001-001`, `ENSAYO_USER2=slx-licitaciones`, `ENSAYO_PUNTO2=001-003`, `SEGEL_DB_CONTAINER=altas-fs-postgres-1`.
+
+**SALUMAX en produccion (2026-11-11):** FE prod ya tiene el emisor, 14 usuarios en el FS de `segel-fs` y numeradores desbloqueados, con NRE solo en 001 y 002. Al desplegar esta cadena, FS ofrecera la remision a todos sus usuarios (regla por emisor); los del 003 veran el error operativo. Antes del despliegue, el usuario decide entre cargar el numerador tipo 7 tambien en 003 (operativa que propuso FE) o pedir a FE los numeradores por punto en el export.
+
 ## 6. Riesgos
 
 | Riesgo | Mitigacion |

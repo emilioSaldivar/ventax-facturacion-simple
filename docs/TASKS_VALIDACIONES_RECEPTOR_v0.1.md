@@ -16,6 +16,8 @@ SPEC: `docs/SPEC_VALIDACIONES_RECEPTOR_v0.1.md` · PLAN: `docs/PLAN_VALIDACIONES
 | VAL-010 | Regresion: `npm run test`, `typecheck`, `lint` (api); `typecheck`, `build` (web); `playwright-ux-resto-app.cjs` agenda/nuevo/ficha; `playwright-nc-cuerpo.cjs` | CA-09 | salidas en esta tabla | Hecha (2026-11-11) |
 | VAL-011 | Cierre: repaso de SPEC/PLAN/TASKS, BACKLOG (FS-60, FS-62 cerrados por esta cadena), `HOJA_DE_RUTA` | — | revision | Pendiente |
 | VAL-012 | Despliegue en `segel-fs` | — | **solo con orden directa del usuario**; respaldo previo; aviso de la cifra de VAL-009 | Pendiente |
+| VAL-013 | Pantalla de Recibos: error por campo en el pagador (hoy solo el mensaje de la API) | RV-09 | Playwright en el formulario de recibos | Pendiente (refinado el 2026-11-11) |
+| VAL-014 | Corrida del guion con SALUMAX (`altas-fs`, `slx-tics`, `SEGEL_DB_CONTAINER=altas-fs-postgres-1`) | CA-01 a CA-08 | 67 verificaciones en 1440/1280/390 | Pendiente: corrida en curso (2026-11-11) |
 
 ## Tabla de casos (VAL-002)
 

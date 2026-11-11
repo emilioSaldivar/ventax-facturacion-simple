@@ -2,7 +2,10 @@
 // Catalogo en moneda extranjera (SPEC_CATALOGO_MONEDA_v0.1, TASKS CAM-009). Solo stack local de Segel; no emite.
 // Crea articulos "Prueba CAM ..." y los borra al final (por la API, con la sesion del operador).
 //
-//   ENSAYO_PASSWORD_FILE=/ruta/clave node scripts/segel-fs/playwright-catalogo-moneda.cjs
+//   ENSAYO_PASSWORD_FILE=/ruta/clave node scripts/segel-fs/playwright-catalogo-moneda.cjs [sifen]
+//
+// Sin argumentos no emite. Con `sifen` corre ademas CA-10: una factura USD con un articulo del catalogo en USD, emitida
+// en SIFEN test (avisar a FE antes); espera la aprobacion hasta ENSAYO_ESPERA_MS (17 min) y comprueba el KUDE.
 //
 // Escribe test-results/catalogo-moneda/.
 const fs = require("node:fs");
@@ -16,6 +19,10 @@ const clave = fs.readFileSync(process.env.ENSAYO_PASSWORD_FILE ?? "", "utf8").tr
 const outDir = path.join(process.cwd(), "test-results", "catalogo-moneda");
 fs.mkdirSync(outDir, { recursive: true });
 const sufijo = String(Date.now() % 100000);
+const conSifen = process.argv.includes("sifen");
+const RUC = process.env.ENSAYO_RUC ?? "80026570-0";
+const NOMBRE = process.env.ENSAYO_NOMBRE ?? "SEGEL SA";
+const ESPERA_APROBACION_MS = Number(process.env.ENSAYO_ESPERA_MS ?? 17 * 60 * 1000);
 
 const resultados = [];
 function check(escenario, ok, detalle = "") {
@@ -247,6 +254,62 @@ async function casoEditor(browser) {
   }
 }
 
+// CA-10: factura USD con un articulo del catalogo en USD, aprobada en SIFEN test, con KUDE.
+async function casoSifen(browser) {
+  const { ctx, page } = await entrar(browser, 1440, 900);
+  try {
+    const usd = await api(page, "POST", "/catalogo/items", { descripcion: `Prueba CAM sifen USD ${sufijo}`, precio_unitario: 12.5, moneda: "USD" });
+    check("CA-10: articulo USD creado", usd.status === 201);
+    await abrirVista(page, "Nueva factura");
+    await page.locator("table.grilla-lineas").waitFor();
+    await elegirMoneda(page, "USD");
+    await page.getByPlaceholder("Ingresá el número de documento").fill(RUC);
+    await page.getByPlaceholder("Ingresá el número de documento").press("Tab");
+    await page.waitForTimeout(1200);
+    const nombre = page.getByLabel("Nombre o razón social");
+    if (!(await nombre.inputValue()).trim()) await nombre.fill(NOMBRE);
+    const fila0 = page.locator('[data-grilla-fila="0"]');
+    await fila0.locator('input[data-celda="descripcion"]').fill("Prueba CAM sifen");
+    await page.locator(".grilla-sugerencias button", { hasText: "sifen USD" }).first().click();
+    await page.waitForTimeout(600);
+    check("CA-10: el precio del catalogo quedo en la linea (12,50)", (await fila0.getByLabel(/^Precio, línea/).inputValue()).replace(".", ",") === "12,50");
+    await fila0.getByLabel(/^Cantidad, línea/).fill("2");
+    await page.waitForTimeout(1500);
+    const crearBtn = page.getByRole("button", { name: "Crear factura" });
+    await page.waitForFunction((b) => b && !b.disabled, await crearBtn.elementHandle(), { timeout: 20000 });
+    await crearBtn.click();
+    const confirmar = page.getByRole("button", { name: /^Confirmar/ });
+    if (await confirmar.isVisible({ timeout: 3000 }).catch(() => false)) await confirmar.click();
+    await page.getByRole("button", { name: "Crear nueva factura" }).waitFor({ timeout: 60000 });
+    const inicio = Date.now();
+    let aprobada = false;
+    while (!aprobada && Date.now() - inicio < ESPERA_APROBACION_MS) {
+      aprobada = (await page.locator(".paso.hecho").count()) >= 4;
+      const estado = (await page.locator(".resultado-emision .estado-documento").first().getAttribute("data-estado").catch(() => "")) ?? "";
+      if (["RECHAZADA", "ERROR_OPERATIVO", "ERROR_TEMPORAL"].includes(estado)) break;
+      if (!aprobada) {
+        await page.waitForTimeout(20000);
+        const resumen = page.locator("summary", { hasText: "Más opciones" });
+        if ((await resumen.count()) && !(await page.locator("details.mas-opciones[open]").count())) await resumen.click();
+        const verificar = page.getByRole("button", { name: "Verificar estado fiscal" });
+        if (await verificar.isVisible().catch(() => false)) await verificar.click();
+      }
+    }
+    const texto = (await page.locator("main").innerText()).replace(/\s+/g, " ");
+    const numero = (texto.match(/Factura (\d[\d-]{5,})/) ?? [])[1] ?? null;
+    check(`CA-10: factura USD con articulo del catalogo aprobada en SIFEN test (${numero ?? "sin numero"})`, aprobada, texto.slice(0, 200));
+    check("CA-10: total USD 25,00 con el precio del catalogo", texto.includes("USD 25,00"), texto.slice(0, 200));
+    check("CA-10: KUDE disponible", (await page.getByRole("link", { name: "Ver KUDE en PDF" }).count()) === 1);
+    await page.screenshot({ path: path.join(outDir, "1440-sifen-usd.png"), fullPage: true });
+  } catch (e) {
+    check("CA-10: sin excepciones", false, e.message);
+    await page.screenshot({ path: path.join(outDir, "sifen-error.png"), fullPage: true }).catch(() => undefined);
+  } finally {
+    await borrarPruebas(page).catch(() => undefined);
+    await ctx.close();
+  }
+}
+
 (async () => {
   const browser = await chromium.launch();
   try {
@@ -258,6 +321,7 @@ async function casoEditor(browser) {
       await casoCatalogo(browser, ancho, alto);
     }
     await casoEditor(browser);
+    if (conSifen) await casoSifen(browser);
   } finally {
     const { ctx, page } = await entrar(browser, 1280, 800);
     await borrarPruebas(page).catch(() => undefined);

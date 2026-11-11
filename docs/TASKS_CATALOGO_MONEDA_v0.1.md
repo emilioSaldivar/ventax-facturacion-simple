@@ -37,4 +37,5 @@ Estimacion total: 7 a 9 horas de implementacion y prueba, sin contar el desplieg
 - vitest `catalogo.service.test.ts` 16 (7 nuevas: CA-01 a CA-03); suite completa en verde.
 - Playwright `scripts/segel-fs/playwright-catalogo-moneda.cjs`, 1440 / 1280 / 390: **48/48** (API con la sesion del operador; alta en USD y Gs.; filtros; cambio de moneda con el error de decimales; editor USD con precio 12,50; articulo en Gs. sin precio en una factura USD y al reves; guardado en el catalogo desde una factura USD con `moneda: "USD"`). Los articulos de prueba se borran al final.
 - CA-05 de `playwright-ux-nueva-factura.cjs` reescrito segun RN-16. Ese guion emitio 3 facturas aprobadas en SIFEN test (1010637 USD, 1010638 y 1010639 PYG, con aviso previo a FE); sus 2 fallas eran verificaciones viejas (iconos del menu y un RUC con DV incorrecto), corregidas en `cba6d2b`.
-- Pendiente: CA-10 (una factura USD con un articulo del catalogo en USD en SIFEN test y su KUDE) y CAM-014 (despliegue con orden directa).
+- CA-10: caso `sifen` de `playwright-catalogo-moneda.cjs` (crea el articulo USD, lo elige en una factura USD, emite y espera la aprobacion). Corrida con SALUMAX (`altas-fs`, `slx-tics`, punto 001-001) en curso el 2026-11-11.
+- Pendiente: CAM-014 (despliegue con orden directa).
