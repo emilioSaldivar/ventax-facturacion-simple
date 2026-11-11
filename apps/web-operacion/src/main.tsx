@@ -14,6 +14,7 @@ import { MenuFila } from "./components/MenuFila";
 import { PastillaEstado } from "./components/PastillaEstado";
 import { AvisoPuntoDistinto } from "./components/AvisoPuntoDistinto";
 import { hayBorradorSinEmitir, useBorradorSinEmitir } from "./lib/borradores";
+import { numeroCorrelativo } from "./lib/formato";
 import { actividadPunto, etiquetaPunto, nombrePunto, numeroConPunto } from "./lib/punto";
 import { esNotaSinConfirmar, estadoDocumento, estadoRecibo, etiquetaCondicionVenta, formatDocumentoTipo } from "./lib/estados";
 import {
@@ -564,9 +565,9 @@ function NotaPublicaView({ token }: { token: string }) {
   }
 
   const tipoLabel = data.tipo === "PRESUPUESTO" ? "Presupuesto" : "Nota de Pedido";
-  const nroStr = data.numero != null ? String(data.numero).padStart(7, "0") : "-------";
+  const nroStr = data.numero != null ? numeroCorrelativo(data.numero) : "-------";
   const fmtGs = (n: number | null | undefined) => n != null ? Math.round(n).toLocaleString("es-PY") : "";
-  const pdfUrl = `/api/v1/verificar/nota/${token}/pdf`;
+  const pdfUrl = `${API_BASE_URL}/verificar/nota/${token}/pdf`;
 
   return (
     <div style={{ minHeight: "100dvh", background: "#ffffff", fontFamily: "var(--segel-font)" }}>
@@ -694,9 +695,9 @@ function ReciboPublicaView({ token }: { token: string }) {
     );
   }
 
-  const nroStr = data.numero != null ? String(data.numero).padStart(7, "0") : "-------";
-  const pdfUrl = `/api/v1/verificar/recibo/${token}/pdf`;
-  const xmlUrl = `/api/v1/verificar/recibo/${token}/xml`;
+  const nroStr = data.numero != null ? numeroCorrelativo(data.numero) : "-------";
+  const pdfUrl = `${API_BASE_URL}/verificar/recibo/${token}/pdf`;
+  const xmlUrl = `${API_BASE_URL}/verificar/recibo/${token}/xml`;
   const anulado = data.estado === "ANULADO";
 
   return (
@@ -7308,20 +7309,6 @@ function getDocumentoNombreLower(tipo: DocumentoResponse["tipo"]): string {
   return tipo === "NOTA_CREDITO" ? "nota de crédito" : tipo === "NOTA_REMISION" ? "nota de remisión" : "factura";
 }
 
-function formatOperationViewTitle(value: OperationView): string {
-  const labels: Record<OperationView, string> = {
-    status: "Información",
-    invoice: "Nueva factura",
-    clients: "Agenda clientes",
-    "credit-note": "Devolver factura",
-    catalog: "Catálogo",
-    documents: "Documentos",
-    notas: "Notas / Presupuestos",
-    recibos: "Cobros / Recibos"
-  };
-  return labels[value];
-}
-
 function getOperationViewHint(value: OperationView): string {
   const hints: Record<OperationView, string> = {
     status: "Estado del facturador",
@@ -7968,7 +7955,7 @@ function NotasView({
   async function handleDuplicar(nota: NotaListItem) {
     try {
       const nuevo = await api.request<NotaListItem>(`/notas/${nota.id}/duplicar`, { method: "POST" });
-      setMessage(`Borrador creado a partir de ${nota.tipo === "PRESUPUESTO" ? "presupuesto" : "pedido"} N° ${String(nota.numero ?? "").padStart(7, "0")}.`);
+      setMessage(`Borrador creado a partir de ${nota.tipo === "PRESUPUESTO" ? "presupuesto" : "pedido"} N° ${numeroCorrelativo(nota.numero ?? "")}.`);
       void openEdit(nuevo);
     } catch (e) {
       setError(e instanceof Error ? e.message : "No se pudo duplicar.");
@@ -8181,7 +8168,7 @@ function NotasView({
   // ── Sub-vista: detalle ──
 
   if (subView === "detail" && selectedNota) {
-    const nroStr = selectedNota.numero != null ? String(selectedNota.numero).padStart(7, "0") : "-------";
+    const nroStr = selectedNota.numero != null ? numeroCorrelativo(selectedNota.numero) : "-------";
     const tipoLabel = selectedNota.tipo === "PRESUPUESTO" ? "Presupuesto" : "Pedido";
     const estadoVisual = calcularEstadoVisualNota(selectedNota);
     const notaFull = selectedNotaFull;
@@ -8701,7 +8688,7 @@ function NotasView({
             <div key={grupo.label} className="invoice-list-group">
               <p className="invoice-list-group-label">{grupo.label}</p>
               {grupo.notas.map(nota => {
-                const nroStr = nota.numero != null ? String(nota.numero).padStart(7, "0") : "Borrador";
+                const nroStr = nota.numero != null ? numeroCorrelativo(nota.numero) : "Borrador";
                 const estadoVisual = calcularEstadoVisualNota(nota);
                 const isMenuOpen = menuOpenId === nota.id;
                 return (
@@ -9095,7 +9082,7 @@ function RecibosView({
         const res = await api.requestRaw(`/recibos/${r.id}/xml`);
         const blob = await res.blob();
         const url = URL.createObjectURL(blob);
-        const nroStr = r.numero != null ? String(r.numero).padStart(7, "0") : "borrador";
+        const nroStr = r.numero != null ? numeroCorrelativo(r.numero) : "borrador";
         const link = document.createElement("a");
         link.href = url;
         link.download = `recibo-${nroStr}.xml`;
@@ -9198,7 +9185,7 @@ function RecibosView({
               <p className="eyebrow">Confirmación</p>
               <h3 id="recibo-anular-title">Anular recibo</h3>
               <p className="muted">
-                El recibo N° {anularTarget.numero != null ? String(anularTarget.numero).padStart(7, "0") : ""} para {anularTarget.pagador_nombre} quedará anulado.
+                El recibo N° {anularTarget.numero != null ? numeroCorrelativo(anularTarget.numero) : ""} para {anularTarget.pagador_nombre} quedará anulado.
                 Se genera un recibo de anulación firmado; el original no se modifica.
               </p>
             </header>
@@ -9383,7 +9370,7 @@ function RecibosView({
       <div className="module-view">
         <div className="view-header">
           <button type="button" className="ghost-action" onClick={() => setSubView("list")}>← Volver</button>
-          <h2>Recibo {r.numero != null ? `N° ${String(r.numero).padStart(7, "0")}` : "(borrador)"}</h2>
+          <h2>Recibo {r.numero != null ? `N° ${numeroCorrelativo(r.numero)}` : "(borrador)"}</h2>
           <PastillaEstado {...estadoRecibo(r.estado)} />
         </div>
         {error ? <p className="error-banner">{error}</p> : null}
@@ -9460,7 +9447,7 @@ function RecibosView({
                 <span>{r.concepto}</span>
                 <span>{formatMonto(r.importe, r.moneda)}</span>
                 <span>{FORMAS_PAGO_LABELS[r.forma_pago]}</span>
-                {r.numero != null ? <span>N° {String(r.numero).padStart(7, "0")}</span> : null}
+                {r.numero != null ? <span>N° {numeroCorrelativo(r.numero)}</span> : null}
               </div>
               <div className="nota-card-actions">
                 <button type="button" className="ghost-action compact" onClick={() => { setSelectedRecibo(r); setWhatsappPhone(""); setSubView("detail"); }}>Ver</button>
