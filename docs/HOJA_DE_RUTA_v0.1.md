@@ -186,6 +186,17 @@ Para que el usuario decida si entran antes, junto o despues de los criticos:
 - ATO-009 y FS-62 pasan a criticos.
 - Autoriza validar en SIFEN test y escribir las SPEC/PLAN/TASKS ahora.
 
+## Cadenas escritas el 2026-11-11
+
+| Cadena | Documentos | Migracion | Tareas | Estimacion | Decisiones pendientes del usuario |
+|---|---|---|---|---|---|
+| Validaciones del receptor (FS-62 ampliado, FS-60) | `SPEC/PLAN/TASKS_VALIDACIONES_RECEPTOR_v0.1` | ninguna | VAL-001 a VAL-012 | 1 jornada | D-2 (si FS exige el DV o lo calcula cuando el padron no tiene el RUC), D-3 (telefonos con texto) |
+| Catalogo en moneda extranjera (FS-59) | `SPEC/PLAN/TASKS_CATALOGO_MONEDA_v0.1` | `0046` | CAM-001 a CAM-014 | 7 a 9 h | DP-1 (orden de los articulos de otra moneda en la busqueda), DP-2 (filtro que recuerda la moneda) |
+| Descuentos en la factura (FS-66) | `SPEC/PLAN/TASKS_DESCUENTOS_FACTURA_v0.1` | `0047` | DES-001 a DES-012 | 16 a 18 h | DP-2 (conmutador % / monto por grilla), DP-3 (global solo en monto). Riesgo: PYG con global que no divide exacto, sin verificar en SIFEN |
+| Nota de remision manual (FS-56) | `SPEC/PLAN/TASKS_NOTA_REMISION_v0.1` | `0048` | NRE-001 a NRE-029 en tres entregas E1/E2/E3 | E1 10 a 12 h, E2 5 a 6 h, E3 2 a 3 h | DP-4 (mas motivos ahora o despues), DP-5 (transportista precargado con el facturador en transporte propio), DP-6 (facturadores de `segel-fs` para `NRE_EMIT`), DP-7 (bloque Domicilio en la agenda para todos) |
+
+Total: unas 5 a 6 jornadas de implementacion. Para el 2026-11-12 es realista: validaciones del receptor, catalogo en USD y la entrega E1 de la remision; los descuentos van al dia siguiente. FE ya habilito `NRE_EMIT` en el FE local de prueba y confirmo las reglas de descuentos, geografia y receptor (registradas en cada SPEC).
+
 ## Orden de trabajo propuesto para el compromiso del 2026-11-12
 
 1. **Hoy:** pedir a FE el permiso `NRE_EMIT` para las claves de prueba y de los facturadores que lo usen; confirmar con FE los descuentos en USD.
