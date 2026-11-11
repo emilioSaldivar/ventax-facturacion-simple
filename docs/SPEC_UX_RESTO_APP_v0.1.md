@@ -1,6 +1,6 @@
 # SPEC UX Del Resto De La App v0.1
 
-**Fecha:** 2026-11-10 · **Rama:** `feat/identidad-segel` · **Estado:** documentada, sin implementar. Propuesta de diseño en el canvas `https://claude.ai/artifact/R7AL4Ajj7oAX9PfydQDYWe`, pendiente de aceptacion del usuario. No se implementa hasta que el usuario lo indique.
+**Fecha:** 2026-11-10 · **Rama:** `feat/identidad-segel` · **Estado:** aceptada por el usuario el 2026-11-11 (canvas `https://claude.ai/artifact/R7AL4Ajj7oAX9PfydQDYWe`, pautas y propuestas D-3, D-4, D-10, D-13 y D-14), **lista para implementar** por otro agente con el protocolo del PLAN §12. Sin codigo todavia.
 
 **Revision del 2026-11-10 (noche):** con multiperfil v0.1 y v0.2 implementadas, se hizo un recorrido de reconocimiento sobre el stack local (§G) y se fijaron las pautas de frontend y componentes (§H, `docs/PAUTAS_FRONTEND_v0.1.md`). Su adopcion es la fase 0 de esta cadena (URA-015 a URA-024).
 
@@ -145,7 +145,7 @@ Se toma tal cual el ajuste propuesto en `docs/BACKLOG.md`, seccion "UX en el res
 
 Se adoptan sin cambios la pantalla "Elegir punto de expedicion" (C.1), el boton del punto activo en la barra (C.2), la ventana de cambio con contraseña y su aviso de documento sin emitir (C.3 y C.4) y la tarjeta de Informacion y estado (C.5). El canvas las dibuja con el diseño de esta SPEC.
 
-Hay tres agregados. Se proponen a la cadena de multiperfil y se implementan **despues** de ella:
+Hay tres agregados. Multiperfil v0.1 y v0.2 ya estan implementadas en local (2026-11-10), asi que F.1 entra en la fase 0 (URA-021) y F.2 y F.3 en la fase 3 (URA-013):
 
 1. **Menu de celular.** El elemento "Cambiar punto de expedicion" va arriba de "Salir", solo con mas de un perfil, y abre la misma ventana de C.3.
 2. **Punto en Documentos.**
@@ -167,7 +167,7 @@ Recorrido con Playwright sobre el stack local de Segel (frontend `3d6c6e3`, usua
 | H-03 | Informacion y estado muestra el codigo del perfil (`AC445203-E001-P001-FE-PTO`) | Sacarlo de la pantalla del operador | URA-021 |
 | H-04 | La barra lateral sigue diciendo "ultimo numero 0000001" (`main.tsx:2245`); la eleccion ya no lo muestra (multiperfil CA-23) y la barra no dice el punto | "Listo para facturar · Punto 001-001" | URA-021 |
 | H-05 | En el dialogo de cambio, el campo de contraseña no ocupa el ancho y el ojo queda suelto a la derecha (1440 y 390) | `CampoContrasena` comun con el login | URA-017, URA-021 |
-| H-06 | El menu de celular no tiene "Cambiar punto de expedicion" y su cabecera muestra la descripcion larga | §F.1 y P-P1 | URA-013, URA-021 |
+| H-06 | El menu de celular no tiene "Cambiar punto de expedicion" y su cabecera muestra la descripcion larga | §F.1 y P-P1 | URA-021 |
 | H-07 | En las tarjetas de celular y en la ficha no se ve el punto: "1010619" y "0008487" son de puntos distintos | Numero completo `001-002-0008487` (P-E3) | URA-021 |
 | H-08 | La lista de facturas de Notas de credito no dice el punto de cada factura; el modal de nota de credito de Documentos no avisa si la factura es de otro punto (CreditNoteView si avisa) y su motivo no se registra como borrador | Punto en cada candidata; mismo aviso en los dos caminos; motivo y archivo de carga masiva registrados (P-P4) | URA-021 |
 
@@ -215,18 +215,18 @@ Recorrido con Playwright sobre el stack local de Segel (frontend `3d6c6e3`, usua
 
 - **D-1 — "Notas de credito".** "Devolver factura" se llama "Notas de credito". Decision del usuario del 2026-11-10.
 - **D-2 — Un espacio por tipo desde ahora.** Cada tipo fiscal tiene su lugar en "Emitir" aunque no se pueda emitir todavia, para que los tipos entren sin rehacer el menu. Decision del usuario del 2026-11-10.
-- **D-3 — "Presupuestos / Pedidos" (propuesta).** Evita que "notas" mezcle comprobantes comerciales con fiscales. Pendiente de aceptacion.
-- **D-4 — Boton "Nuevo" (propuesta).** Un solo punto de entrada para todo lo que se emite, en la barra, a la vista desde cualquier pantalla. Pendiente de aceptacion.
+- **D-3 — "Presupuestos / Pedidos".** Evita que "notas" mezcle comprobantes comerciales con fiscales. Aceptada por el usuario el 2026-11-11.
+- **D-4 — Boton "Nuevo".** Un solo punto de entrada para todo lo que se emite, en la barra, a la vista desde cualquier pantalla. Aceptada por el usuario el 2026-11-11.
 - **D-5 — Mostrar, no ocultar.** Un tipo no habilitado se ve en gris con "Proximamente", igual que las pestañas de Documentos (`SPEC_DOCUMENTOS_ESCRITORIO` CA-04). El operador sabe que existe y que llegara.
 - **D-6 — "Nueva factura" no cambia.** Es la accion principal y la usan los guiones de Playwright y la guia de uso.
 - **D-7 — Un patron, varias cadenas.** Esta SPEC fija el marco y el patron de §B. Los campos y validaciones de cada tipo nuevo son de su propia cadena.
 - **D-8 — Multiperfil se adopta, no se redefine.** Las pantallas de perfil son las de `SPEC_MULTIPERFIL_USUARIO`. Esta SPEC solo propone §F.1 a §F.3.
 - **D-9 — Cantidad solo en la pestaña activa.** Contar todos los tipos pediria un pedido por pestaña o un contrato nuevo. La pestaña activa ya trae su total.
-- **D-10 — Pautas obligatorias.** Todo cambio de frontend sigue `docs/PAUTAS_FRONTEND_v0.1.md`. El codigo existente se pone al dia cuando se toca, sin ampliar el alcance de la tarea sin anotarlo (pautas §0). Pendiente de aceptacion (URA-015).
+- **D-10 — Pautas obligatorias.** Todo cambio de frontend sigue `docs/PAUTAS_FRONTEND_v0.1.md`. El codigo existente se pone al dia cuando se toca, sin ampliar el alcance de la tarea sin anotarlo (pautas §0). Aceptada por el usuario el 2026-11-11 (URA-015).
 - **D-11 — Nombre corto del punto.** "Punto EST-PTO" y la actividad (`actividad_economica_descripcion`) como texto secundario. `titulo_operativo` y `perfil_emision_alias` traen hoy la descripcion fiscal larga (en la base, `alias_operativo` de los dos perfiles de ensayo); no se usan como titulo. Sin cambio de contrato.
 - **D-12 — Particion incremental.** `main.tsx` se divide en `api/`, `components/`, `lib/` y `views/` por etapas, empezando por lo que cada fase toca, y cada paso sin cambio de comportamiento, comprobado con las regresiones de Playwright. No hay un refactor de una sola vez.
-- **D-13 — Voseo (propuesta).** La interfaz usa voseo, como multiperfil y Nueva factura. Pendiente de aceptacion: la alternativa es usted en toda la app.
-- **D-14 — Zoom permitido (propuesta).** Se quita `maximum-scale=1.0, user-scalable=no` del `viewport`. El riesgo es que el celular agrande la pantalla al enfocar un campo de menos de 16 px; se cubre con campos de 16 px en celular. Pendiente de aceptacion.
+- **D-13 — Voseo.** La interfaz usa voseo, como multiperfil y Nueva factura. Aceptada por el usuario el 2026-11-11.
+- **D-14 — Zoom permitido.** Se quita `maximum-scale=1.0, user-scalable=no` del `viewport`. El riesgo es que el celular agrande la pantalla al enfocar un campo de menos de 16 px; se cubre con campos de 16 px en celular. Aceptada por el usuario el 2026-11-11.
 
 ## Reglas
 
@@ -253,12 +253,12 @@ Recorrido con Playwright sobre el stack local de Segel (frontend `3d6c6e3`, usua
 - **CA-07.** Informacion y estado muestra la tarjeta "Documentos que podes emitir" con los cinco tipos y su estado.
 - **CA-08.** Ninguna pantalla del operador ni pagina publica contiene emojis. Lo comprueba un recorrido de Playwright que busca caracteres del rango de emojis en el texto visible.
 - **CA-09.** En 390 px: el menu sigue los grupos de A.1, no hay desplazamiento horizontal y Documentos conserva las tarjetas con la pastilla de estado.
-- **CA-10.** Despues de multiperfil (§F): con dos perfiles, la columna "Punto" muestra el punto de cada documento, tambien en los anteriores por su CDC. El filtro por punto devuelve solo los documentos de ese punto. El menu de celular ofrece "Cambiar punto de expedicion".
+- **CA-10.** Fase 3 (§F.2 y §F.3): con dos perfiles, la columna "Punto" muestra el punto de cada documento, tambien en los anteriores por su CDC. El filtro por punto devuelve solo los documentos de ese punto. "Se emite por" aparece en cada espacio de §B.
 - **CA-11.** Las regresiones de Nueva factura (`playwright-ux-nueva-factura.cjs`), Documentos escritorio y carga masiva pasan con los textos actualizados.
-- **CA-12.** Fase 0: `styles.css` sin colores hex fuera de `:root` y sin `z-index` numericos; cortes solo en 720 y 1024 px; sin las clases sin uso ni los selectores duplicados de H-19. Las capturas de 1440 y 390 px de las ocho pantallas no cambian a simple vista respecto del recorrido del 2026-11-10.
+- **CA-12.** Al cerrar URA-016 y URA-022 (fase 0): `styles.css` sin `z-index` numericos, sin valores que coincidan con un token escritos a mano, con `1040px` corregido y sin el solape en 720 px; sin las clases sin uso ni los selectores duplicados de H-19; las capturas de 1440 y 390 px de las ocho pantallas no cambian a simple vista respecto del recorrido del 2026-11-10. Al cerrar URA-002 (fase 1, R-1): ningun color hex fuera de `:root`.
 - **CA-13.** `EncabezadoPantalla`, `PastillaEstado`, `Aviso`, `EstadoVacio`, `Dialogo`, `MenuFila`, `CampoFormulario` y `CampoContrasena` existen en `src/components/` y reemplazan a sus variantes (sin `window.confirm` en el codigo).
-- **CA-14.** Con dos puntos: la eleccion, el cambio, Informacion y estado y el menu de celular nombran el punto como "Punto 001-002" sin la descripcion larga ni el codigo del perfil; las tarjetas de celular y la ficha muestran el numero completo; el dialogo de cambio avisa si hay un motivo de nota de credito escrito.
-- **CA-15.** Guion de reconocimiento en 1440, 1280 y 390 px: 0 emojis, 0 desplazamiento horizontal, 0 controles sin nombre, 0 campos sin etiqueta y 0 controles de menos de 44 px en 390 px.
+- **CA-14.** Con dos puntos: la eleccion, el cambio, Informacion y estado y el menu de celular nombran el punto como "Punto 001-002" con la actividad como texto secundario, sin la descripcion fiscal larga ni el codigo del perfil ni "ultimo numero"; el menu de celular ofrece "Cambiar punto de expedición" y abre el dialogo; las tarjetas de celular y la ficha muestran el numero completo (`001-002-0008487`); el modal de nota de credito de Documentos avisa cuando la factura es de otro punto; con un motivo escrito en ese modal, "Cambiar punto" ofrece "Descartar y cambiar".
+- **CA-15.** Guion de reconocimiento (PLAN §11) en 1440, 1280 y 390 px: 0 desplazamiento horizontal, 0 controles sin nombre, 0 campos sin etiqueta, 0 controles de menos de 44 px y 0 campos de menos de 16 px en 390 px al cerrar URA-020; 0 emojis al cerrar URA-011 (los emojis de estado y de acciones salen en las fases 1 y 2, con las pantallas). Entre tareas, ningun total sube respecto de la linea base (RN-11).
 
 ## Limitaciones conocidas
 

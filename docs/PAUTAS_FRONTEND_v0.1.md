@@ -1,6 +1,6 @@
 # Pautas De Frontend Y Componentes v0.1
 
-**Fecha:** 2026-11-10 · **Rama:** `feat/identidad-segel` · **Estado:** propuesta, pendiente de aceptacion del usuario (URA-015). La adopcion en el codigo existente esta en `docs/TASKS_UX_RESTO_APP_v0.1.md` (URA-016 a URA-024). Lamina visual en el canvas `https://claude.ai/artifact/R7AL4Ajj7oAX9PfydQDYWe`, tablero "Pautas de frontend".
+**Fecha:** 2026-11-10 · **Rama:** `feat/identidad-segel` · **Estado:** vigente, aceptada por el usuario el 2026-11-11 (URA-015). La adopcion en el codigo existente esta en `docs/TASKS_UX_RESTO_APP_v0.1.md` (URA-016 a URA-024), con los contratos de los componentes en `docs/PLAN_UX_RESTO_APP_v0.1.md` §10.3. Lamina visual en el canvas `https://claude.ai/artifact/R7AL4Ajj7oAX9PfydQDYWe`, tablero "Pautas de frontend".
 
 ## Para que sirve
 
@@ -27,8 +27,8 @@ No reemplazan a SPEC, PLAN y TASKS: el alcance de cada cambio lo sigue fijando s
 - **P-T2 — Escala de espaciado.** 4, 8, 12, 16, 20, 24 y 32 px, como `--esp-1` a `--esp-8` (URA-016). Valores impares (7, 9, 11 px) no.
 - **P-T3 — Tipografia.** Montserrat. Tamaños 12, 13, 14, 16, 18, 22 y 24 px, en px, como `--fs-*`. Pesos 400, 500, 600 y 700; nunca 800 ni 900 (SPEC R-1).
 - **P-T4 — Radios.** `--radius-control` (6 px) para controles, `--radius-card` (8 px) para tarjetas y paneles, 999 px solo para pastillas.
-- **P-T5 — Capas.** Escala unica `--z-barra` 10, `--z-menu` 20, `--z-dialogo` 40, `--z-aviso` 50. Ningun `z-index` numerico suelto. Un menu nunca queda por encima de un dialogo.
-- **P-T6 — Cortes.** Dos: 720 px y 1024 px (`MEDIA_ESCRITORIO`, `main.tsx`). `min-width` siempre; un `max-width` solo si no se puede expresar de otra forma, y nunca solapado con un `min-width` del mismo valor.
+- **P-T5 — Capas.** Escala unica `--z-flotante` 5 (sugerencias, pie fijo), `--z-barra` 10, `--z-menu` 20, `--z-dialogo` 40, `--z-aviso` 60 (avisos bloqueantes de sesion, como el cambio externo de punto). Ningun `z-index` numerico suelto. Un menu nunca queda por encima de un dialogo.
+- **P-T6 — Cortes.** Dos: 720 px y 1024 px (`MEDIA_ESCRITORIO`, `main.tsx`). `min-width` por defecto; un `max-width` solo como complemento exacto (`max-width: 719px` / `min-width: 720px`, `max-width: 1023px` / `min-width: 1024px`), nunca solapado.
 
 ## 3. Componentes (P-C)
 
@@ -38,7 +38,7 @@ No reemplazan a SPEC, PLAN y TASKS: el alcance de cada cambio lo sigue fijando s
   |---|---|---|
   | `Icono` | Todos los iconos (SVG, 18 px por defecto) | Existe (`main.tsx`, `Icono`) |
   | `EncabezadoPantalla` | Titulo, subtitulo y acciones de cada pantalla | A crear (URA-017); hoy `editor-heading`, `view-header` y `receipt-heading` |
-  | `PastillaEstado` | Estado de un documento o comprobante | A crear desde `EstadoDocumentoPill`; hoy hay 12 implementaciones del mapeo |
+  | `PastillaEstado` | Estado de un documento o comprobante; conserva las clases `status-pill estado-documento` y `data-estado` que leen los guiones | A crear desde `EstadoDocumentoPill`; hoy hay 12 implementaciones del mapeo |
   | `Aviso` | Error, advertencia, informacion o exito dentro de la pantalla, con `role="alert"` o `status` | A crear; hoy seis clases distintas |
   | `EstadoVacio` | Lista o tabla sin resultados | A crear; hoy tres clases |
   | `Dialogo` | Toda ventana modal y toda confirmacion | A crear; hoy cinco mecanismos y tres `window.confirm` |
@@ -85,13 +85,13 @@ No reemplazan a SPEC, PLAN y TASKS: el alcance de cada cambio lo sigue fijando s
 - **P-A4 — Dialogos.** `role="dialog"`, `aria-modal`, titulo enlazado, foco inicial, foco atrapado, Escape cierra (salvo un paso que no se puede cancelar) y el foco vuelve al boton que lo abrio. Todo eso lo da `Dialogo`.
 - **P-A5 — Campos con etiqueta.** Cada control tiene `<label>` asociada; un placeholder no es una etiqueta. Los errores van con `role="alert"`.
 - **P-A6 — Filas que se abren.** Una fila de tabla que abre una ficha tiene un boton o enlace alcanzable con el teclado; `<tr onClick>` solo no alcanza.
-- **P-A7 — Zoom permitido.** El `viewport` no bloquea el zoom (propuesta D-14 de `SPEC_UX_RESTO_APP_v0.1`).
+- **P-A7 — Zoom permitido.** El `viewport` no bloquea el zoom (D-14 de `SPEC_UX_RESTO_APP_v0.1`). Los campos miden 16 px de letra en celular para que el telefono no agrande la pantalla al enfocarlos.
 - **P-A8 — HTML valido.** Sin `<div>` dentro de `<button>`.
 
 ## 8. Textos (P-X)
 
 - **P-X1 — Tildes siempre.** "Información", "Catálogo", "Nota de crédito", "Punto de expedición", "Contraseña". Los identificadores y las rutas no cambian (SPEC RN-06).
-- **P-X2 — Una sola voz.** Voseo, como ya usan multiperfil y Nueva factura ("Elegí", "Tenés") (propuesta D-13 de `SPEC_UX_RESTO_APP_v0.1`). Nada de "Seleccione" o "Ingrese".
+- **P-X2 — Una sola voz.** Voseo, como ya usan multiperfil y Nueva factura ("Elegí", "Tenés") (D-13 de `SPEC_UX_RESTO_APP_v0.1`). Nada de "Seleccione" o "Ingrese".
 - **P-X3 — Glosario.**
 
   | Se dice | No se dice |
@@ -126,7 +126,7 @@ Reglas de interfaz para varios puntos por usuario (`SPEC_MULTIPERFIL_USUARIO_v0.
 
 - `npm run typecheck`, `npm run lint` y `npm run build`.
 - Playwright en 1440 y 1280 px primero y en 390 px despues, contra el stack desplegado (AGENTS.md).
-- **Guion de reconocimiento** (`scripts/segel-fs/playwright-reconocimiento-ux.cjs`, URA-024): recorre todas las pantallas en los tres anchos y cuenta emojis, desplazamiento horizontal, controles de menos de 44 px en 390 px, controles sin nombre accesible, campos sin etiqueta y errores de consola. Ningun cambio sube esos numeros; la linea base es el anexo.
+- **Guion de reconocimiento** (`scripts/segel-fs/playwright-reconocimiento-ux.cjs`, URA-024, especificado en `PLAN_UX_RESTO_APP_v0.1` §11): recorre todas las pantallas en los tres anchos y cuenta emojis, desplazamiento horizontal, controles de menos de 44 px y campos de menos de 16 px en 390 px, controles sin nombre accesible, campos sin etiqueta y errores de consola. Ningun cambio sube esos numeros; la linea base versionada es `scripts/segel-fs/reconocimiento-ux.base.json` y el anexo de abajo es su origen.
 
 ## 12. Lista para cerrar un cambio de frontend
 
