@@ -377,6 +377,24 @@ describe("clientes service", () => {
     });
   });
 
+  it("RV-10: con un DV distinto al del padron devuelve el RUC del padron", async () => {
+    const repo = new FakeClienteRepository();
+    const llamadas: Array<string | undefined> = [];
+    const original = repo.findDnitByDocumento.bind(repo);
+    repo.findDnitByDocumento = async (input) => {
+      llamadas.push(input.dv);
+      if (input.dv) return { status: "NOT_FOUND" as const };
+      return original(input);
+    };
+    repo.dnitResult = {
+      status: "FOUND",
+      item: { ruc_sin_dv: "80136968", dv: "1", ruc: "80136968-1", nombre: null, apellido: null, razon_social: "SEGEL SA", codigo_dnit: null, estado: "ACTIVO" }
+    };
+    const result = await autocompleteClienteFromDnit({ documento_tipo: "RUC", documento: "80136968-2" }, repo);
+    expect(llamadas).toEqual(["2", undefined]);
+    expect(result).toMatchObject({ found: true, cliente: { documento_tipo: "RUC", documento: "80136968-1" } });
+  });
+
   it("RV-10 (FS-60): un RUC no activo de persona fisica sigue siendo RUC, con el DV del padron", async () => {
     const repo = new FakeClienteRepository();
     repo.dnitResult = {

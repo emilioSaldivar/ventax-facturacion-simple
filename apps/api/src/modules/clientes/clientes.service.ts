@@ -122,11 +122,16 @@ export async function autocompleteClienteFromDnit(
     throw new HttpError(400, "VALIDATION_ERROR", "Documento invalido para lookup DNIT.");
   }
 
-  const result = await repository.findDnitByDocumento({
+  let result = await repository.findDnitByDocumento({
     documentoTipo: data.documento_tipo,
     rucSinDv: parsed.rucSinDv,
     dv: parsed.dv
   });
+  // SPEC_VALIDACIONES_RECEPTOR_v0.1 RV-10: con un DV que no es el del padron, se busca por la base para
+  // devolver el RUC correcto; la interfaz lo avisa y ofrece usarlo, sin cambiar lo escrito.
+  if (result.status === "NOT_FOUND" && parsed.dv) {
+    result = await repository.findDnitByDocumento({ documentoTipo: data.documento_tipo, rucSinDv: parsed.rucSinDv });
+  }
 
   if (result.status === "NOT_FOUND" || !result.item) {
     return { found: false, ambiguous: false, message: "Sin coincidencias DNIT." };
