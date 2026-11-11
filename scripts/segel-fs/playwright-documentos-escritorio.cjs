@@ -73,7 +73,7 @@ async function escritorio(browser, ancho) {
 
   // CA-03: menu de la fila y clic en la fila.
   await page.locator("table.documents-tabla tbody tr .icon-menu-action").first().click();
-  const menu = page.getByRole("menu", { name: "Acciones del documento" });
+  const menu = page.getByRole("menu", { name: /^Acciones de / }); // URA-019: el nombre incluye el documento
   check(`CA-03 ${v}: menu de la fila con "Ver detalle"`, await menu.getByRole("menuitem", { name: "Ver detalle" }).isVisible());
   await page.screenshot({ path: path.join(outDir, `${v}-menu-fila.png`) });
   await page.locator("table.documents-tabla tbody tr .icon-menu-action").first().click();

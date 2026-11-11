@@ -4,7 +4,7 @@
 //
 //   ENSAYO_PASSWORD_FILE=/ruta/clave node scripts/segel-fs/playwright-ux-resto-app.cjs [caso ...]
 //
-// Sin argumentos corre todos los casos. Casos: componentes (URA-017, CA-13), api (URA-018). URA-012 suma los de las fases 1 y 2.
+// Sin argumentos corre todos los casos. Casos: componentes (URA-017, CA-13), api (URA-018), teclado (URA-019). URA-012 suma los de las fases 1 y 2.
 // Escribe test-results/ux-resto-app/.
 const fs = require("node:fs");
 const path = require("node:path");
@@ -220,11 +220,62 @@ async function casoApi(browser) {
   }
 }
 
+// ─── URA-019: teclado, menu de celular y zoom ───────────────────────────────────
+async function casoTeclado(browser) {
+  {
+    const { ctx, page } = await entrar(browser, 1440, 900);
+    try {
+      await abrirVista(page, "Documentos");
+      await page.locator("table.documents-tabla button.enlace-fila").first().waitFor();
+      await page.locator(".documents-advanced-filters select").last().focus();
+      let llego = false;
+      for (let i = 0; i < 40 && !llego; i += 1) {
+        await page.keyboard.press("Tab");
+        llego = await page.evaluate(() => document.activeElement?.classList.contains("enlace-fila") ?? false);
+      }
+      check("URA-019 teclado: Tab llega al numero de la primera fila", llego);
+      const anillo = await page.evaluate(() => getComputedStyle(document.activeElement).outlineStyle);
+      check("URA-019 teclado: el foco se ve (outline)", anillo !== "none", anillo);
+      await page.keyboard.press("Enter");
+      const volver = page.getByRole("button", { name: /Volver a resultados/ });
+      check("URA-019 teclado: Enter abre la ficha", await volver.waitFor({ timeout: 15000 }).then(() => true, () => false));
+      await page.screenshot({ path: path.join(outDir, "1440-teclado-ficha.png") });
+    } finally {
+      await ctx.close();
+    }
+  }
+  {
+    const { ctx, page } = await entrar(browser, 390, 844);
+    try {
+      const viewport = await page.locator('meta[name="viewport"]').getAttribute("content");
+      check("URA-019 zoom: el viewport no bloquea el zoom (D-14)", !/user-scalable=no|maximum-scale/.test(viewport ?? ""), viewport);
+      await page.getByRole("button", { name: "Abrir menu" }).click();
+      await page.locator("nav.mobile-menu").waitFor();
+      await page.keyboard.press("Escape");
+      check("URA-019 celular: Escape cierra el menu", await page.locator("nav.mobile-menu").waitFor({ state: "detached", timeout: 5000 }).then(() => true, () => false));
+      await abrirVista(page, "Nueva factura");
+      const campos = await page.evaluate(() =>
+        [...document.querySelectorAll('main input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]), main select, main textarea')]
+          .filter((e) => e.getBoundingClientRect().height > 0)
+          .map((e) => ({ alto: e.getBoundingClientRect().height, letra: parseFloat(getComputedStyle(e).fontSize) }))
+      );
+      check(
+        "URA-019 celular: campos de Nueva factura de 44 px y letra de 16 px",
+        campos.length > 0 && campos.every((c) => c.alto >= 44 && c.letra >= 16),
+        JSON.stringify(campos.slice(0, 6))
+      );
+    } finally {
+      await ctx.close();
+    }
+  }
+}
+
 (async () => {
   const browser = await chromium.launch();
   try {
     if (corre("componentes")) await casoComponentes(browser);
     if (corre("api")) await casoApi(browser);
+    if (corre("teclado")) await casoTeclado(browser);
   } catch (e) {
     check("el guion termino sin excepciones", false, String(e));
   } finally {

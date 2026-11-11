@@ -2179,12 +2179,12 @@ dd {
   color: inherit;
   font-family: inherit;
   padding: 0;
-  outline: none;
   min-height: 40px;
 }
 
-.nota-fila-textarea:focus {
-  outline: none;
+.nota-fila-textarea:focus-visible {
+  outline: 2px solid var(--color-brand);
+  outline-offset: 2px;
 }
 
 .nota-fila-contexto .nota-fila-badge {
@@ -4543,4 +4543,52 @@ dd {
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: var(--esp-2);
+}
+
+/* ─── Accesibilidad (PAUTAS_FRONTEND_v0.1 §7; PLAN_UX_RESTO_APP_v0.1 §10.5, URA-019) ─────────────────── */
+
+/* P-A2: foco visible para todo lo que se activa con el teclado. :where() no suma especificidad: los estilos de
+   foco propios (campos con borde rojo, ojo de la contraseña) siguen mandando. */
+:where(button, a[href], [role="button"], [role="menuitem"], summary):focus-visible {
+  outline: 2px solid var(--color-brand);
+  outline-offset: 2px;
+}
+
+/* P-A6: el numero de la fila de Documentos es un boton que no cambia el aspecto de la celda. */
+.enlace-fila {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.invoice-card-cliente {
+  display: block;
+}
+
+/* P-A1 y P-A7, solo en celular (complemento exacto de MEDIA_ESCRITORIO). Excepcion escrita en el PLAN §10.5:
+   !important porque las clases de cada pantalla fijan alturas y letras menores con mas especificidad que una
+   regla base; sin el, cada clase nueva podria volver a bajar de 44 px o de 16 px. */
+@media (max-width: 1023px) {
+  button,
+  [role="button"],
+  select,
+  textarea,
+  input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]):not([type="file"]) {
+    min-height: 44px !important;
+  }
+
+  select,
+  textarea,
+  input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]):not([type="file"]) {
+    font-size: var(--fs-16) !important;
+  }
+
+  .enlace-accion {
+    display: inline-flex;
+    align-items: center;
+  }
 }

@@ -1745,6 +1745,15 @@ function OperationHome({
   const [cambioPerfil, setCambioPerfil] = useState<{ sinEmitir: boolean } | null>(null);
   const abrirCambioPerfil = () => setCambioPerfil({ sinEmitir: hayBorradorSinEmitir() });
   const [menuOpen, setMenuOpen] = useState(false);
+  // URA-019 (P-A3): Escape cierra el menu de celular.
+  useEffect(() => {
+    if (!menuOpen) return undefined;
+    const alTeclear = (evento: globalThis.KeyboardEvent) => {
+      if (evento.key === "Escape") setMenuOpen(false);
+    };
+    document.addEventListener("keydown", alTeclear);
+    return () => document.removeEventListener("keydown", alTeclear);
+  }, [menuOpen]);
   const esEscritorio = useEsEscritorio();
   const updatePending = useUpdatePending();
   const [invoiceClientePrefill, setInvoiceClientePrefill] = useState<InvoiceClientePrefillRequest | null>(null);
@@ -2890,10 +2899,15 @@ function DocumentsView({
   }, [documents]);
 
   /** SPEC_DOCUMENTOS_ESCRITORIO_v0.1, RN-02: la tarjeta y la fila de la tabla ofrecen las mismas acciones. */
+  // URA-019: menu de la fila con MenuFila (nombre, aria-haspopup, aria-expanded, Escape; PAUTAS P-A3).
   function menuDeFila(documento: DocumentoResponse) {
-    if (quickMenuDocId !== documento.id) return null;
     return (
-                  <div className="client-row-menu" role="menu" aria-label="Acciones del documento">
+                  <MenuFila
+                    abierto={quickMenuDocId === documento.id}
+                    etiqueta={`Acciones de ${formatDocumentoTipo(documento.tipo).toLowerCase()} ${documento.numero_fiscal ?? "pendiente"}`}
+                    onAbrir={() => setQuickMenuDocId(documento.id)}
+                    onCerrar={() => setQuickMenuDocId(null)}
+                  >
                     <button onClick={() => void openDetail(documento.id)} role="menuitem" type="button">Ver detalle</button>
                     {!sinValidezFiscal(documento) ? (
                       <>
@@ -2910,7 +2924,7 @@ function DocumentsView({
                     {documento.tipo !== "NOTA_REMISION" ? (
                       <button className="destructive-item" onClick={() => void cancelDocumentoFromList(documento.id, documento.tipo)} role="menuitem" type="button">Anular</button>
                     ) : null}
-                  </div>
+                  </MenuFila>
     );
   }
 
@@ -3174,7 +3188,18 @@ function DocumentsView({
                       <td className="documents-tabla-punto">{documento.perfil_emision ? etiquetaPunto(documento.perfil_emision) : "—"}</td>
                     ) : null}
                     <td>
-                      <strong title={documento.accion_detalle?.titulo}>{`${getDocumentoAccionIcon(documento)} ${documento.numero_fiscal ?? "pendiente"}`}</strong>
+                      {/* URA-019 (P-A6): la fila tambien se abre con el teclado, desde el numero. */}
+                      <button
+                        className="enlace-fila"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          void openDetail(documento.id);
+                        }}
+                        title={documento.accion_detalle?.titulo}
+                        type="button"
+                      >
+                        <strong>{`${getDocumentoAccionIcon(documento)} ${documento.numero_fiscal ?? "pendiente"}`}</strong>
+                      </button>
                       {documento.carga ? (
                         <button
                           className="carga-enlace documents-tabla-carga"
@@ -3204,10 +3229,7 @@ function DocumentsView({
                     {esRemision ? null : <td>{documento.moneda ?? "PYG"}</td>}
                     {esRemision ? null : <td className="numero"><strong>{formatMonto(documento.totals.total, documento.moneda)}</strong></td>}
                     <td className="documents-tabla-acciones" onClick={(event) => event.stopPropagation()}>
-                      <div className="document-row-menu-wrapper">
-                        <button aria-label="Acciones" className="icon-menu-action" onClick={() => setQuickMenuDocId((current) => current === documento.id ? null : documento.id)} type="button">⋮</button>
-                        {menuDeFila(documento)}
-                      </div>
+                      {menuDeFila(documento)}
                     </td>
                   </tr>
                 ))}
@@ -3254,10 +3276,7 @@ function DocumentsView({
                   <small>{formatShortDate(documento.created_at)}</small>
                 </span>
               </button>
-              <div className="document-row-menu-wrapper">
-                <button className="icon-menu-action" onClick={() => setQuickMenuDocId((current) => current === documento.id ? null : documento.id)} type="button">⋮</button>
-                {menuDeFila(documento)}
-              </div>
+              {menuDeFila(documento)}
             </article>
           ))}
           {hasRecentWindow ? <h3 className="documents-group-title">Ultimos 7 dias</h3> : null}
@@ -8466,10 +8485,10 @@ function NotasView({
               return (
                 <article key={fila._id} className="sale-item-card">
                   <button className="sale-item-main" onClick={() => { setActiveFilaId(fila._id); setFilaSheetOpen(true); }} type="button">
-                    <div className="nota-item-header">
+                    <span className="nota-item-header">
                       <span className="nota-fila-badge nota-fila-badge-item">Item</span>
                       <strong>{fila.descripcion.trim() || "Item con precio"}</strong>
-                    </div>
+                    </span>
                     <span>{cant} × {formatGuaranies(precio)}</span>
                     <b>{precio > 0 ? formatGuaranies(Math.round(cant * precio)) : "—"}</b>
                   </button>
@@ -8707,15 +8726,15 @@ function NotasView({
                       type="button"
                       onClick={() => nota.estado === "BORRADOR" ? openEdit(nota) : void openDetail(nota)}
                     >
-                      <div className="invoice-card-top">
+                      <span className="invoice-card-top">
                         <span className="invoice-card-nro">{nroStr}</span>
                         <span className={ESTADO_VISUAL_CLASS[estadoVisual]}>{ESTADO_VISUAL_LABEL[estadoVisual]}</span>
-                      </div>
-                      <div className="invoice-card-cliente">{nota.cliente_nombre}</div>
-                      <div className="invoice-card-meta">
+                      </span>
+                      <span className="invoice-card-cliente">{nota.cliente_nombre}</span>
+                      <span className="invoice-card-meta">
                         <span className="muted">{fmtFecha(nota.fecha_emision ?? nota.created_at.slice(0, 10))}</span>
                         {(nota.total ?? 0) > 0 ? <strong>{formatGuaranies(nota.total ?? 0)}</strong> : null}
-                      </div>
+                      </span>
                     </button>
                     <div className="invoice-card-menu-wrapper">
                       <button
@@ -9460,16 +9479,12 @@ function RecibosView({
               </div>
               <div className="nota-card-actions">
                 <button type="button" className="ghost-action compact" onClick={() => { setSelectedRecibo(r); setWhatsappPhone(""); setSubView("detail"); }}>Ver</button>
-                <div className="document-row-menu-wrapper">
-                  <button
-                    className="icon-menu-action"
-                    onClick={() => setQuickMenuReciboId((current) => (current === r.id ? null : r.id))}
-                    type="button"
-                  >
-                    ⋮
-                  </button>
-                  {quickMenuReciboId === r.id ? (
-                    <div className="client-row-menu" role="menu" aria-label={`Acciones para el recibo de ${r.pagador_nombre}`}>
+                <MenuFila
+                  abierto={quickMenuReciboId === r.id}
+                  etiqueta={`Acciones para el recibo de ${r.pagador_nombre}`}
+                  onAbrir={() => setQuickMenuReciboId(r.id)}
+                  onCerrar={() => setQuickMenuReciboId(null)}
+                >
                       <button
                         onClick={() => { setSelectedRecibo(r); setWhatsappPhone(""); setSubView("detail"); setQuickMenuReciboId(null); }}
                         role="menuitem"
@@ -9501,9 +9516,7 @@ function RecibosView({
                           ) : null}
                         </>
                       )}
-                    </div>
-                  ) : null}
-                </div>
+                </MenuFila>
               </div>
             </div>
           ))}
