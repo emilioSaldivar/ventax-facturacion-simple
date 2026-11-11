@@ -4,6 +4,7 @@ import { CargaMasivaView } from "../carga-masiva";
 import { useConfirmar } from "../components/Dialogo";
 import { MenuFila } from "../components/MenuFila";
 import { PastillaEstado } from "../components/PastillaEstado";
+import { EncabezadoPantalla } from "../components/EncabezadoPantalla";
 import { AvisoPuntoDistinto } from "../components/AvisoPuntoDistinto";
 import { useBorradorSinEmitir } from "../lib/borradores";
 import { etiquetaPunto, numeroConPunto } from "../lib/punto";
@@ -702,15 +703,7 @@ export function DocumentsView({
   if (docKindTab === "CARGA_MASIVA" && context) {
     return (
       <section className="documents-view documents-view-ancha" aria-labelledby="documents-title">
-        <div className="editor-heading">
-          <div>
-            <p className="eyebrow">Documentos</p>
-            <h2 id="documents-title">Carga masiva</h2>
-          </div>
-          <button className="ghost-action" onClick={onBack} type="button">
-            Volver
-          </button>
-        </div>
+        <EncabezadoPantalla id="documents-title" onVolver={onBack} rotulo="Documentos" titulo="Carga masiva" />
         {pestanasDocumentos}
         <CargaMasivaView
           api={api}
@@ -738,15 +731,7 @@ export function DocumentsView({
 
   return (
     <section className={esEscritorio ? "documents-view documents-view-ancha" : "documents-view"} aria-labelledby="documents-title">
-      <div className="editor-heading">
-        <div>
-          <p className="eyebrow">Documentos</p>
-          <h2 id="documents-title">Facturas y notas</h2>
-        </div>
-        <button className="ghost-action" onClick={onBack} type="button">
-          Volver
-        </button>
-      </div>
+      <EncabezadoPantalla id="documents-title" onVolver={onBack} rotulo="Documentos" titulo="Facturas y notas" />
 
       {!selected ? (
       <section className={esEscritorio ? "documents-filters documents-filtros-escritorio" : "documents-filters"}>
