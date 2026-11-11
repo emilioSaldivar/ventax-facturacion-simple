@@ -3004,7 +3004,8 @@ function UserDetailView({ userId, onNavigate }: { userId: string; onNavigate: (v
         ) : (
           <>
             {/* SPEC_MULTIPERFIL_USUARIO_v0.1 §D.1: una fila por punto de expedicion asignado. */}
-            <table className="table" aria-label="Puntos de expedicion del usuario">
+            <div className="table-wrap">
+            <table aria-label="Puntos de expedicion del usuario">
               <thead>
                 <tr>
                   <th>Establecimiento</th>
@@ -3041,6 +3042,7 @@ function UserDetailView({ userId, onNavigate }: { userId: string; onNavigate: (v
                 ))}
               </tbody>
             </table>
+            </div>
             <p className="muted" style={{ fontSize: 12, marginTop: 8 }}>
               Todas las configuraciones de un usuario son del mismo facturador (un RUC y un timbrado). Para otro
               facturador, el cliente necesita otro usuario y otro correo. Con mas de un punto, el operador elige el
