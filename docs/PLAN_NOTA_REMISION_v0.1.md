@@ -130,10 +130,10 @@ Sin emojis; voseo segun `PAUTAS_FRONTEND_v0.1` §8; tildes en los textos de inte
 Pedidos y confirmaciones a la sesion de FE (`facturacion-electronica-7c`), con respuesta antes de E3:
 
 1. `NRE_EMIT` en `segel-fs` para los facturadores que el usuario nombre (DP-6). Hecho ya en el FE local `fe-segel` para el consumidor del ensayo.
-2. DP-2: formato de `fecha` en `/v1/nota-remision` (ISO `date-time` como la factura, o `date`).
+2. DP-2: resuelta el 2026-11-11: `date-time` en hora de Asuncion, como la factura; nunca solo `AAAA-MM-DD` (ver SPEC).
 3. DP-3: resuelta el 2026-11-11 (ver `SPEC_VALIDACIONES_RECEPTOR_v0.1`, RV-01).
-4. DP-1: codigo del catalogo de unidades de medida en `GET /v1/parametrizaciones` y si 77 es "Unidad".
-5. Confirmar que `GET /v1/documentos/{uuid}/files/kude.pdf` de una NRE no requiere nada distinto a la factura y que `/totales` no debe llamarse para una NRE.
+4. DP-1: resuelta el 2026-11-11: catalogo `UNIDAD_MEDIDA`, 77 = "Unidad"; queda la decision del usuario de ofrecer el selector (propuesta: E2).
+5. Resuelta el 2026-11-11: KUDE y ticket de NRE funcionan sin nada extra; `/totales` responde `422 DOCUMENT_WITHOUT_TOTALS` y no se llama para NRE (el worker de totales debe saltar el tipo `NOTA_REMISION`).
 6. Aviso previo a cada emision en SIFEN test (CA-10) con fecha y hora.
 7. Defecto documental ya informado por FE: §43.4 "por ahora solo guaranies" quedo viejo (no afecta a esta cadena).
 

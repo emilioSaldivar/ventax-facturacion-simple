@@ -41,6 +41,8 @@ Resumen de lo que FS consume. Lo normativo es la guia y el OpenAPI de FE.
 
 **Respuesta.** La de la emision de siempre (`document_uuid`, `cdc`, numero, `status`), con `tipo_documento: "NRE"`. En SYNC el estado de SIFEN; en BATCH `QUEUED_BATCH`. **Todos los rechazos de validacion responden antes de numerar**: ninguno consume numero.
 
+**Artefactos (FE, 2026-11-11).** `files/kude.pdf` usa la plantilla propia de nota de remision sin nada extra; `files/ticket/raw` sale sin totales ni IVA, con motivo y documento asociado. `GET /v1/documentos/{uuid}/totales` sobre una NRE responde `422 DOCUMENT_WITHOUT_TOTALS` (MT150 2351): FS **no lo llama** para este tipo.
+
 **Despues de emitir.** Cancelar con `POST /v1/evento/cancelar` hasta **168 horas** despues de la aprobacion (la factura, 48). Inutilizar un numero sin usar o rechazado con `POST /v1/evento/inutilizacionnumfactura` y `tipoDocumento: "NRE"`. KUDE con plantilla de remision (`files/kude.pdf`) y ticket sin totales. Evento de cambio de transporte (§54) sobre una nota aprobada.
 
 **Geografia (§38).** `GET /v1/parametrizaciones/geografia` devuelve los departamentos; `?departamento=N` sus distritos; `?distrito=N` sus ciudades. Cada item: `codigo`, `descripcion` y, segun el nivel, `departamento` y `distrito`. La respuesta trae `version`. Se lee con cualquier clave de consumidor activa, sin permiso. FE confirmo (2026-11-11) que los codigos son del MT150, estables, y que solo cambian con una version nueva del catalogo: FS puede guardarlos en su agenda y refrescar el catalogo una vez por dia.
@@ -142,8 +144,8 @@ Patron comun de `SPEC_UX_RESTO_APP_v0.1` §B: encabezado "Notas de remision" con
 
 | Id | Pregunta | Para quien | Propuesta |
 |---|---|---|---|
-| DP-1 | `unidadMedida`: FE toma 77 por defecto. ¿Se ofrece un selector de unidades (kg, litro, caja) en v0.1 o se fija 77 "Unidad"? ¿Cual es el codigo del catalogo de unidades en `GET /v1/parametrizaciones`? | Usuario y FE | v0.1 fija 77; selector en v0.2 con el catalogo de FE |
-| DP-2 | Formato de `fecha` de la nota: el OpenAPI de `/v1/nota-remision` dice `string` sin formato; la factura usa `date-time`. ¿FE acepta el mismo ISO `date-time` que la factura? | FE | Mandar `new Date().toISOString()` como la factura |
+| DP-1 | `unidadMedida`: ¿selector de unidades en v0.1 o fija 77 "Unidad"? | Usuario | FE confirmo el 2026-11-11: catalogo `UNIDAD_MEDIDA` en `GET /v1/parametrizaciones/UNIDAD_MEDIDA` (Tabla 5 + NT023); 77 es "Unidad" (UNI); en la NRE `items[].unidadMedida` es opcional y se valida contra ese catalogo. Propuesta v0.1: fija 77; el selector con el catalogo en E2 si el usuario lo pide |
+| DP-2 | Formato de `fecha` de la nota | FE | Resuelta el 2026-11-11: `date-time` como la factura. FE aplica `toXmlgenDateTime`: una fecha con Z u offset se pasa a hora de Asuncion; sin offset se toma como hora local; solo `AAAA-MM-DD` se interpreta como medianoche UTC y queda el dia anterior en Asuncion, **no usar**. FS manda `AAAA-MM-DDTHH:mm:ss` en hora de Asuncion, igual que la factura. `remision.fechaFuturaFactura`, `inicioTraslado` y `finTraslado` si son `AAAA-MM-DD` |
 | DP-3 | RUC con letras (`^[0-9A-Z]{3,8}-\d$`) en el modulo 11 | FE | Resuelta el 2026-11-11: FE expande cada letra a los digitos de su codigo ASCII (`A` -> `65`) y pondera digito por digito; algoritmo y vectores en `SPEC_VALIDACIONES_RECEPTOR_v0.1` (RV-01). FS usa esa funcion compartida |
 | DP-4 | Motivos sin campos extra (2, 4, 6, 8 a 14): ¿se agregan en v0.1 si cuestan solo una opcion mas en el selector, o se esperan a probarlos en SIFEN test? | Usuario | Esperar: cada motivo tiene reglas de SIFEN que no se probaron |
 | DP-5 | Transporte propio sin transportista: FE dice que SIFEN test rechaza sin transportista (2300). FS exige siempre transportista; con transporte propio lo precarga con el facturador (RN-13). ¿Correcto para el usuario? | Usuario | Si |
