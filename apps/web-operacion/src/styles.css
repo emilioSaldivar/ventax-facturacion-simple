@@ -4517,3 +4517,147 @@ dd {
   color: var(--color-muted);
   font-size: var(--fs-12);
 }
+
+/* ─── Notas de credito con el patron de Nueva factura (SPEC_UX_RESTO_APP_v0.1 B.1; PLAN §4, URA-005) ──────── */
+.nc-espacio {
+  display: grid;
+  gap: var(--esp-4);
+}
+
+.nc-pestanas {
+  display: flex;
+  gap: var(--esp-1);
+  border-bottom: 1px solid var(--color-line);
+}
+
+.nc-pestanas button {
+  min-height: 40px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--color-muted);
+  font: inherit;
+  font-weight: 600;
+  padding: 0 var(--esp-3);
+  cursor: pointer;
+}
+
+.nc-pestanas button.active {
+  border-bottom-color: var(--color-brand);
+  color: var(--color-ink);
+}
+
+.nc-grilla {
+  display: grid;
+  gap: var(--esp-4);
+}
+
+.nc-columna {
+  display: grid;
+  gap: var(--esp-4);
+  min-width: 0;
+}
+
+.nc-tarjeta,
+.nc-panel {
+  display: grid;
+  gap: var(--esp-3);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-card);
+  background: var(--color-surface);
+  padding: var(--esp-4);
+}
+
+.nc-tarjeta h3,
+.nc-panel h3 {
+  margin: 0;
+  font-size: var(--fs-16);
+  font-weight: 600;
+}
+
+.nc-busqueda {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: var(--esp-2);
+}
+
+.nc-candidatas {
+  max-height: 420px;
+  overflow-y: auto;
+}
+
+.nc-factura-elegida {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--esp-3);
+}
+
+.nc-factura-datos {
+  display: grid;
+  flex: 1 1 260px;
+  gap: 2px;
+}
+
+.nc-factura-datos strong {
+  font-size: var(--fs-16);
+}
+
+.nc-lineas .numero {
+  text-align: right;
+}
+
+.nc-lineas input {
+  width: 100%;
+  max-width: 110px;
+  text-align: right;
+}
+
+.nc-totales {
+  display: grid;
+  gap: var(--esp-2);
+  margin: 0;
+}
+
+.nc-totales div {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--esp-3);
+}
+
+.nc-totales dt {
+  color: var(--color-muted);
+}
+
+.nc-totales dd {
+  margin: 0;
+  font-weight: 600;
+}
+
+.nc-totales .nc-total {
+  font-size: var(--fs-22);
+  font-weight: 700;
+}
+
+.nc-bloqueo {
+  margin: 0;
+  color: var(--color-warn);
+  font-size: var(--fs-13);
+}
+
+.nc-punto {
+  font-size: var(--fs-12);
+}
+
+@media (min-width: 1024px) {
+  .nc-grilla {
+    grid-template-columns: minmax(0, 1fr) 320px;
+    align-items: start;
+  }
+
+  .nc-panel {
+    position: sticky;
+    top: calc(var(--altura-barra) + var(--esp-4));
+  }
+}

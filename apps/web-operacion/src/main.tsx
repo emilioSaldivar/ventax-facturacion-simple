@@ -672,7 +672,7 @@ function OperationHome({
   const abrirCambioPerfil = () => setCambioPerfil({ sinEmitir: hayBorradorSinEmitir() });
   const [menuOpen, setMenuOpen] = useState(false);
   // URA-003: "Notas de remisión" (por planilla) abre Documentos en su pestaña hasta que tenga espacio propio (URA-006).
-  const [pestanaDocumentos, setPestanaDocumentos] = useState<"FACTURAS" | "NOTAS_REMISION" | "CARGA_MASIVA">("FACTURAS");
+  const [pestanaDocumentos, setPestanaDocumentos] = useState<"FACTURAS" | "NOTAS_CREDITO" | "NOTAS_REMISION" | "CARGA_MASIVA">("FACTURAS");
   // URA-004: el menu "Nuevo" abre la carga masiva con el tipo elegido.
   const [tipoCarga, setTipoCarga] = useState<TipoDeCarga | undefined>(undefined);
   // URA-019 (P-A3): Escape cierra el menu de celular.
@@ -860,7 +860,7 @@ function OperationHome({
     { title: "Comercial", key: "comercial" },
     { title: "Administración", key: "admin" }
   ];
-  function abrirDocumentos(pestana: "FACTURAS" | "NOTAS_REMISION" | "CARGA_MASIVA", tipo?: TipoDeCarga) {
+  function abrirDocumentos(pestana: "FACTURAS" | "NOTAS_CREDITO" | "NOTAS_REMISION" | "CARGA_MASIVA", tipo?: TipoDeCarga) {
     setPestanaDocumentos(pestana);
     setTipoCarga(tipo);
     goTo("documents");
@@ -1112,6 +1112,7 @@ function OperationHome({
           context={context}
           mostrarPunto={variosPerfiles}
           onBack={() => goTo("status")}
+          onVerEmitidas={() => abrirDocumentos("NOTAS_CREDITO")}
         />
       ) : operationView === "documents" ? (
         <DocumentsView

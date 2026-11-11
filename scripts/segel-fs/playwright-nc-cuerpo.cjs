@@ -81,6 +81,27 @@ async function pantallaTotal(browser) {
   }
 }
 
+/** URA-005: la pantalla nueva de Notas de credito, total o parcial (1 unidad de la linea 1). */
+async function pantallaNueva(browser, parcial) {
+  const { ctx, page, capturas } = await entrar(browser);
+  try {
+    await abrirNotasCredito(page);
+    await page.getByLabel("Buscar factura").fill(FACTURA);
+    await page.getByRole("button", { name: "Buscar", exact: true }).click();
+    await page.locator("button.document-row", { hasText: FACTURA }).first().click();
+    await page.getByRole("group", { name: "Tipo de nota de crédito" }).waitFor();
+    if (parcial) {
+      await page.getByRole("button", { name: "Algunas líneas" }).click();
+      await page.getByLabel("Cantidad a devolver, línea 1").fill("1");
+    }
+    await page.getByLabel(/^Motivo/).fill(MOTIVO);
+    await page.getByRole("button", { name: "Emitir nota de crédito" }).click();
+    return await esperarCaptura(capturas, 1);
+  } finally {
+    await ctx.close();
+  }
+}
+
 async function documentos(browser, parcial) {
   const { ctx, page, capturas } = await entrar(browser);
   try {
@@ -122,7 +143,15 @@ async function documentos(browser, parcial) {
       // Version de la linea de base junto al guion: test-results/ no se versiona.
       fs.writeFileSync(path.join(__dirname, "nc-cuerpo.base.json"), `${JSON.stringify({ factura: FACTURA, motivo: MOTIVO, casos }, null, 2)}\n`);
     } else {
-      throw new Error("El modo comparar se completa en URA-005, con la pantalla nueva.");
+      const base0 = JSON.parse(fs.readFileSync(path.join(__dirname, "nc-cuerpo.base.json"), "utf8")).casos;
+      const comparar = (nombre, cuerpo, esperado) => {
+        if (cuerpo !== null) fs.writeFileSync(path.join(outDir, `nc-${nombre}.json`), `${JSON.stringify(cuerpo, null, 2)}\n`);
+        check(`${nombre}: cuerpo identico a la linea de base`, JSON.stringify(cuerpo) === JSON.stringify(esperado), `${JSON.stringify(cuerpo)} vs ${JSON.stringify(esperado)}`);
+      };
+      comparar("pantalla-nueva-total", await pantallaNueva(browser, false), base0["pantalla-total"]);
+      comparar("pantalla-nueva-parcial", await pantallaNueva(browser, true), base0["documentos-parcial"]);
+      comparar("documentos-total", await documentos(browser, false), base0["documentos-total"]);
+      comparar("documentos-parcial", await documentos(browser, true), base0["documentos-parcial"]);
     }
   } catch (e) {
     check("el guion termino sin excepciones", false, String(e));
