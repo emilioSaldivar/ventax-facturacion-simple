@@ -4618,6 +4618,11 @@ dd {
   font-size: var(--fs-16);
 }
 
+.nc-lineas th,
+.nc-lineas td {
+  text-align: left;
+}
+
 .nc-lineas .numero {
   text-align: right;
 }
@@ -4630,6 +4635,7 @@ dd {
 
 .nc-totales {
   display: grid;
+  grid-template-columns: 1fr;
   gap: var(--esp-2);
   margin: 0;
 }
