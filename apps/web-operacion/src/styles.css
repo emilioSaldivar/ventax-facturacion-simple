@@ -445,6 +445,11 @@ h2 {
   gap: var(--esp-4);
   width: min(86vw, 340px);
   min-height: calc(100vh - 24px);
+  /* URA-003: el menu crecio con las etiquetas de tipo; dentro del fondo fijo solo se alcanza el final si el menu se
+     desplaza solo (antes ya pasaba en celulares bajos). */
+  max-height: calc(100dvh - 24px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   border: 1px solid var(--color-line);
   border-radius: var(--radius-card);
   background: var(--color-surface);

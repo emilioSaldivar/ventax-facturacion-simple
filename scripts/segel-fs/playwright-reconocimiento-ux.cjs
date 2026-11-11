@@ -108,7 +108,9 @@ async function etiquetasMenu(page, celular) {
     // "Cambiar punto de expedición" (URA-021) abre un dialogo, no una pantalla: se mide aparte (30-cambiar-punto).
     const items = page.locator("nav.mobile-menu button.menu-item:not([disabled]):not(.menu-cambiar-punto)");
     await items.first().waitFor();
-    const etiquetas = await items.evaluateAll((els) => els.map((e) => (e.querySelector("span:not(.menu-item-icon)")?.textContent ?? e.innerText).trim()));
+    const etiquetas = await items.evaluateAll((els) =>
+      els.map((e) => (e.querySelector(".menu-nombre")?.textContent ?? e.querySelector("span:not(.menu-item-icon)")?.textContent ?? e.innerText).trim())
+    );
     await cerrarMenuCelular(page);
     return etiquetas;
   }
