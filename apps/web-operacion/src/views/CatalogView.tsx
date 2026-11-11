@@ -112,7 +112,7 @@ export function CatalogView({ onBack }: { onBack: () => void }) {
     abrirEditor(
       "EDIT",
       item,
-      { codigo: item.codigo, descripcion: item.descripcion, precio_unitario: String(item.precio_unitario), moneda: monedaDe(item), iva_tipo: item.iva_tipo, activo: item.activo },
+      { codigo: item.codigo, descripcion: item.descripcion, precio_unitario: monedaDe(item) === "PYG" ? String(item.precio_unitario) : Number(item.precio_unitario).toFixed(2), moneda: monedaDe(item), iva_tipo: item.iva_tipo, activo: item.activo },
       false
     );
   }
@@ -121,7 +121,7 @@ export function CatalogView({ onBack }: { onBack: () => void }) {
     abrirEditor(
       "CREATE",
       null,
-      { codigo: "", descripcion: `${item.descripcion} (copia)`, precio_unitario: String(item.precio_unitario), moneda: monedaDe(item), iva_tipo: item.iva_tipo, activo: true },
+      { codigo: "", descripcion: `${item.descripcion} (copia)`, precio_unitario: monedaDe(item) === "PYG" ? String(item.precio_unitario) : Number(item.precio_unitario).toFixed(2), moneda: monedaDe(item), iva_tipo: item.iva_tipo, activo: true },
       true
     );
   }

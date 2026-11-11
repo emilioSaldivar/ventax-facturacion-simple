@@ -145,7 +145,7 @@ async function marco(page, v) {
     await page.locator('[data-grilla-fila="2"]').getByLabel(/^IVA, línea/).selectOption("IVA_5");
     await page.waitForTimeout(900);
     check("CA-03 1440: fila invalida con motivo propio y bloqueo que la nombra", (await page.locator('tr.fila-motivo[data-grilla-motivo="2"]').count()) === 1 && (await motivoBloqueo(page)).includes("línea 3"), await motivoBloqueo(page));
-    check("CA-05 1440: aviso de catalogo no disponible en USD", (await page.locator(".grilla-pie").innerText()).includes("no disponible en USD"));
+    check("CA-05 1440 (SPEC_CATALOGO_MONEDA RN-16): el pie ya no dice que el catalogo no esta disponible en USD", !(await page.locator(".grilla-pie").innerText()).includes("no disponible"));
     await page.screenshot({ path: path.join(outDir, "1440-fila-invalida.png") });
     await page.locator('[data-grilla-fila="2"]').getByLabel(/^Precio, línea/).fill("10");
     await page.waitForTimeout(1500);

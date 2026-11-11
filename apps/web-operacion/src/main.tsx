@@ -1998,7 +1998,7 @@ function InvoiceEditor({
       catalogo_item_id: item.id,
       codigo: item.codigo,
       descripcion: item.descripcion,
-      precio_unitario: mismaMoneda ? String(item.precio_unitario) : "",
+      precio_unitario: mismaMoneda ? (moneda === "PYG" ? String(item.precio_unitario) : Number(item.precio_unitario).toFixed(2)) : "",
       iva_tipo: item.iva_tipo,
       lockedFromCatalog: mismaMoneda
     });
