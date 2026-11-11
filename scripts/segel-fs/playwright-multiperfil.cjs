@@ -264,8 +264,9 @@ async function esperarDocumentoFinal(page, documentoId) {
       await page.getByRole("button", { name: "Buscar" }).click();
       await page.waitForTimeout(1500);
       await page.locator(".documents-list .document-row").filter({ hasText: fNumero.slice(-7) }).first().click();
-      const avisoNc = await texto(page, ".document-detail");
-      check("RN-05: aviso de que la NC sale por otro punto", avisoNc.includes("se emitio por 001-002") && avisoNc.includes("saldra por 001-001"), avisoNc.slice(0, 300));
+      // URA-021/URA-005: el aviso nombra los puntos ("La factura se emitió por el Punto 001-002; ... por el Punto 001-001").
+      const avisoNc = await texto(page, ".nc-espacio");
+      check("RN-05: aviso de que la NC sale por otro punto", avisoNc.includes("se emitió por el Punto 001-002") && avisoNc.includes("sale por el Punto 001-001"), avisoNc.slice(0, 300));
       await page.locator(".credit-note-motivo textarea").fill("Prueba FS-54: NC por otro punto del mismo emisor");
       await page.screenshot({ path: path.join(outDir, "1440-nc-aviso.png"), fullPage: true });
       await page.getByRole("button", { name: "Emitir nota de crédito" }).click();

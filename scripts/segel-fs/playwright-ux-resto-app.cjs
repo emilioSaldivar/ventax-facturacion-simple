@@ -4,7 +4,7 @@
 //
 //   ENSAYO_PASSWORD_FILE=/ruta/clave node scripts/segel-fs/playwright-ux-resto-app.cjs [caso ...]
 //
-// Sin argumentos corre todos los casos. Casos: componentes (URA-017, CA-13), api (URA-018), teclado (URA-019), puntos (URA-021, CA-14), menu (URA-003), nuevo (URA-004). URA-012 suma los de las fases 1 y 2.
+// Sin argumentos corre todos los casos. Casos: componentes (URA-017, CA-13), api (URA-018), teclado (URA-019), puntos (URA-021, CA-14), menu (URA-003), nuevo (URA-004), busqueda (URA-025). URA-012 suma los de las fases 1 y 2.
 // Escribe test-results/ux-resto-app/.
 const fs = require("node:fs");
 const path = require("node:path");
@@ -113,19 +113,16 @@ async function casoComponentes(browser) {
     check("CA-13 menu de fila: Escape cierra", (await page.locator('.menu-fila [role="menu"]').count()) === 0);
     check("CA-13 menu de fila: el foco vuelve al boton", (await enfocado(page))?.nombre === nombre);
 
-    // Notas de credito: encabezado, aviso con tono y campo "Motivo" con etiqueta asociada.
+    // Notas de credito (URA-005): campo "Motivo" con etiqueta asociada y boton con su motivo de bloqueo (RN-04).
     await abrirVista(page, "Notas de crédito");
-    await page.getByRole("heading", { name: "Seleccionar factura" }).waitFor();
+    await page.getByRole("heading", { name: "Notas de crédito" }).waitFor();
     const elegible = page.locator("button.document-row", { hasText: "Elegible" }).first();
     await elegible.click();
-    check("CA-13 campo: 'Motivo' asociado por etiqueta", (await page.getByLabel("Motivo").count()) === 1);
-    await page.getByRole("button", { name: "Emitir nota de crédito" }).click();
-    const aviso = page.locator(".aviso");
-    await aviso.waitFor();
-    check(
-      "CA-13 aviso: falta el motivo, tono atencion y sin emitir",
-      (await aviso.innerText()).includes("Motivo requerido") && (await aviso.getAttribute("class")).includes("aviso-atencion")
-    );
+    await page.getByRole("group", { name: "Tipo de nota de crédito" }).waitFor();
+    check("CA-13 campo: 'Motivo' asociado por etiqueta", (await page.getByRole("textbox", { name: /^Motivo/ }).count()) === 1);
+    const emitir = page.getByRole("button", { name: "Emitir nota de crédito" });
+    const bloqueo = await page.locator(".nc-bloqueo").innerText().catch(() => "");
+    check("CA-13 sin motivo no se puede emitir y el panel dice por que", (await emitir.isDisabled()) && bloqueo.includes("Escribí el motivo"), bloqueo);
 
     // Pastillas sin emojis: Documentos y Cobros / Recibos (enum traducido).
     await abrirVista(page, "Documentos");
@@ -412,7 +409,7 @@ async function casoMenu(browser) {
         const activa = await page.locator(".filter-tabs button.active, [role=tablist] button.active").first().innerText().catch(() => "");
         check(`CA-02 ${ancho}: "Notas de remisión" abre Documentos en su pestaña`, /Notas de remisión/.test(activa), activa);
         await abrirVista(page, "Notas de crédito");
-        check(`CA-03 ${ancho}: "Notas de crédito" abre la pantalla de notas de crédito`, await page.getByRole("heading", { name: "Seleccionar factura" }).waitFor({ timeout: 10000 }).then(() => true, () => false));
+        check(`CA-03 ${ancho}: "Notas de crédito" abre la pantalla de notas de crédito`, await page.getByRole("heading", { name: "Notas de crédito" }).waitFor({ timeout: 10000 }).then(() => true, () => false));
       } else {
         await page.screenshot({ path: path.join(outDir, `${ancho}-menu.png`) });
       }
@@ -453,7 +450,7 @@ async function casoNuevo(browser) {
       check(`CA-04 ${ancho}: "Factura" abre Nueva factura`, await page.getByRole("heading", { name: "Nueva factura" }).waitFor({ timeout: 10000 }).then(() => true, () => false));
       await boton.click();
       await page.getByRole("menuitem", { name: /^Nota de crédito/ }).click();
-      check(`CA-04 ${ancho}: "Nota de crédito" abre Notas de crédito`, await page.getByRole("heading", { name: "Seleccionar factura" }).waitFor({ timeout: 10000 }).then(() => true, () => false));
+      check(`CA-04 ${ancho}: "Nota de crédito" abre Notas de crédito`, await page.getByRole("heading", { name: "Notas de crédito" }).waitFor({ timeout: 10000 }).then(() => true, () => false));
       await boton.click();
       await page.getByRole("menuitem", { name: /^Nota de remisión/ }).click();
       // Las pestañas de Documentos tambien se llaman "Tipo de documento": se apunta al select de la carga.
@@ -476,6 +473,39 @@ async function casoNuevo(browser) {
   }
 }
 
+// ─── URA-025: busqueda por numero completo (CA-16) ─────────────────────────────────────────────────────
+async function casoBusqueda(browser) {
+  const { ctx, page } = await entrar(browser, 1440, 900);
+  try {
+    async function buscarEnDocumentos(pestana, texto) {
+      await abrirVista(page, "Documentos");
+      await page.getByRole("group", { name: "Tipo de documento" }).getByRole("button", { name: pestana, exact: true }).click();
+      await page.getByPlaceholder("Buscar factura...").fill(texto);
+      await page.getByPlaceholder("Buscar factura...").press("Enter");
+      await page.waitForTimeout(1500);
+      return page.locator("table.documents-tabla tbody tr").allInnerTexts();
+    }
+    const exacta = await buscarEnDocumentos("Notas de crédito", "001-001-1010006");
+    check("CA-16 Documentos: 001-001-1010006 encuentra la nota 1010006", exacta.some((t) => t.includes("1010006")), exacta.slice(0, 2).join(" | "));
+    const otroPunto = await buscarEnDocumentos("Notas de crédito", "001-002-1010006");
+    check("CA-16 Documentos: 001-002-1010006 no la encuentra (otro punto)", !otroPunto.some((t) => t.includes("1010006")), otroPunto.slice(0, 2).join(" | "));
+    const suelto = await buscarEnDocumentos("Notas de crédito", "1010006");
+    check("CA-16 Documentos: 1010006 la sigue encontrando", suelto.some((t) => t.includes("1010006")), suelto.slice(0, 2).join(" | "));
+    const corto = await buscarEnDocumentos("Facturas", "001-002-8487");
+    check("CA-16 Documentos: 001-002-8487 encuentra la factura 0008487 de 001-002", corto.some((t) => t.includes("0008487")), corto.slice(0, 2).join(" | "));
+    await page.screenshot({ path: path.join(outDir, "1440-busqueda-numero.png") });
+
+    await abrirVista(page, "Notas de crédito");
+    await page.getByLabel("Buscar factura").fill("001-002-8487");
+    await page.getByRole("button", { name: "Buscar", exact: true }).click();
+    await page.waitForTimeout(1500);
+    const candidatas = await page.locator("button.document-row").allInnerTexts();
+    check("CA-16 Notas de crédito: 001-002-8487 encuentra la factura candidata", candidatas.length > 0 && candidatas.every((t) => t.includes("0008487")), candidatas.slice(0, 2).join(" | "));
+  } finally {
+    await ctx.close();
+  }
+}
+
 (async () => {
   const browser = await chromium.launch();
   try {
@@ -485,6 +515,7 @@ async function casoNuevo(browser) {
     if (corre("puntos")) await casoPuntos(browser);
     if (corre("menu")) await casoMenu(browser);
     if (corre("nuevo")) await casoNuevo(browser);
+    if (corre("busqueda")) await casoBusqueda(browser);
   } catch (e) {
     check("el guion termino sin excepciones", false, String(e));
   } finally {

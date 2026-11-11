@@ -94,7 +94,7 @@ async function pantallaNueva(browser, parcial) {
       await page.getByRole("button", { name: "Algunas líneas" }).click();
       await page.getByLabel("Cantidad a devolver, línea 1").fill("1");
     }
-    await page.getByLabel(/^Motivo/).fill(MOTIVO);
+    await page.getByRole("textbox", { name: /^Motivo/ }).fill(MOTIVO);
     await page.getByRole("button", { name: "Emitir nota de crédito" }).click();
     return await esperarCaptura(capturas, 1);
   } finally {
