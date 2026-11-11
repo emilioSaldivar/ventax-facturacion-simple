@@ -251,3 +251,12 @@ describe("SPEC_NOTA_REMISION_v0.1 RN-01 - permisos del consumidor", () => {
     expect(planConPermisos(["FACTURA_EMIT"]).emisor.permisos_consumidor).not.toContain("NRE_EMIT");
   });
 });
+
+describe("SPEC_NOTA_REMISION_v0.1 RN-01b - tipos de documento del emisor", () => {
+  it("el plan lleva tipos_documento_habilitados del export", () => {
+    const doc = JSON.parse(leer("fe-config-ambiente-test.json"));
+    doc.tipos_documento_habilitados.valor = ["FE", "NCE", "NRE"];
+    const parsed = parseFeConfig({ filename: "fe-config-ambiente-test.json", content: JSON.stringify(doc) });
+    expect(buildImportPlan(parsed.document, ctxTest).emisor.tipos_documento).toEqual(["FE", "NCE", "NRE"]);
+  });
+});

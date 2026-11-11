@@ -29,6 +29,8 @@ export interface PlanEmisor {
    * ambiente del deployment (por ejemplo NRE_EMIT). Habilitan documentos nuevos en la app.
    */
   permisos_consumidor?: string[];
+  /** SPEC_NOTA_REMISION_v0.1 RN-01b: `tipos_documento_habilitados` del emisor ("FE", "NCE", "NRE"...). */
+  tipos_documento?: string[];
 }
 
 export interface PlanEstablecimiento {

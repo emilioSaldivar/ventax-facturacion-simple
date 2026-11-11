@@ -3014,8 +3014,9 @@ components:
         nota_remision_habilitada:
           type: boolean
           description: >-
-            SPEC_NOTA_REMISION_v0.1 RN-01. La clave de consumidor del facturador tiene el permiso NRE_EMIT de FE (tomado del
-            export de configuracion importado en el backoffice). Sin el, "Nueva nota de remision" se muestra Proximamente.
+            SPEC_NOTA_REMISION_v0.1 RN-01 y RN-01b. La clave de consumidor del facturador tiene el permiso NRE_EMIT y el
+            emisor tiene NRE en tipos_documento_habilitados (numerador tipo 7), segun el export de configuracion de FE
+            importado en el backoffice. Sin las dos, "Nueva nota de remision" se muestra Proximamente.
         nc_moneda_extranjera_habilitada:
           type: boolean
           description: FE admite la nota de credito de una factura en moneda extranjera, en la moneda de la factura (`FE_NC_MONEDA_EXTRANJERA`). Apagada, esa nota se bloquea con el motivo `NOTA_CREDITO_MONEDA_EXTRANJERA`.

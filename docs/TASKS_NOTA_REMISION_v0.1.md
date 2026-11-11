@@ -29,7 +29,7 @@ Todas las tareas estan **Pendiente** (2026-11-11). La implementacion arranca cua
 
 | ID | Tarea | Reglas | Validacion | Estado |
 |---|---|---|---|---|
-| NRE-030 | Habilitar la remision solo con `NRE_EMIT` y numerador tipo 7 (dato del export a definir con FE) | RN-01b | vitest del mapper y del contexto; Playwright `permiso` con las dos condiciones | Pendiente: esperando respuesta de FE |
+| NRE-030 | Habilitar la remision solo con `NRE_EMIT` y `NRE` en `tipos_documento_habilitados` (migracion `0049`); 4xx de FE a una remision queda `ERROR_OPERATIVO` sin reintentos | RN-01b, RN-23 | vitest: mapper (tipos del emisor), `remisionHabilitada`, worker con "No existe numerador configurado"; suite 912 en verde | Hecha (2026-11-11); falta el Playwright `permiso` sobre el stack con las dos condiciones |
 
 ## Entrega E2 — datos reutilizables y agenda
 

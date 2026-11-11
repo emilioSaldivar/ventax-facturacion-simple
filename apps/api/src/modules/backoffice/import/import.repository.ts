@@ -198,6 +198,12 @@ export class PgImportRepository implements ImportRepository {
       const facturadorId = f.rows[0]!.id;
 
       // SPEC_NOTA_REMISION_v0.1 RN-01 y RN-03: los permisos del consumidor se toman en cada importacion.
+      if (plan.emisor.tipos_documento) {
+        await client.query(`update facturadores set fe_tipos_documento = $2::jsonb, updated_at = now() where id = $1`, [
+          facturadorId,
+          JSON.stringify(plan.emisor.tipos_documento)
+        ]);
+      }
       if (plan.emisor.permisos_consumidor) {
         await client.query(`update facturadores set fe_consumer_permisos = $2::jsonb, updated_at = now() where id = $1`, [
           facturadorId,

@@ -286,7 +286,6 @@ function reportarIgnorados(doc: FeConfigDocument, h: Hallazgos): void {
     [doc.contrato.guia_referencia, "$.contrato.guia_referencia", "Texto informativo del exportador."],
     [doc.contrato.aviso_vigencia, "$.contrato.aviso_vigencia", "Texto informativo del exportador."],
     [doc.envio?.modos_habilitados, "$.envio.modos_habilitados", "El SaaS usa su propio outbox de emision."],
-    [doc.tipos_documento_habilitados, "$.tipos_documento_habilitados", "Informativo."],
     [doc.numeracion?.serie_fiscal, "$.numeracion.serie_fiscal", "Sin columna en el modelo."],
     [doc.numeracion?.rango_min, "$.numeracion.rango_min", "Sin columna en el modelo."],
     [doc.numeracion?.rango_max, "$.numeracion.rango_max", "Sin columna en el modelo."]
@@ -658,7 +657,8 @@ export function buildImportPlan(doc: FeConfigDocument, ctx: MapperContext): Impo
       razon_social: razonSocial ?? "",
       nombre_fantasia: texto(doc.emisor.nombre_fantasia),
       ambiente: texto(doc.emisor.ambiente),
-      permisos_consumidor: permisosConAlcance(doc, ctx, emisorId)
+      permisos_consumidor: permisosConAlcance(doc, ctx, emisorId),
+      tipos_documento: [...new Set(doc.tipos_documento_habilitados.filter((x): x is string => typeof x === "string"))].sort()
     },
     establecimientos,
     puntos,

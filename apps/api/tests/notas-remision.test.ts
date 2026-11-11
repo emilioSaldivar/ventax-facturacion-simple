@@ -308,3 +308,46 @@ describe("RN-24 gateway real: POST /v1/nota-remision", () => {
     }
   });
 });
+
+describe("RN-01b habilitacion: permiso y numerador tipo 7", () => {
+  it("hace falta NRE_EMIT y NRE en los tipos del emisor", async () => {
+    const { remisionHabilitada } = await import("../src/modules/notas-remision/notas-remision.permiso");
+    expect(remisionHabilitada({ permisos: ["FACTURA_EMIT", "NRE_EMIT"], tiposDocumento: ["FE", "NCE", "NRE"] })).toBe(true);
+    expect(remisionHabilitada({ permisos: ["FACTURA_EMIT", "NRE_EMIT"], tiposDocumento: ["FE", "NCE"] })).toBe(false);
+    expect(remisionHabilitada({ permisos: ["FACTURA_EMIT"], tiposDocumento: ["FE", "NCE", "NRE"] })).toBe(false);
+  });
+});
+
+describe("RN-23 y RN-01b: un 4xx de FE a la remision queda ERROR_OPERATIVO sin reintentos", () => {
+  it("punto sin numerador tipo 7", async () => {
+    const { pedido } = construirPedidoFe(context, base(), "nre_e", AHORA);
+    let fallo: Record<string, unknown> | null = null;
+    const gateway = {
+      emitNotaRemision: async () => {
+        throw new FiscalGatewayError("UPSTREAM_ERROR", "rechazo", {
+          status: 422,
+          body: { error: "VALIDATION_ERROR", message: "No existe numerador configurado para la combinacion fiscal" }
+        });
+      }
+    } as unknown as FiscalGateway;
+    const repository = {
+      claimNextPendingEmission: async () => ({
+        outboxId: "o1",
+        documentoId: "d1",
+        facturadorId: "f1",
+        facturadorApiKey: null,
+        fiscalRequest: pedido,
+        attempts: 0,
+        documentoCreatedAt: new Date().toISOString(),
+        accionNotificadaAt: null
+      }),
+      failPendingEmission: async (input: Record<string, unknown>) => {
+        fallo = input;
+        return { id: "d1", estado: "ERROR_OPERATIVO" };
+      }
+    } as unknown as FacturaRepository;
+    await processNextQueuedFiscalEmission(repository, gateway);
+    expect(fallo).toMatchObject({ outboxEstado: "FAILED_PERM", estado: "ERROR_OPERATIVO" });
+    expect((fallo!.error as { message: string }).message).toBe("Este punto de expedición todavía no tiene numeración para notas de remisión. Pedila a Segel.");
+  });
+});

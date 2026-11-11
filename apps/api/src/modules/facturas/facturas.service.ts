@@ -1844,6 +1844,31 @@ export async function processNextQueuedFiscalEmission(
     // A-2: aprobada en el acto (sincronico o mock); `gateway` es el de clave compartida, el de `/totales`.
     return completado ? await guardarTotalesFe(pending.facturadorId, completado, repository, gateway) : completado;
   } catch (error) {
+    // SPEC_NOTA_REMISION_v0.1 RN-23 y RN-01b: un 4xx de FE a una remision (validacion que FS no reprodujo, o punto sin
+    // numerador tipo 7) no se arregla reintentando: queda ERROR_OPERATIVO con el mensaje de FE y sin numero tomado.
+    const esRemisionPendiente = (pending.fiscalRequest as { tipo_documento?: string }).tipo_documento === "NOTA_REMISION";
+    const statusFe = error instanceof FiscalGatewayError ? (error.details as { status?: number } | undefined)?.status : undefined;
+    if (esRemisionPendiente && error instanceof FiscalGatewayError && statusFe && [400, 404, 409, 422].includes(statusFe)) {
+      const cuerpo = (error.details as { body?: { message?: unknown; error?: unknown } }).body;
+      const mensajeFe = typeof cuerpo?.message === "string" ? cuerpo.message : typeof cuerpo?.error === "string" ? cuerpo.error : error.message;
+      return repository.failPendingEmission({
+        outboxId: pending.outboxId,
+        documentoId: pending.documentoId,
+        outboxEstado: "FAILED_PERM",
+        estado: "ERROR_OPERATIVO",
+        error: {
+          code: "VALIDACION_FE",
+          message: /numerador/i.test(mensajeFe)
+            ? "Este punto de expedición todavía no tiene numeración para notas de remisión. Pedila a Segel."
+            : `El servicio fiscal rechazó la nota de remisión: ${mensajeFe}`,
+          details: error.details ?? null,
+          recoverable: false,
+          retry_after_seconds: null,
+          suggested_action: "CORREGIR_Y_EMITIR"
+        },
+        retryAfterSeconds: 0
+      });
+    }
     if (error instanceof FiscalGatewayError) {
       const ageMs = Date.now() - new Date(pending.documentoCreatedAt).getTime();
       const cutover = ageMs >= HORAS_CORTE_REINTENTO_EMISION * 60 * 60 * 1000;
