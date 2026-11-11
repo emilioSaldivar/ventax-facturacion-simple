@@ -351,3 +351,39 @@ describe("RN-23 y RN-01b: un 4xx de FE a la remision queda ERROR_OPERATIVO sin r
     expect((fallo!.error as { message: string }).message).toBe("Este punto de expedición todavía no tiene numeración para notas de remisión. Pedila a Segel.");
   });
 });
+
+describe("FE rc4.32: punto sin numerador tipo 7 responde 500 ISSUE_NRE_FAILED", () => {
+  async function correr(status: number, body: Record<string, unknown>) {
+    const { pedido } = construirPedidoFe(context, base(), "nre_500", AHORA);
+    let fallo: Record<string, unknown> | null = null;
+    const gateway = {
+      emitNotaRemision: async () => {
+        throw new FiscalGatewayError("UPSTREAM_ERROR", "rechazo", { status, body });
+      }
+    } as unknown as FiscalGateway;
+    const repository = {
+      claimNextPendingEmission: async () => ({
+        outboxId: "o1", documentoId: "d1", facturadorId: "f1", facturadorApiKey: null, fiscalRequest: pedido,
+        attempts: 0, documentoCreatedAt: new Date().toISOString(), accionNotificadaAt: null
+      }),
+      failPendingEmission: async (input: Record<string, unknown>) => {
+        fallo = input;
+        return { id: "d1", estado: input.estado };
+      },
+      markAccionNotificada: async () => undefined
+    } as unknown as FacturaRepository;
+    await processNextQueuedFiscalEmission(repository, gateway);
+    return fallo as unknown as Record<string, unknown>;
+  }
+
+  it("500 con ISSUE_NRE_FAILED y el mensaje del numerador: ERROR_OPERATIVO sin reintentos", async () => {
+    const f = await correr(500, { error: "ISSUE_NRE_FAILED", message: "No existe numerador configurado para la combinación fiscal" });
+    expect(f).toMatchObject({ outboxEstado: "FAILED_PERM", estado: "ERROR_OPERATIVO" });
+  });
+
+  it("otro 500 sigue reintentando", async () => {
+    const f = await correr(500, { error: "ISSUE_NRE_FAILED", message: "xmlgen fallo" });
+    expect(f).toMatchObject({ outboxEstado: "FAILED_TEMP", estado: "ERROR_TEMPORAL" });
+  });
+});
+

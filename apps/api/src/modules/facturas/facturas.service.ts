@@ -1848,8 +1848,14 @@ export async function processNextQueuedFiscalEmission(
     // numerador tipo 7) no se arregla reintentando: queda ERROR_OPERATIVO con el mensaje de FE y sin numero tomado.
     const esRemisionPendiente = (pending.fiscalRequest as { tipo_documento?: string }).tipo_documento === "NOTA_REMISION";
     const statusFe = error instanceof FiscalGatewayError ? (error.details as { status?: number } | undefined)?.status : undefined;
-    if (esRemisionPendiente && error instanceof FiscalGatewayError && statusFe && [400, 404, 409, 422].includes(statusFe)) {
-      const cuerpo = (error.details as { body?: { message?: unknown; error?: unknown } }).body;
+    const cuerpoFe = error instanceof FiscalGatewayError ? (error.details as { body?: { message?: unknown; error?: unknown } } | undefined)?.body : undefined;
+    // FE segel-rc4.32: un punto sin numerador tipo 7 responde 500 ISSUE_NRE_FAILED "No existe numerador configurado
+    // para la combinacion fiscal", antes de crear el borrador (sin numero tomado). FE lo registro como defecto (deberia
+    // ser 4xx). Otro 500 sigue el camino de reintentos: podria haber pasado despues de numerar.
+    const sinNumeradorNre =
+      statusFe === 500 && cuerpoFe?.error === "ISSUE_NRE_FAILED" && typeof cuerpoFe.message === "string" && /numerador/i.test(cuerpoFe.message);
+    if (esRemisionPendiente && error instanceof FiscalGatewayError && statusFe && ([400, 404, 409, 422].includes(statusFe) || sinNumeradorNre)) {
+      const cuerpo = cuerpoFe;
       const mensajeFe = typeof cuerpo?.message === "string" ? cuerpo.message : typeof cuerpo?.error === "string" ? cuerpo.error : error.message;
       return repository.failPendingEmission({
         outboxId: pending.outboxId,
