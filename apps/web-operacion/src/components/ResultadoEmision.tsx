@@ -108,6 +108,7 @@ export function ResultadoEmision({
   const nombreTitulo = nombreTipo.charAt(0).toUpperCase() + nombreTipo.slice(1);
 
   const esRemision = documento.tipo === "NOTA_REMISION";
+  const traslado = esRemision && documento.remision?.motivo === 7;
   return (
     <div className="resultado-emision" aria-live="polite">
       <div className="editor-heading">
@@ -242,15 +243,22 @@ export function ResultadoEmision({
           </p>
         </section>
 
-        <aside className="resultado-entrega" aria-label="Entregar al cliente">
+        <aside className="resultado-entrega" aria-label={traslado ? "Descargar para el traslado" : "Entregar al cliente"}>
           <section className="form-section">
-            <h3>Entregar al cliente</h3>
-            <p className="muted">
-              {conCorreo
-                ? `Correo a ${documento.cliente.email}: ${estadoEmail}.`
-                : `${documento.cliente.razon_social} no tiene correo en la agenda. Envia por WhatsApp o copia el enlace.`}
-            </p>
-            {emailStatus?.message ? <p className="editor-alert ready">{emailStatus.message}</p> : null}
+            {/* SPEC_NOTA_REMISION_v0.1 RN-20: con motivo 7 el destinatario es el propio emisor; no hay a quien entregar. */}
+            <h3>{traslado ? "Descargar para el traslado" : "Entregar al cliente"}</h3>
+            {traslado ? (
+              <p className="muted">La mercadería va a otro local tuyo: imprimí o descargá el KUDE para que acompañe el traslado.</p>
+            ) : (
+              <p className="muted">
+                {conCorreo
+                  ? `Correo a ${documento.cliente.email}: ${estadoEmail}.`
+                  : `${documento.cliente.razon_social} no tiene correo en la agenda. Envia por WhatsApp o copia el enlace.`}
+              </p>
+            )}
+            {!traslado && emailStatus?.message ? <p className="editor-alert ready">{emailStatus.message}</p> : null}
+            {traslado ? null : (
+            <>
             <label className="campo-whatsapp">
               Número de WhatsApp
               <span className="campo-prefijo">
@@ -266,6 +274,8 @@ export function ResultadoEmision({
             >
               <Icono nombre="whatsapp" tamano={16} /> Enviar por WhatsApp
             </a>
+            </>
+            )}
             <div className="delivery-actions">
               <button className="secondary-action con-icono" disabled={!deliveryLink} onClick={onCopiar} type="button">
                 <Icono nombre="copiar" tamano={16} /> Copiar enlace

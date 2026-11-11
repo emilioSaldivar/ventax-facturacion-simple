@@ -4,7 +4,11 @@
 //   ENSAYO_PASSWORD_FILE=/ruta/clave node scripts/segel-fs/playwright-nota-remision.cjs [caso ...]
 //
 // Casos: permiso (CA-01), validaciones (CA-04), pantallas (1440, 1280 y 390 sin emitir), motivo1 y motivo7
-// (CA-02, CA-03: EMITEN en SIFEN test si el stack usa FE real; avisar a FE antes). Escribe test-results/nota-remision/.
+// (CA-02, CA-03: EMITEN en SIFEN test si el stack usa FE real; avisar a FE antes), motivo1-390 (emite desde celular),
+// sin-numerador (RN-01b: ENSAYO_USER2 / ENSAYO_PASSWORD_FILE2 / ENSAYO_PUNTO2, un punto sin numerador tipo 7: queda en
+// error operativo con el mensaje "Pedila a Segel") y anular (RN-26: anula la ultima nota aprobada en esta corrida o la de
+// ENSAYO_NRE_ANULAR). Variables: SEGEL_APP_URL, ENSAYO_USER, ENSAYO_PASSWORD_FILE, ENSAYO_PUNTO, ENSAYO_RUC, ENSAYO_NOMBRE.
+// Escribe test-results/nota-remision/.
 const fs = require("node:fs");
 const path = require("node:path");
 const { chromium } = require(path.join(__dirname, "../../node_modules/playwright"));
@@ -17,7 +21,8 @@ const RUC_DESTINATARIO = process.env.ENSAYO_RUC ?? "80026570-0";
 const outDir = path.join(process.cwd(), "test-results", "nota-remision");
 fs.mkdirSync(outDir, { recursive: true });
 const pedidos = process.argv.slice(2);
-const corre = (caso) => (pedidos.length === 0 ? !["motivo1", "motivo7"].includes(caso) : pedidos.includes(caso));
+const corre = (caso) => (pedidos.length === 0 ? !["motivo1", "motivo7", "motivo1-390", "sin-numerador", "anular"].includes(caso) : pedidos.includes(caso));
+const ESPERA_APROBACION_MS = Number(process.env.ENSAYO_ESPERA_MS ?? 17 * 60 * 1000); // lote de FE test cada 15 min
 
 const resultados = [];
 const emitidas = [];
@@ -28,8 +33,12 @@ function check(escenario, ok, detalle = "") {
 const EMOJI = /[\p{Extended_Pictographic}]/u;
 const sinDesborde = (page) => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1);
 
-async function entrar(browser, ancho, alto, sinPermiso = false) {
+async function entrar(browser, ancho, alto, sinPermiso = false, cuenta = null) {
   const ctx = await browser.newContext({ viewport: { width: ancho, height: alto } });
+  const usuarioDe = cuenta?.usuario ?? usuario;
+  const claveDe = cuenta?.clave ?? clave;
+  const puntoPrevio = process.env.ENSAYO_PUNTO;
+  if (cuenta?.punto) process.env.ENSAYO_PUNTO = cuenta.punto;
   const page = await ctx.newPage();
   page.setDefaultTimeout(20000);
   if (sinPermiso) {
@@ -40,10 +49,17 @@ async function entrar(browser, ancho, alto, sinPermiso = false) {
     });
   }
   await page.goto(base, { waitUntil: "domcontentloaded" });
-  await page.locator('input[name="username"]').fill(usuario);
-  await page.locator('input[name="password"]').fill(clave);
+  await page.locator('input[name="username"]').fill(usuarioDe);
+  await page.locator('input[name="password"]').fill(claveDe);
   await page.getByRole("button", { name: "Ingresar" }).click();
-  await esperarSesion(page);
+  try {
+    await esperarSesion(page);
+  } finally {
+    if (cuenta?.punto) {
+      if (puntoPrevio === undefined) delete process.env.ENSAYO_PUNTO;
+      else process.env.ENSAYO_PUNTO = puntoPrevio;
+    }
+  }
   return { ctx, page };
 }
 
@@ -175,33 +191,109 @@ async function casoPantallas(browser) {
 async function emitirYEsperar(page, etiqueta) {
   await page.getByRole("button", { name: "Emitir nota de remisión" }).click();
   await page.locator(".resultado-emision, .paso").first().waitFor({ timeout: 30000 });
+  // Se espera hasta un estado final: aprobada (4 pasos hechos), rechazada o error. El lote de FE test sale cada 15 min.
+  const inicio = Date.now();
   let aprobada = false;
-  for (let i = 0; i < 16 && !aprobada; i += 1) {
+  let final = false;
+  while (!final && Date.now() - inicio < ESPERA_APROBACION_MS) {
     aprobada = (await page.locator(".paso.hecho").count()) >= 4;
-    if (!aprobada) {
-      await page.waitForTimeout(15000);
+    const estado = (await page.locator(".resultado-emision .estado-documento").first().getAttribute("data-estado").catch(() => null)) ?? "";
+    final = aprobada || ["RECHAZADA", "ERROR_OPERATIVO", "ERROR_TEMPORAL", "ANULADA"].includes(estado);
+    if (!final) {
+      await page.waitForTimeout(20000);
       const verificar = page.getByRole("button", { name: /Verificar/ });
       if ((await verificar.count()) > 0 && (await verificar.first().isEnabled())) await verificar.first().click().catch(() => undefined);
     }
   }
   const texto = (await page.locator("main").innerText()).replace(/\s+/g, " ");
   const numero = (texto.match(/(\d{3}-\d{3}-\d{7}|\b\d{7}\b)/) ?? [])[1] ?? null;
+  const estadoFinal = (await page.locator(".resultado-emision .estado-documento").first().getAttribute("data-estado").catch(() => null)) ?? null;
   await page.screenshot({ path: path.join(outDir, `${etiqueta}.png`), fullPage: true });
-  emitidas.push({ etiqueta, numero, aprobada });
-  return { aprobada, texto };
+  emitidas.push({ etiqueta, numero, aprobada, estado: estadoFinal, segundos: Math.round((Date.now() - inicio) / 1000) });
+  return { aprobada, texto, estado: estadoFinal };
 }
 
-async function casoMotivo(browser, motivo) {
-  const { ctx, page } = await entrar(browser, 1440, 900);
+async function casoMotivo(browser, motivo, ancho = 1440, alto = 900) {
+  const { ctx, page } = await entrar(browser, ancho, alto);
   try {
     await abrirNueva(page);
     await completarComun(page, { motivo });
     await page.waitForTimeout(500);
-    const r = await emitirYEsperar(page, `1440-motivo${motivo}`);
-    check(`CA-0${motivo === 1 ? 2 : 3} motivo ${motivo}: nota aprobada en SIFEN test`, r.aprobada, r.texto.slice(0, 200));
+    const r = await emitirYEsperar(page, `${ancho}-motivo${motivo}`);
+    check(`CA-0${motivo === 1 ? 2 : 3} motivo ${motivo} ${ancho}: nota aprobada en SIFEN test`, r.aprobada, `${r.estado} · ${r.texto.slice(0, 160)}`);
+    if (motivo === 7 && r.aprobada) {
+      const texto = await page.locator("main").innerText();
+      check("RN-20 motivo 7: dice 'Descargar para el traslado' y no ofrece WhatsApp ni correo", texto.includes("Descargar para el traslado") && !/WhatsApp/.test(texto), texto.slice(0, 120));
+    }
+    if (ancho < 1024) check("CA 390: resultado sin desplazamiento horizontal", await sinDesborde(page));
   } catch (e) {
-    check(`motivo ${motivo}: sin excepciones`, false, e.message);
-    await page.screenshot({ path: path.join(outDir, `motivo${motivo}-error.png`), fullPage: true }).catch(() => undefined);
+    check(`motivo ${motivo} ${ancho}: sin excepciones`, false, e.message);
+    await page.screenshot({ path: path.join(outDir, `motivo${motivo}-${ancho}-error.png`), fullPage: true }).catch(() => undefined);
+  } finally {
+    await ctx.close();
+  }
+}
+
+// RN-01b: el emisor tiene numerador tipo 7 en algun punto, pero no en el punto activo de este usuario.
+async function casoSinNumerador(browser) {
+  const cuenta = {
+    usuario: process.env.ENSAYO_USER2,
+    clave: fs.readFileSync(process.env.ENSAYO_PASSWORD_FILE2 ?? "", "utf8").trim(),
+    punto: process.env.ENSAYO_PUNTO2 ?? "001-003"
+  };
+  const { ctx, page } = await entrar(browser, 1440, 900, false, cuenta);
+  try {
+    await abrirNueva(page);
+    check("RN-01b: la pestaña se ofrece (el emisor tiene NRE_EMIT y numerador en otro punto)", (await page.locator(".remision-form").count()) === 1);
+    await completarComun(page, { motivo: 1 });
+    await page.waitForTimeout(500);
+    const r = await emitirYEsperar(page, "1440-sin-numerador");
+    check("RN-01b / RN-23: la nota queda en error operativo, sin reintentos", r.estado === "ERROR_OPERATIVO", `${r.estado} · ${r.texto.slice(0, 160)}`);
+    check("RN-01b: el mensaje dice que falta la numeracion y pide a Segel", r.texto.includes("todavía no tiene numeración para notas de remisión"), r.texto.slice(0, 300));
+  } catch (e) {
+    check("sin-numerador: sin excepciones", false, e.message);
+    await page.screenshot({ path: path.join(outDir, "sin-numerador-error.png"), fullPage: true }).catch(() => undefined);
+  } finally {
+    await ctx.close();
+  }
+}
+
+// RN-26: anular una nota de remision aprobada desde la ficha de Documentos (168 h).
+async function casoAnular(browser) {
+  const objetivo = process.env.ENSAYO_NRE_ANULAR ?? emitidas.filter((e) => e.aprobada && e.numero).map((e) => e.numero).pop();
+  if (!objetivo) {
+    check("RN-26 anular: hay una nota aprobada para anular", false, "sin nota; pasa ENSAYO_NRE_ANULAR");
+    return;
+  }
+  const { ctx, page } = await entrar(browser, 1440, 900);
+  try {
+    await abrirVista(page, "Documentos");
+    await page.getByRole("button", { name: /^Notas de remisión/ }).click();
+    await page.getByPlaceholder(/Buscar/).first().fill(objetivo.replace(/^\d{3}-\d{3}-/, ""));
+    await page.getByPlaceholder(/Buscar/).first().press("Enter");
+    const fila = page.locator("table.documents-tabla tbody tr", { hasText: objetivo.replace(/^\d{3}-\d{3}-/, "") }).first();
+    await fila.waitFor({ timeout: 15000 });
+    await fila.locator("button.enlace-fila").click();
+    const ficha = page.locator("aside.document-ficha");
+    await ficha.waitFor();
+    const anular = ficha.getByRole("button", { name: /Anular nota de remisión/ });
+    check("RN-26: la ficha ofrece 'Anular nota de remisión'", (await anular.count()) === 1 && (await anular.isEnabled()));
+    await anular.click();
+    const dialogo = page.getByRole("dialog");
+    await dialogo.waitFor({ timeout: 10000 });
+    await dialogo.locator("textarea, input[type=text]").first().fill("Prueba de anulación de nota de remisión desde FS");
+    await dialogo.getByRole("button", { name: /Anular/ }).last().click();
+    let estado = "";
+    for (let i = 0; i < 12; i += 1) {
+      await page.waitForTimeout(5000);
+      estado = (await ficha.locator(".estado-documento").first().getAttribute("data-estado").catch(() => "")) ?? "";
+      if (estado === "ANULADA") break;
+    }
+    check(`RN-26: la nota ${objetivo} queda ANULADA en SIFEN test`, estado === "ANULADA", `estado ${estado} · ${(await ficha.innerText()).replace(/\s+/g, " ").slice(0, 200)}`);
+    await page.screenshot({ path: path.join(outDir, "1440-anular.png"), fullPage: true });
+  } catch (e) {
+    check("anular: sin excepciones", false, e.message);
+    await page.screenshot({ path: path.join(outDir, "anular-error.png"), fullPage: true }).catch(() => undefined);
   } finally {
     await ctx.close();
   }
@@ -215,6 +307,9 @@ async function casoMotivo(browser, motivo) {
     if (corre("pantallas")) await casoPantallas(browser);
     if (corre("motivo1")) await casoMotivo(browser, 1);
     if (corre("motivo7")) await casoMotivo(browser, 7);
+    if (corre("motivo1-390")) await casoMotivo(browser, 1, 390, 844);
+    if (corre("sin-numerador")) await casoSinNumerador(browser);
+    if (corre("anular")) await casoAnular(browser);
   } finally {
     await browser.close();
   }

@@ -54,7 +54,7 @@ async function textoError(raiz, campo) {
 // CA-08: cliente viejo con RUC sin DV, creado por SQL (la API ya no lo deja crear).
 function crearClienteInvalido() {
   const fila = sql(
-    "select c.facturador_id || '|' || u.tenant_id from usuarios u join usuario_operacion_config c on c.usuario_id = u.id where u.username = 'operador-ensayo' limit 1"
+    `select c.facturador_id || '|' || u.tenant_id from usuarios u join usuario_operacion_config c on c.usuario_id = u.id where u.username = '${usuario}' limit 1`
   );
   const [facturadorId, tenantId] = fila.split("|");
   const nombre = `Prueba VAL viejo ${Date.now() % 100000}`;
