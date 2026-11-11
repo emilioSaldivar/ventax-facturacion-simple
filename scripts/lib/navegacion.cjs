@@ -11,8 +11,12 @@ async function esperarSesion(page, timeout = 20000) {
   const opcion = page.locator(".perfil-eleccion .perfil-opcion").first();
   await sesion.or(opcion).waitFor({ timeout });
   if (await sesion.isVisible().catch(() => false)) return;
-  const punto = process.env.ENSAYO_PUNTO ?? "001-001";
-  await page.locator(`.perfil-eleccion .perfil-opcion[aria-label*="${punto}"]`).first().click();
+  // Si el guion ya eligio, las opciones quedan deshabilitadas mientras la app entra: solo se espera.
+  const habilitadas = page.locator(".perfil-eleccion .perfil-opcion:not([disabled])");
+  if ((await habilitadas.count()) > 0) {
+    const punto = process.env.ENSAYO_PUNTO ?? "001-001";
+    await page.locator(`.perfil-eleccion .perfil-opcion:not([disabled])[aria-label*="${punto}"]`).first().click().catch(() => undefined);
+  }
   await sesion.waitFor({ timeout });
 }
 

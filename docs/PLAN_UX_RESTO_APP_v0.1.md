@@ -212,6 +212,16 @@ Carpeta `apps/web-operacion/src/components/`, un archivo por componente, clases 
 | `CampoFormulario` | `{ etiqueta: string; id: string; ayuda?: string; error?: string; children }`. Renderiza `<label htmlFor={id}>` y el error con `role="alert"` | `CreditNoteView` motivo (`:4710`) | etiquetas sueltas, placeholders como etiqueta |
 | `CampoContrasena` | `{ id; etiqueta; value; onChange; autoComplete?; disabled? }`. El boton "Mostrar contraseña" va **dentro** del campo, 44×44, alcanzable con Tab (sin `tabIndex={-1}`), `aria-pressed`. CSS: el campo ocupa el 100 % del ancho del contenedor (hoy `.password-input input` no estira en el dialogo: H-05) | `LoginScreen:1348` y `CambioPerfilDialog:1603` | `.password-input`, `.password-toggle`, `EyeIcon` (pasa a `Icono` `ojo`/`ojo-tachado`) |
 
+Ajustes al contrato hechos al implementar (URA-017, `ec4bbc4`):
+
+- `Icono` se movio antes a `components/Icono.tsx` (commit solo de movimiento `4446abd`): los componentes lo usan y no pueden importarlo de `main.tsx` sin una dependencia circular. Suma `mas-opciones`, `ojo` y `ojo-tachado`.
+- `EncabezadoPantalla` suma `rotulo?: string` (el texto chico de arriba, `.eyebrow`) e `id?: string` (para el `aria-labelledby` de la seccion). `rotulo` existe solo hasta que R-1 (URA-002) quite los rotulos.
+- `Dialogo` suma `useConfirmar()`: devuelve `[confirmar, elemento]` y `await confirmar({...})` reemplaza a `window.confirm` sin reordenar el codigo que lo llama. Sin `abierto`: el dialogo existe mientras se renderiza. Fondo con el token nuevo `--color-velo`.
+- `CampoContrasena` envuelve el control en su `<label>` (asociacion implicita, sin `id`), con `aria-label="Mostrar contraseña"` fijo y `aria-pressed`. Su estilo propio va con `:where(.campo-contrasena) input` para que el login conserve el suyo.
+- `CampoFormulario` suma `className` para conservar el estilo de la pantalla que lo adopta (`credit-note-motivo`).
+- `lib/estados.ts` implementa `estadoDocumento` y `estadoRecibo`, y absorbe `formatDocumentoTipo` y `esNotaSinConfirmar` (movidos). `estadoNota` y `estadoCarga` se agregan cuando Presupuestos (URA-010) y la carga masiva (URA-011) adopten `PastillaEstado`, para no dejar codigo sin uso. La ficha de Documentos sigue con `formatEstadoDocumento` (con emoji) hasta URA-007.
+- `MenuFila` lleva el foco a la primera opcion al abrir.
+
 Validacion: `typecheck`, `lint`, `build`; `grep -n 'window.confirm\|[^a-zA-Z.]confirm(' src/*.tsx` vacio; en el guion de reconocimiento, el conteo de "sin nombre" baja (⋮ de Catalogo) y nada sube; prueba manual con Playwright en `scripts/segel-fs/playwright-ux-resto-app.cjs` (se crea en esta tarea con los casos de la fase 0 y crece en URA-012): abrir "Quitar esta linea" en Nueva factura con una linea cargada → Escape cierra sin quitar → el foco vuelve al boton; Tab dentro del dialogo no sale de el (CA-13). Regresion: `playwright-multiperfil-v02.cjs` (usa "Mostrar contraseña" del dialogo: actualizar su selector si cambia).
 
 ### 10.4 Cliente de API (URA-018)

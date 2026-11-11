@@ -36,14 +36,14 @@ No reemplazan a SPEC, PLAN y TASKS: el alcance de cada cambio lo sigue fijando s
 
   | Componente | Uso | Estado al 2026-11-10 |
   |---|---|---|
-  | `Icono` | Todos los iconos (SVG, 18 px por defecto) | Existe (`main.tsx`, `Icono`) |
-  | `EncabezadoPantalla` | Titulo, subtitulo y acciones de cada pantalla | A crear (URA-017); hoy `editor-heading`, `view-header` y `receipt-heading` |
-  | `PastillaEstado` | Estado de un documento o comprobante; conserva las clases `status-pill estado-documento` y `data-estado` que leen los guiones | A crear desde `EstadoDocumentoPill`; hoy hay 12 implementaciones del mapeo |
-  | `Aviso` | Error, advertencia, informacion o exito dentro de la pantalla, con `role="alert"` o `status` | A crear; hoy seis clases distintas |
-  | `EstadoVacio` | Lista o tabla sin resultados | A crear; hoy tres clases |
-  | `Dialogo` | Toda ventana modal y toda confirmacion | A crear; hoy cinco mecanismos y tres `window.confirm` |
-  | `MenuFila` | Menu ⋮ de una fila o tarjeta | A crear; hoy `client-row-menu` e `invoice-card-menu` |
-  | `CampoFormulario` y `CampoContrasena` | Etiqueta, control, ayuda y error; mostrar contraseña | A crear; hoy el campo de contraseña del cambio de punto no ocupa el ancho |
+  | `Icono` | Todos los iconos (SVG, 18 px por defecto) | Existe (`components/Icono.tsx`) |
+  | `EncabezadoPantalla` | Titulo, subtitulo y acciones de cada pantalla | Existe (`components/`, URA-017); lo adoptan las pantallas en las fases 1 y 2 |
+  | `PastillaEstado` | Estado de un documento o comprobante; conserva las clases `status-pill estado-documento` y `data-estado` que leen los guiones | Existe, con `lib/estados.ts` (URA-017); usada en Documentos y Recibos |
+  | `Aviso` | Error, advertencia, informacion o exito dentro de la pantalla, con `role="alert"` o `status` | Existe (URA-017); usado en Notas de credito |
+  | `EstadoVacio` | Lista o tabla sin resultados | Existe (URA-017) |
+  | `Dialogo`, `ConfirmarDialogo`, `useConfirmar` | Toda ventana modal y toda confirmacion | Existe (URA-017); ya no hay `window.confirm` |
+  | `MenuFila` | Menu de mas opciones de una fila o tarjeta | Existe (URA-017); usado en Catalogo |
+  | `CampoFormulario` y `CampoContrasena` | Etiqueta, control, ayuda y error; mostrar contraseña | Existen (URA-017); login y cambio de punto usan `CampoContrasena` |
   | `AccionesEntrega` | PDF, XML, WhatsApp, copiar enlace | A crear desde `ResultadoEmision`; hoy cuatro versiones |
   | `AutocompletarCliente` | Busqueda de cliente | A crear; hoy cuatro listas de sugerencias |
   | `Paginador` | Paginas de una lista | A crear; hoy unas cuentan desde 0 y otras desde 1 |
