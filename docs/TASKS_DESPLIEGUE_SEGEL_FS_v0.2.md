@@ -149,3 +149,14 @@ Autorizado por el usuario directamente en la sesion de FS. Hecho desde la estaci
 - `FE_REF` por defecto pasa a `segel-rc4.6.1`.
 - **Pendiente:** los topes siguen en los valores de 3,6 GiB; con los 8 GB entregados, pasarlos a los de 8 GB (fase 2 del runbook) es decision del usuario. Las imagenes `:antes-rc4.6.1` quedan para volver atras.
 
+
+### E-6. Despliegue en `segel-fs` de FS `segel-fs-2026.11.11` (2026-11-11)
+
+Pedido directo del usuario en la sesion de FS ("Desplegá FS segel-fs-2026.11.11 (b252627) en segel-fs, solo FS, con respaldo previo"), para dar de alta a un cliente en espera. Hecho desde la sesion de FS; FE no se toco.
+
+- **Contenido:** FS `de601a1` → `b252627` (tag local `segel-fs-2026.11.11`): multiperfil (FS-54, migraciones `0044` y `0045`) y UX resto app fase 0 y fase 1 (`TASKS_UX_RESTO_APP_v0.1`). Sin cambios de compose, plantillas ni variables.
+- **Respaldo:** `pg_dump -Fc` de la base FS sin datos del padron, guardado en la VPS en `backups/fs/20261111T104708Z` (280 KB, permiso 700, con la lista de imagenes y SHA256). No se copio a la estacion. Restauracion comprobada en un Postgres descartable en la VPS: 307 facturas, migracion 0043, contenedor eliminado.
+- **Imagenes:** API/migrate y frontend construidas en la estacion desde el tag con `BUILD_COMMIT_SHA=b252627` y transferidas por SSH. Las anteriores quedan como `segel-fs-{api,migrate,frontend}:antes-multiperfil` para volver atras. El loader DNIT sigue con su imagen anterior.
+- **Arranque:** solo `migrate`, `api` y `frontend` de FS, mas `restart frontend` (como `up.sh`).
+- **Verificacion sin emitir:** migrate aplico `0044` y `0045` (45 migraciones); 307 de 307 facturas con perfil tras el backfill; 1 configuracion operativa activa; API y frontend `healthy`; `X-App-Version: b252627` por el frontend; `/app/` 200; salud de FE por la red interna OK; 0 errores en la API en los primeros minutos. El ingreso del operador no se probo: la sesion de FS no tiene credenciales de produccion.
+- **Vuelta atras:** volver a etiquetar `:antes-multiperfil` como `:latest`, restaurar el respaldo (las migraciones 0044/0045 no tienen reversa automatica) y recrear `migrate`, `api` y `frontend`.
