@@ -323,7 +323,7 @@ Por tarea: `npm run typecheck`, `npm run lint`, `npm run build` (raiz). Al cerra
 ### 12.1 Antes de cada tarea
 
 1. Leer `AGENTS.md`, `docs/PAUTAS_FRONTEND_v0.1.md`, esta cadena (SPEC, PLAN, TASKS) y la tarea en cuestion.
-2. `git status` y `git log --oneline -5`. Archivos de **otra sesion** que nunca se agregan a un commit ni se modifican: `TMP/`, `scripts/guia-uso-segel.cjs`, `docs/SPEC_IDENTIDAD_MARCA_SEGEL_v0.1.md` y `docs/PLAN_IDENTIDAD_MARCA_SEGEL_v0.1.md` mientras figuren modificados sin commit. Los commits se arman con `git add <archivos propios>`, nunca `git add -A`.
+2. `git status` y `git log --oneline -5`. Archivos de **otra sesion** que nunca se agregan a un commit ni se modifican: `TMP/`, `scripts/guia-uso-segel.cjs`, `docs/SPEC_IDENTIDAD_MARCA_SEGEL_v0.1.md` y `docs/PLAN_IDENTIDAD_MARCA_SEGEL_v0.1.md` mientras figuren modificados sin commit. Los commits se arman con `git add <archivos propios>`, nunca `git add -A` ni una carpeta entera (`git add scripts` agrega tambien los archivos sin versionar de la otra sesion: paso en URA-020 y se corrigio antes de publicar).
 3. Releer las lineas citadas en §10.0: si `main.tsx` o `styles.css` cambiaron desde `63be9d3` (`git log -3 -- apps/web-operacion/src`), ubicar de nuevo cada referencia antes de editar.
 4. Si la tarea toca pantallas de multiperfil (URA-021) o un bloque grande de `main.tsx` (URA-023), avisar a la otra sesion por el medio que use el usuario y esperar su respuesta; si no hay respuesta, anotarlo en Evidencia y seguir con el bloque mas chico posible.
 
