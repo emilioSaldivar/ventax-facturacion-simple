@@ -33,6 +33,9 @@ import { ApiProvider, useApi } from "./api/useApi";
 import type { AuthResponse, PerfilDisponible, UserSummary } from "./tipos";
 import { type ViewState, type OperationView, type CondicionVenta, type TipoTransaccionServicio, type DocumentoIdentidadTipo, type TipoIva, type DocumentoEstado, type BeforeInstallPromptEvent, type OperationalContextResponse, type ReadinessResponse, type ClienteNaturaleza, type FacturaClienteInput, type FacturaPreviewRequest, type FacturaPreviewResponse, type DocumentoAccion, type DocumentoAccionSoportePayload, type DocumentoInutilizacion, type NotaCreditoSaldoResponse, type DocumentoResponse, type DocumentoListResponse, type NotaCreditoCandidate, type NotaCreditoCandidateListResponse, type DeliveryLinkResponse, type EmailStatusResponse, type DocumentoEventosListResponse, type DocumentoDecisionResponse, type DocumentoValidateCdcImpactResponse, type DocumentoGestionResendResponse, type DocumentoGestionCreateDerivedResponse, type DocumentoGestionCancelSendResponse, type DocumentoGestionVoidResponse, type BatchPendientesGestionResponse, type ReconciliacionFiscalResponse, type InvoiceLineDraft, type ClienteSearchResult, type ClienteResponse, type ClienteListResponse, type DnitAutocompleteResponse, type CatalogoItem, type CatalogoItemListResponse, type CatalogoDraft, type InvoiceClientePrefillRequest, type NotaPublicaPayload, type ReciboPublicaPayload, type TycCurrentData, type ClasePaso, type MonedaFactura, type SifenSummary, type NotaTipo, type NotaEstadoComercial, type NotaEstadoVisual, type NotaFilaTipo, type NotaFilaDraft, type NotaClienteDraft, type NotaListItem, type NotaConItems, type InvoiceInitialDraft, type ReciboFormaPago, type ReciboRecord } from "./tipos";
 import { formatMonto, formatGuaranies, formatCantidad, formatShortDate, fmtFecha, formatHora, formatIntegerInput, normalizeIntegerInput, buildWhatsAppShareUrl, firstText, iniciales, formatYmdFromDate, formatUltimaVerificacion } from "./lib/formato";
+import { BrandMark } from "./components/BrandMark";
+import { LoadingScreen } from "./components/LoadingScreen";
+import { TotalRow } from "./components/TotalRow";
 
 const ACCESS_TOKEN_STORAGE_KEY = "ventax_factura_access_token";
 
@@ -6131,39 +6134,6 @@ function ResultadoEmision({
           </details>
         </aside>
       </div>
-    </div>
-  );
-}
-
-function TotalRow({ label, value, strong = false, moneda = "PYG" }: { label: string; value: number; strong?: boolean; moneda?: string }) {
-  return (
-    <div className={strong ? "total-row strong" : "total-row"}>
-      <span>{label}</span>
-      <strong>{formatMonto(value, moneda)}</strong>
-    </div>
-  );
-}
-
-function LoadingScreen({ message }: { message: string }) {
-  return (
-    <main className="auth-shell">
-      <section className="loading-panel" aria-live="polite">
-        <BrandMark />
-        <div className="spinner" aria-hidden="true" />
-        <p>{message}</p>
-      </section>
-    </main>
-  );
-}
-
-function BrandMark({ compact = false }: { compact?: boolean }) {
-  return (
-    <div className={compact ? "brand-mark compact" : "brand-mark"} aria-label="Segel Factura">
-      <img
-        alt="Segel"
-        className="brand-logo"
-        src={compact ? "/app/brand/segel-isotipo.svg" : "/app/brand/segel-logo-fondo-claro.svg"}
-      />
     </div>
   );
 }
