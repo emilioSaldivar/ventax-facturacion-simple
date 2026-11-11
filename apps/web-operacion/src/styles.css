@@ -4219,8 +4219,10 @@ dd {
 /* ─── SPEC_MULTIPERFIL_USUARIO_v0.1: punto de expedicion por sesion ─────────── */
 .topbar-facturador--boton {
   display: flex;
+  flex: 1 1 auto;
   align-items: center;
   gap: 8px;
+  min-width: 0;
   max-width: 100%;
   padding: 4px 8px;
   margin: 0 -8px;
@@ -4393,4 +4395,10 @@ dd {
 .documents-tabla-punto {
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
+}
+
+/* Con el boton del facturador, "Salir" no se parte en dos lineas en celular. */
+.topbar > .ghost-action.compact {
+  flex: none;
+  white-space: nowrap;
 }
