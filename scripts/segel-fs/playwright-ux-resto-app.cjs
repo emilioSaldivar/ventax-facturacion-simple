@@ -491,7 +491,8 @@ async function casoBusqueda(browser) {
   try {
     async function buscarEnDocumentos(pestana, texto) {
       await abrirVista(page, "Documentos");
-      await page.getByRole("group", { name: "Tipo de documento" }).getByRole("button", { name: pestana, exact: true }).click();
+      // La pestaña activa suma su cantidad ("Notas de crédito · 7", D-9).
+      await page.getByRole("group", { name: "Tipo de documento" }).getByRole("button", { name: new RegExp(`^${pestana}( · \\d+)?$`) }).click();
       await page.getByPlaceholder("Buscar factura...").fill(texto);
       await page.getByPlaceholder("Buscar factura...").press("Enter");
       await page.waitForTimeout(1500);
