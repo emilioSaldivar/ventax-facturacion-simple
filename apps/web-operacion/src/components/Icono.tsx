@@ -4,7 +4,8 @@ import React from "react";
 export type NombreIcono =
   | "factura" | "agenda" | "documentos" | "notas" | "recibos" | "catalogo" | "devolver" | "estado" | "menu" | "salir"
   | "buscar" | "mas" | "papelera" | "guardar" | "lapiz" | "tilde" | "reloj" | "alerta" | "whatsapp" | "copiar"
-  | "compartir" | "pdf" | "chevron-abajo" | "chevron-derecha" | "chevron-izquierda";
+  | "compartir" | "pdf" | "chevron-abajo" | "chevron-derecha" | "chevron-izquierda"
+  | "mas-opciones" | "ojo" | "ojo-tachado";
 
 const TRAZOS_ICONO: Record<NombreIcono, React.ReactNode> = {
   factura: <><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6" /><path d="M12 18v-6" /><path d="M9 15h6" /></>,
@@ -31,7 +32,28 @@ const TRAZOS_ICONO: Record<NombreIcono, React.ReactNode> = {
   pdf: <><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6" /></>,
   "chevron-abajo": <path d="m6 9 6 6 6-6" />,
   "chevron-derecha": <path d="m9 6 6 6-6 6" />,
-  "chevron-izquierda": <path d="m15 6-6 6 6 6" />
+  "chevron-izquierda": <path d="m15 6-6 6 6 6" />,
+  // PAUTAS_FRONTEND_v0.1 P-I1 (URA-017): reemplazan a "⋮" y al EyeIcon propio.
+  "mas-opciones": (
+    <>
+      <circle cx="12" cy="5" r="1" />
+      <circle cx="12" cy="12" r="1" />
+      <circle cx="12" cy="19" r="1" />
+    </>
+  ),
+  ojo: (
+    <>
+      <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z" />
+      <circle cx="12" cy="12" r="3" />
+    </>
+  ),
+  "ojo-tachado": (
+    <>
+      <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z" />
+      <circle cx="12" cy="12" r="3" />
+      <path d="M2 21 22 3" />
+    </>
+  )
 };
 
 export function Icono({ nombre, tamano = 18, grosor = 2 }: { nombre: NombreIcono; tamano?: number; grosor?: number }) {

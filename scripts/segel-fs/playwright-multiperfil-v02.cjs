@@ -137,7 +137,7 @@ async function api(metodo, ruta, token, cuerpo) {
       check("CA-23: el dialogo no muestra 'Ultimo numero'", !/ultimo numero/i.test(await dialogo.innerText()));
       const campo = dialogo.locator(".password-input input");
       await campo.fill("abc");
-      await dialogo.getByRole("button", { name: "Mostrar contrasena" }).click();
+      await dialogo.getByRole("button", { name: "Mostrar contraseña" }).click();
       check("B.6: el ojo muestra la contraseña", (await campo.getAttribute("type")) === "text");
       await page.screenshot({ path: path.join(outDir, "1440-dialogo-ojo.png") });
       await dialogo.getByRole("button", { name: "Cancelar" }).click();

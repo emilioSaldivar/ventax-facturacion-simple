@@ -3,7 +3,16 @@ import { createRoot } from "react-dom/client";
 import "./styles.css";
 
 import { CargaMasivaView } from "./carga-masiva";
+import { Aviso, type TonoAviso } from "./components/Aviso";
+import { CampoContrasena } from "./components/CampoContrasena";
+import { CampoFormulario } from "./components/CampoFormulario";
+import { useConfirmar } from "./components/Dialogo";
+import { EncabezadoPantalla } from "./components/EncabezadoPantalla";
+import { EstadoVacio } from "./components/EstadoVacio";
 import { Icono, type NombreIcono } from "./components/Icono";
+import { MenuFila } from "./components/MenuFila";
+import { PastillaEstado } from "./components/PastillaEstado";
+import { esNotaSinConfirmar, estadoDocumento, estadoRecibo, formatDocumentoTipo } from "./lib/estados";
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "/api/v1";
 const ACCESS_TOKEN_STORAGE_KEY = "ventax_factura_access_token";
@@ -1278,24 +1287,6 @@ function App() {
   );
 }
 
-function EyeIcon({ crossed }: { crossed: boolean }) {
-  return (
-    <svg fill="none" height="18" viewBox="0 0 24 24" width="18" xmlns="http://www.w3.org/2000/svg">
-      <path
-        d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z"
-        stroke="currentColor"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth="1.6"
-      />
-      <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="1.6" />
-      {crossed ? (
-        <line stroke="currentColor" strokeLinecap="round" strokeWidth="1.6" x1="2" x2="22" y1="21" y2="3" />
-      ) : null}
-    </svg>
-  );
-}
-
 function LoginScreen({
   errorMessage,
   onLogin,
@@ -1308,7 +1299,6 @@ function LoginScreen({
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -1345,28 +1335,7 @@ function LoginScreen({
               value={username}
             />
           </label>
-          <label>
-            Contrasena
-            <div className="password-input">
-              <input
-                autoComplete="current-password"
-                name="password"
-                onChange={(event) => setPassword(event.target.value)}
-                required
-                type={showPassword ? "text" : "password"}
-                value={password}
-              />
-              <button
-                aria-label={showPassword ? "Ocultar contrasena" : "Mostrar contrasena"}
-                className="password-toggle"
-                onClick={() => setShowPassword((value) => !value)}
-                tabIndex={-1}
-                type="button"
-              >
-                <EyeIcon crossed={showPassword} />
-              </button>
-            </div>
-          </label>
+          <CampoContrasena etiqueta="Contrasena" name="password" onChange={setPassword} required value={password} />
 
           {errorMessage ? <p className="form-error">{errorMessage}</p> : null}
 
@@ -1535,7 +1504,6 @@ function CambioPerfilDialog({
 }) {
   const [elegido, setElegido] = useState<string | null>(null);
   const [password, setPassword] = useState("");
-  const [mostrarPassword, setMostrarPassword] = useState(false);
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -1598,28 +1566,8 @@ function CambioPerfilDialog({
             );
           })}
         </div>
-        <label>
-          Tu contraseña
-          {/* SPEC_MULTIPERFIL_USUARIO_v0.2 B.6 (M-3): igual que el login. */}
-          <div className="password-input">
-            <input
-              autoComplete="current-password"
-              disabled={enviando}
-              onChange={(event) => setPassword(event.target.value)}
-              type={mostrarPassword ? "text" : "password"}
-              value={password}
-            />
-            <button
-              aria-label={mostrarPassword ? "Ocultar contrasena" : "Mostrar contrasena"}
-              className="password-toggle"
-              onClick={() => setMostrarPassword((v) => !v)}
-              tabIndex={-1}
-              type="button"
-            >
-              <EyeIcon crossed={mostrarPassword} />
-            </button>
-          </div>
-        </label>
+        {/* SPEC_MULTIPERFIL_USUARIO_v0.2 B.6 (M-3): igual que el login; URA-017: CampoContrasena (H-05). */}
+        <CampoContrasena disabled={enviando} etiqueta="Tu contraseña" onChange={setPassword} value={password} />
         {hayDocumentoSinEmitir ? (
           <p className="aviso-perfil" role="alert">Tenes un documento sin emitir. Si cambias de punto se descarta.</p>
         ) : null}
@@ -2548,6 +2496,8 @@ function DocumentsView({
   const [quickMenuDocId, setQuickMenuDocId] = useState<string | null>(null);
   // SPEC_DOCUMENTOS_ESCRITORIO_v0.1: tabla en escritorio y paginacion en las dos vistas.
   const esEscritorio = useEsEscritorio();
+  // URA-017: confirmaciones con Dialogo (PAUTAS_FRONTEND_v0.1 P-L6).
+  const [confirmar, dialogoConfirmar] = useConfirmar();
   const [pagina, setPagina] = useState(1);
   const [totalDocumentos, setTotalDocumentos] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -2723,7 +2673,7 @@ function DocumentsView({
     if (!selected || !isInternalSupport) {
       return;
     }
-    if (!window.confirm("Cancelar envío local del documento en cola batch?")) {
+    if (!(await confirmar({ titulo: "¿Cancelar el envío local del documento en cola batch?", textoConfirmar: "Cancelar envío", textoCancelar: "Volver", peligro: true }))) {
       return;
     }
     setActionLoading(true);
@@ -4079,6 +4029,7 @@ function DocumentsView({
           </section>
         </div>
       ) : null}
+      {dialogoConfirmar}
     </section>
   );
 }
@@ -4557,7 +4508,8 @@ function CreditNoteView({
   const [emitting, setEmitting] = useState(false);
   const [result, setResult] = useState<DocumentoResponse | null>(null);
   const [deliveryLink, setDeliveryLink] = useState<DeliveryLinkResponse | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
+  // URA-017: el tono del aviso se decide donde se produce el mensaje, no buscando "emitida" en el texto.
+  const [aviso, setAviso] = useState<{ tono: TonoAviso; texto: string } | null>(null);
   // SPEC_MULTIPERFIL_USUARIO_v0.1 RN-06: una factura elegida con motivo y sin NC emitida es un borrador.
   useBorradorSinEmitir("nota-credito", () => Boolean(selected && !result && motivo.trim()));
 
@@ -4567,7 +4519,7 @@ function CreditNoteView({
 
   async function loadCandidates(nextQuery = query) {
     setLoading(true);
-    setMessage(null);
+    setAviso(null);
     const params = new URLSearchParams({ limit: "30", offset: "0" });
     if (nextQuery.trim()) {
       params.set("q", nextQuery.trim());
@@ -4578,7 +4530,7 @@ function CreditNoteView({
       setCandidates(response.items);
       setSelected((current) => (current ? response.items.find((item) => item.documento.id === current.documento.id) ?? current : current));
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "No se pudieron cargar facturas candidatas.");
+      setAviso({ tono: "error", texto: error instanceof Error ? error.message : "No se pudieron cargar facturas candidatas." });
     } finally {
       setLoading(false);
     }
@@ -4586,16 +4538,16 @@ function CreditNoteView({
 
   async function emitNotaCredito() {
     if (!selected?.elegible) {
-      setMessage(selected?.motivo_no_elegible ?? "Seleccione una factura elegible.");
+      setAviso({ tono: "atencion", texto: selected?.motivo_no_elegible ?? "Seleccione una factura elegible." });
       return;
     }
     if (!motivo.trim()) {
-      setMessage("Motivo requerido.");
+      setAviso({ tono: "atencion", texto: "Motivo requerido." });
       return;
     }
 
     setEmitting(true);
-    setMessage(null);
+    setAviso(null);
     setDeliveryLink(null);
 
     try {
@@ -4604,13 +4556,13 @@ function CreditNoteView({
         body: JSON.stringify({ motivo: motivo.trim() })
       });
       setResult(notaCredito);
-      setMessage(mensajeNotaCredito(notaCredito));
+      setAviso({ tono: notaCredito.estado === "EMITIDA" ? "exito" : notaCredito.estado === "RECHAZADA" ? "error" : "atencion", texto: mensajeNotaCredito(notaCredito) });
       if (notaCredito.estado === "EMITIDA") {
         const link = await api.post<DeliveryLinkResponse>(`/facturas/${notaCredito.id}/delivery-link`, { regenerate: false });
         setDeliveryLink(link);
       }
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "No se pudo emitir la nota de credito.");
+      setAviso({ tono: "error", texto: error instanceof Error ? error.message : "No se pudo emitir la nota de credito." });
     } finally {
       setEmitting(false);
     }
@@ -4618,15 +4570,7 @@ function CreditNoteView({
 
   return (
     <section className="documents-view" aria-labelledby="credit-note-title">
-      <div className="editor-heading">
-        <div>
-          <p className="eyebrow">Nueva nota de credito</p>
-          <h2 id="credit-note-title">Seleccionar factura</h2>
-        </div>
-        <button className="ghost-action" onClick={onBack} type="button">
-          Volver
-        </button>
-      </div>
+      <EncabezadoPantalla id="credit-note-title" onVolver={onBack} rotulo="Nueva nota de credito" titulo="Seleccionar factura" />
       <section className="documents-filters">
         <label>
           Buscar factura
@@ -4646,11 +4590,11 @@ function CreditNoteView({
         </button>
       </section>
 
-      {message ? <p className={message.includes("emitida") ? "editor-alert ready" : "form-error"}>{message}</p> : null}
+      {aviso ? <Aviso tono={aviso.tono}>{aviso.texto}</Aviso> : null}
 
       <section className="documents-layout">
         <div className="documents-list">
-          {candidates.length === 0 && !loading ? <p className="muted empty-state">Sin facturas para los filtros actuales.</p> : null}
+          {candidates.length === 0 && !loading ? <EstadoVacio>Sin facturas para los filtros actuales.</EstadoVacio> : null}
           {candidates.map((candidate) => (
             <button
               className={selected?.documento.id === candidate.documento.id ? "document-row active" : "document-row"}
@@ -4708,10 +4652,9 @@ function CreditNoteView({
                   {etiquetaPunto(context.fiscal_context)} (punto activo).
                 </p>
               ) : null}
-              <label className="credit-note-motivo">
-                Motivo
+              <CampoFormulario className="credit-note-motivo" etiqueta="Motivo">
                 <textarea onChange={(event) => setMotivo(event.target.value)} rows={4} value={motivo} />
-              </label>
+              </CampoFormulario>
               <button className="primary-action wide" disabled={emitting || !selected.elegible} onClick={() => void emitNotaCredito()} type="button">
                 {emitting ? "Emitiendo..." : "Emitir nota de credito"}
               </button>
@@ -4970,24 +4913,24 @@ function CatalogView({
                   <small>{formatIva(item.iva_tipo)}</small>
                 </span>
               </button>
-              <div className="document-row-menu-wrapper">
-                <button className="icon-menu-action" onClick={() => setMenuItemId((current) => (current === item.id ? null : item.id))} type="button">⋮</button>
-                {menuItemId === item.id ? (
-                  <div className="client-row-menu" role="menu" aria-label="Acciones del item">
-                    <button onClick={() => openEdit(item)} role="menuitem" type="button">Editar</button>
-                    <button onClick={() => duplicateItem(item)} role="menuitem" type="button">Duplicar</button>
-                    {item.activo ? (
-                      <button onClick={() => void archiveItem(item)} role="menuitem" type="button">Archivar</button>
-                    ) : (
-                      <button disabled role="menuitem" type="button">Archivado</button>
-                    )}
-                    <hr />
-                    <button className="destructive-item" onClick={() => openDeleteConfirm(item)} role="menuitem" type="button">
-                      Eliminar permanentemente
-                    </button>
-                  </div>
-                ) : null}
-              </div>
+              <MenuFila
+                abierto={menuItemId === item.id}
+                etiqueta={`Acciones de ${item.descripcion}`}
+                onAbrir={() => setMenuItemId(item.id)}
+                onCerrar={() => setMenuItemId(null)}
+              >
+                <button onClick={() => openEdit(item)} role="menuitem" type="button">Editar</button>
+                <button onClick={() => duplicateItem(item)} role="menuitem" type="button">Duplicar</button>
+                {item.activo ? (
+                  <button onClick={() => void archiveItem(item)} role="menuitem" type="button">Archivar</button>
+                ) : (
+                  <button disabled role="menuitem" type="button">Archivado</button>
+                )}
+                <hr />
+                <button className="destructive-item" onClick={() => openDeleteConfirm(item)} role="menuitem" type="button">
+                  Eliminar permanentemente
+                </button>
+              </MenuFila>
             </article>
           ))}
         </div>
@@ -7012,6 +6955,7 @@ function GrillaLineas({
   onGuardarCatalogo: (line: InvoiceLineDraft) => void;
 }) {
   const [filaConFoco, setFilaConFoco] = useState<string | null>(null);
+  const [confirmar, dialogoConfirmar] = useConfirmar();
   const enMonedaExtranjera = moneda !== "PYG";
 
   function enfocarDescripcion(indice: number) {
@@ -7027,8 +6971,8 @@ function GrillaLineas({
     }
   }
 
-  function quitar(line: InvoiceLineDraft) {
-    if (lineaTieneDatos(line) && !window.confirm("¿Quitar esta línea?")) return;
+  async function quitar(line: InvoiceLineDraft) {
+    if (lineaTieneDatos(line) && !(await confirmar({ titulo: "¿Quitar esta línea?", textoConfirmar: "Quitar" }))) return;
     onQuitar(line.id);
   }
 
@@ -7186,6 +7130,7 @@ function GrillaLineas({
         <span className="tarjeta-cabecera-espacio" />
         {enMonedaExtranjera ? <span className="muted">Guardar en el catalogo no disponible en {moneda}</span> : null}
       </div>
+      {dialogoConfirmar}
     </div>
   );
 }
@@ -7541,10 +7486,6 @@ function formatEmisor(documento: DocumentoResponse): string | null {
   return emisor.display_name ?? emisor.username;
 }
 
-function formatDocumentoTipo(value: DocumentoResponse["tipo"]): string {
-  return value === "NOTA_CREDITO" ? "Nota credito" : value === "NOTA_REMISION" ? "Nota de remisión" : "Factura";
-}
-
 function getDocumentoNombreLower(tipo: DocumentoResponse["tipo"]): string {
   return tipo === "NOTA_CREDITO" ? "nota de credito" : tipo === "NOTA_REMISION" ? "nota de remisión" : "factura";
 }
@@ -7793,17 +7734,9 @@ function formatSifenSummary(summary: SifenSummary | null): string {
 }
 
 /** FS-34: estado del documento a primera vista en el listado. */
+/** URA-017: la pastilla sale del mapa unico de lib/estados.ts, sin emojis (PAUTAS_FRONTEND_v0.1 P-E1, P-I1). */
 function EstadoDocumentoPill({ documento }: { documento: DocumentoResponse }) {
-  const clase =
-    documento.estado === "EMITIDA" ? "ready"
-    : documento.estado === "ANULADA" ? "anulada"
-    : documento.estado === "RECHAZADA" || documento.estado === "ERROR_OPERATIVO" || esNotaSinConfirmar(documento) ? "rechazado"
-    : "pending";
-  return (
-    <small className={`status-pill estado-documento ${clase}`} data-estado={documento.estado}>
-      {formatEstadoDocumento(documento)}
-    </small>
-  );
+  return <PastillaEstado {...estadoDocumento(documento)} />;
 }
 
 /** FS-31, RN-31.1: estados sin validez fiscal. Mismo criterio que el servicio de entrega. */
@@ -8015,10 +7948,6 @@ async function readApiError(response: Response): Promise<string> {
 }
 
 /** SPEC_NOTA_CREDITO_TRABADA_v0.1, RN-06: una nota trabada nunca se muestra como "en proceso". */
-function esNotaSinConfirmar(documento: DocumentoResponse): boolean {
-  return Boolean(documento.accion_detalle?.acciones_sugeridas.includes("REINTENTAR_NOTA_CREDITO"));
-}
-
 function formatEstadoDocumento(documento: DocumentoResponse): string {
   if (esNotaSinConfirmar(documento)) return "🟠 Nota credito sin confirmar";
   // SPEC_CORRECCION_INUTILIZACION_RECHAZADAS_v0.1, RN-C1.
@@ -9220,6 +9149,7 @@ function RecibosView({
 }) {
   const api = useMemo(() => createApiClient(accessToken, setAccessToken), [accessToken, setAccessToken]);
   const [recibos, setRecibos] = useState<ReciboRecord[]>([]);
+  const [confirmar, dialogoConfirmar] = useConfirmar();
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -9456,7 +9386,7 @@ function RecibosView({
     setSaving(true);
     setError(null);
     try {
-      if (!confirm(`¿Emitir el recibo para ${r.pagador_nombre}? Esta accion no se puede deshacer.`)) return;
+      if (!(await confirmar({ titulo: `¿Emitir el recibo para ${r.pagador_nombre}?`, texto: "Esta accion no se puede deshacer.", textoConfirmar: "Emitir" }))) return;
       const emitido = await api.request<ReciboRecord>(`/recibos/${r.id}/emitir`, { method: "POST" });
       setSelectedRecibo(emitido);
       setWhatsappPhone("");
@@ -9566,6 +9496,7 @@ function RecibosView({
   // no se renderizaba cuando se abria desde el detalle (bug reportado por el usuario).
   const modals = (
     <>
+      {dialogoConfirmar}
       {deleteTarget ? (
         <div className="modal-backdrop" role="presentation">
           <section className="modal-panel" aria-labelledby="recibo-delete-title" role="dialog" aria-modal="true">
@@ -9779,7 +9710,7 @@ function RecibosView({
         <div className="view-header">
           <button type="button" className="ghost-action" onClick={() => setSubView("list")}>← Volver</button>
           <h2>Recibo {r.numero != null ? `N° ${String(r.numero).padStart(7, "0")}` : "(borrador)"}</h2>
-          <span className={r.estado === "EMITIDO" ? "status-pill ready" : "status-pill blocked"}>{r.estado}</span>
+          <PastillaEstado {...estadoRecibo(r.estado)} />
         </div>
         {error ? <p className="error-banner">{error}</p> : null}
         <dl className="receipt-summary">
@@ -9849,7 +9780,7 @@ function RecibosView({
             <div key={r.id} className="nota-card">
               <div className="nota-card-main">
                 <strong>{r.pagador_nombre}</strong>
-                <span className={r.estado === "EMITIDO" ? "status-pill ready" : "status-pill blocked"}>{r.estado}</span>
+                <PastillaEstado {...estadoRecibo(r.estado)} />
               </div>
               <div className="nota-card-meta">
                 <span>{r.concepto}</span>
