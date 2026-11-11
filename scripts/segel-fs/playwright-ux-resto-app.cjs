@@ -456,7 +456,8 @@ async function casoNuevo(browser) {
       check(`CA-04 ${ancho}: "Nota de crédito" abre Notas de crédito`, await page.getByRole("heading", { name: "Seleccionar factura" }).waitFor({ timeout: 10000 }).then(() => true, () => false));
       await boton.click();
       await page.getByRole("menuitem", { name: /^Nota de remisión/ }).click();
-      const tipo = page.getByLabel("Tipo de documento");
+      // Las pestañas de Documentos tambien se llaman "Tipo de documento": se apunta al select de la carga.
+      const tipo = page.locator('select[aria-label="Tipo de documento"]');
       const llego = await tipo.waitFor({ timeout: 10000 }).then(() => true, () => false);
       check(`CA-04 ${ancho}: "Nota de remisión" abre la carga masiva con el tipo elegido`, llego && (await tipo.inputValue()) === "NOTA_REMISION", llego ? await tipo.inputValue() : "sin selector");
       await page.mouse.click(5, 300);
