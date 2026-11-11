@@ -146,6 +146,9 @@ La fuente de verdad de este proyecto es:
 - `docs/PLAN_UX_RESTO_APP_v0.1.md`
 - `docs/TASKS_UX_RESTO_APP_v0.1.md`
 - `docs/PAUTAS_FRONTEND_v0.1.md`
+- `docs/SPEC_TUTORIALES_VIDEO_v0.1.md`
+- `docs/PLAN_TUTORIALES_VIDEO_v0.1.md`
+- `docs/TASKS_TUTORIALES_VIDEO_v0.1.md`
 - `spec/openapi.yaml`
 
 Los documentos bajo `contexto_facturacion_electronica/` y `contexto_pos_graciela/` son antecedentes. No son la especificacion final del nuevo producto.
