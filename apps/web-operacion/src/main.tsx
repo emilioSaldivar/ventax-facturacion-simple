@@ -936,8 +936,8 @@ function OperationHome({
                       type="button"
                     >
                       <span className="menu-item-icon"><Icono nombre={item.icon} tamano={20} /></span>
-                      <span>
-                        {item.label}
+                      <span className="menu-texto">
+                        <span className="menu-nombre">{item.label}</span>
                         {item.etiqueta ? <span className="menu-tag">{item.etiqueta}</span> : null}
                       </span>
                       <small>{item.hint}</small>
@@ -985,8 +985,10 @@ function OperationHome({
                   type="button"
                 >
                   <Icono nombre={item.icon} />
-                  <span>{item.label}</span>
-                  {item.etiqueta ? <span className="menu-tag">{item.etiqueta}</span> : null}
+                  <span className="menu-texto">
+                    <span className="menu-nombre">{item.label}</span>
+                    {item.etiqueta ? <span className="menu-tag">{item.etiqueta}</span> : null}
+                  </span>
                 </button>
               ))}
             </div>

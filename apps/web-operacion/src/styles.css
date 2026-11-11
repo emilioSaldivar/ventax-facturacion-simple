@@ -4367,10 +4367,23 @@ dd {
 
 /* ─── Menu por tipo de documento (SPEC_UX_RESTO_APP_v0.1 A.2; PLAN_UX_RESTO_APP_v0.1 §2, URA-003) ─────────── */
 
-/* Etiqueta "Próximamente" o "Por planilla" a la derecha del nombre. */
+/* Nombre y etiqueta ("Próximamente", "Por planilla"): el nombre no se corta y la etiqueta baja de renglon si no
+   entra en el ancho del menu, en lugar de desbordar. */
+.menu-texto {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: var(--esp-2);
+  row-gap: 2px;
+  min-width: 0;
+}
+
+.menu-nombre {
+  white-space: nowrap;
+}
+
 .menu-tag {
   flex: 0 0 auto;
-  margin-left: auto;
   border-radius: 999px;
   background: var(--color-bg);
   color: var(--color-muted);
@@ -4380,6 +4393,11 @@ dd {
   white-space: nowrap;
 }
 
-.menu-item .menu-tag {
-  margin-left: var(--esp-2);
+@media (min-width: 1024px) {
+  .side-nav-item {
+    height: auto;
+    min-height: 40px;
+    padding-top: 6px;
+    padding-bottom: 6px;
+  }
 }
