@@ -897,7 +897,8 @@ function OperationHome({
           etiqueta: estado === "DISPONIBLE" ? undefined : ETIQUETA_ESTADO_TIPO[estado],
           deshabilitado: estado === "PROXIMAMENTE" || t.vista === null || bloqueado,
           onElegir: () => {
-            if (t.tipo === "NOTA_REMISION") abrirRemision(true);
+            // SPEC_NOTA_REMISION_v0.1: con NRE_EMIT abre "Nueva nota de remisión"; sin el, la planilla.
+            if (t.tipo === "NOTA_REMISION") abrirRemision(estado !== "DISPONIBLE");
             else if (t.vista) goTo(t.vista);
           }
         };

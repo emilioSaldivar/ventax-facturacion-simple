@@ -1364,9 +1364,9 @@ export function DocumentsView({
                 {(selected.totals?.anticipo ?? 0) > 0 ? <small className="muted">{AVISO_NOTA_CREDITO_CON_ANTICIPO}</small> : null}
                 {selected.moneda && selected.moneda !== "PYG" && !context?.nc_moneda_extranjera_habilitada ? <small className="muted">La nota de crédito de una factura en moneda extranjera se gestiona con soporte.</small> : null}
               </div>
-              {/* SPEC_DOCUMENTOS_ESCRITORIO_v0.1, RN-09: la nota de remision no se anula desde FS en esta fase.
+              {/* SPEC_NOTA_REMISION_v0.1 RN-26: la nota de remision se anula como la factura (168 h en lugar de 48).
                   URA-007 (P-L6): anular se separa del resto, con estilo de peligro; pide motivo en su ventana. */}
-              {selected.tipo !== "NOTA_REMISION" ? (
+              {["FACTURA", "NOTA_CREDITO", "NOTA_REMISION"].includes(selected.tipo) ? (
                 <div className="ficha-peligro">
                   <button className="danger-action" disabled={actionLoading || !canCancelDocumento(selected)} onClick={() => void cancelSelectedDocumento()} type="button">
                     <Icono nombre="alerta" /> Anular {getDocumentoNombreLower(selected.tipo)}
@@ -1753,7 +1753,8 @@ export function getNotaCreditoSuccessMessage(estado: DocumentoEstado): string {
 }
 
 export function canCancelDocumento(documento: DocumentoResponse): boolean {
-  return documento.tipo === "FACTURA" && documento.estado === "EMITIDA" && Boolean(documento.cdc);
+  // SPEC_NOTA_REMISION_v0.1 RN-26: la nota de remision tambien se anula (hasta 168 horas desde la aprobacion).
+  return (documento.tipo === "FACTURA" || documento.tipo === "NOTA_REMISION") && documento.estado === "EMITIDA" && Boolean(documento.cdc);
 }
 
 /** SPEC_TOTALES_FE_EN_CARGA_v0.1, RN-08. */

@@ -111,6 +111,8 @@ export interface OperationalContextResponse {
     batch_enabled?: boolean | null;
   };
   carga_masiva_habilitada?: boolean;
+  /** SPEC_NOTA_REMISION_v0.1 RN-01: la clave fiscal del facturador tiene NRE_EMIT. */
+  nota_remision_habilitada?: boolean;
   nc_moneda_extranjera_habilitada?: boolean;
   display?: {
     titulo_operativo: string;

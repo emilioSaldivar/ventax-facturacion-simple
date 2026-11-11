@@ -59,8 +59,9 @@ export const TIPOS_EMISION: DefinicionTipoEmision[] = [
     icono: "remision",
     // URA-006: espacio propio (Emitidas y Por planilla).
     vista: "remision",
-    // SPEC_DOCUMENTOS_ESCRITORIO_v0.1 fase B1: hoy entra solo por planilla; la emision manual es FS-56.
-    estado: (context) => (context?.carga_masiva_habilitada ? "POR_PLANILLA" : "PROXIMAMENTE")
+    // SPEC_NOTA_REMISION_v0.1 RN-01 y RN-02: con NRE_EMIT se emite desde la app; si no, por planilla o Proximamente.
+    estado: (context) =>
+      context?.nota_remision_habilitada ? "DISPONIBLE" : context?.carga_masiva_habilitada ? "POR_PLANILLA" : "PROXIMAMENTE"
   },
   {
     tipo: "AUTOFACTURA",

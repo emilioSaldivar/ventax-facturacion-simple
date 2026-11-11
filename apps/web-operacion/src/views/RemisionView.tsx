@@ -4,9 +4,12 @@
 import { useEffect, useState } from "react";
 import { useApi } from "../api/useApi";
 import { EncabezadoPantalla } from "../components/EncabezadoPantalla";
+import { RemisionNuevaView } from "./RemisionNuevaView";
 import { CargaMasivaView } from "../carga-masiva";
 import { actividadPunto, nombrePunto } from "../lib/punto";
 import type { DocumentoListResponse, OperationalContextResponse, UserSummary } from "../tipos";
+
+const SIN_PERMISO = "Tu clave fiscal todavía no tiene habilitada la nota de remisión. Pedila a Segel.";
 
 export function RemisionView({
   context,
@@ -26,6 +29,9 @@ export function RemisionView({
 }) {
   const api = useApi();
   const [emitidas, setEmitidas] = useState<number | null>(null);
+  const habilitada = Boolean(context.nota_remision_habilitada);
+  // Con el permiso, el espacio abre en "Nueva"; el menu "Nuevo" con la planilla sigue abriendo "Por planilla".
+  const [pestana, setPestana] = useState<"NUEVA" | "PLANILLA">(habilitada && !abrirNuevaCarga ? "NUEVA" : "PLANILLA");
   const fc = context.fiscal_context;
   const seEmitePor = `Se emite por el ${[nombrePunto(fc), actividadPunto(fc)].filter(Boolean).join(" · ")}`;
 
@@ -40,13 +46,28 @@ export function RemisionView({
     <section className="nc-espacio" aria-labelledby="remision-title">
       <EncabezadoPantalla id="remision-title" onVolver={onBack} subtitulo={`Traslado de mercadería · ${seEmitePor}`} titulo="Notas de remisión" />
       <div className="nc-pestanas" role="group" aria-label="Notas de remisión">
+        {/* SPEC_NOTA_REMISION_v0.1 RN-01 y RN-02: "Nueva nota de remisión" solo con NRE_EMIT. */}
+        <button
+          aria-pressed={pestana === "NUEVA"}
+          className={pestana === "NUEVA" ? "active" : ""}
+          disabled={!habilitada}
+          onClick={() => setPestana("NUEVA")}
+          title={habilitada ? undefined : SIN_PERMISO}
+          type="button"
+        >
+          Nueva nota de remisión{habilitada ? "" : " · Próximamente"}
+        </button>
         <button aria-pressed="false" onClick={onVerEmitidas} type="button">
           Emitidas{emitidas !== null ? ` · ${emitidas}` : ""}
         </button>
-        <button aria-pressed="true" className="active" type="button">
+        <button aria-pressed={pestana === "PLANILLA"} className={pestana === "PLANILLA" ? "active" : ""} onClick={() => setPestana("PLANILLA")} type="button">
           Por planilla
         </button>
       </div>
+      {!habilitada ? <p className="muted">{SIN_PERMISO}</p> : null}
+      {pestana === "NUEVA" ? (
+        <RemisionNuevaView context={context} onVerEmitidas={onVerEmitidas} seEmitePor={seEmitePor} />
+      ) : (
       <CargaMasivaView
         api={api}
         contexto={{
@@ -61,6 +82,7 @@ export function RemisionView({
         tipoInicial={abrirNuevaCarga ? "NOTA_REMISION" : undefined}
         tipoPorDefecto="NOTA_REMISION"
       />
+      )}
     </section>
   );
 }
