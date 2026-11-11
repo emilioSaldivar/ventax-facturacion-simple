@@ -165,7 +165,7 @@ export async function getOperationalContext(
 - `refreshSession()` (helper global) devuelve la respuesta completa; `bootstrap` y `createApiClient` la examinan: con `SELECT_PERFIL` → mismo camino que el login; con token completo → como hoy.
 - `handleOnboardingComplete(token, user, pendingActions?)`: `OnboardingFlow` pasa `result.pending_actions`; con `SELECT_PERFIL` → `select-perfil`.
 - `seleccionarPerfil(id, password?)`: `POST /auth/perfil`; exito → `setAccessToken`, `setPerfiles(null)`, `setView("loading-context")`; el efecto existente recarga contexto y readiness, y ahora tambien `/me/perfiles` (§4.3).
-- 409 `PERFIL_NO_DISPONIBLE` en cualquier pedido (`ApiClientError` con `details.reason`): `createApiClient` fuerza `refreshSession()`; si trae `SELECT_PERFIL` → `select-perfil`; si trae token → reintenta el pedido una vez; si falla → `clearSession` y login con "Tu punto de expedicion cambio. Volve a entrar.".
+- 409 `PERFIL_NO_DISPONIBLE`/`PERFIL_REQUERIDO` en cualquier pedido (`ApiClientError` con `details.reason`): `createApiClient` fuerza `refreshSession()`; si trae `SELECT_PERFIL` → avisa a App (`onPerfilRequerido`) y App muestra la eleccion; si trae token → App recarga el contexto con el aviso "Tu punto de expedicion cambio"; en ambos casos **lanza el error sin reintentar** (D-10). Lo mismo cuando un refresh por 401 devuelve un `uoc` distinto al anterior. Si el refresh falla → error 401 "Tu punto de expedicion cambio. Volve a entrar.".
 
 ### 4.2 `SeleccionPerfilScreen`
 
@@ -207,7 +207,8 @@ export async function getOperationalContext(
 
 - `listOperationConfigs(userId)`: `findOperationConfigRow` (`backoffice.repository.ts:1193`) sin `limit`, devuelve `BackofficeOperationConfigResponse[]` con `id` (de `usuario_operacion_config`), `titulo_operativo` y `numeracion_facturas`.
 - `addOperationConfig({ userId, data })`: `begin`; `resolveOperationConfigTarget` como hoy (incluye la validacion de API key del facturador); `select facturador_id from usuario_operacion_config where usuario_id = $1 and activo and deleted_at is null limit 1`; si existe y difiere → `rollback` y 422 `VALIDATION_ERROR` `{ motivo: "FACTURADOR_DISTINTO", facturador_actual: razon_social }`; `insert`; si el indice unico salta (`23505`) → 409 `CONFLICT` "El usuario ya tiene ese punto de expedicion."; `commit`; devuelve la lista.
-- `removeOperationConfig({ userId, configId })`: `update usuario_operacion_config set activo = false, deleted_at = now(), updated_at = now() where id = $2 and usuario_id = $1 and activo and deleted_at is null returning id`; sin fila → 404; luego `revokeRefreshTokensByOperacionConfig(configId)` (D-9); devuelve la lista.
+- `removeOperationConfig({ userId, configId })`: `update usuario_operacion_config set activo = false, deleted_at = now(), updated_at = now() where id = $2 and usuario_id = $1 and activo and deleted_at is null returning id`; sin fila → 404; devuelve la lista. **No revoca refresh tokens** (D-9 revisada).
+- `USER_DETAIL_SELECT` (listado y detalle de usuarios): el `left join usuario_operacion_config` pasa a `left join lateral (... order by created_at limit 1)`. Sin esto, un usuario con dos configuraciones aparecia **dos veces** en el listado (hallazgo al implementar).
 - `assignOperationConfig` (el `PUT`) se conserva y se marca `/** @deprecated SPEC_MULTIPERFIL_USUARIO_v0.1 §D.6 */`.
 - `findUserRow` / `BackofficeUserDetail` (`backoffice.types.ts:254`): `operation_configs: BackofficeOperationConfigResponse[]`; `operation_config` = primera o `null`.
 - Metricas (`:725-731`): `select count(distinct uoc.usuario_id)`.
