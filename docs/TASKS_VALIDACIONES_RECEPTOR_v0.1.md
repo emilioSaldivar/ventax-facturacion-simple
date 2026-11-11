@@ -29,6 +29,7 @@ SPEC: `docs/SPEC_VALIDACIONES_RECEPTOR_v0.1.md` · PLAN: `docs/PLAN_VALIDACIONES
 | RUC | `12-3` | invalido: la base tiene menos de 3 caracteres |
 | RUC | `123456789-0` | invalido: la base tiene mas de 8 caracteres |
 | RUC | `4543629-0`, `80044279-2`, `80136968-1` (RUC reales conocidos) | validos: el modulo 11 de la SPEC da 0, 2 y 1 (comprobado el 2026-11-11) |
+| RUC | `80120841-6`, `5057016-1`, `A123456-5` (vectores de FE) | validos; `A123456-8` invalido (seria el resultado de un algoritmo equivocado con letras) |
 | CI | `1234567` | valido |
 | CI | `1.234.567` | valido, se guarda `1234567` |
 | CI | `123456A` | invalido |

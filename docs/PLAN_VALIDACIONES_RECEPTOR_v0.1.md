@@ -15,7 +15,7 @@ Un solo algoritmo por regla, escrito dos veces con los mismos casos de prueba: e
 
 1. `shared/validation/receptor.ts`, nuevo:
    - `normalizarDocumento(tipo, valor)`, `normalizarTelefono(valor)`, `normalizarNombre(valor)`, `normalizarCorreo(valor)` (RV-07).
-   - `calcularDvRuc(base)` (modulo 11 de SIFEN; letras por codigo ASCII, D-1) y `validarRuc(valor)` que devuelve `{ ok, base, dv, dvEsperado, mensaje }` (RV-01).
+   - `calcularDvRuc(base)` (modulo 11 de SIFEN con letras expandidas a los digitos de su codigo ASCII, como `calcularDigitoVerificadorModulo11` de FE) y `validarRuc(valor)` que devuelve `{ ok, base, dv, dvEsperado, mensaje }` (RV-01).
    - `validarDocumento(tipo, valor)` (RV-02), `validarCorreo`, `validarTelefono`, `validarNombre`, `validarDireccion`, `validarNumeroCasa` (RV-03 a RV-06).
    - `observacionesReceptor(cliente)` devuelve los mensajes de todo lo que incumple, para RV-11.
    - Todos devuelven el mensaje exacto de la SPEC; no lanzan.
@@ -42,12 +42,11 @@ Un solo algoritmo por regla, escrito dos veces con los mismos casos de prueba: e
 ## Riesgos
 
 - Clientes existentes con datos invalidos en `segel-fs` (al menos el `RUC XXX` de FS-64 y los que muestre la consulta): veran "Revisar datos" y tendran que corregirse al usarlos. Se avisa al usuario con la cifra antes de desplegar.
-- Letras en la base del RUC (D-1): si FE trata las letras distinto, un RUC con letras valido para FE podria rechazarse en FS. Son casos raros (RUC de extranjeros antiguos); se corrige al confirmar.
 - Telefonos guardados con texto ("int. 12"): se normalizan al editar; en el listado se muestran como estan.
 - Divergencia entre los dos algoritmos: mitigada con la tabla unica de casos.
 
 ## Coordinacion con FE
 
-- Pedir a FE la regla para letras en la base del RUC en su modulo 11 (D-1).
+- Regla de letras en el modulo 11: confirmada por FE el 2026-11-11 (D-1 cerrada).
 - FE registro como defecto propio que valida el DV del receptor despues de numerar; no bloquea esta cadena.
 - No se pide ningun cambio de contrato.
