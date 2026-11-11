@@ -62,7 +62,8 @@ async function escritorio(browser, ancho) {
     await page.getByRole("button", { name: /Volver a resultados/ }).waitFor({ timeout: 20000 });
     const ficha = await page.locator(".document-detail").innerText();
     check(`B1 ${v}: ficha de remision con motivo, transportista y mercaderia`, ["Motivo", "Transportista", "Vehículo", "Mercadería trasladada"].every((t) => ficha.includes(t)), ficha.slice(0, 200).replace(/\n+/g, " | "));
-    check(`B1 ${v}: la ficha de remision no ofrece nota de credito ni anular`, !ficha.includes("Crear nota de crédito") && !ficha.includes("Anular nota"), "");
+    // SPEC_NOTA_REMISION_v0.1 RN-26: la remision se puede anular (168 h); sigue sin nota de credito.
+    check(`B1 ${v}: la ficha de remision no ofrece nota de credito y ofrece anular`, !ficha.includes("Crear nota de crédito") && ficha.includes("Anular nota de remisión"), "");
     await page.screenshot({ path: path.join(outDir, `${v}-ficha-remision.png`), fullPage: true });
     await page.getByRole("button", { name: /Volver a resultados/ }).click();
   }
