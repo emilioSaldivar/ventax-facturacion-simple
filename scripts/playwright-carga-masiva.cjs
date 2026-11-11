@@ -371,7 +371,7 @@ async function correr(browser, vp) {
     const item = pagCliente.locator('button.menu-item:has-text("Nueva factura")').first();
     check(nombre, "contexto CLIENTE: Nueva factura deshabilitada", await item.isDisabled());
     check(nombre, "contexto CLIENTE: explica por que", (await item.innerText()).includes("Este punto emite por carga masiva"));
-    check(nombre, "contexto CLIENTE: Devolver factura (nota de credito) sigue disponible", !(await pagCliente.locator('button.menu-item:has-text("Devolver factura")').first().isDisabled()));
+    check(nombre, "contexto CLIENTE: Notas de crédito sigue disponible", !(await pagCliente.locator('button.menu-item:has-text("Notas de crédito")').first().isDisabled()));
     await pagCliente.screenshot({ path: path.join(outDir, `${nombre}-14-cliente-menu.png`) });
     await pagCliente.locator('button:has-text("Documentos")').first().click();
     await pagCliente.getByRole("button", { name: "Carga masiva" }).click();

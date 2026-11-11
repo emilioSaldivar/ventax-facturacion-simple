@@ -4,7 +4,7 @@
 //
 //   ENSAYO_PASSWORD_FILE=/ruta/clave node scripts/segel-fs/playwright-ux-resto-app.cjs [caso ...]
 //
-// Sin argumentos corre todos los casos. Casos: componentes (URA-017, CA-13), api (URA-018), teclado (URA-019), puntos (URA-021, CA-14). URA-012 suma los de las fases 1 y 2.
+// Sin argumentos corre todos los casos. Casos: componentes (URA-017, CA-13), api (URA-018), teclado (URA-019), puntos (URA-021, CA-14), menu (URA-003). URA-012 suma los de las fases 1 y 2.
 // Escribe test-results/ux-resto-app/.
 const fs = require("node:fs");
 const path = require("node:path");
@@ -114,7 +114,7 @@ async function casoComponentes(browser) {
     check("CA-13 menu de fila: el foco vuelve al boton", (await enfocado(page))?.nombre === nombre);
 
     // Notas de credito: encabezado, aviso con tono y campo "Motivo" con etiqueta asociada.
-    await abrirVista(page, "Devolver factura");
+    await abrirVista(page, "Notas de crédito");
     await page.getByRole("heading", { name: "Seleccionar factura" }).waitFor();
     const elegible = page.locator("button.document-row", { hasText: "Elegible" }).first();
     await elegible.click();
@@ -360,11 +360,63 @@ async function casoPuntos(browser) {
       const ficha = await page.locator(".documents-view").innerText();
       check("CA-14 390 ficha: numero con su punto", /Número \d{3}-\d{3}-\d{7}/.test(ficha), (ficha.match(/Número [^\n]*/) ?? [""])[0]);
 
-      await abrirVista(page, "Devolver factura");
+      await abrirVista(page, "Notas de crédito");
       await page.locator("button.document-row").first().waitFor();
       const candidatas = await page.locator("button.document-row strong").allInnerTexts();
       check("CA-14 390 Notas de crédito: cada factura candidata dice su punto", candidatas.some((t) => /^\d{3}-\d{3}-\d{7}$/.test(t.trim())), candidatas.slice(0, 4).join(" | "));
       await page.screenshot({ path: path.join(outDir, "390-puntos-candidatas.png"), fullPage: true });
+    } finally {
+      await ctx.close();
+    }
+  }
+}
+
+// ─── URA-003: menu en cuatro grupos, un espacio por tipo (CA-01, CA-02, CA-03) ───────────────────────
+const GRUPOS = ["Emitir", "Consultar", "Comercial", "Administración"];
+const EMITIR = ["Nueva factura", "Notas de crédito", "Notas de débito", "Notas de remisión", "Autofacturas"];
+
+async function casoMenu(browser) {
+  for (const [ancho, alto] of [
+    [1440, 900],
+    [1280, 800],
+    [390, 844]
+  ]) {
+    const { ctx, page } = await entrar(browser, ancho, alto);
+    try {
+      const celular = ancho < 1024;
+      if (celular) await page.getByRole("button", { name: "Abrir menu" }).click();
+      const nav = page.locator(celular ? "nav.mobile-menu" : "nav.side-nav");
+      await nav.waitFor();
+      const grupos = (await nav.locator(celular ? ".menu-group-title" : ".side-nav-titulo").allInnerTexts()).map((t) => t.trim());
+      check(`CA-01 ${ancho}: cuatro grupos en orden`, JSON.stringify(grupos.map((g) => g.toLowerCase())) === JSON.stringify(GRUPOS.map((g) => g.toLowerCase())), grupos.join(" | "));
+      const textoNav = await nav.innerText();
+      check(`CA-01 ${ancho}: "Emitir" lista los cinco tipos`, EMITIR.every((t) => textoNav.includes(t)), "");
+      for (const t of ["Notas de débito", "Autofacturas"]) {
+        const boton = nav.locator("button", { hasText: t }).first();
+        check(`CA-01 ${ancho}: ${t} deshabilitado con "Próximamente"`, (await boton.isDisabled()) && (await boton.innerText()).includes("Próximamente"));
+      }
+      const remision = nav.locator("button", { hasText: "Notas de remisión" }).first();
+      check(`CA-02 ${ancho}: Notas de remisión "Por planilla" con la carga masiva habilitada`, (await remision.innerText()).includes("Por planilla") && !(await remision.isDisabled()));
+      check(`CA-03 ${ancho}: sin "Devolver factura" ni "Notas / Presupuestos"`, !/Devolver factura|Notas \/ Presupuestos/.test(textoNav));
+      if (!celular) {
+        // RN-02: un clic en "Próximamente" no navega ni consulta la API.
+        let pedidos = 0;
+        const contar = (r) => { if (r.url().includes("/api/")) pedidos += 1; };
+        page.on("request", contar);
+        const antes = await page.locator("main").innerText();
+        await nav.locator("button", { hasText: "Notas de débito" }).first().click({ force: true });
+        await page.waitForTimeout(800);
+        page.off("request", contar);
+        check(`CA-01 ${ancho}: clic en "Próximamente" sin navegar ni pedir a la API`, pedidos === 0 && (await page.locator("main").innerText()) === antes, `pedidos=${pedidos}`);
+        await remision.click();
+        const activa = await page.locator(".filter-tabs button.active, [role=tablist] button.active").first().innerText().catch(() => "");
+        check(`CA-02 ${ancho}: "Notas de remisión" abre Documentos en su pestaña`, /Notas de remisión/.test(activa), activa);
+        await abrirVista(page, "Notas de crédito");
+        check(`CA-03 ${ancho}: "Notas de crédito" abre la pantalla de notas de crédito`, await page.getByRole("heading", { name: "Seleccionar factura" }).waitFor({ timeout: 10000 }).then(() => true, () => false));
+      } else {
+        await page.screenshot({ path: path.join(outDir, `${ancho}-menu.png`) });
+      }
+      if (!celular) await page.screenshot({ path: path.join(outDir, `${ancho}-menu.png`) });
     } finally {
       await ctx.close();
     }
@@ -378,6 +430,7 @@ async function casoPuntos(browser) {
     if (corre("api")) await casoApi(browser);
     if (corre("teclado")) await casoTeclado(browser);
     if (corre("puntos")) await casoPuntos(browser);
+    if (corre("menu")) await casoMenu(browser);
   } catch (e) {
     check("el guion termino sin excepciones", false, String(e));
   } finally {

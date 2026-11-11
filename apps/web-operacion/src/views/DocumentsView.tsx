@@ -5,6 +5,7 @@ import { useConfirmar } from "../components/Dialogo";
 import { MenuFila } from "../components/MenuFila";
 import { PastillaEstado } from "../components/PastillaEstado";
 import { EncabezadoPantalla } from "../components/EncabezadoPantalla";
+import { TIPOS_PROXIMAMENTE } from "../lib/tiposEmision";
 import { AvisoPuntoDistinto } from "../components/AvisoPuntoDistinto";
 import { useBorradorSinEmitir } from "../lib/borradores";
 import { etiquetaPunto, numeroConPunto } from "../lib/punto";
@@ -17,7 +18,6 @@ import { mensajeResultadoReintento, mensajeNotaCredito, formatEmailStatus, getDo
 
 export const POR_PAGINA_DOCUMENTOS = 30;
 
-export const TIPOS_PROXIMAMENTE = ["Notas de débito", "Autofacturas"] as const;
 
 export function DocumentsView({
   onBack,
@@ -25,7 +25,8 @@ export function DocumentsView({
   role,
   context,
   onCorregirFactura,
-  mostrarPunto = false
+  mostrarPunto = false,
+  pestanaInicial = "FACTURAS"
 }: {
   onBack: () => void;
   onGoTo?: (view: OperationView) => void;
@@ -34,6 +35,8 @@ export function DocumentsView({
   onCorregirFactura?: (draft: InvoiceInitialDraft) => void;
   /** SPEC_MULTIPERFIL_USUARIO_v0.1 §C.8: columna "Punto" solo con mas de un perfil. */
   mostrarPunto?: boolean;
+  /** URA-003: el menu "Notas de remisión" abre Documentos en su pestaña. */
+  pestanaInicial?: "FACTURAS" | "NOTAS_CREDITO" | "NOTAS_REMISION" | "CARGA_MASIVA";
 }) {
   const api = useApi();
   const todayYmd = useMemo(() => formatYmdFromDate(new Date()), []);
@@ -45,7 +48,7 @@ export function DocumentsView({
   const [documents, setDocuments] = useState<DocumentoResponse[]>([]);
   const [selected, setSelected] = useState<DocumentoResponse | null>(null);
   const [estadoFilter, setEstadoFilter] = useState<DocumentoEstado | "">("");
-  const [docKindTab, setDocKindTab] = useState<"FACTURAS" | "NOTAS_CREDITO" | "NOTAS_REMISION" | "CARGA_MASIVA">("FACTURAS");
+  const [docKindTab, setDocKindTab] = useState<"FACTURAS" | "NOTAS_CREDITO" | "NOTAS_REMISION" | "CARGA_MASIVA">(pestanaInicial);
   const esRemision = docKindTab === "NOTAS_REMISION";
   const [cargaAbiertaId, setCargaAbiertaId] = useState<string | null>(null);
   // FS-33: carga desde la que se abrio la ficha, para volver a ella.

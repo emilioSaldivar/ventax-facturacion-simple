@@ -259,7 +259,7 @@ async function esperarDocumentoFinal(page, documentoId) {
     if (process.env.MPU_SIN_NC === "1") {
       check("Paso 13: NC omitida por MPU_SIN_NC (validada en la v0.1)", true);
     } else if (aprobada) {
-      await abrirVista(page, "Devolver factura");
+      await abrirVista(page, "Notas de crédito");
       await page.getByPlaceholder("Cliente, documento, número o total").fill(fNumero.slice(-7));
       await page.getByRole("button", { name: "Buscar" }).click();
       await page.waitForTimeout(1500);

@@ -8,6 +8,7 @@ import { MenuFila } from "./components/MenuFila";
 import { PastillaEstado } from "./components/PastillaEstado";
 import { hayBorradorSinEmitir, useBorradorSinEmitir } from "./lib/borradores";
 import { numeroCorrelativo } from "./lib/formato";
+import { ETIQUETA_ESTADO_TIPO, TIPOS_EMISION } from "./lib/tiposEmision";
 import { actividadPunto, nombrePunto } from "./lib/punto";
 import { estadoRecibo, etiquetaCondicionVenta, formatDocumentoTipo } from "./lib/estados";
 import {
@@ -666,6 +667,8 @@ function OperationHome({
   const [cambioPerfil, setCambioPerfil] = useState<{ sinEmitir: boolean } | null>(null);
   const abrirCambioPerfil = () => setCambioPerfil({ sinEmitir: hayBorradorSinEmitir() });
   const [menuOpen, setMenuOpen] = useState(false);
+  // URA-003: "Notas de remisión" (por planilla) abre Documentos en su pestaña hasta que tenga espacio propio (URA-006).
+  const [pestanaDocumentos, setPestanaDocumentos] = useState<"FACTURAS" | "NOTAS_REMISION">("FACTURAS");
   // URA-019 (P-A3): Escape cierra el menu de celular.
   useEffect(() => {
     if (!menuOpen) return undefined;
@@ -805,27 +808,54 @@ function OperationHome({
   const lineaFiscalCorta = fc ? `Timbrado ${fc.timbrado} · ${fc.establecimiento}-${fc.punto_expedicion}` : "";
   const operadorNombre = user?.display_name?.trim() || user?.username || "";
   // SPEC_UX_NUEVA_FACTURA_v0.1, A.3: iconos SVG por nombre (PLAN 2) y grupos renombrados.
+  // SPEC_UX_RESTO_APP_v0.1 A.1, A.2 y A.4 (URA-003): cuatro grupos; "Emitir" sale del catalogo TIPOS_EMISION, con un
+  // espacio por tipo aunque todavia no se emita ("Próximamente" no navega ni consulta la API, RN-02).
+  type GrupoMenu = "emitir" | "consultar" | "comercial" | "admin";
   const menuItems: Array<{
+    clave: string;
     label: string;
-    view: OperationView;
+    view: OperationView | null;
     disabled?: boolean;
     icon: NombreIcono;
-    group: "primary" | "secondary" | "admin";
+    group: GrupoMenu;
+    etiqueta?: string;
+    hint: string;
+    abrir: () => void;
   }> = [
-    { label: "Nueva factura", view: "invoice", disabled: !canEmit || numeracionDelCliente, icon: "factura", group: "primary" },
-    { label: "Agenda / Clientes", view: "clients", icon: "agenda", group: "primary" },
-    { label: "Documentos", view: "documents", icon: "documentos", group: "primary" },
-    { label: "Notas / Presupuestos", view: "notas", icon: "notas", group: "secondary" },
-    { label: "Cobros / Recibos", view: "recibos", icon: "recibos", group: "secondary" },
-    { label: "Catálogo", view: "catalog", icon: "catalogo", group: "secondary" },
-    { label: "Devolver factura", view: "credit-note", disabled: !canEmit, icon: "devolver", group: "secondary" },
-    { label: "Información y estado", view: "status", icon: "estado", group: "admin" }
+    ...TIPOS_EMISION.map((t) => {
+      const estado = t.estado(context);
+      const bloqueado = t.tipo === "FACTURA" ? !canEmit || numeracionDelCliente : t.tipo === "NOTA_CREDITO" ? !canEmit : false;
+      return {
+        clave: t.tipo,
+        label: t.etiquetaMenu,
+        view: t.vista,
+        icon: t.icono,
+        group: "emitir" as GrupoMenu,
+        disabled: estado === "PROXIMAMENTE" || t.vista === null || bloqueado,
+        etiqueta: estado === "DISPONIBLE" ? undefined : ETIQUETA_ESTADO_TIPO[estado],
+        hint: t.tipo === "FACTURA" && numeracionDelCliente ? "Este punto emite por carga masiva" : t.descripcion,
+        abrir: () => {
+          if (!t.vista) return;
+          setPestanaDocumentos(t.tipo === "NOTA_REMISION" ? "NOTAS_REMISION" : "FACTURAS");
+          goTo(t.vista);
+        }
+      };
+    }),
+    { clave: "documents", label: "Documentos", view: "documents", icon: "documentos", group: "consultar", hint: getOperationViewHint("documents"), abrir: () => { setPestanaDocumentos("FACTURAS"); goTo("documents"); } },
+    { clave: "clients", label: "Agenda / Clientes", view: "clients", icon: "agenda", group: "consultar", hint: getOperationViewHint("clients"), abrir: () => goTo("clients") },
+    { clave: "catalog", label: "Catálogo", view: "catalog", icon: "catalogo", group: "consultar", hint: getOperationViewHint("catalog"), abrir: () => goTo("catalog") },
+    { clave: "notas", label: "Presupuestos / Pedidos", view: "notas", icon: "notas", group: "comercial", hint: getOperationViewHint("notas"), abrir: () => goTo("notas") },
+    { clave: "recibos", label: "Cobros / Recibos", view: "recibos", icon: "recibos", group: "comercial", hint: getOperationViewHint("recibos"), abrir: () => goTo("recibos") },
+    { clave: "status", label: "Información y estado", view: "status", icon: "estado", group: "admin", hint: getOperationViewHint("status"), abrir: () => goTo("status") }
   ];
-  const menuSections: Array<{ title: string; key: "primary" | "secondary" | "admin" }> = [
-    { title: "Operaciones", key: "primary" },
-    { title: "Secundarias", key: "secondary" },
+  const menuSections: Array<{ title: string; key: GrupoMenu }> = [
+    { title: "Emitir", key: "emitir" },
+    { title: "Consultar", key: "consultar" },
+    { title: "Comercial", key: "comercial" },
     { title: "Administración", key: "admin" }
   ];
+  // La remision comparte la vista de Documentos: el activo es "Documentos".
+  const esActivo = (item: { clave: string; view: OperationView | null }) => item.view === operationView && item.clave !== "NOTA_REMISION";
 
   return (
     <main className="operation-shell">
@@ -898,16 +928,19 @@ function OperationHome({
                       className={[
                         "menu-item",
                         `menu-item-${item.group}`,
-                        operationView === item.view ? "active" : ""
+                        esActivo(item) ? "active" : ""
                       ].filter(Boolean).join(" ")}
                       disabled={item.disabled}
-                      key={item.view}
-                      onClick={() => goTo(item.view)}
+                      key={item.clave}
+                      onClick={item.abrir}
                       type="button"
                     >
                       <span className="menu-item-icon"><Icono nombre={item.icon} tamano={20} /></span>
-                      <span>{item.label}</span>
-                      <small>{item.view === "invoice" && numeracionDelCliente ? "Este punto emite por carga masiva" : getOperationViewHint(item.view)}</small>
+                      <span>
+                        {item.label}
+                        {item.etiqueta ? <span className="menu-tag">{item.etiqueta}</span> : null}
+                      </span>
+                      <small>{item.hint}</small>
                     </button>
                   ))}
                 </div>
@@ -943,16 +976,17 @@ function OperationHome({
               <p className="side-nav-titulo">{section.title}</p>
               {menuItems.filter((item) => item.group === section.key).map((item) => (
                 <button
-                  aria-current={operationView === item.view ? "page" : undefined}
-                  className={["side-nav-item", operationView === item.view ? "active" : ""].filter(Boolean).join(" ")}
+                  aria-current={esActivo(item) ? "page" : undefined}
+                  className={["side-nav-item", esActivo(item) ? "active" : ""].filter(Boolean).join(" ")}
                   disabled={item.disabled}
-                  key={item.view}
-                  onClick={() => goTo(item.view)}
-                  title={item.view === "invoice" && numeracionDelCliente ? "Este punto emite por carga masiva" : getOperationViewHint(item.view)}
+                  key={item.clave}
+                  onClick={item.abrir}
+                  title={item.hint}
                   type="button"
                 >
                   <Icono nombre={item.icon} />
                   <span>{item.label}</span>
+                  {item.etiqueta ? <span className="menu-tag">{item.etiqueta}</span> : null}
                 </button>
               ))}
             </div>
@@ -1023,13 +1057,14 @@ function OperationHome({
         />
       ) : operationView === "documents" ? (
         <DocumentsView
-         
           onBack={() => goTo("invoice")}
           onGoTo={goTo}
           onCorregirFactura={(draft) => { setInvoiceInitialDraft(draft); goTo("invoice"); }}
           role={user?.role ?? "OPERADOR_FACTURACION"}
           context={context}
           mostrarPunto={variosPerfiles}
+          key={pestanaDocumentos}
+          pestanaInicial={pestanaDocumentos}
         />
       ) : operationView === "clients" ? (
         <ClientesAgendaView
@@ -4015,10 +4050,10 @@ function getOperationViewHint(value: OperationView): string {
     status: "Estado del facturador",
     invoice: "Crear factura electrónica",
     clients: "Agenda de contactos",
-    "credit-note": "Devolver una factura",
+    "credit-note": "Devolución total o parcial de una factura aprobada",
     catalog: "Productos y servicios",
     documents: "Facturas y notas emitidas",
-    notas: "Notas de pedido y presupuesto",
+    notas: "Presupuestos y pedidos (no van a SIFEN)",
     recibos: "Cobros y recibos de dinero"
   };
   return hints[value];

@@ -4364,3 +4364,22 @@ dd {
   color: var(--color-ink);
   font-size: var(--fs-13);
 }
+
+/* ─── Menu por tipo de documento (SPEC_UX_RESTO_APP_v0.1 A.2; PLAN_UX_RESTO_APP_v0.1 §2, URA-003) ─────────── */
+
+/* Etiqueta "Próximamente" o "Por planilla" a la derecha del nombre. */
+.menu-tag {
+  flex: 0 0 auto;
+  margin-left: auto;
+  border-radius: 999px;
+  background: var(--color-bg);
+  color: var(--color-muted);
+  font-size: var(--fs-12);
+  font-weight: 600;
+  padding: 1px var(--esp-2);
+  white-space: nowrap;
+}
+
+.menu-item .menu-tag {
+  margin-left: var(--esp-2);
+}
