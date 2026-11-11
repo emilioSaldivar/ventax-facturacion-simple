@@ -1,0 +1,21 @@
+{
+  "factura": "1010559",
+  "motivo": "Prueba de cuerpo URA-001",
+  "casos": {
+    "pantalla-total": {
+      "motivo": "Prueba de cuerpo URA-001"
+    },
+    "documentos-total": {
+      "motivo": "Prueba de cuerpo URA-001"
+    },
+    "documentos-parcial": {
+      "motivo": "Prueba de cuerpo URA-001",
+      "lineas": [
+        {
+          "line_no": 1,
+          "cantidad": 1
+        }
+      ]
+    }
+  }
+}
