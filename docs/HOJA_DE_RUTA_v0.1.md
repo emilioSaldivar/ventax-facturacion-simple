@@ -197,6 +197,16 @@ Para que el usuario decida si entran antes, junto o despues de los criticos:
 
 Total: unas 5 a 6 jornadas de implementacion. Para el 2026-11-12 es realista: validaciones del receptor, catalogo en USD y la entrega E1 de la remision; los descuentos van al dia siguiente. FE ya habilito `NRE_EMIT` en el FE local de prueba y confirmo las reglas de descuentos, geografia y receptor (registradas en cada SPEC).
 
+## Avance de la implementacion (2026-11-11, noche)
+
+| Cadena | Estado | Evidencia |
+|---|---|---|
+| Validaciones del receptor | Implementada y probada en local; falta la cifra de `segel-fs` y el despliegue | 67/67 Playwright; DV verificado contra 20.365 RUC del padron |
+| Catalogo en moneda extranjera | Implementada y probada en local; falta la factura USD con catalogo en SIFEN test y el despliegue | 48/48 Playwright |
+| Nota de remision, E1 | Implementada; notas 0000509 y 0000510 aprobadas en SIFEN test; falta anular en SIFEN test, NRE-014 y E2 | 25/25 Playwright |
+| Descuentos | Sin empezar | - |
+| ATO-009 | Espera la orden directa de despliegue | - |
+
 ## Orden de trabajo propuesto para el compromiso del 2026-11-12
 
 1. **Hoy:** pedir a FE el permiso `NRE_EMIT` para las claves de prueba y de los facturadores que lo usen; confirmar con FE los descuentos en USD.
