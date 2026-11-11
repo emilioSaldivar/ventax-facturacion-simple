@@ -16,7 +16,7 @@ const validateArtifacts = process.env.ONBOARDING_SMOKE_VALIDATE_ARTIFACTS !== "N
 
 const clienteInput = {
   documento_tipo: process.env.ONBOARDING_SMOKE_CLIENTE_TIPO ?? "RUC",
-  documento: process.env.ONBOARDING_SMOKE_CLIENTE_DOCUMENTO ?? "80000000-1",
+  documento: process.env.ONBOARDING_SMOKE_CLIENTE_DOCUMENTO ?? "80000000-5",
   razon_social: process.env.ONBOARDING_SMOKE_CLIENTE_RAZON_SOCIAL ?? "CLIENTE CONTRIBUYENTE SA",
   direccion: process.env.ONBOARDING_SMOKE_CLIENTE_DIRECCION ?? "Asuncion",
   telefono: process.env.ONBOARDING_SMOKE_CLIENTE_TELEFONO ?? "021000000",

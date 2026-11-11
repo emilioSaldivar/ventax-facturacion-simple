@@ -61,7 +61,7 @@ function sembrarFactura(razon, numero) {
         cliente_snapshot, totals_snapshot, fiscal_response_snapshot, numero_fiscal, cdc, document_uuid, emitted_at
       )
       select tenant_id, facturador_id, usuario_id, 'FACTURA', 'CONTADO', 'EMITIDA', 'fac_e2e_nct_' || md5('${razon}'),
-        jsonb_build_object('documento_tipo','RUC','documento','80000000-1','razon_social','${razon}','email',null),
+        jsonb_build_object('documento_tipo','RUC','documento','80000000-5','razon_social','${razon}','email',null),
         '{"subtotal":1100,"total_sin_iva":1000,"iva_5":0,"iva_10":100,"total_iva":100,"total":1100}'::jsonb,
         '{"status":"APPROVED"}'::jsonb, '${numero}', '${cdc}', gen_random_uuid(), now()
       from u

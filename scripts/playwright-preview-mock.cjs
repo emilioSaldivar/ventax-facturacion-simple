@@ -11,7 +11,7 @@ const modo = process.argv[3] ?? "completo";
 const contexto = {
   user: { id: "u1", username: "op", display_name: "Operador Demo", role: "OPERADOR_FACTURACION" },
   tenant: { id: "t1", name: "Empresa Ejemplo S.A.", status: "ACTIVE" },
-  facturador: { id: "f1", emisor_id: "80000000-1", razon_social: "Empresa Ejemplo S.A.", ruc: "80000000-1" },
+  facturador: { id: "f1", emisor_id: "80000000-5", razon_social: "Empresa Ejemplo S.A.", ruc: "80000000-5" },
   fiscal_context: { establecimiento: "001", punto_expedicion: "001", perfil_emision_codigo: "P1", actividad_economica_codigo: "62010",
     actividad_economica_descripcion: "Servicios", timbrado: "12345678", timbrado_inicio: "2026-01-01", documento_nro: "0000119", credito_plazo_dias: 30, tipo_transaccion_default: 2 }
 };

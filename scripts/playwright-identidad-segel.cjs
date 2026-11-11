@@ -34,7 +34,7 @@ const contexto = {
 
 const nota = {
   valido: true, tipo: "PRESUPUESTO", numero: 12, fecha_emision: "2026-11-04", valido_hasta: "2026-11-30",
-  cliente_nombre: "Cliente Demo", cliente_ruc: "80000000-1", estado_visual: "VIGENTE", total: 100000,
+  cliente_nombre: "Cliente Demo", cliente_ruc: "80000000-5", estado_visual: "VIGENTE", total: 100000,
   items: [{ fila_tipo: "ITEM", descripcion: "Servicio", cantidad: 1, precio_total: 100000 }]
 };
 
@@ -49,7 +49,7 @@ function htmlPublicoApi() {
     process.stdout.write(renderPublicDocumentHtml({
       facturador: { id: "f1", emisor_id: "80136968-1", razon_social: "Demo SA", ruc: "80136968-1" },
       numero_fiscal: "001-001-0000001", cdc: "${"A".repeat(44)}", estado: "EMITIDA",
-      cliente: { documento_tipo: "RUC", documento: "80000000-1", razon_social: "Cliente Demo" },
+      cliente: { documento_tipo: "RUC", documento: "80000000-5", razon_social: "Cliente Demo" },
       totals: { total: 100000, iva_10: 9091, iva_5: 0, exenta: 0, base_10: 90909, base_5: 0 },
       email_status: "DELEGATED",
       artifacts: { kude_pdf: { available: true, url: "/mock.pdf" }, xml: { available: true, url: "/mock.xml" } }

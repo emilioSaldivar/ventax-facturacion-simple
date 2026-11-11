@@ -32,7 +32,7 @@ function documento(cancelacion) {
     id: "doc-1", document_uuid: "uuid-1", tipo: "FACTURA", estado: "EMITIDA",
     condicion_venta: "CONTADO", numero_fiscal: "001-001-0000001", cdc: "A".repeat(44),
     fiscal_document_id: "fd-1", external_ref: null, fiscal_envio_modo: "BATCH",
-    batch: null, cliente: { razon_social: "Cliente Demo", documento: "80000000-1", documento_tipo: "RUC" },
+    batch: null, cliente: { razon_social: "Cliente Demo", documento: "80000000-5", documento_tipo: "RUC" },
     items: [{ line_no: 1, descripcion: "Servicio", cantidad: 1, precio_unitario: 100000, iva_tipo: "IVA_10", subtotal: 100000, base_imponible: 90909, iva_monto: 9091 }],
     totals: { total: 100000, iva_10: 9091, iva_5: 0, exenta: 0, base_10: 90909, base_5: 0 },
     fiscal_status: null, fiscal_status_raw: "APPROVED", sifen_result_code: "0260",
