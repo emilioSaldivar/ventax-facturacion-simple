@@ -4802,3 +4802,42 @@ dd {
   align-items: center;
   gap: var(--esp-2);
 }
+
+/* Con la ficha abierta, la tabla deja las columnas de consulta (RUC, CDC, moneda) para la ficha. */
+@media (min-width: 1024px) {
+  .documents-cuerpo.con-ficha .documents-tabla-ruc,
+  .documents-cuerpo.con-ficha .documents-tabla-cdc,
+  .documents-cuerpo.con-ficha .documents-tabla-moneda {
+    display: none;
+  }
+}
+
+/* En 360 px los pasos bajan de renglon y sin linea entre ellos. */
+.ficha-pasos {
+  flex-wrap: wrap;
+  gap: var(--esp-1) var(--esp-3);
+}
+
+.ficha-pasos .paso-linea {
+  display: none;
+}
+
+.document-ficha > .ghost-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--esp-1);
+}
+
+/* Linea de producto: descripcion e importe en dos columnas (H-11). */
+.document-ficha .invoice-line-card {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--esp-3);
+}
+
+.document-ficha .invoice-line-card small {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}

@@ -4,7 +4,7 @@
 //
 //   ENSAYO_PASSWORD_FILE=/ruta/clave node scripts/segel-fs/playwright-ux-resto-app.cjs [caso ...]
 //
-// Sin argumentos corre todos los casos. Casos: componentes (URA-017, CA-13), api (URA-018), teclado (URA-019), puntos (URA-021, CA-14), menu (URA-003), nuevo (URA-004), busqueda (URA-025). URA-012 suma los de las fases 1 y 2.
+// Sin argumentos corre todos los casos. Casos: componentes (URA-017, CA-13), api (URA-018), teclado (URA-019), puntos (URA-021, CA-14), menu (URA-003), nuevo (URA-004), busqueda (URA-025), ficha (URA-007). URA-012 suma los de las fases 1 y 2.
 // Escribe test-results/ux-resto-app/.
 const fs = require("node:fs");
 const path = require("node:path");
@@ -517,6 +517,56 @@ async function casoBusqueda(browser) {
   }
 }
 
+// ─── URA-007: Documentos con ficha lateral (CA-06) ────────────────────────────────────────────────────
+async function casoFicha(browser) {
+  {
+    const { ctx, page } = await entrar(browser, 1440, 900);
+    try {
+      await abrirVista(page, "Documentos");
+      await page.locator("table.documents-tabla tbody tr").first().waitFor();
+      const pestanas = (await page.getByRole("group", { name: "Tipo de documento" }).innerText()).replace(/\s+/g, " ");
+      check("CA-06 1440: solo la pestaña activa muestra su cantidad", /Facturas · \d+/.test(pestanas) && !/Notas de crédito · \d+/.test(pestanas) && pestanas.includes("Cargas por planilla"), pestanas);
+      const tabla = await page.locator("table.documents-tabla").innerText();
+      check("CA-06 1440: tabla sin emojis", !EMOJI.test(tabla));
+      // Una factura emitida que todavia admite nota de credito (la de URA-001 no tiene notas).
+      await page.getByPlaceholder("Buscar factura...").fill("001-001-1010559");
+      await page.getByPlaceholder("Buscar factura...").press("Enter");
+      await page.locator("table.documents-tabla tbody tr", { hasText: "1010559" }).first().waitFor();
+      await page.locator("table.documents-tabla tbody tr", { hasText: "1010559" }).first().locator("button.enlace-fila").click();
+      const ficha = page.locator("aside.document-ficha");
+      await ficha.waitFor();
+      check("CA-06 1440: la ficha se abre al costado y la tabla sigue a la vista", (await page.locator("table.documents-tabla").isVisible()) && Math.round((await ficha.boundingBox()).width) === 360, String(Math.round((await ficha.boundingBox()).width)));
+      const texto = await ficha.innerText();
+      check("CA-06 1440: titulo con tipo y numero con punto, una sola pastilla", (await ficha.locator("h3").first().innerText()).includes("1010559") && (await ficha.locator(".estado-documento").count()) === 1, await ficha.locator("h3").first().innerText());
+      check("CA-06 1440: pasos de la emision", (await ficha.locator("ol.ficha-pasos li").count()) >= 3);
+      const columnas = await ficha.locator(".ficha-entrega").evaluate((e) => getComputedStyle(e).gridTemplateColumns.split(" ").length);
+      check("CA-06 1440: entrega en dos columnas", columnas === 2, String(columnas));
+      check("CA-06 1440: \"Desde esta factura\" con nota de credito habilitada", texto.includes("Desde esta factura") && (await ficha.getByRole("button", { name: /Crear nota de crédito/ }).isEnabled()));
+      check("CA-06 1440: nota de debito y de remision para esta venta Próximamente", (await ficha.getByRole("button", { name: /Nota de débito/ }).isDisabled()) && (await ficha.getByRole("button", { name: /Nota de remisión para esta venta/ }).isDisabled()));
+      check("CA-06 1440: Anular separado y con estilo de peligro", (await ficha.locator(".ficha-peligro .danger-action").count()) === 1);
+      check("CA-06 1440: ficha sin emojis", !EMOJI.test(texto));
+      await page.screenshot({ path: path.join(outDir, "1440-ficha.png"), fullPage: true });
+    } finally {
+      await ctx.close();
+    }
+  }
+  {
+    const { ctx, page } = await entrar(browser, 390, 844);
+    try {
+      await abrirVista(page, "Documentos");
+      await page.locator(".document-row").first().waitFor();
+      const tarjetas = await page.locator(".documents-list").innerText();
+      check("CA-06 390: tarjetas con pastilla y sin emojis", (await page.locator(".documents-list .estado-documento").count()) > 0 && !EMOJI.test(tarjetas));
+      await page.locator(".document-row-main, button.document-row").first().click();
+      await page.getByRole("button", { name: /Volver a resultados/ }).waitFor();
+      check("CA-06 390: en celular la ficha reemplaza a la lista", (await page.locator(".documents-list").count()) === 0);
+      await page.screenshot({ path: path.join(outDir, "390-ficha.png"), fullPage: true });
+    } finally {
+      await ctx.close();
+    }
+  }
+}
+
 (async () => {
   const browser = await chromium.launch();
   try {
@@ -527,6 +577,7 @@ async function casoBusqueda(browser) {
     if (corre("menu")) await casoMenu(browser);
     if (corre("nuevo")) await casoNuevo(browser);
     if (corre("busqueda")) await casoBusqueda(browser);
+    if (corre("ficha")) await casoFicha(browser);
   } catch (e) {
     check("el guion termino sin excepciones", false, String(e));
   } finally {

@@ -916,11 +916,11 @@ export function DocumentsView({
                   {mostrarPunto ? <th>Punto</th> : null}
                   <th>Número</th>
                   <th>{esRemision ? "Destinatario" : "Cliente"}</th>
-                  <th>RUC o CI</th>
+                  <th className="documents-tabla-ruc">RUC o CI</th>
                   {esRemision ? <th>Motivo</th> : <th>Condición</th>}
                   <th>Estado</th>
-                  <th>CDC</th>
-                  {esRemision ? null : <th>Moneda</th>}
+                  <th className="documents-tabla-cdc">CDC</th>
+                  {esRemision ? null : <th className="documents-tabla-moneda">Moneda</th>}
                   {esRemision ? null : <th className="numero">Total</th>}
                   <th aria-label="Acciones" />
                 </tr>
@@ -971,7 +971,7 @@ export function DocumentsView({
                     )}
                     <td><EstadoDocumentoPill documento={documento} /></td>
                     <td className="documents-tabla-cdc" title={documento.cdc ?? undefined}>{documento.cdc ? `${documento.cdc.slice(0, 8)}…${documento.cdc.slice(-4)}` : "-"}</td>
-                    {esRemision ? null : <td>{documento.moneda ?? "PYG"}</td>}
+                    {esRemision ? null : <td className="documents-tabla-moneda">{documento.moneda ?? "PYG"}</td>}
                     {esRemision ? null : <td className="numero"><strong>{formatMonto(documento.totals.total, documento.moneda)}</strong></td>}
                     <td className="documents-tabla-acciones" onClick={(event) => event.stopPropagation()}>
                       {menuDeFila(documento)}
@@ -1189,7 +1189,8 @@ export function DocumentsView({
                 </section>
               ) : null}
 
-              {selected.accion_detalle ? (
+              {/* URA-007 (P-L7, H-11): el aviso solo aparece si hay algo que hacer; el estado ya esta en la pastilla. */}
+              {selected.accion_detalle && selected.accion !== "OK" ? (
                 <div className={`accion-banner ${accionBannerClass(selected.accion)}`}>
                   <p className="accion-banner-titulo">{selected.accion_detalle.titulo}</p>
                   <p className="accion-banner-descripcion">{selected.accion_detalle.descripcion}</p>
