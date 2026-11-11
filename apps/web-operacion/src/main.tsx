@@ -8,6 +8,74 @@ const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?
 const ACCESS_TOKEN_STORAGE_KEY = "ventax_factura_access_token";
 const BUILD_VERSION = (import.meta.env.VITE_APP_VERSION as string | undefined) ?? "dev";
 
+// ─── SPEC_MULTIPERFIL_USUARIO_v0.1: perfil de emision por sesion ──────────────
+// El cliente HTTP vive en muchos componentes; cuando un refresh devuelve SELECT_PERFIL avisa a App por aca.
+const _perfilRequeridoListeners: Array<(respuesta: AuthResponse) => void> = [];
+
+function onPerfilRequerido(fn: (respuesta: AuthResponse) => void): () => void {
+  _perfilRequeridoListeners.push(fn);
+  return () => {
+    const i = _perfilRequeridoListeners.indexOf(fn);
+    if (i >= 0) _perfilRequeridoListeners.splice(i, 1);
+  };
+}
+
+function emitirPerfilRequerido(respuesta: AuthResponse): void {
+  for (const fn of [..._perfilRequeridoListeners]) fn(respuesta);
+}
+
+function requierePerfil(respuesta: AuthResponse): boolean {
+  return respuesta.pending_actions?.includes("SELECT_PERFIL") ?? false;
+}
+
+function motivoDeError(error: unknown): string | null {
+  if (!(error instanceof ApiClientError)) return null;
+  const details = error.details as { reason?: unknown } | undefined;
+  return typeof details?.reason === "string" ? details.reason : null;
+}
+
+function esErrorDePerfil(error: unknown): boolean {
+  const motivo = motivoDeError(error);
+  return motivo === "PERFIL_REQUERIDO" || motivo === "PERFIL_NO_DISPONIBLE";
+}
+
+/** Claims del JWT sin verificarlos: solo para decisiones de la UI (D-8, RN-06). */
+function claimsDeToken(token: string | null): { scope: string | null; uoc: string | null } {
+  if (!token) return { scope: null, uoc: null };
+  try {
+    const payload = JSON.parse(atob(token.split(".")[1]!.replace(/-/g, "+").replace(/_/g, "/"))) as { scope?: unknown; uoc?: unknown };
+    return {
+      scope: typeof payload.scope === "string" ? payload.scope : null,
+      uoc: typeof payload.uoc === "string" ? payload.uoc : null
+    };
+  } catch {
+    return { scope: null, uoc: null };
+  }
+}
+
+// RN-06: cada editor registra si tiene un documento cargado y sin emitir.
+const _borradores = new Map<string, () => boolean>();
+
+function useBorradorSinEmitir(nombre: string, tieneDatos: () => boolean): void {
+  useEffect(() => {
+    _borradores.set(nombre, tieneDatos);
+    return () => {
+      if (_borradores.get(nombre) === tieneDatos) _borradores.delete(nombre);
+    };
+  });
+}
+
+function hayBorradorSinEmitir(): boolean {
+  for (const tieneDatos of _borradores.values()) {
+    if (tieneDatos()) return true;
+  }
+  return false;
+}
+
+function etiquetaPunto(perfil: { establecimiento: string; punto_expedicion: string }): string {
+  return `${perfil.establecimiento}-${perfil.punto_expedicion}`;
+}
+
 let _updatePending = false;
 const _updateListeners: Array<() => void> = [];
 
@@ -72,7 +140,7 @@ function startVersionPolling(): () => void {
   return () => window.clearInterval(id);
 }
 
-type ViewState = "checking-session" | "login" | "loading-context" | "operacion" | "onboarding";
+type ViewState = "checking-session" | "login" | "loading-context" | "operacion" | "onboarding" | "select-perfil";
 type OperationView = "status" | "invoice" | "credit-note" | "documents" | "catalog" | "clients" | "notas" | "recibos";
 type CondicionVenta = "CONTADO" | "CREDITO";
 type TipoTransaccionServicio = 1 | 2 | 3;
@@ -100,6 +168,32 @@ interface AuthResponse {
   expires_in: number;
   user: UserSummary;
   pending_actions?: string[];
+  /** SPEC_MULTIPERFIL_USUARIO_v0.1 §B.1: viene con pending_actions SELECT_PERFIL. */
+  perfiles?: PerfilDisponible[];
+}
+
+/** SPEC_MULTIPERFIL_USUARIO_v0.1 §B.4 */
+interface PerfilDisponible {
+  operacion_config_id: string;
+  establecimiento: string;
+  punto_expedicion: string;
+  perfil_emision_codigo: string;
+  perfil_emision_alias: string | null;
+  actividad_economica_codigo: string;
+  actividad_economica_descripcion: string | null;
+  actividad_economica_alias: string | null;
+  titulo_operativo: string;
+  timbrado: string;
+  numeracion_facturas: "SERVICIO" | "CLIENTE";
+  documento_nro: string | null;
+  activo_en_sesion: boolean;
+}
+
+interface DocumentoPerfilEmision {
+  establecimiento: string;
+  punto_expedicion: string;
+  perfil_emision_codigo: string;
+  alias: string | null;
 }
 
 interface OperationalContextResponse {
@@ -321,6 +415,8 @@ interface NotaCreditoSaldoResponse {
 
 interface DocumentoResponse {
   id: string;
+  /** SPEC_MULTIPERFIL_USUARIO_v0.1 §E.7: punto por el que se emitio; null en historicos. */
+  perfil_emision?: DocumentoPerfilEmision | null;
   /** La factura vino de una carga masiva. */
   carga?: { id: string; numero_archivo: string | null } | null;
   tipo: "FACTURA" | "NOTA_CREDITO" | "NOTA_REMISION";
@@ -888,16 +984,45 @@ function App() {
   const [readiness, setReadiness] = useState<ReadinessResponse | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [pendingActions, setPendingActions] = useState<string[]>([]);
+  // SPEC_MULTIPERFIL_USUARIO_v0.1: perfiles para la pantalla de eleccion y los de la sesion (barra).
+  const [perfilesEleccion, setPerfilesEleccion] = useState<PerfilDisponible[] | null>(null);
+  const [perfilesSesion, setPerfilesSesion] = useState<PerfilDisponible[]>([]);
+  const [avisoPerfil, setAvisoPerfil] = useState<string | null>(null);
+  const [recargaContexto, setRecargaContexto] = useState(0);
 
   const api = useMemo(() => createApiClient(accessToken, setAccessToken), [accessToken]);
 
   useEffect(() => {
-    if (accessToken) {
+    // D-8: el token de eleccion de perfil vence en 10 minutos y no sirve para operar: no se guarda.
+    if (accessToken && claimsDeToken(accessToken).scope !== "perfil_select") {
       localStorage.setItem(ACCESS_TOKEN_STORAGE_KEY, accessToken);
     } else {
       localStorage.removeItem(ACCESS_TOKEN_STORAGE_KEY);
     }
   }, [accessToken]);
+
+  function mostrarEleccionPerfil(respuesta: AuthResponse) {
+    setPerfilesEleccion(respuesta.perfiles ?? []);
+    setUser(respuesta.user);
+    setView("select-perfil");
+    setAccessToken(respuesta.access_token);
+  }
+
+  useEffect(
+    () =>
+      onPerfilRequerido((respuesta) => {
+        if (requierePerfil(respuesta)) {
+          mostrarEleccionPerfil(respuesta);
+          return;
+        }
+        // El refresh asigno otro punto (el anterior ya no esta): se recarga todo el contexto.
+        setAvisoPerfil("Tu punto de expedicion cambio. Revisa el punto activo antes de continuar.");
+        setView("loading-context");
+        setAccessToken(respuesta.access_token);
+        setRecargaContexto((n) => n + 1);
+      }),
+    []
+  );
 
   useEffect(() => startVersionPolling(), []);
 
@@ -905,7 +1030,7 @@ function App() {
     let active = true;
 
     async function bootstrap() {
-      if (accessToken && (view === "operacion" || view === "onboarding")) {
+      if (accessToken && (view === "operacion" || view === "onboarding" || view === "select-perfil")) {
         return;
       }
 
@@ -913,6 +1038,10 @@ function App() {
         if (!accessToken) {
           const refreshed = await refreshSession();
           if (!active) {
+            return;
+          }
+          if (requierePerfil(refreshed)) {
+            mostrarEleccionPerfil(refreshed);
             return;
           }
           setAccessToken(refreshed.access_token);
@@ -934,12 +1063,21 @@ function App() {
     async function loadOperationalState(token: string, sessionUser?: UserSummary) {
       setView("loading-context");
       const client = createApiClient(token, setAccessToken);
-      const [contextResult, readinessResult] = await Promise.allSettled([
+      const [contextResult, readinessResult, perfilesResult] = await Promise.allSettled([
         client.get<OperationalContextResponse>("/me/context"),
-        client.get<ReadinessResponse>("/me/readiness")
+        client.get<ReadinessResponse>("/me/readiness"),
+        client.get<{ perfiles: PerfilDisponible[] }>("/me/perfiles")
       ]);
 
       if (!active) {
+        return;
+      }
+
+      // Si falla, la barra no ofrece cambiar de punto; no bloquea la operacion.
+      setPerfilesSesion(perfilesResult.status === "fulfilled" ? perfilesResult.value.perfiles : []);
+
+      if (contextResult.status === "rejected" && esErrorDePerfil(contextResult.reason)) {
+        // El cliente HTTP ya aviso por onPerfilRequerido: eleccion o recarga.
         return;
       }
 
@@ -973,11 +1111,15 @@ function App() {
     return () => {
       active = false;
     };
-  }, [accessToken]);
+  }, [accessToken, recargaContexto]);
 
   async function handleLogin(username: string, password: string) {
     setErrorMessage(null);
     const response = await api.post<AuthResponse>("/auth/login", { username, password }, false);
+    if (requierePerfil(response)) {
+      mostrarEleccionPerfil(response);
+      return;
+    }
     if (response.pending_actions && response.pending_actions.length > 0) {
       setPendingActions(response.pending_actions);
       setView("onboarding");
@@ -986,10 +1128,48 @@ function App() {
     setUser(response.user);
   }
 
-  function handleOnboardingComplete(newAccessToken: string, newUser: UserSummary) {
+  function handleOnboardingComplete(newAccessToken: string, newUser: UserSummary, respuesta?: AuthResponse) {
+    if (respuesta && requierePerfil(respuesta)) {
+      mostrarEleccionPerfil(respuesta);
+      return;
+    }
     setView("loading-context");
     setAccessToken(newAccessToken);
     setUser(newUser);
+  }
+
+  /**
+   * SPEC_MULTIPERFIL_USUARIO_v0.1 §B.2 y §B.3. Sin reintento automatico: un 401 por contraseña
+   * incorrecta no debe disparar un refresh (contaria dos intentos).
+   */
+  async function elegirPerfil(operacionConfigId: string, password?: string) {
+    const respuesta = await api.post<AuthResponse>(
+      "/auth/perfil",
+      { operacion_config_id: operacionConfigId, ...(password ? { password } : {}) },
+      false
+    );
+    setPerfilesEleccion(null);
+    setView("loading-context");
+    setAccessToken(respuesta.access_token);
+    setRecargaContexto((n) => n + 1);
+  }
+
+  async function cambiarPerfil(operacionConfigId: string, password: string) {
+    const elegido = perfilesSesion.find((p) => p.operacion_config_id === operacionConfigId);
+    await elegirPerfil(operacionConfigId, password);
+    if (elegido) {
+      setAvisoPerfil(`Ahora estas facturando por ${etiquetaPunto(elegido)} · ${elegido.titulo_operativo}`);
+    }
+  }
+
+  function terminarSesionPorBloqueo(mensaje: string) {
+    clearSession(setAccessToken);
+    setUser(null);
+    setContext(null);
+    setReadiness(null);
+    setPerfilesSesion([]);
+    setErrorMessage(mensaje);
+    setView("login");
   }
 
   async function handleLogout() {
@@ -1004,6 +1184,9 @@ function App() {
       setUser(null);
       setContext(null);
       setReadiness(null);
+      setPerfilesSesion([]);
+      setPerfilesEleccion(null);
+      setAvisoPerfil(null);
       setView("login");
     }
   }
@@ -1014,6 +1197,17 @@ function App() {
 
   if (view === "login") {
     return <LoginScreen errorMessage={errorMessage} onLogin={handleLogin} onError={setErrorMessage} />;
+  }
+
+  if (view === "select-perfil") {
+    return (
+      <SeleccionPerfilScreen
+        perfiles={perfilesEleccion ?? []}
+        user={user}
+        onElegir={(id) => elegirPerfil(id)}
+        onSalir={handleLogout}
+      />
+    );
   }
 
   if (view === "onboarding") {
@@ -1028,6 +1222,11 @@ function App() {
       setAccessToken={setAccessToken}
       user={user}
       onLogout={handleLogout}
+      perfiles={perfilesSesion}
+      avisoPerfil={avisoPerfil}
+      onCerrarAvisoPerfil={() => setAvisoPerfil(null)}
+      onCambiarPerfil={cambiarPerfil}
+      onBloqueado={terminarSesionPorBloqueo}
     />
   );
 }
@@ -1133,6 +1332,192 @@ function LoginScreen({
   );
 }
 
+// ─── SPEC_MULTIPERFIL_USUARIO_v0.1 §C.1: elegir el punto de expedicion ───────
+function PerfilOpcionContenido({ perfil }: { perfil: PerfilDisponible }) {
+  return (
+    <>
+      <span className="perfil-opcion-texto">
+        <strong>{perfil.titulo_operativo}</strong>
+        <small>
+          Establecimiento {perfil.establecimiento} · Punto {perfil.punto_expedicion} · Timbrado {perfil.timbrado}
+        </small>
+        <small className="perfil-opcion-numero">
+          {perfil.numeracion_facturas === "CLIENTE"
+            ? "Solo carga de archivo"
+            : perfil.documento_nro
+              ? `Ultimo numero ${perfil.documento_nro}`
+              : null}
+        </small>
+      </span>
+    </>
+  );
+}
+
+function SeleccionPerfilScreen({
+  perfiles,
+  user,
+  onElegir,
+  onSalir
+}: {
+  perfiles: PerfilDisponible[];
+  user: UserSummary | null;
+  onElegir: (operacionConfigId: string) => Promise<void>;
+  onSalir: () => Promise<void>;
+}) {
+  const [eligiendo, setEligiendo] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function elegir(id: string) {
+    setEligiendo(id);
+    setError(null);
+    try {
+      await onElegir(id);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "No se pudo elegir el punto de expedicion.");
+      setEligiendo(null);
+    }
+  }
+
+  return (
+    <main className="auth-shell">
+      <section className="auth-panel perfil-eleccion" aria-labelledby="perfil-titulo">
+        <BrandMark />
+        <div className="auth-copy">
+          <p className="muted">Hola, {user?.display_name ?? user?.username ?? ""}</p>
+          <h1 id="perfil-titulo">¿Desde que punto vas a trabajar?</h1>
+        </div>
+        <div className="perfil-lista" role="list">
+          {perfiles.map((perfil) => (
+            <button
+              aria-label={`Elegir ${perfil.titulo_operativo} ${etiquetaPunto(perfil)}`}
+              className="perfil-opcion"
+              disabled={eligiendo !== null}
+              key={perfil.operacion_config_id}
+              onClick={() => void elegir(perfil.operacion_config_id)}
+              role="listitem"
+              type="button"
+            >
+              <PerfilOpcionContenido perfil={perfil} />
+              <Icono nombre="chevron-derecha" />
+            </button>
+          ))}
+        </div>
+        {error ? <p className="form-error">{error}</p> : null}
+        <button className="ghost-action" onClick={() => void onSalir()} type="button">
+          Salir
+        </button>
+      </section>
+    </main>
+  );
+}
+
+// ─── SPEC_MULTIPERFIL_USUARIO_v0.1 §C.3 y §C.4: cambiar de punto con contraseña ─
+function CambioPerfilDialog({
+  perfiles,
+  activoId,
+  hayDocumentoSinEmitir,
+  onConfirmar,
+  onBloqueado,
+  onCerrar
+}: {
+  perfiles: PerfilDisponible[];
+  activoId: string | null;
+  hayDocumentoSinEmitir: boolean;
+  onConfirmar: (operacionConfigId: string, password: string) => Promise<void>;
+  onBloqueado: (mensaje: string) => void;
+  onCerrar: () => void;
+}) {
+  const [elegido, setElegido] = useState<string | null>(null);
+  const [password, setPassword] = useState("");
+  const [enviando, setEnviando] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    function alTeclear(event: globalThis.KeyboardEvent) {
+      if (event.key === "Escape" && !enviando) onCerrar();
+    }
+    window.addEventListener("keydown", alTeclear);
+    return () => window.removeEventListener("keydown", alTeclear);
+  }, [enviando, onCerrar]);
+
+  async function confirmar(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!elegido || !password) return;
+    setEnviando(true);
+    setError(null);
+    try {
+      await onConfirmar(elegido, password);
+    } catch (e) {
+      if (e instanceof ApiClientError && e.status === 423) {
+        onBloqueado(e.message);
+        return;
+      }
+      setPassword("");
+      setError(e instanceof ApiClientError && e.status === 401 && motivoDeError(e) === "PASSWORD_INCORRECTA"
+        ? "Contraseña incorrecta."
+        : e instanceof Error ? e.message : "No se pudo cambiar el punto de expedicion.");
+      setEnviando(false);
+    }
+  }
+
+  return (
+    <div className="menu-scrim dialog-perfil-scrim" role="presentation" onClick={() => (enviando ? null : onCerrar())}>
+      <form
+        aria-labelledby="cambio-perfil-titulo"
+        aria-modal="true"
+        className="dialog-perfil"
+        onClick={(event) => event.stopPropagation()}
+        onSubmit={(event) => void confirmar(event)}
+        role="dialog"
+      >
+        <h2 id="cambio-perfil-titulo">Cambiar punto de expedicion</h2>
+        <div className="perfil-lista" role="radiogroup" aria-label="Puntos de expedicion">
+          {perfiles.map((perfil) => {
+            const activo = perfil.operacion_config_id === activoId;
+            const marcado = perfil.operacion_config_id === elegido;
+            return (
+              <button
+                aria-checked={marcado}
+                className={["perfil-opcion", marcado ? "elegido" : "", activo ? "activo" : ""].filter(Boolean).join(" ")}
+                disabled={activo || enviando}
+                key={perfil.operacion_config_id}
+                onClick={() => setElegido(perfil.operacion_config_id)}
+                role="radio"
+                type="button"
+              >
+                <PerfilOpcionContenido perfil={perfil} />
+                {activo ? <span className="perfil-opcion-activo">Activo</span> : marcado ? <Icono nombre="tilde" /> : null}
+              </button>
+            );
+          })}
+        </div>
+        <label>
+          Tu contraseña
+          <input
+            autoComplete="current-password"
+            disabled={enviando}
+            onChange={(event) => setPassword(event.target.value)}
+            type="password"
+            value={password}
+          />
+        </label>
+        {hayDocumentoSinEmitir ? (
+          <p className="aviso-perfil" role="alert">Tenes un documento sin emitir. Si cambias de punto se descarta.</p>
+        ) : null}
+        {error ? <p className="form-error">{error}</p> : null}
+        <div className="dialog-perfil-acciones">
+          <button className="ghost-action" disabled={enviando} onClick={onCerrar} type="button">
+            Cancelar
+          </button>
+          <button className="primary-action" disabled={!elegido || !password || enviando} type="submit">
+            {enviando ? "Cambiando..." : hayDocumentoSinEmitir ? "Descartar y cambiar" : "Cambiar"}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
 interface TycCurrentData {
   id: string;
   version: string;
@@ -1155,7 +1540,7 @@ function OnboardingFlow({
   userRole
 }: {
   accessToken: string | null;
-  onComplete: (newAccessToken: string, newUser: UserSummary) => void;
+  onComplete: (newAccessToken: string, newUser: UserSummary, respuesta?: AuthResponse) => void;
   pendingActions: string[];
   username: string;
   userRole: string;
@@ -1219,7 +1604,7 @@ function OnboardingFlow({
     setSubmitting(true);
     try {
       const result = await api.post<AuthResponse>("/onboarding/admin/accept-direct", {});
-      onComplete(result.access_token, result.user);
+      onComplete(result.access_token, result.user, result);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error al completar la activacion.");
     } finally {
@@ -1269,7 +1654,7 @@ function OnboardingFlow({
         otp_code: otpCode,
         checkbox_aceptado: true
       });
-      onComplete(result.access_token, result.user);
+      onComplete(result.access_token, result.user, result);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error al completar la activacion.");
     } finally {
@@ -1433,7 +1818,12 @@ function OperationHome({
   readiness,
   setAccessToken,
   user,
-  onLogout
+  onLogout,
+  perfiles,
+  avisoPerfil,
+  onCerrarAvisoPerfil,
+  onCambiarPerfil,
+  onBloqueado
 }: {
   accessToken: string | null;
   context: OperationalContextResponse | null;
@@ -1441,11 +1831,22 @@ function OperationHome({
   setAccessToken: (token: string | null) => void;
   user: UserSummary | null;
   onLogout: () => Promise<void>;
+  /** SPEC_MULTIPERFIL_USUARIO_v0.1: perfiles emitibles del usuario; con mas de uno se puede cambiar. */
+  perfiles: PerfilDisponible[];
+  avisoPerfil: string | null;
+  onCerrarAvisoPerfil: () => void;
+  onCambiarPerfil: (operacionConfigId: string, password: string) => Promise<void>;
+  onBloqueado: (mensaje: string) => void;
 }) {
   const canEmit = Boolean(readiness?.ready);
   // SPEC_CARGA_MASIVA_FACTURAS_v0.1 RN-22: el backend tambien lo rechaza.
   const numeracionDelCliente = context?.fiscal_context.numeracion_facturas === "CLIENTE";
-  const [operationView, setOperationView] = useState<OperationView>(() => (canEmit ? "invoice" : "status"));
+  // §C.3: tras un cambio de punto se vuelve a "Informacion y estado" con el aviso.
+  const [operationView, setOperationView] = useState<OperationView>(() => (avisoPerfil ? "status" : canEmit ? "invoice" : "status"));
+  const variosPerfiles = perfiles.length > 1;
+  const perfilActivo = perfiles.find((p) => p.activo_en_sesion) ?? null;
+  const [cambioPerfil, setCambioPerfil] = useState<{ sinEmitir: boolean } | null>(null);
+  const abrirCambioPerfil = () => setCambioPerfil({ sinEmitir: hayBorradorSinEmitir() });
   const [menuOpen, setMenuOpen] = useState(false);
   const esEscritorio = useEsEscritorio();
   const updatePending = useUpdatePending();
@@ -1539,6 +1940,7 @@ function OperationHome({
     }
     setOperationView(view);
     setMenuOpen(false);
+    if (avisoPerfil && view !== "status") onCerrarAvisoPerfil();
   }
 
   function useClienteFromAgenda(cliente: ClienteResponse) {
@@ -1620,10 +2022,26 @@ function OperationHome({
           src={esEscritorio ? "/app/brand/segel-logo-fondo-claro.svg" : "/app/brand/segel-isotipo.svg"}
         />
         {esEscritorio ? <span className="topbar-separador" aria-hidden="true" /> : null}
-        <div className="topbar-facturador">
-          <strong>{firstText(context?.facturador.nombre_fantasia, context?.facturador.razon_social) ?? getOperationalTitle(context)}</strong>
-          <small>{esEscritorio ? lineaFiscal : lineaFiscalCorta}</small>
-        </div>
+        {variosPerfiles ? (
+          <button
+            aria-haspopup="dialog"
+            className="topbar-facturador topbar-facturador--boton"
+            onClick={abrirCambioPerfil}
+            title="Cambiar punto de expedicion"
+            type="button"
+          >
+            <span className="topbar-facturador-texto">
+              <strong>{firstText(context?.facturador.nombre_fantasia, context?.facturador.razon_social) ?? getOperationalTitle(context)}</strong>
+              <small>{esEscritorio ? lineaFiscal : lineaFiscalCorta}</small>
+            </span>
+            <Icono nombre="chevron-abajo" tamano={16} />
+          </button>
+        ) : (
+          <div className="topbar-facturador">
+            <strong>{firstText(context?.facturador.nombre_fantasia, context?.facturador.razon_social) ?? getOperationalTitle(context)}</strong>
+            <small>{esEscritorio ? lineaFiscal : lineaFiscalCorta}</small>
+          </div>
+        )}
         {esEscritorio && operadorNombre ? (
           <div className="topbar-operador" title={operadorNombre}>
             <span className="topbar-avatar" aria-hidden="true">{iniciales(operadorNombre)}</span>
@@ -1758,6 +2176,7 @@ function OperationHome({
       ) : operationView === "credit-note" ? (
         <CreditNoteView
           accessToken={accessToken}
+          context={context}
           setAccessToken={setAccessToken}
           onBack={() => goTo("status")}
         />
@@ -1770,6 +2189,7 @@ function OperationHome({
           onCorregirFactura={(draft) => { setInvoiceInitialDraft(draft); goTo("invoice"); }}
           role={user?.role ?? "OPERADOR_FACTURACION"}
           context={context}
+          mostrarPunto={variosPerfiles}
         />
       ) : operationView === "clients" ? (
         <ClientesAgendaView
@@ -1797,10 +2217,25 @@ function OperationHome({
           readiness={readiness}
           user={user}
           onGoTo={goTo}
+          perfilActivo={perfilActivo}
+          variosPerfiles={variosPerfiles}
+          avisoPerfil={avisoPerfil}
+          onCerrarAvisoPerfil={onCerrarAvisoPerfil}
+          onCambiarPerfil={abrirCambioPerfil}
         />
       )}
       </div>
       </div>
+      {cambioPerfil ? (
+        <CambioPerfilDialog
+          activoId={perfilActivo?.operacion_config_id ?? null}
+          hayDocumentoSinEmitir={cambioPerfil.sinEmitir}
+          onBloqueado={onBloqueado}
+          onCerrar={() => setCambioPerfil(null)}
+          onConfirmar={onCambiarPerfil}
+          perfiles={perfiles}
+        />
+      ) : null}
     </main>
   );
 }
@@ -1810,19 +2245,37 @@ function StatusView({
   context,
   readiness,
   user,
-  onGoTo
+  onGoTo,
+  perfilActivo,
+  variosPerfiles,
+  avisoPerfil,
+  onCerrarAvisoPerfil,
+  onCambiarPerfil
 }: {
   canEmit: boolean;
   context: OperationalContextResponse | null;
   readiness: ReadinessResponse | null;
   user: UserSummary | null;
   onGoTo: (view: OperationView) => void;
+  perfilActivo?: PerfilDisponible | null;
+  variosPerfiles?: boolean;
+  avisoPerfil?: string | null;
+  onCerrarAvisoPerfil?: () => void;
+  onCambiarPerfil?: () => void;
 }) {
   const businessChecks = mapBusinessReadinessChecks(readiness?.checks ?? []);
   const statusLabel = canEmit ? "Listo para facturar" : "Faltan requisitos para facturar";
 
   return (
     <>
+      {avisoPerfil ? (
+        <section className="aviso-perfil aviso-perfil-banda" role="status">
+          <span>{avisoPerfil}</span>
+          <button className="ghost-action compact" onClick={onCerrarAvisoPerfil} type="button">
+            Cerrar
+          </button>
+        </section>
+      ) : null}
       <section className="facturador-band" aria-label="Contexto operativo">
         <div>
           <p className="eyebrow">Facturador</p>
@@ -1830,6 +2283,17 @@ function StatusView({
           <p className="muted">
             {context ? `${context.facturador.razon_social} · RUC ${context.facturador.ruc}` : "Configuracion operativa incompleta"}
           </p>
+          {context ? (
+            <p className="punto-activo">
+              Punto de expedicion: <strong>{context.fiscal_context.establecimiento}-{context.fiscal_context.punto_expedicion}</strong>
+              {perfilActivo ? ` · ${perfilActivo.titulo_operativo}` : ""}
+              {variosPerfiles ? (
+                <button className="enlace-accion" onClick={onCambiarPerfil} type="button">
+                  Cambiar punto de expedicion
+                </button>
+              ) : null}
+            </p>
+          ) : null}
         </div>
         <span className={canEmit ? "status-pill ready" : "status-pill blocked"}>{canEmit ? "Listo" : "Bloqueado"}</span>
       </section>
@@ -1918,7 +2382,8 @@ function DocumentsView({
   onGoTo,
   role,
   context,
-  onCorregirFactura
+  onCorregirFactura,
+  mostrarPunto = false
 }: {
   accessToken: string | null;
   setAccessToken: (token: string | null) => void;
@@ -1927,6 +2392,8 @@ function DocumentsView({
   role: UserSummary["role"];
   context?: OperationalContextResponse | null;
   onCorregirFactura?: (draft: InvoiceInitialDraft) => void;
+  /** SPEC_MULTIPERFIL_USUARIO_v0.1 §C.8: columna "Punto" solo con mas de un perfil. */
+  mostrarPunto?: boolean;
 }) {
   const api = useMemo(() => createApiClient(accessToken, setAccessToken), [accessToken, setAccessToken]);
   const todayYmd = useMemo(() => formatYmdFromDate(new Date()), []);
@@ -2791,6 +3258,7 @@ function DocumentsView({
               <thead>
                 <tr>
                   <th>Fecha</th>
+                  {mostrarPunto ? <th>Punto</th> : null}
                   <th>Número</th>
                   <th>{esRemision ? "Destinatario" : "Cliente"}</th>
                   <th>RUC o CI</th>
@@ -2806,6 +3274,9 @@ function DocumentsView({
                 {documents.map((documento) => (
                   <tr className="documents-tabla-fila" key={documento.id} onClick={() => void openDetail(documento.id)}>
                     <td>{formatShortDate(documento.created_at)}</td>
+                    {mostrarPunto ? (
+                      <td className="documents-tabla-punto">{documento.perfil_emision ? etiquetaPunto(documento.perfil_emision) : "—"}</td>
+                    ) : null}
                     <td>
                       <strong title={documento.accion_detalle?.titulo}>{`${getDocumentoAccionIcon(documento)} ${documento.numero_fiscal ?? "pendiente"}`}</strong>
                       {documento.carga ? (
@@ -3942,10 +4413,12 @@ function ClientesAgendaView({
 
 function CreditNoteView({
   accessToken,
+  context,
   setAccessToken,
   onBack
 }: {
   accessToken: string | null;
+  context?: OperationalContextResponse | null;
   setAccessToken: (token: string | null) => void;
   onBack: () => void;
 }) {
@@ -3959,6 +4432,8 @@ function CreditNoteView({
   const [result, setResult] = useState<DocumentoResponse | null>(null);
   const [deliveryLink, setDeliveryLink] = useState<DeliveryLinkResponse | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  // SPEC_MULTIPERFIL_USUARIO_v0.1 RN-06: una factura elegida con motivo y sin NC emitida es un borrador.
+  useBorradorSinEmitir("nota-credito", () => Boolean(selected && !result && motivo.trim()));
 
   useEffect(() => {
     void loadCandidates();
@@ -4099,6 +4574,14 @@ function CreditNoteView({
                 </div>
               </div>
               {!selected.elegible ? <p className="editor-alert blocked">{selected.motivo_no_elegible}</p> : null}
+              {/* SPEC_MULTIPERFIL_USUARIO_v0.1 RN-05 / D-1: la NC sale por el punto activo; se avisa si difiere. */}
+              {selected.documento.perfil_emision && context &&
+              etiquetaPunto(selected.documento.perfil_emision) !== etiquetaPunto(context.fiscal_context) ? (
+                <p className="aviso-perfil">
+                  La factura original se emitio por {etiquetaPunto(selected.documento.perfil_emision)}; la nota saldra por{" "}
+                  {etiquetaPunto(context.fiscal_context)} (punto activo).
+                </p>
+              ) : null}
               <label className="credit-note-motivo">
                 Motivo
                 <textarea onChange={(event) => setMotivo(event.target.value)} rows={4} value={motivo} />
@@ -4574,6 +5057,11 @@ function InvoiceEditor({
   const [emitting, setEmitting] = useState(false);
   const [emissionError, setEmissionError] = useState<string | null>(null);
   const [emittedDocumento, setEmittedDocumento] = useState<DocumentoResponse | null>(null);
+  // SPEC_MULTIPERFIL_USUARIO_v0.1 RN-06: datos cargados y nada emitido.
+  useBorradorSinEmitir(
+    "factura",
+    () => !emittedDocumento && Boolean(cliente.documento.trim() || cliente.razon_social.trim() || lines.some((linea) => linea.descripcion.trim()))
+  );
   const [idempotencyKey, setIdempotencyKey] = useState(() => createIdempotencyKey());
   const [lastEmittedRequestFingerprint, setLastEmittedRequestFingerprint] = useState<string | null>(null);
   const [deliveryLink, setDeliveryLink] = useState<DeliveryLinkResponse | null>(null);
@@ -7349,14 +7837,37 @@ function createApiClient(accessToken: string | null, setAccessToken: (token: str
 
     if (response.status === 401 && retry) {
       const refreshed = await refreshSession();
+      if (requierePerfil(refreshed)) {
+        // SPEC_MULTIPERFIL_USUARIO_v0.1 §B.5: el punto de la sesion ya no esta; App muestra la eleccion.
+        emitirPerfilRequerido(refreshed);
+        throw new ApiClientError(409, "Elegi el punto de expedicion para continuar.", { reason: "PERFIL_REQUERIDO" });
+      }
       setAccessToken(refreshed.access_token);
+      const uocAnterior = claimsDeToken(accessToken).uoc;
+      if (uocAnterior && claimsDeToken(refreshed.access_token).uoc !== uocAnterior) {
+        // RN-06: el refresh asigno otro punto; no se reintenta el pedido con un punto que no esta en pantalla.
+        emitirPerfilRequerido({ ...refreshed, pending_actions: ["RECARGAR_CONTEXTO"] });
+        throw new ApiClientError(409, "Tu punto de expedicion cambio. Revisa el punto activo antes de continuar.", { reason: "PERFIL_NO_DISPONIBLE" });
+      }
       return createApiClient(refreshed.access_token, setAccessToken).request<T>(path, init, false);
     }
 
     if (!response.ok) {
       const copia = response.clone();
       const details = await copia.json().then((body: ApiErrorResponse) => body.error?.details, () => undefined);
-      throw new ApiClientError(response.status, await readApiError(response), details);
+      const error = new ApiClientError(response.status, await readApiError(response), details);
+      if (response.status === 409 && retry && esErrorDePerfil(error)) {
+        // §C.6: perfil no disponible (lo quito el backoffice) o token viejo sin perfil: el refresh decide.
+        const refreshed = await refreshSession().catch(() => null);
+        if (!refreshed) {
+          throw new ApiClientError(401, "Tu punto de expedicion cambio. Volve a entrar.", { reason: "PERFIL_NO_DISPONIBLE" });
+        }
+        // RN-06: nunca se reintenta el pedido con otro punto. App recarga el contexto (o pide elegir)
+        // y el operador ve el punto nuevo antes de volver a emitir.
+        emitirPerfilRequerido(requierePerfil(refreshed) ? refreshed : { ...refreshed, pending_actions: ["RECARGAR_CONTEXTO"] });
+        throw new ApiClientError(409, "Tu punto de expedicion cambio. Revisa el punto activo antes de continuar.", { reason: motivoDeError(error) });
+      }
+      throw error;
     }
 
     if (response.status === 204) {
@@ -7599,6 +8110,11 @@ function NotasView({
 
   // Formulario — filas
   const [formFilas, setFormFilas] = useState<NotaFilaDraft[]>([]);
+  // SPEC_MULTIPERFIL_USUARIO_v0.1 RN-06
+  useBorradorSinEmitir(
+    "presupuesto",
+    () => subView === "form" && Boolean(cliente.nombre.trim() || formObservaciones.trim() || formFilas.some((fila) => fila.descripcion.trim()))
+  );
   const [activeFilaId, setActiveFilaId] = useState<string | null>(null);
   const [filaSheetOpen, setFilaSheetOpen] = useState(false);
 
@@ -8639,6 +9155,11 @@ function RecibosView({
   const [formPagadorDireccion, setFormPagadorDireccion] = useState("");
   const [formPagadorTelefono, setFormPagadorTelefono] = useState("");
   const [formPagadorEmail, setFormPagadorEmail] = useState("");
+  // SPEC_MULTIPERFIL_USUARIO_v0.1 RN-06
+  useBorradorSinEmitir(
+    "recibo",
+    () => subView === "form" && Boolean(formPagadorNombre.trim() || formConcepto.trim() || formImporte.trim())
+  );
   const [clienteSuggestions, setClienteSuggestions] = useState<ClienteSearchResult[]>([]);
   const [clienteSearching, setClienteSearching] = useState(false);
   const [clienteAutocompleting, setClienteAutocompleting] = useState(false);
