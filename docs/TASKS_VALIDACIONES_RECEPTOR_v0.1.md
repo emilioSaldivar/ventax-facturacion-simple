@@ -17,7 +17,7 @@ SPEC: `docs/SPEC_VALIDACIONES_RECEPTOR_v0.1.md` · PLAN: `docs/PLAN_VALIDACIONES
 | VAL-011 | Cierre: repaso de SPEC/PLAN/TASKS, BACKLOG (FS-60, FS-62 cerrados por esta cadena), `HOJA_DE_RUTA` | — | revision | Pendiente |
 | VAL-012 | Despliegue en `segel-fs` | — | **solo con orden directa del usuario**; respaldo previo; aviso de la cifra de VAL-009 | Pendiente |
 | VAL-013 | Pantalla de Recibos: error por campo en el pagador (hoy solo el mensaje de la API) | RV-09 | Playwright en el formulario de recibos | Pendiente (refinado el 2026-11-11) |
-| VAL-014 | Corrida del guion con SALUMAX (`altas-fs`, `slx-tics`, `SEGEL_DB_CONTAINER=altas-fs-postgres-1`) | CA-01 a CA-08 | 67 verificaciones en 1440/1280/390 | Pendiente: corrida en curso (2026-11-11) |
+| VAL-014 | Corrida del guion con SALUMAX (`altas-fs`, `slx-tics`, `SEGEL_DB_CONTAINER=altas-fs-postgres-1`) | CA-01 a CA-08 | 67 verificaciones en 1440/1280/390 | Hecha (2026-11-11): **58/64**. Las 6 fallas son CA-07 y los pasos de CA-02 del editor que dependen de el, en los tres anchos: la pila `altas-fs` no tiene el padron de la DNIT (0 filas en `dnit_ruc_contribuyentes`), asi que no hay aviso del DV. No es un defecto de la app; CA-07 ya paso 3/3 en el stack del ensayo con el padron cargado. CA-08 con el cliente viejo `RUC xxx` paso en el banco de SALUMAX |
 
 ## Tabla de casos (VAL-002)
 
