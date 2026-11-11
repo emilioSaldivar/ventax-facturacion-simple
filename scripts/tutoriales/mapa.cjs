@@ -1,0 +1,88 @@
+// Lista de control del mapa de la app (SPEC_TUTORIALES_VIDEO_v0.1 §3 y §4), una entrada por fila.
+// Cada `paso` de un guion declara en `cubre` los ids de esta lista; cobertura.cjs compara (CA-6).
+// [id, video(s) que deben cubrirlo, fila del SPEC]
+module.exports = [
+  // §3.1 Entrada y sesion
+  ["3.1-ingreso", ["v1"], "Ingresar a facturación"],
+  ["3.1-contrasena", ["v1"], "Crear nueva contraseña"],
+  ["3.1-tyc", ["v1"], "Términos y Condiciones"],
+  ["3.1-otp", ["v1"], "Verificación por correo"],
+  ["3.1-punto", ["v1"], "¿Desde qué punto vas a trabajar?"],
+  ["3.1-barra", ["v1", "v2"], "Barra superior"],
+  ["3.1-cambio-punto", ["v1"], "Cambiar punto de expedición"],
+  ["3.1-menu-nuevo", ["v2"], "Menu Nuevo"],
+  ["3.1-salir", ["v1"], "Salir"],
+  // §3.2 Menu lateral
+  ["3.2-nueva-factura", ["v3"], "Nueva factura"],
+  ["3.2-notas-credito", ["v4"], "Notas de crédito"],
+  ["3.2-notas-debito", ["v2"], "Notas de débito (Próximamente)"],
+  ["3.2-remision", ["v2", "v5"], "Notas de remisión (Por planilla)"],
+  ["3.2-autofacturas", ["v2"], "Autofacturas (Próximamente)"],
+  ["3.2-documentos", ["v2"], "Documentos"],
+  ["3.2-agenda", ["v6"], "Agenda / Clientes"],
+  ["3.2-catalogo", ["v6"], "Catálogo"],
+  ["3.2-presupuestos", ["v6"], "Presupuestos / Pedidos"],
+  ["3.2-recibos", ["v6"], "Cobros / Recibos"],
+  ["3.2-informacion", ["v2"], "Información y estado"],
+  // §3.3 Nueva factura
+  ["3.3-subtitulo", ["v3"], "el número lo asigna el sistema al emitir"],
+  ["3.3-modos", ["v3"], "Modo simple / Modo completo"],
+  ["3.3-condicion", ["v3"], "Contado / Crédito y Plazo"],
+  ["3.3-cliente", ["v3"], "Documento y Número, autocompletado DNIT, Sin nombre"],
+  ["3.3-guardar-agenda", ["v3"], "Guardar en la agenda al emitir"],
+  ["3.3-lineas", ["v3"], "Lineas e IVA"],
+  ["3.3-catalogo", ["v6"], "Buscar en el catálogo"],
+  ["3.3-usd", ["v3"], "Moneda USD y Tipo de cambio"],
+  ["3.3-crear", ["v3"], "Crear factura"],
+  ["3.3-resultado", ["v3"], "Pasos del resultado"],
+  ["3.3-entregar", ["v3"], "Entregar al cliente"],
+  ["3.3-siguiente", ["v3"], "Crear nueva factura / Ver en Documentos"],
+  // §3.4 Documentos
+  ["3.4-pestanas", ["v2"], "Pestañas de Documentos"],
+  ["3.4-filtros", ["v2"], "Filtros"],
+  ["3.4-pastillas", ["v2"], "Pastilla de estado"],
+  ["3.4-ficha", ["v2"], "Ficha y Entregar al cliente"],
+  ["3.4-acciones", ["v4", "v6"], "Crear nota de crédito / Emitir recibo de cobro"],
+  ["3.4-recuperacion", ["v2"], "Verificar estado fiscal / Reintentar / Inutilizar"],
+  ["3.4-info-fiscal", ["v2"], "Información fiscal"],
+  ["3.4-cargas", ["v5"], "Cargas por planilla"],
+  // §3.5 Notas de credito
+  ["3.5-pestanas", ["v4"], "Nueva nota de crédito / Emitidas"],
+  ["3.5-buscar", ["v4"], "Buscar factura y Elegible"],
+  ["3.5-total-parcial", ["v4"], "Toda la factura / Algunas líneas"],
+  ["3.5-emitir", ["v4"], "Motivo y Emitir nota de crédito"],
+  ["3.5-avisos", ["v4"], "Avisos M-4 y Sin nombre"],
+  // §3.6 Carga masiva
+  ["3.6-nueva", ["v5"], "Nueva carga y planilla de ejemplo"],
+  ["3.6-estados", ["v5"], "Estados de la carga"],
+  ["3.6-filas", ["v5"], "Estado por fila y Ver documento"],
+  ["3.6-confirmar", ["v5"], "Confirmar y emitir / Cancelar carga"],
+  ["3.6-atencion", ["v5"], "Requiere atención, Reintentar fallas, Inutilizar, Descargar resultado"],
+  ["3.6-remisiones", ["v5"], "Remisiones por planilla"],
+  // §3.7 Comercial
+  ["3.7-presupuestos", ["v6"], "Presupuestos y Pedidos"],
+  ["3.7-editor", ["v6"], "Editor del presupuesto"],
+  ["3.7-detalle", ["v6"], "Marcar estado, Convertir en factura, WhatsApp"],
+  ["3.7-recibo-suelto", ["v6"], "Nuevo recibo"],
+  ["3.7-recibo-factura", ["v6"], "Recibo desde la factura a credito"],
+  ["3.7-recibo-entrega", ["v6"], "WhatsApp, enlace y Anular recibo"],
+  // §3.8 Agendas
+  ["3.8-clientes", ["v6"], "Clientes"],
+  ["3.8-productos", ["v6"], "Productos y servicios"],
+  // §3.9 Cliente final
+  ["3.9-enlace-factura", ["v3"], "Enlace de la factura"],
+  ["3.9-publicas", ["v6"], "Paginas publicas de presupuesto y recibo"],
+  // §4 Estados
+  ["4-resultado-ok", ["v3"], "Creada → Aprobada · KUDE listo"],
+  ["4-rechazada", ["v3", "v2"], "Rechazada por SIFEN"],
+  ["4-emitida", ["v2"], "Factura emitida"],
+  ["4-procesando", ["v2"], "Procesando"],
+  ["4-revision", ["v2"], "Requiere revisión"],
+  ["4-corregida", ["v2"], "Corregida, falta inutilizar / Número inutilizado / Resuelta"],
+  ["4-nc-sin-confirmar", ["v4"], "Nota de crédito sin confirmar"],
+  ["4-anulada", ["v2"], "Anulada / Cancelada antes de enviar"],
+  ["4-carga", ["v5"], "Ciclo de una carga"],
+  ["4-carga-fila", ["v5"], "Estado por fila"],
+  ["4-comercial", ["v6"], "Estado comercial"],
+  ["4-recibo", ["v6"], "Estados del recibo"]
+];

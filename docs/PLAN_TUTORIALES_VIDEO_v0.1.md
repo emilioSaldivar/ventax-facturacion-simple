@@ -16,6 +16,8 @@ scripts/tutoriales/
   v5-carga-masiva.cjs
   v6-comercial-agendas.cjs
   montar.sh            webm -> mp4 con los cortes de espera
+  mapa.cjs             lista de control: una entrada por fila del mapa del SPEC (§3 y §4), con su video
+  prueba-seca.cjs      TUT-001: comprueba reemplazo, guardia, paginas publicas y cobertura, sin emitir
   cobertura.cjs        junta cobertura.json de los seis videos y lista las filas del mapa sin cubrir
   datos/               CSV de la carga masiva (3 facturas, 2 remisiones), sin datos reales
 ```
@@ -25,27 +27,27 @@ Salida en `test-results/tutoriales/<video>/`: `bruto.webm`, `linea.json`, `<vide
 ## 2. Grabacion (`lib.cjs`)
 
 - **Navegador:** Chromium de Playwright 1.61.1, viewport y video de 1440 x 900, `deviceScaleFactor` 1, idioma `es-PY`, zona `America/Asuncion`. A 1440 px la app usa el diseño de escritorio (menu lateral, menu "Nuevo", editor en "Modo completo"). Antes de V3 se fija `localStorage["fs.editor.modo"] = "completo"`; la escena 1 de V3 muestra el cambio simple → completo a mano.
-- **Subtitulos:** `addInitScript` inyecta una franja inferior fija (Montserrat 22 px, fondo negro al 80 %, maximo dos lineas) con `pointer-events: none`. `paso(texto, {ms, cubre})` cambia el texto y espera lo necesario para leerlo: `max(ms, 900 + 55 ms por palabra)`. Los textos siguen R-7 (voseo, una idea por frase, etiquetas de la app entre comillas tipograficas).
+- **Subtitulos:** `addInitScript` inyecta una franja inferior fija (Montserrat 22 px, fondo negro al 80 %, maximo dos lineas) con `pointer-events: none`. `paso(texto, {ms, cubre})` cambia el texto y espera lo necesario para leerlo: `max(ms, 1200 + 300 ms por palabra)` (unas tres palabras por segundo; la cifra anterior, 55 ms por palabra, no alcanzaba para leer). Los textos siguen R-7 (voseo, una idea por frase, etiquetas de la app entre comillas tipograficas).
 - **Cobertura (CA-6):** `paso` recibe en `cubre` los ids del mapa del SPEC (`3.2 Nueva factura`, `4 Procesando`, …). Al terminar, cada guion escribe `cobertura.json` con los ids tocados; `montar.sh` los junta y TUT-010 compara contra la lista completa (§8).
 - **Cursor y foco:** un punto rojo sigue al mouse. `senalar(locator)` dibuja un recuadro rojo de 600 ms sobre el elemento antes de hacer clic o escribir. Se escribe con `pressSequentially` a 70 ms por tecla, para que se vea. Para los botones que se explican sin usar (R-8), `senalar` sin clic.
-- **Datos ocultos por zonas (D-2, D-6, R-4):** el facturador local y el cliente de la CI son la misma persona, asi que no se reemplaza en todo el texto. Un `MutationObserver` en `addInitScript` reemplaza nombre (`EMILIO MATIAS SALDIVAR CAPUTO`, `EMILIO SALDIVAR`) y RUC (`5057016-1`) del facturador por `Empresa Ejemplo S.A.` y `80000000-0` solo dentro de las zonas del emisor:
-  - barra superior (`.topbar`), pie del menu lateral y menu "Nuevo";
-  - "Información y estado" (tarjeta "Facturador y sesión" y el encabezado de la pantalla, que titula con el facturador);
-  - "Datos de tu cuenta" del primer ingreso;
-  - bloques del emisor en la ficha de Documentos ("Información fiscal") y en las paginas publicas `/verificar/nota/…` y `/verificar/recibo/…`.
+- **Datos ocultos (D-2, D-6, D-7, R-4), diseño adoptado en TUT-001:** el reemplazo se hace en las **respuestas de la API** (`/api/v1/**`, solo JSON), antes de que lleguen a la pantalla, y no en el DOM. Solo se tocan los campos que cuelgan de `facturador`, `tenant` y `emisor` (nombre, RUC, correo) y de `user`, `emitido_por`, `usuario` (`Operador Demo`, `operador.demo`, `ejemplo@ejemplo.com`); los datos del cliente no se tocan, asi que el cliente de la CI conserva su nombre y su RUC. Ademas, en cualquier campo:
+  - el timbrado local `05057016` lleva el RUC del emisor: se reemplaza por `12345678` en todo texto, lo que cubre tambien el **CDC**, que lleva el RUC del emisor con el cero adelante (el RUC de un cliente nunca lo lleva);
+  - `email_destino_ofuscado` pasa a `ej***@ejemplo.com`;
+  - la actividad local ("TALLERES DE CHAPERÍA Y PINTURA", 45203) pasa a "SERVICIOS DE CONSULTORÍA INFORMÁTICA" (62010), coherente con los items de los videos;
+  - el XML crudo de SIFEN en las respuestas se vacia.
 
-  El selector exacto de cada zona se fija en TUT-001 contra el DOM. En todo el texto: el nombre del operador por `Operador Demo`; `operador-ensayo` por `operador.demo`; `emilio.saldivar@segel.com.py` por `ejemplo@ejemplo.com` y `em***@segel.com.py` por `ej***@ejemplo.com` (D-7).
-- **Guardia:** despues de cada `paso`, las zonas del emisor no pueden contener el nombre ni el RUC reales, y ninguna parte de la pagina puede mostrar `emilio.saldivar@segel.com.py`, `operador-ensayo` ni `segel.com.py`. Si aparece uno, el guion falla y marca el video como invalido.
+  Las paginas publicas `/verificar/recibo/…` y `/verificar/nota/…` no muestran datos del emisor: **se abren en V6** (P-5, comprobado en TUT-001).
+- **Guardia:** despues de cada `paso`, las zonas del emisor (barra superior, menu lateral, menu "Nuevo", tarjeta "Facturador y sesión", encabezado de "Información y estado", "Datos de tu cuenta"; en las paginas publicas, toda la pagina) no pueden contener `5057016` ni `SALDIVAR`, y ninguna parte de la pagina, incluidos los campos de texto, puede mostrar `operador-ensayo`, `segel.com.py`, `emilio.saldivar`, `(ensayo)` ni `05057016`. Si aparece uno, el guion falla, deja una captura y marca el video como invalido.
 - **KuDE:** nunca se abre "Ver KUDE en PDF", el PDF de "Entregar al cliente" ni el PDF de un presupuesto (D-2). Los botones se señalan con un subtitulo, sin clic. Las paginas publicas de nota y recibo se abren solo si en TUT-001 se confirma que el reemplazo cubre su bloque de emisor (SPEC §3.9).
-- **Esperas largas:** `espera(nombre, fn)` registra en `linea.json` el inicio y el fin de la espera (por ejemplo, aprobacion SIFEN o validacion de una carga). Durante la espera el subtitulo dice "Esperando la respuesta de SIFEN…". `montar.sh` deja 2 s de cada espera y corta el resto, con un fundido corto.
-- **Montaje:** `ffmpeg` con `libx264`, CRF 20, `yuv420p`, `+faststart`, sin audio. Se recorta el primer segundo en blanco.
+- **Esperas largas:** `espera(nombre, fn)` registra en `linea.json` el inicio y el fin de la espera (por ejemplo, aprobacion SIFEN o validacion de una carga). Durante la espera el subtitulo dice "Esperando la respuesta de SIFEN…". `montar.sh` deja 2 s de cada espera y corta el resto.
+- **Montaje:** `ffmpeg` con `libx264`, CRF 20, `yuv420p`, `+faststart`, sin audio, a 30 cuadros por segundo. Se recorta el primer segundo en blanco. De cada espera de mas de 3 s quedan 1 s al principio y 1 s al final.
 
 ## 3. Datos
 
 | Uso | Dato | Nota |
 |---|---|---|
 | Operador V2-V6 | `operador-ensayo` (puntos 001-001 y 001-002) | contraseña por `ENSAYO_PASSWORD_FILE`; en pantalla se ve `operador.demo` / `Operador Demo` |
-| Operador V1 | usuario `operador.ejemplo`, correo real `emilio.saldivar@segel.com.py` (D-7), en el tenant de `operador-ensayo`, con los mismos dos puntos | `preparar-v1.cjs` lo crea o lo reinicia: `must_change_password`, sin T&C aceptados, sin OTP; contraseña temporal en un archivo del scratchpad |
+| Operador V1 | usuario `operador.ejemplo`, correo real `emilio.saldivar@segel.com.py` (D-7), en el tenant de `operador-ensayo`, con los mismos dos puntos | `preparar-v1.cjs` lo crea o lo reinicia: `must_change_password`, sin T&C aceptados, sin OTP; contraseña temporal en `fe-local-data/segel-ensayo/tutorial-v1.pass` (fuera del repo, modo 600) |
 | Cliente RUC sin DV | `80026570` → SEGEL SA | empresa, ACTIVO (D-6) |
 | Cliente RUC con DV | `80026570-0` → SEGEL SA | idem |
 | Cliente para USD | `80026570-0` → SEGEL SA | idem |
@@ -151,4 +153,4 @@ Lo que aparezca en la segunda pasada se agrega aca con un id nuevo y va a `BACKL
 
 ## 8. Cobertura (CA-6)
 
-`lib.cjs` exporta la lista de ids del mapa (SPEC §3.1 a §3.9 y §4), uno por fila, con el video asignado. Cada `paso` declara que filas cubre. TUT-010 corre `node scripts/tutoriales/cobertura.cjs`, que junta los `cobertura.json` y lista las filas sin cubrir por video; la salida se pega en `TASKS`. Una fila sin cubrir se graba de nuevo o se justifica en `TASKS`.
+`mapa.cjs` tiene la lista de ids del mapa (SPEC §3.1 a §3.9 y §4), uno por fila, con el video asignado. Cada `paso` declara que filas cubre. TUT-010 corre `node scripts/tutoriales/cobertura.cjs`, que junta los `cobertura.json` y lista las filas sin cubrir por video; la salida se pega en `TASKS`. Una fila sin cubrir se graba de nuevo o se justifica en `TASKS`.
