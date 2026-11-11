@@ -294,14 +294,14 @@ Por tarea: `npm run typecheck`, `npm run lint`, `npm run build` (raiz). Al cerra
 5. Si existe `button.topbar-facturador--boton`: clic, esperar `role=dialog`, capturar `30-cambiar-punto`, "Cancelar".
 6. Captura `fullPage` de cada pantalla en `test-results/reconocimiento-ux/<ancho>-<nombre>.png`.
 
-**Medidas por pantalla** (en `page.evaluate`, solo elementos visibles: tamaño > 0, `visibility` y `display` no ocultos):
+**Medidas por pantalla** (en `page.evaluate`, solo elementos visibles: tamaño > 0 y `checkVisibility()`, que descarta tambien lo que esta dentro de un `<details>` cerrado; en el menu de celular y en el dialogo de cambio de punto se mide solo ese contenedor, no la pantalla de atras):
 
 - `emojis`: caracteres `\p{Extended_Pictographic}` o del conjunto `✓ ✕ ⋮ ⋯ ⚠ ← →` en `document.body.innerText`, con los primeros diez.
 - `desbordeX`: `document.documentElement.scrollWidth > window.innerWidth + 1`.
-- `sinNombre`: `button, a[href], [role=button]` sin nombre accesible (ni `aria-label`, ni `aria-labelledby`, ni texto, ni `title`, ni `img[alt]` adentro), con `outerHTML` recortado a 120 caracteres.
+- `sinNombre`: `button, a[href], [role=button]` sin nombre accesible util: un `aria-label`, `title` o texto sin letras ni numeros ("⋮", "✕") no cuenta como nombre; tampoco hay `aria-labelledby` ni `img[alt]` adentro. Con `outerHTML` recortado a 120 caracteres.
 - `camposSinEtiqueta`: `input:not([type=hidden]), select, textarea` sin `labels.length`, `aria-label` ni `aria-labelledby`.
 - `chicos` (solo 390): `button, [role=button], input:not([type=hidden]), select, textarea` con `getBoundingClientRect().height < 44`, con texto y altura.
-- `camposChicos` (solo 390): campos con `font-size` calculado menor que 16 px (URA-019.5).
+- `camposChicos` (solo 390): campos de texto (no casillas, radios ni archivos) con `font-size` calculado menor que 16 px (URA-019.5).
 - `consola`: `console.error` y respuestas ≥ 400 durante la pantalla, salvo los 401 de `/auth/refresh` previos al login.
 
 **Salida.** `test-results/reconocimiento-ux/hallazgos.json` (lista por pantalla y ancho con todas las medidas) y una tabla en consola con los totales por ancho y medida. Compara los totales con la linea base: si alguno **sube**, imprime el detalle (pantalla y elementos) y termina con codigo 1; si bajan, lo informa y termina en 0. La linea base guarda solo totales por ancho y medida (no por pantalla), para sobrevivir a los cambios de nombre de las pantallas; se reescribe con `RECON_ACTUALIZAR_BASE=1` al cerrar una tarea que baja los numeros, en el mismo commit.

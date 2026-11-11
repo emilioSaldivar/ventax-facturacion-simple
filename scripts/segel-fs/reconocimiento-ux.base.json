@@ -1,0 +1,40 @@
+{
+  "generado": "2026-11-11T03:19:49.842Z",
+  "app": "http://127.0.0.1:18492/app/",
+  "nota": "Totales por ancho del guion de reconocimiento (PLAN_UX_RESTO_APP_v0.1 §11). Se reescribe solo cuando bajan.",
+  "totales": {
+    "390": {
+      "emojis": 94,
+      "desbordeX": 0,
+      "sinNombre": 10,
+      "camposSinEtiqueta": 0,
+      "chicos": 79,
+      "camposChicos": 10,
+      "consola": 0,
+      "pantallas": 13,
+      "errores": 0
+    },
+    "1280": {
+      "emojis": 124,
+      "desbordeX": 0,
+      "sinNombre": 10,
+      "camposSinEtiqueta": 0,
+      "chicos": 0,
+      "camposChicos": 0,
+      "consola": 0,
+      "pantallas": 12,
+      "errores": 0
+    },
+    "1440": {
+      "emojis": 124,
+      "desbordeX": 0,
+      "sinNombre": 10,
+      "camposSinEtiqueta": 0,
+      "chicos": 0,
+      "camposChicos": 0,
+      "consola": 0,
+      "pantallas": 12,
+      "errores": 0
+    }
+  }
+}
