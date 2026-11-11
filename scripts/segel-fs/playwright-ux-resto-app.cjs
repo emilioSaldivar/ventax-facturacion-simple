@@ -4,7 +4,7 @@
 //
 //   ENSAYO_PASSWORD_FILE=/ruta/clave node scripts/segel-fs/playwright-ux-resto-app.cjs [caso ...]
 //
-// Sin argumentos corre todos los casos. Casos: componentes (URA-017, CA-13), api (URA-018), teclado (URA-019), puntos (URA-021, CA-14), menu (URA-003), nuevo (URA-004), busqueda (URA-025), ficha (URA-007), estado (URA-008). URA-012 suma los de las fases 1 y 2.
+// Sin argumentos corre todos los casos. Casos: componentes (URA-017, CA-13), api (URA-018), teclado (URA-019), puntos (URA-021, CA-14), menu (URA-003), nuevo (URA-004), busqueda (URA-025), ficha (URA-007), estado (URA-008), agenda (URA-009). URA-012 suma los de las fases 1 y 2.
 // Escribe test-results/ux-resto-app/.
 const fs = require("node:fs");
 const path = require("node:path");
@@ -599,6 +599,93 @@ async function casoEstado(browser) {
   }
 }
 
+// ─── URA-009: Catalogo y Agenda en tabla con panel lateral (SPEC D R-3, R-4) ──────────────────────────────
+async function casoAgendaCatalogo(browser) {
+  const sinDesborde = (page) => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1);
+  for (const [ancho, alto] of [
+    [1440, 900],
+    [1280, 800],
+    [390, 844]
+  ]) {
+    const { ctx, page } = await entrar(browser, ancho, alto);
+    const escritorio = ancho >= 1024;
+    try {
+      // Catalogo
+      await abrirVista(page, "Catálogo");
+      await page.getByRole("heading", { name: "Productos y servicios" }).waitFor();
+      await page.waitForTimeout(800);
+      if (escritorio) {
+        const cabeceras = (await page.locator("table.catalogo-tabla thead").innerText()).replace(/\s+/g, " ");
+        check(`R-4 ${ancho}: tabla con codigo, descripcion, precio, IVA y estado`, ["Código", "Descripción", "Precio", "IVA", "Estado"].every((t) => cabeceras.includes(t)), cabeceras);
+        await page.getByRole("button", { name: "Nuevo producto o servicio" }).click();
+        const panel = page.locator("aside.catalogo-panel");
+        await panel.waitFor();
+        const anchoPanel = Math.round((await panel.boundingBox()).width);
+        check(`R-4 ${ancho}: el alta se abre en el panel lateral y la tabla sigue a la vista`, anchoPanel >= 340 && anchoPanel <= 380 && (await page.locator("table.catalogo-tabla").isVisible()), String(anchoPanel));
+        const descripcion = `Prueba URA-009 ${ancho} ${Date.now() % 100000}`;
+        await panel.getByLabel("Nombre o descripción").fill(descripcion);
+        await panel.getByLabel("Precio (Gs.)").fill("1500");
+        await panel.getByRole("button", { name: "Guardar", exact: true }).click();
+        const fila = page.locator("table.catalogo-tabla tbody tr", { hasText: descripcion });
+        check(`R-4 ${ancho}: el item creado aparece en la tabla con su precio`, await fila.waitFor({ timeout: 10000 }).then(async () => (await fila.innerText()).includes("1.500"), () => false));
+        check(`R-4 ${ancho}: al guardar se cierra el panel`, (await page.locator("aside.catalogo-panel").count()) === 0);
+        check(`R-4 ${ancho}: sin desplazamiento horizontal`, await sinDesborde(page));
+        await page.screenshot({ path: path.join(outDir, `${ancho}-catalogo.png`), fullPage: true });
+        await fila.locator(".menu-fila > button").click();
+        await page.getByRole("menuitem", { name: "Eliminar permanentemente" }).click();
+        const dialogo = page.getByRole("dialog", { name: "¿Eliminar item del catálogo?" });
+        await dialogo.waitFor();
+        await dialogo.getByRole("button", { name: "Eliminar" }).click();
+        check(`R-4 ${ancho}: eliminar pide confirmacion con Dialogo y quita la fila`, await fila.waitFor({ state: "detached", timeout: 10000 }).then(() => true, () => false));
+      } else {
+        check("R-4 390: tarjetas en celular, sin tabla", (await page.locator("table.catalogo-tabla").count()) === 0 && (await page.locator(".documents-list .document-row").count()) > 0);
+        await page.getByRole("button", { name: "Nuevo", exact: true }).click();
+        const dialogo = page.getByRole("dialog", { name: "Nuevo producto o servicio" });
+        check("R-4 390: el alta se abre en una ventana", await dialogo.waitFor({ timeout: 5000 }).then(() => true, () => false));
+        await page.screenshot({ path: path.join(outDir, `390-catalogo-alta.png`) });
+        await page.keyboard.press("Escape");
+        check("R-4 390: Escape cierra la ventana", await dialogo.waitFor({ state: "detached", timeout: 5000 }).then(() => true, () => false));
+        check("R-4 390: sin desplazamiento horizontal", await sinDesborde(page));
+      }
+      check(`R-4 ${ancho}: sin emojis`, !EMOJI.test(await page.locator("main").innerText()));
+
+      // Agenda / Clientes
+      await abrirVista(page, "Agenda / Clientes");
+      await page.getByRole("heading", { name: "Clientes" }).waitFor();
+      await page.waitForTimeout(800);
+      check(`R-3 ${ancho}: sin emojis`, !EMOJI.test(await page.locator("main").innerText()));
+      if (escritorio) {
+        const cabeceras = (await page.locator("table.agenda-tabla thead").innerText()).replace(/\s+/g, " ");
+        check(`R-3 ${ancho}: tabla con nombre, documento y contacto`, ["Nombre o razón social", "Documento", "Teléfono", "Correo"].every((t) => cabeceras.includes(t)), cabeceras);
+        check(`R-3 ${ancho}: "Nuevo cliente" en el encabezado`, await page.locator(".editor-heading").getByRole("button", { name: "Nuevo cliente" }).isVisible());
+        const primera = page.locator("table.agenda-tabla tbody tr").first();
+        const nombre = (await primera.locator("td").first().locator("strong").innerText()).trim();
+        await primera.locator("td").first().click();
+        const panel = page.locator("aside.catalogo-panel");
+        await panel.waitFor();
+        check(`R-3 ${ancho}: la fila abre la edicion en el panel lateral`, (await panel.getByLabel("Nombre o razón social").inputValue()) === nombre && (await panel.innerText()).includes("Editar cliente"), nombre);
+        check(`R-3 ${ancho}: sin desplazamiento horizontal con el panel abierto`, await sinDesborde(page));
+        await page.screenshot({ path: path.join(outDir, `${ancho}-agenda.png`), fullPage: true });
+        await panel.getByRole("button", { name: "Cancelar" }).click();
+        await primera.getByRole("button", { name: "Usar", exact: true }).click();
+        await page.waitForTimeout(1000);
+        const valores = await page.locator("main input").evaluateAll((els) => els.map((e) => e.value));
+        check(`R-3 ${ancho}: "Usar" lleva el cliente a Nueva factura`, valores.includes(nombre), nombre);
+      } else {
+        check("R-3 390: tarjetas en celular, sin tabla", (await page.locator("table.agenda-tabla").count()) === 0 && (await page.locator(".client-row").count()) > 0);
+        await page.screenshot({ path: path.join(outDir, `390-agenda.png`), fullPage: true });
+        await page.getByRole("button", { name: "Nuevo cliente" }).click();
+        const dialogo = page.getByRole("dialog", { name: "Nuevo cliente" });
+        check("R-3 390: el alta se abre en una ventana", await dialogo.waitFor({ timeout: 5000 }).then(() => true, () => false));
+        await page.keyboard.press("Escape");
+        check("R-3 390: sin desplazamiento horizontal", await sinDesborde(page));
+      }
+    } finally {
+      await ctx.close();
+    }
+  }
+}
+
 (async () => {
   const browser = await chromium.launch();
   try {
@@ -611,6 +698,7 @@ async function casoEstado(browser) {
     if (corre("busqueda")) await casoBusqueda(browser);
     if (corre("ficha")) await casoFicha(browser);
     if (corre("estado")) await casoEstado(browser);
+    if (corre("agenda")) await casoAgendaCatalogo(browser);
   } catch (e) {
     check("el guion termino sin excepciones", false, String(e));
   } finally {

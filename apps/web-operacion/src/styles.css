@@ -4954,7 +4954,7 @@ dd {
 }
 
 /* components/CampoFormulario: estilo base de los campos (sin especificidad, para no pisar el de cada pantalla). */
-:where(.campo-formulario) :where(input, select, textarea) {
+:where(.campo-formulario, .catalogo-form) :where(input, select, textarea) {
   width: 100%;
   min-height: 44px;
   border: 1px solid var(--color-line);
@@ -4965,7 +4965,7 @@ dd {
   padding: var(--esp-2) var(--esp-3);
 }
 
-:where(.campo-formulario) :where(input, select, textarea):focus {
+:where(.campo-formulario, .catalogo-form) :where(input, select, textarea):focus {
   border-color: var(--color-brand);
   outline: none;
   box-shadow: 0 0 0 3px var(--color-foco);
@@ -4987,6 +4987,9 @@ dd {
   display: grid;
   gap: var(--esp-1);
   min-width: 0;
+  color: var(--color-ink);
+  font-size: var(--fs-13);
+  font-weight: 600;
 }
 
 .catalogo-form-fila {
@@ -5064,5 +5067,14 @@ dd {
   width: 1%;
   white-space: nowrap;
   cursor: default;
+}
+
+.agenda-usar .secondary-action,
+.client-row-actions .secondary-action {
+  white-space: nowrap;
+}
+
+.agenda-documento {
+  white-space: nowrap;
 }
 

@@ -458,7 +458,7 @@ export function AgendaView({ onBack, onUseCliente }: { onBack: () => void; onUse
                           <strong>{cliente.razon_social}</strong>
                           {cliente.direccion ? <small className="agenda-direccion">{cliente.direccion}</small> : null}
                         </td>
-                        <td className="documents-tabla-ruc">
+                        <td className="agenda-documento">
                           <span className="muted">{DOCUMENTO_TIPO_ETIQUETA[cliente.documento_tipo] ?? cliente.documento_tipo}</span> {cliente.documento}
                         </td>
                         <td>{cliente.telefono || <span className="muted">—</span>}</td>
