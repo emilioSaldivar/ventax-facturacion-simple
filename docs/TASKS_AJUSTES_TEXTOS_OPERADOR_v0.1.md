@@ -12,6 +12,18 @@
 | ATO-006 | A-8 error del recibo desde la ficha | CA-7 | HECHO |
 | ATO-007 | Guiones con textos viejos actualizados | CA-8 | HECHO |
 | ATO-008 | Validacion: typecheck, build, stack local, guion nuevo y regresion | CA-8 | HECHO |
+| ATO-009 | Despliegue en `segel-fs` (produccion) | ver plan abajo | PENDIENTE: el usuario lo deja para despues (2026-11-11); requiere su confirmacion directa |
+
+## Plan de despliegue (ATO-009)
+
+Produccion corre `ed8b493` (hotfix del comprador sin nombre sobre `b252627`) y **no** tiene estas correcciones. RAJ ya factura y ve "Próximo número 001-001-0000002". No es critico: ninguna correccion cambia lo que se emite.
+
+1. Aplicar `395f365` y `add786b` sobre `ed8b493`. Comprobado con `git merge-tree`: el codigo entra limpio (5 archivos de `apps/web-operacion`); solo choca `AGENTS.md` (lista de documentos), se resuelve a mano.
+2. Construir la imagen del frontend con ese commit y probarla en el stack local: `playwright-ajustes-textos.cjs` 17/17 y regresion de Nueva factura sin emitir.
+3. Respaldo y despliegue solo del contenedor del frontend en `segel-fs`; sin API ni migraciones. Corte menor a un minuto.
+4. Verificacion en produccion sin emitir: Nueva factura sin "Próximo número" y las demas pantallas cargan.
+
+Estimado: 45 minutos. Mientras no se despliegue, se puede avisar a las usuarias de RAJ que ignoren el "Próximo número".
 
 ## Evidencia
 
