@@ -13,61 +13,20 @@ import { Icono, type NombreIcono } from "./components/Icono";
 import { MenuFila } from "./components/MenuFila";
 import { PastillaEstado } from "./components/PastillaEstado";
 import { esNotaSinConfirmar, estadoDocumento, estadoRecibo, formatDocumentoTipo } from "./lib/estados";
+import {
+  ApiClientError,
+  claimsDeToken,
+  createApiClient,
+  esErrorDePerfil,
+  motivoDeError,
+  onEventoPerfil,
+  refreshSession,
+  requierePerfil
+} from "./api/cliente";
+import { _updatePending, applyUpdate, startVersionPolling, useUpdatePending } from "./api/version";
+import type { AuthResponse, PerfilDisponible, UserSummary } from "./tipos";
 
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "/api/v1";
 const ACCESS_TOKEN_STORAGE_KEY = "ventax_factura_access_token";
-const BUILD_VERSION = (import.meta.env.VITE_APP_VERSION as string | undefined) ?? "dev";
-
-// ─── SPEC_MULTIPERFIL_USUARIO_v0.1: perfil de emision por sesion ──────────────
-// El cliente HTTP vive en muchos componentes; cuando una renovacion cambia o pide el punto avisa a App por aca.
-// SPEC_MULTIPERFIL_USUARIO_v0.2 B.4 (M-1): evento propio, sin valores sinteticos en pending_actions.
-type EventoPerfil = { tipo: "ELEGIR"; respuesta: AuthResponse } | { tipo: "RECARGAR"; respuesta: AuthResponse };
-const _perfilListeners: Array<(evento: EventoPerfil) => void> = [];
-// RN-14: con pedidos concurrentes todos reciben la misma renovacion; se avisa una sola vez por token.
-let _ultimoTokenAvisado: string | null = null;
-
-function onEventoPerfil(fn: (evento: EventoPerfil) => void): () => void {
-  _perfilListeners.push(fn);
-  return () => {
-    const i = _perfilListeners.indexOf(fn);
-    if (i >= 0) _perfilListeners.splice(i, 1);
-  };
-}
-
-function emitirEventoPerfil(evento: EventoPerfil): void {
-  if (_ultimoTokenAvisado === evento.respuesta.access_token) return;
-  _ultimoTokenAvisado = evento.respuesta.access_token;
-  for (const fn of [..._perfilListeners]) fn(evento);
-}
-
-function requierePerfil(respuesta: AuthResponse): boolean {
-  return respuesta.pending_actions?.includes("SELECT_PERFIL") ?? false;
-}
-
-function motivoDeError(error: unknown): string | null {
-  if (!(error instanceof ApiClientError)) return null;
-  const details = error.details as { reason?: unknown } | undefined;
-  return typeof details?.reason === "string" ? details.reason : null;
-}
-
-function esErrorDePerfil(error: unknown): boolean {
-  const motivo = motivoDeError(error);
-  return motivo === "PERFIL_REQUERIDO" || motivo === "PERFIL_NO_DISPONIBLE";
-}
-
-/** Claims del JWT sin verificarlos: solo para decisiones de la UI (D-8, RN-06). */
-function claimsDeToken(token: string | null): { scope: string | null; uoc: string | null } {
-  if (!token) return { scope: null, uoc: null };
-  try {
-    const payload = JSON.parse(atob(token.split(".")[1]!.replace(/-/g, "+").replace(/_/g, "/"))) as { scope?: unknown; uoc?: unknown };
-    return {
-      scope: typeof payload.scope === "string" ? payload.scope : null,
-      uoc: typeof payload.uoc === "string" ? payload.uoc : null
-    };
-  } catch {
-    return { scope: null, uoc: null };
-  }
-}
 
 // RN-06: cada editor registra si tiene un documento cargado y sin emitir.
 const _borradores = new Map<string, () => boolean>();
@@ -92,70 +51,6 @@ function etiquetaPunto(perfil: { establecimiento: string; punto_expedicion: stri
   return `${perfil.establecimiento}-${perfil.punto_expedicion}`;
 }
 
-let _updatePending = false;
-const _updateListeners: Array<() => void> = [];
-
-function signalUpdatePending(): void {
-  if (_updatePending) return;
-  _updatePending = true;
-  for (const fn of _updateListeners) fn();
-}
-
-function useUpdatePending(): boolean {
-  const [pending, setPending] = useState(_updatePending);
-  useEffect(() => {
-    if (_updatePending) { setPending(true); return; }
-    const handler = () => setPending(true);
-    _updateListeners.push(handler);
-    return () => {
-      const idx = _updateListeners.indexOf(handler);
-      if (idx !== -1) _updateListeners.splice(idx, 1);
-    };
-  }, []);
-  return pending;
-}
-
-function checkVersionHeader(response: Response): void {
-  if (BUILD_VERSION === "dev") return;
-  const serverVersion = response.headers.get("X-App-Version");
-  if (serverVersion && serverVersion !== BUILD_VERSION) {
-    signalUpdatePending();
-  }
-}
-
-async function pollVersion(): Promise<void> {
-  if (BUILD_VERSION === "dev" || _updatePending) return;
-  try {
-    const res = await fetch(`${API_BASE_URL}/health`, { cache: "no-store" });
-    checkVersionHeader(res);
-  } catch {
-    // red sin conexion — ignorar
-  }
-}
-
-async function applyUpdate(): Promise<void> {
-  try {
-    if ("serviceWorker" in navigator) {
-      const registrations = await navigator.serviceWorker.getRegistrations();
-      await Promise.all(registrations.map((registration) => registration.unregister()));
-    }
-    if ("caches" in window) {
-      const keys = await caches.keys();
-      await Promise.all(keys.map((key) => caches.delete(key)));
-    }
-  } catch {
-    // si falla la limpieza, igual forzamos la recarga
-  }
-  window.location.reload();
-}
-
-function startVersionPolling(): () => void {
-  const INTERVAL_MS = 5 * 60 * 1000; // cada 5 minutos
-  void pollVersion();
-  const id = window.setInterval(() => void pollVersion(), INTERVAL_MS);
-  return () => window.clearInterval(id);
-}
-
 type ViewState = "checking-session" | "login" | "loading-context" | "operacion" | "onboarding" | "select-perfil";
 type OperationView = "status" | "invoice" | "credit-note" | "documents" | "catalog" | "clients" | "notas" | "recibos";
 type CondicionVenta = "CONTADO" | "CREDITO";
@@ -169,40 +64,6 @@ interface BeforeInstallPromptEvent extends Event {
   readonly platforms: string[];
   readonly userChoice: Promise<BeforeInstallPromptChoice>;
   prompt: () => Promise<void>;
-}
-
-interface UserSummary {
-  id: string;
-  username: string;
-  display_name: string | null;
-  role: "OPERADOR_FACTURACION" | "SOPORTE_INTERNO" | "ADMIN_INTERNO";
-}
-
-interface AuthResponse {
-  access_token: string;
-  token_type: "Bearer";
-  expires_in: number;
-  user: UserSummary;
-  pending_actions?: string[];
-  /** SPEC_MULTIPERFIL_USUARIO_v0.1 §B.1: viene con pending_actions SELECT_PERFIL. */
-  perfiles?: PerfilDisponible[];
-}
-
-/** SPEC_MULTIPERFIL_USUARIO_v0.1 §B.4 */
-interface PerfilDisponible {
-  operacion_config_id: string;
-  establecimiento: string;
-  punto_expedicion: string;
-  perfil_emision_codigo: string;
-  perfil_emision_alias: string | null;
-  actividad_economica_codigo: string;
-  actividad_economica_descripcion: string | null;
-  actividad_economica_alias: string | null;
-  titulo_operativo: string;
-  timbrado: string;
-  numeracion_facturas: "SERVICIO" | "CLIENTE";
-  documento_nro: string | null;
-  activo_en_sesion: boolean;
 }
 
 interface DocumentoPerfilEmision {
@@ -257,44 +118,6 @@ interface ReadinessResponse {
     ok: boolean;
     message: string;
   }>;
-}
-
-interface ApiValidationDetails {
-  formErrors?: string[];
-  fieldErrors?: Record<string, string[]>;
-}
-
-interface ApiErrorResponse {
-  error?: {
-    code?: string;
-    message?: string;
-    details?: ApiValidationDetails;
-  };
-  message?: string;
-}
-
-function formatValidationDetails(details?: ApiValidationDetails): string {
-  if (!details) return "";
-  const parts: string[] = [];
-  if (details.formErrors?.length) parts.push(...details.formErrors);
-  if (details.fieldErrors) {
-    for (const [field, msgs] of Object.entries(details.fieldErrors)) {
-      if (msgs && msgs.length) parts.push(`${field}: ${msgs.join(", ")}`);
-    }
-  }
-  return parts.join(" | ");
-}
-
-class ApiClientError extends Error {
-  readonly status: number;
-  readonly details?: unknown;
-
-  constructor(status: number, message: string, details?: unknown) {
-    super(message);
-    this.name = "ApiClientError";
-    this.status = status;
-    this.details = details;
-  }
 }
 
 type ClienteNaturaleza = "FISICA" | "JURIDICA";
@@ -7825,126 +7648,6 @@ function formatIntegerInput(value: string): string {
     return "";
   }
   return Number(digits).toLocaleString("es-PY");
-}
-
-function createApiClient(accessToken: string | null, setAccessToken: (token: string | null) => void) {
-  /**
-   * SPEC_MULTIPERFIL_USUARIO_v0.2 RN-17 (M-7): devuelve la respuesta cruda cuando es exitosa, con la misma
-   * renovacion de sesion y el mismo manejo de errores de perfil que `request`. Sirve para descargas.
-   */
-  async function requestRaw(path: string, init: RequestInit = {}, retry = true): Promise<Response> {
-    const response = await fetch(`${API_BASE_URL}${path}`, {
-      ...init,
-      credentials: "include",
-      headers: {
-        "content-type": "application/json",
-        ...(accessToken ? { authorization: `Bearer ${accessToken}` } : {}),
-        ...init.headers
-      }
-    });
-
-    checkVersionHeader(response);
-
-    if (response.status === 401 && retry) {
-      const refreshed = await refreshSession();
-      if (requierePerfil(refreshed)) {
-        // SPEC_MULTIPERFIL_USUARIO_v0.1 §B.5: el punto de la sesion ya no esta; App muestra la eleccion.
-        emitirEventoPerfil({ tipo: "ELEGIR", respuesta: refreshed });
-        throw new ApiClientError(409, "Elegi el punto de expedicion para continuar.", { reason: "PERFIL_REQUERIDO" });
-      }
-      setAccessToken(refreshed.access_token);
-      const uocAnterior = claimsDeToken(accessToken).uoc;
-      if (uocAnterior && claimsDeToken(refreshed.access_token).uoc !== uocAnterior) {
-        // RN-06: el refresh asigno otro punto; no se reintenta el pedido con un punto que no esta en pantalla.
-        emitirEventoPerfil({ tipo: "RECARGAR", respuesta: refreshed });
-        throw new ApiClientError(409, "Tu punto de expedicion cambio. Revisa el punto activo antes de continuar.", { reason: "PERFIL_NO_DISPONIBLE" });
-      }
-      return createApiClient(refreshed.access_token, setAccessToken).requestRaw(path, init, false);
-    }
-
-    if (!response.ok) {
-      const copia = response.clone();
-      const details = await copia.json().then((body: ApiErrorResponse) => body.error?.details, () => undefined);
-      const error = new ApiClientError(response.status, await readApiError(response), details);
-      if (response.status === 409 && retry && esErrorDePerfil(error)) {
-        // §C.6: perfil no disponible (lo quito el backoffice) o token viejo sin perfil: el refresh decide.
-        const refreshed = await refreshSession().catch(() => null);
-        if (!refreshed) {
-          throw new ApiClientError(401, "Tu punto de expedicion cambio. Volve a entrar.", { reason: "PERFIL_NO_DISPONIBLE" });
-        }
-        // RN-06: nunca se reintenta el pedido con otro punto. App recarga el contexto (o pide elegir)
-        // y el operador ve el punto nuevo antes de volver a emitir.
-        emitirEventoPerfil(requierePerfil(refreshed) ? { tipo: "ELEGIR", respuesta: refreshed } : { tipo: "RECARGAR", respuesta: refreshed });
-        throw new ApiClientError(409, "Tu punto de expedicion cambio. Revisa el punto activo antes de continuar.", { reason: motivoDeError(error) });
-      }
-      throw error;
-    }
-
-    return response;
-  }
-
-  async function request<T>(path: string, init: RequestInit = {}, retry = true): Promise<T> {
-    const response = await requestRaw(path, init, retry);
-    if (response.status === 204) {
-      return undefined as T;
-    }
-    return response.json() as Promise<T>;
-  }
-
-  return {
-    get: <T,>(path: string) => request<T>(path),
-    post: <T,>(path: string, body: unknown, retry = true) =>
-      request<T>(
-        path,
-        {
-          method: "POST",
-          body: JSON.stringify(body)
-        },
-        retry
-      ),
-    request,
-    requestRaw
-  };
-}
-
-let _refreshEnVuelo: Promise<AuthResponse> | null = null;
-
-/**
- * SPEC_MULTIPERFIL_USUARIO_v0.2 RN-14 (F-1): una sola llamada a /auth/refresh por pestaña mientras hay
- * una en curso. El refresh token se rota en cada llamada: dos llamadas con la misma cookie hacen que la
- * segunda falle y mande al login.
- */
-function refreshSession(): Promise<AuthResponse> {
-  if (_refreshEnVuelo) return _refreshEnVuelo;
-  _refreshEnVuelo = (async () => {
-    const response = await fetch(`${API_BASE_URL}/auth/refresh`, {
-      method: "POST",
-      credentials: "include",
-      headers: {
-        "content-type": "application/json"
-      }
-    });
-
-    if (!response.ok) {
-      throw new Error(await readApiError(response));
-    }
-
-    return (await response.json()) as AuthResponse;
-  })().finally(() => {
-    _refreshEnVuelo = null;
-  });
-  return _refreshEnVuelo;
-}
-
-async function readApiError(response: Response): Promise<string> {
-  try {
-    const body = (await response.json()) as ApiErrorResponse;
-    const message = body.error?.message ?? body.message ?? "Solicitud rechazada.";
-    const detailsText = formatValidationDetails(body.error?.details);
-    return detailsText ? `${message} (${detailsText})` : message;
-  } catch {
-    return "No se pudo completar la solicitud.";
-  }
 }
 
 /** SPEC_NOTA_CREDITO_TRABADA_v0.1, RN-06: una nota trabada nunca se muestra como "en proceso". */
