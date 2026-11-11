@@ -1,5 +1,6 @@
 import type { FiscalCancelStatus } from "../fiscal-gateway/fiscal-gateway.types";
 import type { TaxTotals } from "@facturacion-simple/shared";
+import { interpretarNumeroCompleto } from "./busqueda-numero";
 import { resumenRemision } from "./nota-remision.resumen";
 import { pool } from "../../db/pool";
 import { HttpError } from "../../shared/errors/http-error";
@@ -1838,7 +1839,34 @@ function buildListWhere(facturadorId: string, filters: DocumentoListFilters): { 
   }
 
   const q = filters.q?.trim();
-  if (q) {
+  const numeroCompleto = interpretarNumeroCompleto(q);
+  if (numeroCompleto) {
+    // SPEC_UX_RESTO_APP_v0.1 RN-12 (URA-025): numero de ese establecimiento y punto. El punto sale del perfil del
+    // documento o, si no tiene, del CDC (posiciones 12 a 17, como en facturas.inutilizacion.ts).
+    params.push(numeroCompleto.numero);
+    const numeroParam = params.length;
+    params.push(numeroCompleto.establecimiento);
+    const estParam = params.length;
+    params.push(numeroCompleto.punto);
+    const ptoParam = params.length;
+    clauses.push(`(numero_fiscal = lpad($${numeroParam}::text, 7, '0') or numero_fiscal like $${numeroParam}::text || '%')`);
+    clauses.push(`(
+      exists (
+        select 1
+          from actividad_punto_perfiles app
+          join facturador_establecimientos fe on fe.id = app.establecimiento_id
+          join facturador_puntos_expedicion fp on fp.id = app.punto_expedicion_id
+         where app.id = facturas_operativas.actividad_punto_perfil_id
+           and fe.codigo = $${estParam}
+           and fp.codigo = $${ptoParam}
+      )
+      or (
+        actividad_punto_perfil_id is null
+        and substring(cdc from 12 for 3) = $${estParam}
+        and substring(cdc from 15 for 3) = $${ptoParam}
+      )
+    )`);
+  } else if (q) {
     const numeroFiscalOrCdcPrefix = `${q}%`;
     const containsQuery = `%${q}%`;
     params.push(numeroFiscalOrCdcPrefix);
