@@ -27,9 +27,15 @@ const ESCALA = 10_000;
 const escalar = (cantidad: number) => cantidadEscalada(cantidad) ?? Math.round(cantidad * ESCALA);
 const desescalar = (escalada: number) => escalada / ESCALA;
 
-/** Notas que cuentan para el saldo: todas las de la factura salvo las rechazadas (D-2, RN-06). */
+/**
+ * Notas que cuentan para el saldo: todas las de la factura salvo las rechazadas (D-2, RN-06). Las notas por monto no
+ * acreditan cantidades de las lineas de la factura (SPEC_NOTA_CREDITO_POR_MONTO_v0.1, RN-07).
+ */
 export function notasQueDescuentan(notas: DocumentoResponse[], facturaId: string): DocumentoResponse[] {
-  return notas.filter((nota) => nota.tipo === "NOTA_CREDITO" && nota.documento_relacionado_id === facturaId && nota.estado !== "RECHAZADA");
+  return notas.filter(
+    (nota) =>
+      nota.tipo === "NOTA_CREDITO" && nota.documento_relacionado_id === facturaId && nota.estado !== "RECHAZADA" && nota.nce_modo !== "MONTO"
+  );
 }
 
 export function saldoAcreditablePorLinea(original: DocumentoResponse, notas: DocumentoResponse[]): SaldoLinea[] {

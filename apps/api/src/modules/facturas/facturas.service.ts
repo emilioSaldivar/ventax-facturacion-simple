@@ -1,10 +1,19 @@
 import crypto from "node:crypto";
 import { env } from "../../config/env";
-import { DescuentoInvalidoError, calculateDocumentTotalsMoneda, type TaxInputLine, type TaxTotals } from "@facturacion-simple/shared";
+import {
+  DescuentoInvalidoError,
+  calculateDocumentTotalsMoneda,
+  montosPorTasa,
+  validarMontoNotaCredito,
+  type MontosPorTasa,
+  type TaxInputLine,
+  type TaxTotals
+} from "@facturacion-simple/shared";
 import { HttpError } from "../../shared/errors/http-error";
 import { logger } from "../../shared/logging/logger";
 import { deriveAccion, esNotaTrabada, puedeReintentarEmision } from "./facturas.accion";
 import { clasificarRespuestaNotaCredito, type ClasificacionNotaCredito } from "./nota-credito.clasificacion";
+import { armarLineasMonto, calcularSaldoMonto, esNotaPorMonto, notasQueCuentanMonto, type MotivoNotaCreditoMonto } from "./nota-credito-monto";
 import { notifyAccionRequerida } from "./facturas.notificaciones";
 import {
   buscarCodigoSifen,
@@ -242,10 +251,13 @@ export async function listNotaCreditoCandidates(
   });
   // SPEC_NOTA_CREDITO_PARCIAL_v0.1, RN-06: una factura con notas vivas sigue elegible mientras le quede saldo.
   // Las rechazadas no cuentan (SPEC_NOTA_CREDITO_TRABADA_v0.1, RN-02).
+  // SPEC_NOTA_CREDITO_POR_MONTO_v0.1, RN-09: con notas vivas, sigue elegible mientras le quede saldo neto (totales
+  // guardados). Sin saldo neto no se puede emitir nada: ni por monto, ni por lineas (RN-10), ni la total (RN-07).
+  // Las lineas sin saldo con un residuo neto emitible dejan la factura elegible para una nota por monto.
   const creditedFacturaIds = new Set(
     result.items
       .filter((factura) => relatedResult.items.some((nota) => nota.documento_relacionado_id === factura.id && nota.estado !== "RECHAZADA"))
-      .filter((factura) => !tieneSaldo(saldoAcreditablePorLinea(factura, relatedResult.items)))
+      .filter((factura) => calcularSaldoMonto(factura.totals?.total ?? 0, relatedResult.items, factura.id, factura.moneda ?? "PYG").saldo <= 0)
       .map((factura) => factura.id)
   );
 
@@ -1332,10 +1344,23 @@ export const MENSAJE_NOTA_CREDITO_TRABADA_PENDIENTE =
 export async function emitNotaCredito(
   context: OperationalContextResponse,
   facturaId: string,
-  input: { motivo: string; lineas?: LineaNotaCreditoPedida[] },
+  input: { motivo: string; lineas?: LineaNotaCreditoPedida[]; monto?: number; motivo_codigo?: MotivoNotaCreditoMonto },
   repository: FacturaRepository,
   gateway: FiscalGateway
 ): Promise<{ documento: DocumentoResponse; reintento: boolean }> {
+  if (input.monto !== undefined) {
+    if (input.lineas && input.lineas.length > 0) {
+      throw new HttpError(400, "VALIDATION_ERROR", "Una nota de credito va por lineas o por monto, no las dos cosas.");
+    }
+    const documento = await emitNotaCreditoPorMonto(
+      context,
+      facturaId,
+      { motivo: input.motivo, monto: input.monto, motivo_codigo: input.motivo_codigo ?? 3 },
+      repository,
+      gateway
+    );
+    return { documento, reintento: false };
+  }
   if (!input.lineas || input.lineas.length === 0) {
     return emitNotaCreditoTotal(context, facturaId, { motivo: input.motivo }, repository, gateway);
   }
@@ -1385,6 +1410,16 @@ export async function emitNotaCreditoParcial(
   }
 
   const { items, totals } = armarLineasNotaCredito(original, input.lineas);
+  // SPEC_NOTA_CREDITO_POR_MONTO_v0.1, RN-10: una nota por monto no descuenta cantidades; el importe no puede pasar el neto.
+  if (notasQueCuentanMonto(notas, facturaId).some(esNotaPorMonto)) {
+    const saldoMonto = calcularSaldoMonto(original.totals?.total ?? 0, notas, facturaId, original.moneda ?? "PYG");
+    if (totals.total > saldoMonto.saldo) {
+      throw new HttpError(409, "CONFLICT", mensajeSuperaSaldo(saldoMonto.saldo, original.moneda ?? "PYG"), {
+        reason: "NOTA_CREDITO_SUPERA_SALDO",
+        saldo: saldoMonto.saldo
+      });
+    }
+  }
   const intento = notas.length + 1;
   const externalRef = buildNotaCreditoExternalRef(context, facturaId, intento);
   const fiscalRequest = buildFiscalNotaCreditoRequest(context, original, motivo, externalRef, { items, totals });
@@ -1411,6 +1446,131 @@ export async function emitNotaCreditoParcial(
   return withAccion(conTotales);
 }
 
+export const MENSAJE_FE_TOTALES_NO_DISPONIBLES =
+  "No se pudieron consultar los totales de la factura en el servicio fiscal. Probá de nuevo en unos minutos.";
+
+export function mensajeSuperaSaldo(saldo: number, moneda: string): string {
+  const texto = moneda === "PYG" ? `Gs ${saldo.toLocaleString("es-PY")}` : `${moneda} ${saldo.toFixed(2).replace(".", ",")}`;
+  return `El monto supera el saldo de la factura (${texto}).`;
+}
+
+/** A-2: refresca los totales de FE de las notas aprobadas que todavia tienen el calculo de FS (D-3). */
+async function notasConTotalesFe(
+  facturadorId: string,
+  notas: DocumentoResponse[],
+  repository: FacturaRepository,
+  gateway: FiscalGateway
+): Promise<DocumentoResponse[]> {
+  return Promise.all(
+    notas.map((nota) =>
+      nota.estado === "EMITIDA" && nota.totals?.fuente !== "FE" ? guardarTotalesFe(facturadorId, nota, repository, gateway) : nota
+    )
+  );
+}
+
+/**
+ * SPEC_NOTA_CREDITO_POR_MONTO_v0.1 (guia de FE §67): acredita un monto repartido por tasa sobre los totales netos
+ * de FE, con el saldo controlado por FS (el 409 de FE compara contra el bruto; SIFEN 2417 contra el neto).
+ */
+export async function emitNotaCreditoPorMonto(
+  context: OperationalContextResponse,
+  facturaId: string,
+  input: { motivo: string; monto: number; motivo_codigo: MotivoNotaCreditoMonto },
+  repository: FacturaRepository,
+  gateway: FiscalGateway
+): Promise<DocumentoResponse> {
+  const motivo = input.motivo.trim();
+  if (!motivo) {
+    throw new HttpError(400, "VALIDATION_ERROR", "Motivo de nota de credito requerido.");
+  }
+  const original = await getDocumentoById(context, facturaId, repository);
+  if (original.tipo !== "FACTURA" || original.estado !== "EMITIDA" || !original.cdc || !original.document_uuid) {
+    throw new HttpError(409, "CONFLICT", "Factura no elegible para nota de credito.");
+  }
+  rechazarNotaCreditoInnominada(original);
+  const moneda = original.moneda ?? "PYG";
+  if (moneda !== "PYG" && !env.FE_NC_MONEDA_EXTRANJERA) {
+    throw new HttpError(409, "CONFLICT", MENSAJE_NOTA_CREDITO_MONEDA_EXTRANJERA, { reason: "NOTA_CREDITO_MONEDA_EXTRANJERA" });
+  }
+  if ((original.totals?.anticipo ?? 0) > 0) {
+    throw new HttpError(409, "CONFLICT", MENSAJE_NOTA_CREDITO_CON_ANTICIPO, { reason: "NOTA_CREDITO_CON_ANTICIPO" });
+  }
+  // RN-01: la regla depende de la moneda de la factura (50 Gs o 2 decimales).
+  const errorMonto = validarMontoNotaCredito(input.monto, moneda);
+  if (errorMonto) {
+    throw new HttpError(400, "VALIDATION_ERROR", errorMonto, { campo: "monto" });
+  }
+
+  const notasGuardadas = await repository.findNotasCreditoByOriginal({ facturadorId: context.facturador.id, documentoId: facturaId });
+  if (notasGuardadas.some((nota) => nota.estado !== "RECHAZADA" && esNotaTrabada(nota))) {
+    throw new HttpError(409, "CONFLICT", MENSAJE_NOTA_CREDITO_TRABADA_PENDIENTE, { reason: "NOTA_CREDITO_TRABADA" });
+  }
+
+  // D-8 y RN-06: sin los totales netos de FE no se reparte ni se controla el saldo; no se llama a FE para emitir.
+  let fe: Awaited<ReturnType<FiscalGateway["getDocumentoTotales"]>>;
+  try {
+    fe = await gateway.getDocumentoTotales(original.document_uuid);
+  } catch (error) {
+    logger.warn({ err: error, documentoId: facturaId }, "nota de credito por monto: totales de FE no disponibles");
+    throw new HttpError(502, "INTERNAL_ERROR", MENSAJE_FE_TOTALES_NO_DISPONIBLES, { reason: "FE_TOTALES_NO_DISPONIBLES" });
+  }
+  if (fe.moneda !== moneda) {
+    throw new HttpError(502, "INTERNAL_ERROR", MENSAJE_FE_TOTALES_NO_DISPONIBLES, { reason: "FE_TOTALES_MONEDA_DISTINTA" });
+  }
+
+  // RN-04 (D-3): saldo neto calculado aca, con los totales de FE de las notas que ya los tengan.
+  const notas = await notasConTotalesFe(context.facturador.id, notasGuardadas, repository, gateway);
+  const saldo = calcularSaldoMonto(fe.totales.total, notas, facturaId, moneda);
+  if (input.monto > saldo.saldo) {
+    throw new HttpError(409, "CONFLICT", mensajeSuperaSaldo(saldo.saldo, moneda), { reason: "NOTA_CREDITO_SUPERA_SALDO", saldo: saldo.saldo });
+  }
+
+  // RN-05: reparto por tasa (§67.2).
+  const lineas = armarLineasMonto(input.monto, montosPorTasa(fe.totales, moneda), moneda, input.motivo_codigo);
+  if (!lineas) {
+    throw new HttpError(409, "CONFLICT", "La factura no tiene montos para acreditar.", { reason: "NOTA_CREDITO_SIN_MONTOS" });
+  }
+
+  const intento = notasGuardadas.length + 1;
+  const externalRef = buildNotaCreditoExternalRef(context, facturaId, intento);
+  const fiscalRequest = buildFiscalNotaCreditoRequest(context, original, motivo, externalRef, lineas, input.motivo_codigo);
+  const clasificacion = await llamarNotaCredito(gateway, fiscalRequest);
+
+  const created = await repository.createNotaCreditoFromFactura({
+    tenantId: context.tenant.id,
+    actividadPuntoPerfilId: context.actividad_punto_perfil_id,
+    facturadorId: context.facturador.id,
+    userId: context.user.id,
+    original,
+    motivo,
+    externalRef,
+    idempotencyKey: externalRef,
+    items: lineas.items,
+    totals: lineas.totals,
+    modo: "MONTO",
+    motivoCodigo: input.motivo_codigo,
+    fiscalRequest,
+    fiscalResponse: clasificacion.fiscalResponse,
+    fiscalError: clasificacion.fiscalError,
+    estado: clasificacion.estado,
+    trabada: clasificacion.trabada
+  });
+  const conTotales = await guardarTotalesFe(context.facturador.id, created, repository, gateway);
+  return withAccion(conTotales);
+}
+
+export interface NotaCreditoSaldoMontoResponse {
+  admite: boolean;
+  motivo_no_admite: string | null;
+  total_factura: number;
+  acreditado: number;
+  saldo: number;
+  /** Montos por tasa con IVA (§67.2) para la vista previa del reparto; null si FE no respondio. */
+  tasas: MontosPorTasa | null;
+  /** "FE": total de `/totales` consultado ahora; "FS": totales guardados (FE no respondio). */
+  fuente: "FE" | "FS";
+}
+
 export interface NotaCreditoSaldoResponse {
   moneda: string;
   /** La total se ofrece solo sin notas vivas (RN-07). */
@@ -1419,34 +1579,77 @@ export interface NotaCreditoSaldoResponse {
   admite_parcial: boolean;
   motivo_no_parcial: string | null;
   lineas: SaldoLinea[];
+  /** SPEC_NOTA_CREDITO_POR_MONTO_v0.1: saldo neto y tasas para la nota por monto. */
+  monto: NotaCreditoSaldoMontoResponse;
 }
 
 /** GET /facturas/:id/nota-credito/saldo: lo que la ventana de nota de credito necesita para ofrecer total o parcial. */
 export async function getNotaCreditoSaldo(
   context: OperationalContextResponse,
   facturaId: string,
-  repository: FacturaRepository
+  repository: FacturaRepository,
+  gateway?: FiscalGateway
 ): Promise<NotaCreditoSaldoResponse> {
   const original = await getDocumentoById(context, facturaId, repository);
   if (original.tipo !== "FACTURA") {
     throw new HttpError(409, "CONFLICT", "Solo una factura puede originar nota de credito.");
   }
-  const notas = await repository.findNotasCreditoByOriginal({ facturadorId: context.facturador.id, documentoId: facturaId });
+  const moneda = original.moneda ?? "PYG";
+  const notasGuardadas = await repository.findNotasCreditoByOriginal({ facturadorId: context.facturador.id, documentoId: facturaId });
+  const notas = gateway ? await notasConTotalesFe(context.facturador.id, notasGuardadas, repository, gateway) : notasGuardadas;
   const vivas = notas.filter((nota) => nota.estado !== "RECHAZADA");
+  const trabada = vivas.some((nota) => esNotaTrabada(nota));
   const lineas = saldoAcreditablePorLinea(original, notas);
+
+  // SPEC_NOTA_CREDITO_POR_MONTO_v0.1: total neto de FE en el momento; si no responde, los totales guardados (D-8).
+  let totalFactura = original.totals?.total ?? 0;
+  let tasas: MontosPorTasa | null = null;
+  let fuente: "FE" | "FS" = "FS";
+  if (gateway && original.estado === "EMITIDA" && original.document_uuid) {
+    try {
+      const fe = await gateway.getDocumentoTotales(original.document_uuid);
+      if (fe.moneda === moneda) {
+        totalFactura = fe.totales.total;
+        tasas = montosPorTasa(fe.totales, moneda);
+        fuente = "FE";
+      }
+    } catch (error) {
+      logger.warn({ err: error, documentoId: facturaId }, "saldo de nota de credito: totales de FE no disponibles");
+    }
+  }
+  const saldoMonto = calcularSaldoMonto(totalFactura, notas, facturaId, moneda);
+  const hayNotaMonto = notasQueCuentanMonto(notas, facturaId).some(esNotaPorMonto);
+  const motivoNoMonto =
+    (original.totals?.anticipo ?? 0) > 0
+      ? MENSAJE_NOTA_CREDITO_CON_ANTICIPO
+      : trabada
+        ? MENSAJE_NOTA_CREDITO_TRABADA_PENDIENTE
+        : saldoMonto.saldo <= 0
+          ? "La factura ya esta acreditada por completo."
+          : null;
+
   const motivoNoParcial = original.totals?.nota_credito_por_referencia
     ? MENSAJE_NOTA_CREDITO_SOLO_TOTAL
-    : vivas.some((nota) => esNotaTrabada(nota))
+    : trabada
       ? MENSAJE_NOTA_CREDITO_TRABADA_PENDIENTE
-      : !tieneSaldo(lineas)
+      : !tieneSaldo(lineas) || (hayNotaMonto && saldoMonto.saldo <= 0)
         ? "La factura ya esta acreditada por completo."
         : null;
   return {
-    moneda: original.moneda ?? "PYG",
+    moneda,
     admite_total: vivas.length === 0,
     admite_parcial: motivoNoParcial === null,
     motivo_no_parcial: motivoNoParcial,
-    lineas
+    lineas,
+    monto: {
+      admite: motivoNoMonto === null,
+      motivo_no_admite: motivoNoMonto,
+      total_factura: saldoMonto.total_factura,
+      acreditado: saldoMonto.acreditado,
+      saldo: saldoMonto.saldo,
+      tasas,
+      fuente
+    }
   };
 }
 
@@ -1466,8 +1669,16 @@ export async function reintentarNotaCredito(
   }
   const original = originalCargada ?? (await getDocumentoById(context, nota.documento_relacionado_id, repository));
   // SPEC_NOTA_CREDITO_PARCIAL_v0.1: una parcial se reintenta con sus mismas lineas y la misma clave.
-  const parcial = esNotaParcial(nota, original) ? { items: nota.items, totals: nota.totals } : undefined;
-  const fiscalRequest = buildFiscalNotaCreditoRequest(context, original, nota.nce_motivo ?? "", nota.external_ref, parcial);
+  // SPEC_NOTA_CREDITO_POR_MONTO_v0.1, RN-07: la nota por monto repite sus lineas por tasa y su motivo SIFEN.
+  const parcial = esNotaPorMonto(nota) || esNotaParcial(nota, original) ? { items: nota.items, totals: nota.totals } : undefined;
+  const fiscalRequest = buildFiscalNotaCreditoRequest(
+    context,
+    original,
+    nota.nce_motivo ?? "",
+    nota.external_ref,
+    parcial,
+    nota.nce_motivo_codigo ?? undefined
+  );
   const clasificacion = await llamarNotaCredito(gateway, fiscalRequest);
   const actualizada = await repository.updateNotaCreditoTrasReintento({
     facturadorId: context.facturador.id,
@@ -1971,7 +2182,9 @@ function buildFiscalNotaCreditoRequest(
   motivo: string,
   externalRef: string,
   // SPEC_NOTA_CREDITO_PARCIAL_v0.1: lineas y totales propios; nunca va por referencia (RN-03).
-  parcial?: { items: FacturaItemPreview[]; totals: TaxTotals }
+  parcial?: { items: FacturaItemPreview[]; totals: TaxTotals },
+  // SPEC_NOTA_CREDITO_POR_MONTO_v0.1: motivo SIFEN 3, 4 u 8; sin el, 1 (FS-44).
+  motivoCodigo?: number
 ): FiscalEmitNotaCreditoRequest {
   if (!original.cdc) {
     throw new HttpError(409, "CONFLICT", "Factura sin CDC fiscal para nota de credito.");
@@ -1989,6 +2202,7 @@ function buildFiscalNotaCreditoRequest(
     items: parcial?.items ?? original.items,
     totals: parcial?.totals ?? original.totals,
     motivo,
+    ...(motivoCodigo && motivoCodigo !== 1 ? { motivo_codigo: motivoCodigo } : {}),
     factura_referencia: {
       documento_id: original.id,
       cdc: original.cdc,

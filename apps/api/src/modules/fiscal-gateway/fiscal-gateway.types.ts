@@ -136,6 +136,10 @@ export interface FiscalEmitNotaCreditoRequest {
   items: FacturaItemPreview[];
   totals: TaxTotals;
   motivo: string;
+  /**
+   * SPEC_NOTA_CREDITO_POR_MONTO_v0.1: motivo SIFEN (E401). La nota por monto manda 3, 4 u 8; sin el, 1 (FS-44).
+   */
+  motivo_codigo?: number;
   factura_referencia: {
     documento_id: string;
     cdc: string;

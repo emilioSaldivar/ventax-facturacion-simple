@@ -83,6 +83,7 @@ export type DocumentoEstado =
   | "CANCELADO_LOCAL";
 
 /** SPEC_DOCUMENTOS_ESCRITORIO_v0.1, fase B1: la nota de remision llega por la carga masiva. */
+export type NotaCreditoModo = "TOTAL" | "LINEAS" | "MONTO";
 export type DocumentoTipo = "FACTURA" | "NOTA_CREDITO" | "NOTA_REMISION";
 export type DocumentoTipoOperativo = CondicionVenta | "NOTA_CREDITO";
 export type EmailStatus = "NOT_APPLICABLE" | "DELEGATED" | "PENDING" | "SENT" | "FAILED" | "UNKNOWN";
@@ -224,6 +225,10 @@ export interface DocumentoResponse {
   sifen_last_checked_at: string | null;
   documento_relacionado_id: string | null;
   nce_motivo: string | null;
+  /** SPEC_NOTA_CREDITO_POR_MONTO_v0.1, RN-07: modo de la nota (null en notas anteriores y en facturas). */
+  nce_modo?: NotaCreditoModo | null;
+  /** Motivo SIFEN (E401) con el que se emitio la nota; null = 1 (notas anteriores). */
+  nce_motivo_codigo?: number | null;
   /** Quien emitio el documento. Ver DocumentoEmisor. */
   emitido_por: DocumentoEmisor | null;
   /** Resultado del ultimo intento de anulacion. `null` si nunca se intento. */
@@ -450,6 +455,9 @@ export interface NotaCreditoPersistInput {
   /** SPEC_NOTA_CREDITO_PARCIAL_v0.1: lineas y totales propios de la nota. Sin ellos, los de la factura (nota total). */
   items?: FacturaItemPreview[];
   totals?: TaxTotals;
+  /** SPEC_NOTA_CREDITO_POR_MONTO_v0.1, RN-07. */
+  modo?: NotaCreditoModo;
+  motivoCodigo?: number;
   fiscalRequest: FiscalEmitNotaCreditoRequest;
   fiscalResponse: FiscalEmitNotaCreditoResponse | null;
   fiscalError: Record<string, unknown> | null;

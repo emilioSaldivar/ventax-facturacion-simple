@@ -49,6 +49,8 @@ interface FacturaRow {
   email_estado: DocumentoResponse["delivery"]["email_status"] | null;
   documento_relacionado_id: string | null;
   nce_motivo: string | null;
+  nce_modo?: string | null;
+  nce_motivo_codigo?: number | null;
   fiscal_status_raw: string | null;
   sifen_result_code: string | null;
   sifen_result_message: string | null;
@@ -136,6 +138,8 @@ const COLUMNAS_DOCUMENTO = `
           email_estado,
           documento_relacionado_id,
           nce_motivo,
+          nce_modo,
+          nce_motivo_codigo,
           fiscal_status_raw,
           sifen_result_code,
           sifen_result_message,
@@ -859,7 +863,9 @@ export class PgFacturaRepository implements FacturaRepository {
             emitted_at,
             moneda,
             tipo_cambio,
-            actividad_punto_perfil_id
+            actividad_punto_perfil_id,
+            nce_modo,
+            nce_motivo_codigo
           )
           values (
             $1, $2, $3, 'NOTA_CREDITO', $4, $5, $6, $7, $8, $9, $10::jsonb, $11::jsonb, $12::jsonb,
@@ -867,7 +873,7 @@ export class PgFacturaRepository implements FacturaRepository {
             case when $19::text is not null then now() end,
             case when $22::boolean then null when $5 in ('PENDIENTE_SIFEN', 'EMITIENDO') and $15::text is not null then now() + interval '5 minutes' end,
             now(),
-            $23, $24, $25
+            $23, $24, $25, $26, $27
           )
           returning
             ${COLUMNAS_DOCUMENTO}
@@ -898,7 +904,10 @@ export class PgFacturaRepository implements FacturaRepository {
           // SPEC_MONEDA_EXTRANJERA_v0.1, D-1: la NC esta en la moneda de su factura.
           input.original.moneda ?? "PYG",
           input.original.moneda && input.original.moneda !== "PYG" ? input.original.tipo_cambio ?? null : null,
-          input.actividadPuntoPerfilId ?? null
+          input.actividadPuntoPerfilId ?? null,
+          // SPEC_NOTA_CREDITO_POR_MONTO_v0.1, RN-07.
+          input.modo ?? (input.items ? "LINEAS" : "TOTAL"),
+          input.motivoCodigo ?? 1
         ]
       );
 
@@ -1986,6 +1995,8 @@ function mapFacturaRow(
     sifen_last_checked_at: row.sifen_last_checked_at ? row.sifen_last_checked_at.toISOString() : null,
     documento_relacionado_id: row.documento_relacionado_id,
     nce_motivo: row.nce_motivo,
+    nce_modo: (row.nce_modo as DocumentoResponse["nce_modo"]) ?? null,
+    nce_motivo_codigo: row.nce_motivo_codigo ?? null,
     emitido_por: emisor,
     cancelacion: mapCancelacion(row),
     inutilizacion: mapInutilizacion(row),

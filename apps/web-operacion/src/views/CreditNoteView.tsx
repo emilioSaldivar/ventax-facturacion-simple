@@ -1,12 +1,14 @@
 // Notas de credito con el patron de Nueva factura (SPEC_UX_RESTO_APP_v0.1 B.1, RN-03, RN-04, RN-07; PLAN §4, URA-005):
 // encabezado, pestañas, tarjetas (factura, que se devuelve, motivo) y panel fijo con el total y "Emitir"; al emitir,
 // el resultado reemplaza al formulario. El cuerpo del pedido es el de antes: total {motivo}, parcial {motivo, lineas}
-// (linea de base en scripts/segel-fs/nc-cuerpo.base.json).
+// (linea de base en scripts/segel-fs/nc-cuerpo.base.json); por monto {motivo, monto, motivo_codigo}
+// (SPEC_NOTA_CREDITO_POR_MONTO_v0.1).
 import { useEffect, useState } from "react";
 import { useApi } from "../api/useApi";
 import { Aviso, type TonoAviso } from "../components/Aviso";
 import { AvisoPuntoDistinto } from "../components/AvisoPuntoDistinto";
 import { CampoFormulario } from "../components/CampoFormulario";
+import { NotaCreditoPorMonto, pedidoNotaCreditoMonto } from "../components/NotaCreditoPorMonto";
 import { EncabezadoPantalla } from "../components/EncabezadoPantalla";
 import { EstadoVacio } from "../components/EstadoVacio";
 import { PastillaEstado } from "../components/PastillaEstado";
@@ -16,6 +18,7 @@ import { mensajeNotaCredito } from "../lib/documentos";
 import { estadoDocumento, etiquetaCondicionVenta } from "../lib/estados";
 import { cantidadValida, formatCantidad, formatMonto, formatShortDate, normalizeDecimalInput } from "../lib/formato";
 import { actividadPunto, nombrePunto, numeroConPunto } from "../lib/punto";
+import { modoInicialNotaCredito, type ModoNotaCredito, type MotivoCodigoMonto } from "../lib/notaCreditoMonto";
 import { useEntregaDocumento } from "../lib/useEntregaDocumento";
 import type {
   DocumentoListResponse,
@@ -26,7 +29,7 @@ import type {
   OperationalContextResponse
 } from "../tipos";
 
-type Modo = "TOTAL" | "PARCIAL";
+type Modo = ModoNotaCredito;
 
 /** Importe de una cantidad de una linea, redondeado como lo muestra el resto de la app. */
 function importeLinea(cantidad: number, precio: number, moneda: string): number {
@@ -54,6 +57,8 @@ export function CreditNoteView({
   const [saldoError, setSaldoError] = useState<string | null>(null);
   const [modo, setModo] = useState<Modo>("TOTAL");
   const [cantidades, setCantidades] = useState<Record<number, string>>({});
+  const [montoTexto, setMontoTexto] = useState("");
+  const [motivoCodigo, setMotivoCodigo] = useState<MotivoCodigoMonto>(3);
   const [query, setQuery] = useState("");
   const [motivo, setMotivo] = useState("");
   const [loading, setLoading] = useState(false);
@@ -97,12 +102,14 @@ export function CreditNoteView({
     setSaldoError(null);
     setModo("TOTAL");
     setCantidades({});
+    setMontoTexto("");
+    setMotivoCodigo(3);
     if (!candidate.elegible) return;
     api
       .get<NotaCreditoSaldoResponse>(`/facturas/${candidate.documento.id}/nota-credito/saldo`)
       .then((s) => {
         setSaldo(s);
-        setModo(s.admite_total ? "TOTAL" : "PARCIAL");
+        setModo(modoInicialNotaCredito(s));
       })
       .catch((error) => setSaldoError(error instanceof Error ? error.message : "No se pudo cargar el saldo de la factura."));
   }
@@ -112,6 +119,7 @@ export function CreditNoteView({
     setSaldo(null);
     setSaldoError(null);
     setCantidades({});
+    setMontoTexto("");
     setAviso(null);
   }
 
@@ -132,11 +140,19 @@ export function CreditNoteView({
   }
 
   const moneda = saldo?.moneda ?? selected?.documento.moneda ?? "PYG";
-  const saldoTotal = saldo ? saldo.lineas.reduce((suma, l) => suma + importeLinea(l.saldo, l.precio_unitario, moneda), 0) : 0;
+  const pedidoMonto = modo === "MONTO" && saldo ? pedidoNotaCreditoMonto(saldo, montoTexto) : null;
+  // Por monto el saldo es el neto de FE (SPEC_NOTA_CREDITO_POR_MONTO_v0.1, D-3); por lineas, el de siempre.
+  const saldoTotal = !saldo
+    ? 0
+    : modo === "MONTO"
+      ? saldo.monto.saldo
+      : saldo.lineas.reduce((suma, l) => suma + importeLinea(l.saldo, l.precio_unitario, moneda), 0);
   const aDevolver =
     modo === "TOTAL"
       ? selected?.documento.totals.total ?? 0
-      : saldo
+      : modo === "MONTO"
+        ? pedidoMonto?.monto ?? 0
+        : saldo
         ? saldo.lineas.reduce((suma, l) => {
             const cantidad = Number(cantidades[l.line_no] || 0);
             return suma + (Number.isFinite(cantidad) ? importeLinea(cantidad, l.precio_unitario, moneda) : 0);
@@ -154,13 +170,15 @@ export function CreditNoteView({
         ? saldoError
         : !saldo
           ? "Cargando el saldo de la factura..."
-          : !saldo.admite_total && !saldo.admite_parcial
-            ? saldo.motivo_no_parcial ?? "La factura no admite nota de crédito."
+          : !saldo.admite_total && !saldo.admite_parcial && !saldo.monto.admite
+            ? saldo.monto.motivo_no_admite ?? saldo.motivo_no_parcial ?? "La factura no admite nota de crédito."
             : parcial?.error
               ? parcial.error
-              : !motivo.trim()
-                ? "Escribí el motivo."
-                : null;
+              : pedidoMonto?.error
+                ? pedidoMonto.error
+                : !motivo.trim()
+                  ? "Escribí el motivo."
+                  : null;
 
   async function emitNotaCredito() {
     if (!selected || bloqueo) {
@@ -169,7 +187,12 @@ export function CreditNoteView({
     }
     setEmitting(true);
     setAviso(null);
-    const cuerpo = modo === "PARCIAL" && parcial ? { motivo: motivo.trim(), lineas: parcial.lineas } : { motivo: motivo.trim() };
+    const cuerpo =
+      modo === "PARCIAL" && parcial
+        ? { motivo: motivo.trim(), lineas: parcial.lineas }
+        : modo === "MONTO" && pedidoMonto?.monto
+          ? { motivo: motivo.trim(), monto: pedidoMonto.monto, motivo_codigo: motivoCodigo }
+          : { motivo: motivo.trim() };
     try {
       const notaCredito = await api.request<DocumentoResponse>(`/facturas/${selected.documento.id}/nota-credito`, {
         method: "POST",
@@ -230,7 +253,7 @@ export function CreditNoteView({
       <EncabezadoPantalla
         id="credit-note-title"
         onVolver={onBack}
-        subtitulo={["Devolución total o parcial de una factura aprobada", seEmitePor].filter(Boolean).join(" · ")}
+        subtitulo={["Devolución total o parcial, o un monto, de una factura aprobada", seEmitePor].filter(Boolean).join(" · ")}
         titulo="Notas de crédito"
       />
       <div className="nc-pestanas" role="group" aria-label="Notas de crédito">
@@ -330,7 +353,26 @@ export function CreditNoteView({
                     >
                       Algunas líneas
                     </button>
+                    <button
+                      aria-pressed={modo === "MONTO"}
+                      className={modo === "MONTO" ? "active" : ""}
+                      disabled={!saldo.monto.admite}
+                      onClick={() => setModo("MONTO")}
+                      title={saldo.monto.motivo_no_admite ?? undefined}
+                      type="button"
+                    >
+                      Un monto
+                    </button>
                   </div>
+                  {modo === "MONTO" ? (
+                    <NotaCreditoPorMonto
+                      montoTexto={montoTexto}
+                      motivoCodigo={motivoCodigo}
+                      onMontoTexto={setMontoTexto}
+                      onMotivoCodigo={setMotivoCodigo}
+                      saldo={saldo}
+                    />
+                  ) : (
                   <div className="nc-lineas-wrap">
                     <table className="nc-lineas">
                       <thead>
@@ -375,6 +417,7 @@ export function CreditNoteView({
                       </tbody>
                     </table>
                   </div>
+                  )}
                 </>
               ) : !saldoError ? (
                 <p className="muted">Cargando el saldo de la factura...</p>
@@ -396,7 +439,7 @@ export function CreditNoteView({
           <h3 id="nc-resumen-titulo">Resumen</h3>
           <dl className="nc-totales">
             <div>
-              <dt>Total a devolver{modo === "PARCIAL" ? " (estimado)" : ""}</dt>
+              <dt>{modo === "MONTO" ? "Monto a acreditar" : `Total a devolver${modo === "PARCIAL" ? " (estimado)" : ""}`}</dt>
               <dd className="nc-total">{formatMonto(aDevolver, moneda)}</dd>
             </div>
             {saldo ? (

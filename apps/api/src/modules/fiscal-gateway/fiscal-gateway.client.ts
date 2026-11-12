@@ -138,11 +138,26 @@ const numerosInutilizadosMock = new Map<string, string>();
  * SPEC_MONEDA_EXTRANJERA_v0.1, A-2: totales que el mock "aprobo", por document_uuid, para responder `/totales`
  * con el mismo formato que FE (gTotSub) y que el flujo local sea el mismo que contra FE.
  */
-const totalesMockPorDocumento = new Map<string, { moneda: string; tipo_cambio: number | null; totals: TaxTotalsMock }>();
 type TaxTotalsMock = { subtotal: number; total_sin_iva: number; iva_5: number; iva_10: number; total_iva: number; total: number; descuento?: number };
+/** Importe neto (IVA incluido) por tasa, sumado de las lineas del pedido (SPEC_NOTA_CREDITO_POR_MONTO_v0.1, PLAN 4). */
+type TasasMock = { iva_10: number; iva_5: number; exenta: number } | null;
+const totalesMockPorDocumento = new Map<string, { moneda: string; tipo_cambio: number | null; totals: TaxTotalsMock; tasas: TasasMock }>();
 
-function registrarTotalesMock(documentUuid: string, request: { moneda?: string; tipo_cambio?: number | null; totals: TaxTotalsMock }): void {
-  totalesMockPorDocumento.set(documentUuid, { moneda: request.moneda ?? "PYG", tipo_cambio: request.tipo_cambio ?? null, totals: request.totals });
+function registrarTotalesMock(
+  documentUuid: string,
+  request: { moneda?: string; tipo_cambio?: number | null; totals: TaxTotalsMock; items?: Array<{ iva_tipo: string; subtotal: number }> }
+): void {
+  const tasas: TasasMock = request.items?.length
+    ? request.items.reduce(
+        (acumulado, item) => {
+          const clave = item.iva_tipo === "IVA_10" ? "iva_10" : item.iva_tipo === "IVA_5" ? "iva_5" : "exenta";
+          acumulado[clave] = Math.round((acumulado[clave] + Number(item.subtotal)) * 100) / 100;
+          return acumulado;
+        },
+        { iva_10: 0, iva_5: 0, exenta: 0 }
+      )
+    : null;
+  totalesMockPorDocumento.set(documentUuid, { moneda: request.moneda ?? "PYG", tipo_cambio: request.tipo_cambio ?? null, totals: request.totals, tasas });
 }
 
 export class MockFiscalGateway implements FiscalGateway {
@@ -329,6 +344,10 @@ export class MockFiscalGateway implements FiscalGateway {
       throw new FiscalGatewayError("UPSTREAM_ERROR", "Backend fiscal rechazo la consulta de totales.", { status: 404, body: { error: "XML_NOT_AVAILABLE" } });
     }
     const t = guardado.totals;
+    const redondear = (valor: number) => Math.round(valor * 100) / 100;
+    // Con las lineas del pedido, gravada = neto de la tasa - IVA (como FE); sin ellas, la aproximacion de antes.
+    const gravada10 = guardado.tasas ? redondear(guardado.tasas.iva_10 - t.iva_10) : t.iva_10 > 0 ? redondear(t.iva_10 * 10) : 0;
+    const gravada5 = guardado.tasas ? redondear(guardado.tasas.iva_5 - t.iva_5) : t.iva_5 > 0 ? redondear(t.iva_5 * 20) : 0;
     const totales: FeDetalleTotales = {
       bruto: t.subtotal,
       // SPEC_DESCUENTOS_FACTURA_v0.1 (PLAN, mock): el total de descuentos del pedido, como lo informaria FE.
@@ -336,9 +355,11 @@ export class MockFiscalGateway implements FiscalGateway {
       anticipo: 0,
       total: t.total,
       redondeo: 0,
-      gravada_10: t.iva_10 > 0 ? Math.round((t.iva_10 * 10) * 100) / 100 : 0,
-      gravada_5: t.iva_5 > 0 ? Math.round((t.iva_5 * 20) * 100) / 100 : 0,
-      exenta: 0,
+      gravada_10: gravada10,
+      gravada_5: gravada5,
+      // SPEC_NOTA_CREDITO_POR_MONTO_v0.1 (PLAN 4): lo que no es 10 % ni 5 % es exento, para que el reparto local
+      // tenga las tres tasas como FE.
+      exenta: guardado.tasas ? guardado.tasas.exenta : 0,
       exonerada: 0,
       iva_10: t.iva_10,
       iva_5: t.iva_5,
@@ -1834,7 +1855,7 @@ export class RealFiscalGateway implements FiscalGateway {
       receptor: buildReceptor(request.cliente),
       fecha: new Date().toISOString(),
       motivo: {
-        codigo: 1,
+        codigo: request.motivo_codigo ?? 1,
         descripcion: request.motivo
       },
       referencia: {

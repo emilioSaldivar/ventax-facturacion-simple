@@ -7,6 +7,8 @@ import { PastillaEstado } from "../components/PastillaEstado";
 import { EncabezadoPantalla } from "../components/EncabezadoPantalla";
 import { TIPOS_PROXIMAMENTE } from "../lib/tiposEmision";
 import { AvisoPuntoDistinto } from "../components/AvisoPuntoDistinto";
+import { NotaCreditoPorMonto, pedidoNotaCreditoMonto } from "../components/NotaCreditoPorMonto";
+import { modoInicialNotaCredito, type ModoNotaCredito, type MotivoCodigoMonto } from "../lib/notaCreditoMonto";
 import { useBorradorSinEmitir } from "../lib/borradores";
 import { filaDescuento } from "../lib/descuentos";
 import { etiquetaPunto, nombrePunto, numeroConPunto } from "../lib/punto";
@@ -106,8 +108,11 @@ export function DocumentsView({
   const [notaCreditoPopup, setNotaCreditoPopup] = useState<DocumentoResponse | null>(null);
   // SPEC_NOTA_CREDITO_PARCIAL_v0.1: modo de la nota y cantidades a acreditar por linea.
   const [ncSaldo, setNcSaldo] = useState<NotaCreditoSaldoResponse | null>(null);
-  const [ncModo, setNcModo] = useState<"TOTAL" | "PARCIAL">("TOTAL");
+  const [ncModo, setNcModo] = useState<ModoNotaCredito>("TOTAL");
   const [ncCantidades, setNcCantidades] = useState<Record<number, string>>({});
+  // SPEC_NOTA_CREDITO_POR_MONTO_v0.1: monto y motivo SIFEN de la nota por monto.
+  const [ncMontoTexto, setNcMontoTexto] = useState("");
+  const [ncMotivoCodigo, setNcMotivoCodigo] = useState<MotivoCodigoMonto>(3);
   // Lo acreditado por notas de credito, para la ficha de una factura (SPEC_NOTA_CREDITO_PARCIAL_v0.1, alcance 6).
   const [fichaSaldo, setFichaSaldo] = useState<NotaCreditoSaldoResponse | null>(null);
   // Lista blanca a proposito: un rol nuevo no hereda permisos de soporte por descarte
@@ -292,12 +297,14 @@ export function DocumentsView({
     setNcSaldo(null);
     setNcModo("TOTAL");
     setNcCantidades({});
+    setNcMontoTexto("");
+    setNcMotivoCodigo(3);
     if (action === "CREDIT_NOTE_DETAIL" || action === "CREDIT_NOTE_LIST") {
       void api
         .get<NotaCreditoSaldoResponse>(`/facturas/${documentoId}/nota-credito/saldo`)
         .then((saldo) => {
           setNcSaldo(saldo);
-          setNcModo(saldo.admite_total ? "TOTAL" : "PARCIAL");
+          setNcModo(modoInicialNotaCredito(saldo));
         })
         .catch(() => setNcSaldo(null));
     }
@@ -340,7 +347,21 @@ export function DocumentsView({
     }
 
     const esNotaCredito = reasonModal.action === "CREDIT_NOTE_DETAIL" || reasonModal.action === "CREDIT_NOTE_LIST";
-    let cuerpoNotaCredito: { motivo: string; lineas?: Array<{ line_no: number; cantidad: number }> } = { motivo };
+    let cuerpoNotaCredito: { motivo: string; lineas?: Array<{ line_no: number; cantidad: number }>; monto?: number; motivo_codigo?: number } = {
+      motivo
+    };
+    if (esNotaCredito && ncModo === "MONTO") {
+      if (!ncSaldo) {
+        setReasonError("No se pudo cargar el saldo de la factura.");
+        return;
+      }
+      const pedido = pedidoNotaCreditoMonto(ncSaldo, ncMontoTexto);
+      if (pedido.error || pedido.monto === null) {
+        setReasonError(pedido.error);
+        return;
+      }
+      cuerpoNotaCredito = { motivo, monto: pedido.monto, motivo_codigo: ncMotivoCodigo };
+    }
     if (esNotaCredito && ncModo === "PARCIAL") {
       const { lineas, error } = lineasNotaParcial();
       if (error) {
@@ -1543,9 +1564,28 @@ export function DocumentsView({
                   >
                     Parcial
                   </button>
+                  <button
+                    aria-pressed={ncModo === "MONTO"}
+                    className={ncModo === "MONTO" ? "active" : ""}
+                    disabled={!ncSaldo.monto.admite}
+                    onClick={() => setNcModo("MONTO")}
+                    title={ncSaldo.monto.motivo_no_admite ?? undefined}
+                    type="button"
+                  >
+                    Por monto
+                  </button>
                 </div>
-                {!ncSaldo.admite_total && !ncSaldo.admite_parcial ? (
-                  <p className="form-error">{ncSaldo.motivo_no_parcial ?? "La factura no admite nota de crédito."}</p>
+                {!ncSaldo.admite_total && !ncSaldo.admite_parcial && !ncSaldo.monto.admite ? (
+                  <p className="form-error">{ncSaldo.monto.motivo_no_admite ?? ncSaldo.motivo_no_parcial ?? "La factura no admite nota de crédito."}</p>
+                ) : null}
+                {ncModo === "MONTO" ? (
+                  <NotaCreditoPorMonto
+                    montoTexto={ncMontoTexto}
+                    motivoCodigo={ncMotivoCodigo}
+                    onMontoTexto={setNcMontoTexto}
+                    onMotivoCodigo={setNcMotivoCodigo}
+                    saldo={ncSaldo}
+                  />
                 ) : null}
                 {ncModo === "PARCIAL" ? (
                   <>

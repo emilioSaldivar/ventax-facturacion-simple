@@ -2931,7 +2931,8 @@ dd {
 
 .nc-parcial .segmented {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  /* SPEC_NOTA_CREDITO_POR_MONTO_v0.1: Total, Parcial y Por monto. */
+  grid-template-columns: repeat(3, 1fr);
   gap: 0;
 }
 
@@ -4636,7 +4637,34 @@ dd {
 }
 
 .nc-modo {
-  max-width: 420px;
+  max-width: 560px;
+  /* SPEC_NOTA_CREDITO_POR_MONTO_v0.1: tres modos (toda la factura, algunas lineas, un monto). */
+  grid-template-columns: repeat(3, 1fr);
+}
+
+/* SPEC_NOTA_CREDITO_POR_MONTO_v0.1: modo "Por monto" (componente NotaCreditoPorMonto). */
+.nc-monto {
+  display: grid;
+  gap: var(--esp-3);
+}
+
+.nc-monto-campos {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--esp-3);
+}
+
+.nc-monto-campos input {
+  text-align: right;
+}
+
+.nc-monto-reparto {
+  display: grid;
+  gap: var(--esp-2);
+}
+
+.nc-monto-reparto p {
+  margin: 0;
 }
 
 .nc-pestanas {

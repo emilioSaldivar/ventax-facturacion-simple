@@ -17,7 +17,9 @@ export interface ClasificacionNotaCredito {
 
 const ESTADOS_FE_TRABADA = new Set(["DRAFT", "TRANSMISSION_FAILED"]);
 
-export const MENSAJE_TOTAL_EXCEDIDO = "FE ya registra una nota de credito por esta factura. Requiere soporte.";
+// SPEC_NOTA_CREDITO_POR_MONTO_v0.1, RN-08: aplica a todos los modos (total, lineas y monto).
+export const MENSAJE_TOTAL_EXCEDIDO =
+  "La suma de las notas de crédito supera el total de la factura. Requiere soporte si no hay otras notas en Documentos.";
 export const MENSAJE_MONEDA_DISTINTA = "La moneda de la nota de credito no coincide con la de la factura.";
 
 export function clasificarRespuestaNotaCredito(

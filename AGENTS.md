@@ -176,6 +176,15 @@ La fuente de verdad de este proyecto es:
 - `docs/SPEC_PLAZO_CREDITO_v0.1.md`
 - `docs/PLAN_PLAZO_CREDITO_v0.1.md`
 - `docs/TASKS_PLAZO_CREDITO_v0.1.md`
+- `docs/SPEC_NOTA_CREDITO_POR_MONTO_v0.1.md`
+- `docs/PLAN_NOTA_CREDITO_POR_MONTO_v0.1.md`
+- `docs/TASKS_NOTA_CREDITO_POR_MONTO_v0.1.md`
+- `docs/SPEC_REMISION_FACTURA_ASOCIADA_CDC_v0.1.md`
+- `docs/PLAN_REMISION_FACTURA_ASOCIADA_CDC_v0.1.md`
+- `docs/TASKS_REMISION_FACTURA_ASOCIADA_CDC_v0.1.md`
+- `docs/SPEC_NOTA_CREDITO_FACTURA_EXTERNA_v0.1.md`
+- `docs/PLAN_NOTA_CREDITO_FACTURA_EXTERNA_v0.1.md`
+- `docs/TASKS_NOTA_CREDITO_FACTURA_EXTERNA_v0.1.md`
 - `docs/BACKLOG.md` (archivo unico de pendientes, hallazgos y estados; ver "Regla Del Backlog Unico")
 - `docs/HOJA_DE_RUTA_v0.1.md` (prioridades y decisiones del 2026-11-11; el estado vigente esta en `BACKLOG.md`)
 - `spec/openapi.yaml`

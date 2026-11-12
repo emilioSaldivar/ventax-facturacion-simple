@@ -85,7 +85,7 @@ async function fichaAprobada(page, total) {
 
 /** Emite una nota parcial desde la ficha abierta: `cantidades` por numero de linea (1, 2, ...). */
 async function notaParcial(page, cantidades, etiqueta) {
-  const boton = page.getByRole("button", { name: /Crear nota de credito/ }).first();
+  const boton = page.getByRole("button", { name: /Crear nota de cr[eé]dito/ }).first();
   await page.waitForFunction((b) => b && !b.disabled, await boton.elementHandle(), { timeout: 20000 });
   await boton.click();
   const grupo = page.getByRole("group", { name: "Tipo de nota de crédito" });
@@ -134,7 +134,7 @@ async function notaParcial(page, cantidades, etiqueta) {
     await page.locator(".nc-acreditado").waitFor({ timeout: 15000 }).catch(() => {});
     const ficha = (await page.locator(".document-detail").innerText()).replace(/\s+/g, " ");
     check("CA-01 1440: la ficha de la factura muestra lo acreditado y el saldo", ficha.includes("Acreditado por notas de crédito") && ficha.includes("1 de 2"), ficha.slice(0, 300));
-    const boton = page.getByRole("button", { name: /Crear nota de credito/ }).first();
+    const boton = page.getByRole("button", { name: /Crear nota de cr[eé]dito/ }).first();
     await boton.click();
     const grupo = page.getByRole("group", { name: "Tipo de nota de crédito" });
     await grupo.waitFor();
@@ -151,7 +151,7 @@ async function notaParcial(page, cantidades, etiqueta) {
     const p2 = await notaParcial(page, { 1: "1", 2: "1" }, "usd-parcial-2");
     check("CA-02 1440: segunda parcial por el saldo, USD 250,24", p2.ok && p2.totalNota.includes("USD 250,24"), `${p2.totalNota} :: ${p2.texto}`);
     await fichaAprobada(page, "USD 400,49");
-    await page.getByRole("button", { name: /Crear nota de credito/ }).first().click();
+    await page.getByRole("button", { name: /Crear nota de cr[eé]dito/ }).first().click();
     await page.getByRole("group", { name: "Tipo de nota de crédito" }).waitFor();
     const sinSaldo = (await page.locator(".modal-panel").innerText()).replace(/\s+/g, " ");
     check("CA-02 1440: sin saldo, la ventana no ofrece ni total ni parcial", sinSaldo.includes("acreditada por completo"), sinSaldo.slice(0, 200));
@@ -190,7 +190,7 @@ async function notaParcial(page, cantidades, etiqueta) {
       await v.page.waitForTimeout(2000);
       const fila = ancho >= 1024 ? v.page.locator("table.documents-tabla tbody tr", { hasText: "385.000" }).first().locator("td").nth(2) : v.page.locator(".document-row-main", { hasText: "385.000" }).first();
       await fila.click();
-      await v.page.getByRole("button", { name: /Crear nota de credito/ }).first().click();
+      await v.page.getByRole("button", { name: /Crear nota de cr[eé]dito/ }).first().click();
       const g = v.page.getByRole("group", { name: "Tipo de nota de crédito" });
       await g.waitFor();
       await g.getByRole("button", { name: "Parcial" }).click();

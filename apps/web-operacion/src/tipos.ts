@@ -265,6 +265,16 @@ export interface NotaCreditoSaldoResponse {
     cantidad_acreditada: number;
     saldo: number;
   }>;
+  /** SPEC_NOTA_CREDITO_POR_MONTO_v0.1: saldo neto y montos por tasa para la nota por monto. */
+  monto: {
+    admite: boolean;
+    motivo_no_admite: string | null;
+    total_factura: number;
+    acreditado: number;
+    saldo: number;
+    tasas: { iva_10: number; iva_5: number; exenta: number } | null;
+    fuente: "FE" | "FS";
+  };
 }
 
 export interface DocumentoResponse {

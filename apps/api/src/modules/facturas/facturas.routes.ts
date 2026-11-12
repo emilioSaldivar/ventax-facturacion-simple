@@ -211,9 +211,19 @@ const notaCreditoSchema = z
       .array(z.object({ line_no: z.number().int().positive(), cantidad: z.number().positive() }))
       .min(1)
       .max(200)
-      .optional()
+      .optional(),
+    // SPEC_NOTA_CREDITO_POR_MONTO_v0.1: nota por monto (la regla de 50 Gs o 2 decimales la aplica el servicio, RN-01).
+    monto: z.number().positive().optional(),
+    motivo_codigo: z.union([z.literal(3), z.literal(4), z.literal(8)]).optional()
   })
   .superRefine((input, ctx) => {
+    // RN-02: lineas y monto son excluyentes; el motivo SIFEN solo acompaña al monto.
+    if (input.monto !== undefined && input.lineas !== undefined) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["monto"], message: "La nota va por lineas o por monto, no las dos cosas." });
+    }
+    if (input.motivo_codigo !== undefined && input.monto === undefined) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["motivo_codigo"], message: "motivo_codigo solo se usa con monto." });
+    }
     const vistas = new Set<number>();
     input.lineas?.forEach((linea, indice) => {
       if (cantidadEscalada(linea.cantidad) === null) {
@@ -582,7 +592,7 @@ facturasRouter.get(
   async (req, res, next) => {
     try {
       const context = await getOperationalContext(req.user!, operationalContextRepository);
-      res.json(await getNotaCreditoSaldo(context, String(req.params.documentoId), facturasRepository));
+      res.json(await getNotaCreditoSaldo(context, String(req.params.documentoId), facturasRepository, fiscalGateway));
     } catch (error) {
       next(error);
     }

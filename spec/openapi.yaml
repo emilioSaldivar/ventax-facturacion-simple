@@ -1360,7 +1360,14 @@ paths:
         facturas `EMITIDA` con CDC. La total exige que la factura no tenga ninguna nota viva; las parciales
         se suman hasta cubrir la factura (saldo por linea, RN-06). Una nota `RECHAZADA` no cuenta.
         En moneda extranjera la total va por referencia y la parcial con `moneda` y `tipoCambio` de la
-        factura, ambas solo con `FE_NC_MONEDA_EXTRANJERA`. El envio fiscal usa `envio.mode=BATCH`
+        factura, ambas solo con `FE_NC_MONEDA_EXTRANJERA`.
+
+        Con `monto` (SPEC_NOTA_CREDITO_POR_MONTO_v0.1, guia de FE v0.52 §67) emite una NCE por ese importe:
+        FS pide `GET /v1/documentos/{uuid}/totales` de la factura, controla el saldo sobre el total **neto**
+        (total de FE menos las notas no rechazadas, anuladas ni canceladas) y reparte el monto por tasa
+        (una linea por tasa, cantidad 1) con `motivo_codigo` 3, 4 u 8. En guaranies el monto es multiplo de
+        50; en otra moneda, hasta 2 decimales. Admite facturas con descuento. `monto` y `lineas` son
+        excluyentes. El envio fiscal usa `envio.mode=BATCH`
         y puede quedar `PENDIENTE_SIFEN` mientras SIFEN procesa el lote.
 
         La clave de idempotencia hacia FE la deriva el servidor a partir de la factura
@@ -1400,7 +1407,8 @@ paths:
         "400":
           description: >-
             `lineas` no validas: linea inexistente o repetida, cantidad con mas de 4 decimales o mayor que el
-            saldo. `details.lineas[]` trae `line_no`, `motivo` y, si corresponde, `saldo`.
+            saldo. `details.lineas[]` trae `line_no`, `motivo` y, si corresponde, `saldo`. Con `monto`: no
+            multiplo de 50 en guaranies, mas de 2 decimales en otra moneda, o `monto` junto con `lineas`.
           content:
             application/json:
               schema:
@@ -1409,7 +1417,9 @@ paths:
           description: >-
             Factura no elegible (`details.reason`: `NOTA_CREDITO_YA_EMITIDA` si se pide la total con una nota
             viva, `NOTA_CREDITO_SOLO_TOTAL`, `NOTA_CREDITO_TRABADA`, `NOTA_CREDITO_MONEDA_EXTRANJERA`,
-            `NOTA_CREDITO_CON_ANTICIPO`, `NOTA_CREDITO_INNOMINADA` si la factura es a un comprador sin nombre), o FE responde `CREDIT_NOTE_TOTAL_EXCEEDED` o
+            `NOTA_CREDITO_CON_ANTICIPO`, `NOTA_CREDITO_INNOMINADA` si la factura es a un comprador sin nombre,
+            `NOTA_CREDITO_SUPERA_SALDO` con `details.saldo` si el monto o las lineas superan el saldo neto,
+            `NOTA_CREDITO_SIN_MONTOS`), o FE responde `CREDIT_NOTE_TOTAL_EXCEEDED` o
             `INVALID_REFERENCED_DOCUMENT` (`details.fe_code`; FE no numero)
           content:
             application/json:
@@ -1420,7 +1430,8 @@ paths:
         "502":
           description: >-
             FE rechazo el pedido con un error que no crea la nota (400, 401, 404, 409 no idempotente,
-            422, 429). Los errores que pudieron crearla se guardan y responden 201
+            422, 429). Los errores que pudieron crearla se guardan y responden 201. Con `monto`, tambien si
+            FE no dio los totales de la factura (`details.reason` `FE_TOTALES_NO_DISPONIBLES`): no se emite
           content:
             application/json:
               schema:
@@ -3856,6 +3867,15 @@ components:
         nce_motivo:
           type: string
           nullable: true
+        nce_modo:
+          type: string
+          nullable: true
+          enum: [TOTAL, LINEAS, MONTO, null]
+          description: SPEC_NOTA_CREDITO_POR_MONTO_v0.1. Modo de la nota de credito; null en notas anteriores.
+        nce_motivo_codigo:
+          type: integer
+          nullable: true
+          description: Motivo SIFEN (E401) con el que se emitio la nota; null en notas anteriores (1).
         emitido_por:
           $ref: "#/components/schemas/DocumentoEmisor"
         delivery:
@@ -4483,10 +4503,20 @@ components:
                 exclusiveMinimum: 0
                 multipleOf: 0.0001
                 description: Hasta 4 decimales, no mayor que el saldo de la linea.
+        monto:
+          type: number
+          exclusiveMinimum: 0
+          description: >-
+            SPEC_NOTA_CREDITO_POR_MONTO_v0.1. Importe a acreditar en la moneda de la factura (PYG multiplo de
+            50; otra moneda hasta 2 decimales). Excluyente con `lineas`.
+        motivo_codigo:
+          type: integer
+          enum: [3, 4, 8]
+          description: Motivo SIFEN de la nota por monto (3 Descuento, 4 Bonificacion, 8 Ajuste de precio). Solo con `monto`; por defecto 3.
 
     NotaCreditoSaldoResponse:
       type: object
-      required: [moneda, admite_total, admite_parcial, motivo_no_parcial, lineas]
+      required: [moneda, admite_total, admite_parcial, motivo_no_parcial, lineas, monto]
       properties:
         moneda:
           type: string
@@ -4511,6 +4541,30 @@ components:
               cantidad_facturada: { type: number }
               cantidad_acreditada: { type: number }
               saldo: { type: number }
+        monto:
+          type: object
+          description: >-
+            SPEC_NOTA_CREDITO_POR_MONTO_v0.1. Saldo neto para la nota por monto. `saldo` ya esta bajado a lo
+            emitible (multiplo de 50 en guaranies).
+          required: [admite, motivo_no_admite, total_factura, acreditado, saldo, tasas, fuente]
+          properties:
+            admite: { type: boolean }
+            motivo_no_admite: { type: string, nullable: true }
+            total_factura: { type: number }
+            acreditado: { type: number }
+            saldo: { type: number }
+            tasas:
+              type: object
+              nullable: true
+              description: Monto de cada tasa con IVA (gravada + IVA; exenta + exonerada). null si FE no respondio.
+              properties:
+                iva_10: { type: number }
+                iva_5: { type: number }
+                exenta: { type: number }
+            fuente:
+              type: string
+              enum: [FE, FS]
+              description: FE si el total salio de `/totales` en el momento; FS si son los totales guardados.
 
     CancelacionRequest:
       type: object
