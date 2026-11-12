@@ -3,7 +3,8 @@
 //
 //   ENSAYO_PASSWORD_FILE=/ruta/clave node scripts/segel-fs/playwright-descuentos.cjs [caso ...]
 //
-// Casos: grilla (CA-07, 1440 y 1280), simple (CA-08, 390), validacion (CA-03 en pantalla). Sin emitir.
+// Casos: grilla (CA-07, 1440 y 1280), simple (CA-08, 390), validacion (CA-03 en pantalla), desglose (CA-12, 1440/1280/390:
+// filas "Descuento por linea", "Descuento sobre el total" y "Total descuentos" con su porcentaje; RN-18b). Sin emitir.
 // sifen (CA-10): EMITE en SIFEN test una factura PYG con descuento por linea y un global que no divide exacto
 // (avisar a FE antes) y compara los totales oficiales de FE. Variables: SEGEL_APP_URL, ENSAYO_USER, ENSAYO_RUC.
 // Prueba fina antes del despliegue (TASKS DES-013 a DES-016, 2026-11-12), tambien EMITEN en SIFEN test:
@@ -79,7 +80,8 @@ async function fila(page, indice, { descripcion, cantidad, precio, descuento }) 
   return f;
 }
 
-const totalesTexto = async (page) => (await page.locator(".totales-fija, .totals-section").first().innerText()).replace(/\s+/g, " ");
+// En modo completo la tarjeta fija trae todo; en modo simple "Total a pagar" vive en el pie fijo (.pie-crear).
+const totalesTexto = async (page) => (await page.locator(".totals-section, .pie-crear").allInnerTexts()).join(" ").replace(/\s+/g, " ");
 
 // Llamadas a la API con la sesion del navegador.
 async function api(page, metodo, ruta, cuerpo) {
@@ -219,7 +221,10 @@ async function casoGrilla(browser) {
       await page.getByLabel(/Descuento sobre el total/).fill("30000");
       await page.waitForTimeout(2200);
       const t = await totalesTexto(page);
-      check(`CA-07 ${ancho}: fila "Descuento − Gs. 50.000"`, /Descuento\s*− Gs\.? ?50\.000/.test(t), t);
+      // RN-18b: con los dos descuentos, tres filas y la de cierre con el porcentaje sobre el bruto (50.000 / 250.000).
+      check(`CA-07 ${ancho}: fila "Descuento por línea − Gs. 20.000"`, /Descuento por línea\s*− Gs\.? ?20\.000/.test(t), t);
+      check(`CA-07 ${ancho}: fila "Descuento sobre el total − Gs. 30.000"`, /Descuento sobre el total\s*− Gs\.? ?30\.000/.test(t), t);
+      check(`CA-07 ${ancho}: fila "Total descuentos (20 %) − Gs. 50.000"`, /Total descuentos \(20 %\)\s*− Gs\.? ?50\.000/.test(t), t);
       check(`CA-07 ${ancho}: "Total a pagar Gs. 200.000"`, /Total a pagar\s*Gs\.? ?200\.000/.test(t), t);
       check(`CA-07 ${ancho}: subtotal bruto 250.000`, /Subtotal\s*Gs\.? ?250\.000/.test(t), t);
       await page.screenshot({ path: path.join(outDir, `${ancho}-grilla.png`), fullPage: true });
@@ -263,7 +268,7 @@ async function casoSimple(browser) {
     // La vista previa se recalcula sola; "Calcular" queda debajo del pie fijo en celular.
     await page.waitForTimeout(3000);
     const t = await texto(page);
-    check("CA-08 390: totales con la fila Descuento − Gs. 15.000", /Descuento\s*− Gs\.? ?15\.000/.test(t), t.slice(-400));
+    check("CA-08 390: totales con las filas por línea 10.000, sobre el total 5.000 y Total descuentos (15 %) 15.000", /Descuento por línea\s*− Gs\.? ?10\.000/.test(t) && /Descuento sobre el total\s*− Gs\.? ?5\.000/.test(t) && /Total descuentos \(15 %\)\s*− Gs\.? ?15\.000/.test(t), t.slice(-500));
     check("CA-08 390: total neto Gs. 85.000", /Total a pagar\s*Gs\.? ?85\.000/.test(t), t.slice(-300));
     check("CA-08 390: sin desplazamiento horizontal", await sinDesborde(page));
     await page.screenshot({ path: path.join(outDir, "390-simple.png"), fullPage: true });
@@ -272,6 +277,84 @@ async function casoSimple(browser) {
     await page.screenshot({ path: path.join(outDir, "390-simple-error.png"), fullPage: true }).catch(() => undefined);
   } finally {
     await ctx.close();
+  }
+}
+
+// CA-12 (RN-18b): el desglose segun que descuentos haya. 2 x 100.000 y 1 x 50.000 (IVA 10 %).
+async function casoDesglose(browser) {
+  for (const [ancho, alto, modo] of [
+    [1440, 900, "completo"],
+    [1280, 800, "completo"],
+    [390, 844, "simple"]
+  ]) {
+    const { ctx, page } = await entrar(browser, ancho, alto, modo);
+    const pref = `CA-12 ${ancho}`;
+    try {
+      await abrirVista(page, "Nueva factura");
+      await cliente(page);
+      if (modo === "completo") {
+        await page.locator("table.grilla-lineas").waitFor();
+        await fila(page, 0, { descripcion: "Zapatillas DES", cantidad: "2", precio: "100000" });
+        await fila(page, 1, { descripcion: "Medias DES", cantidad: "1", precio: "50000" });
+      } else {
+        for (const [descripcion, cantidad, precio] of [["Zapatillas DES", "2", "100000"], ["Medias DES", "1", "50000"]]) {
+          await page.getByRole("button", { name: /Agregar (producto|el primer)/ }).first().click();
+          const hoja = page.locator(".line-sheet, [role=dialog]").first();
+          await hoja.waitFor();
+          await hoja.getByLabel(/^Descripción|Producto o servicio/).first().fill(descripcion);
+          await hoja.getByLabel(/^Cantidad/).first().fill(cantidad).catch(() => undefined);
+          await hoja.getByLabel(/^Precio/).fill(precio);
+          await hoja.getByRole("button", { name: "AGREGAR Y NO GUARDAR" }).click().catch(() => undefined);
+          await page.waitForTimeout(400);
+        }
+      }
+      const espera = () => page.waitForTimeout(2200);
+      const sinDescuento = (t) => !/Descuento por línea|Descuento sobre el total|Total descuentos/.test(t);
+      // (d) sin descuentos: ninguna fila.
+      await espera();
+      let t = await totalesTexto(page);
+      check(`${pref} (d): sin descuentos no hay filas de descuento`, sinDescuento(t) && /Total a pagar\s*Gs\.? ?250\.000/.test(t), t);
+      // (b) solo global 30.000 sobre 250.000 = 12 %.
+      await page.getByLabel(/Descuento sobre el total/).fill("30000");
+      await espera();
+      t = await totalesTexto(page);
+      check(`${pref} (b): solo global: "Descuento sobre el total (12 %) − Gs. 30.000"`, /Descuento sobre el total \(12 %\)\s*− Gs\.? ?30\.000/.test(t), t);
+      check(`${pref} (b): sin fila por línea ni Total descuentos`, !/Descuento por línea|Total descuentos/.test(t), t);
+      check(`${pref} (b): Total a pagar Gs. 220.000`, /Total a pagar\s*Gs\.? ?220\.000/.test(t), t);
+      // (a) solo linea: 10 % en la linea 1 (20.000 sobre 250.000 = 8 %).
+      await page.getByLabel(/Descuento sobre el total/).fill("");
+      if (modo === "completo") {
+        await page.locator('[data-grilla-fila="0"]').getByLabel(/^Descuento, línea/).fill("10");
+      } else {
+        // Las lineas viven en el estado del editor: la hoja solo las edita (la vista previa se recalcula sola).
+        await page.getByRole("button", { name: "Editar producto 1" }).click();
+        const hoja = page.locator(".line-sheet, [role=dialog]").first();
+        await hoja.waitFor();
+        await hoja.getByLabel("Descuento de la línea").fill("10");
+        await hoja.getByRole("button", { name: "Cerrar" }).first().click().catch(() => undefined);
+      }
+      await espera();
+      t = await totalesTexto(page);
+      check(`${pref} (a): solo línea: "Descuento por línea (8 %) − Gs. 20.000"`, /Descuento por línea \(8 %\)\s*− Gs\.? ?20\.000/.test(t), t);
+      check(`${pref} (a): sin fila sobre el total ni Total descuentos`, !/Descuento sobre el total|Total descuentos/.test(t), t);
+      check(`${pref} (a): Total a pagar Gs. 230.000`, /Total a pagar\s*Gs\.? ?230\.000/.test(t), t);
+      // (c) los dos: 20.000 + 30.000 = 50.000 (20 %).
+      await page.getByLabel(/Descuento sobre el total/).fill("30000");
+      await espera();
+      t = await totalesTexto(page);
+      check(`${pref} (c): las tres filas`, /Descuento por línea\s*− Gs\.? ?20\.000/.test(t) && /Descuento sobre el total\s*− Gs\.? ?30\.000/.test(t) && /Total descuentos \(20 %\)\s*− Gs\.? ?50\.000/.test(t), t);
+      check(`${pref} (c): las parciales sin porcentaje`, !/Descuento por línea \(/.test(t) && !/Descuento sobre el total \(/.test(t), t);
+      check(`${pref} (c): Total a pagar Gs. 200.000`, /Total a pagar\s*Gs\.? ?200\.000/.test(t), t);
+      check(`${pref} (c): el campo sobre el total sigue habilitado con descuentos de línea (RN-23)`, await page.getByLabel(/Descuento sobre el total/).isEnabled());
+      check(`${pref}: sin desplazamiento horizontal`, await sinDesborde(page));
+      check(`${pref}: sin emojis`, !EMOJI.test(await texto(page)));
+      await page.screenshot({ path: path.join(outDir, `${ancho}-desglose.png`), fullPage: true });
+    } catch (e) {
+      check(`${pref}: sin excepciones`, false, e.message);
+      await page.screenshot({ path: path.join(outDir, `${ancho}-desglose-error.png`), fullPage: true }).catch(() => undefined);
+    } finally {
+      await ctx.close();
+    }
   }
 }
 
@@ -425,6 +508,28 @@ async function casoVerificar(browser) {
       check(`verificar ${n}: factura aprobada con totales de FE`, d?.estado === "EMITIDA" && d?.totals?.fuente === "FE", JSON.stringify(d?.totals));
       if (d) fs.writeFileSync(path.join(outDir, `verificar-${n}.json`), JSON.stringify(d, null, 2));
     }
+    // CA-13 (RN-19b): la ficha de Documentos muestra el desglose con los totales oficiales de FE.
+    const esperadas = {};
+    try {
+      esperadas[process.env.ENSAYO_FICHA_SOLO_GLOBAL ?? "1010645"] = { si: ["Descuento sobre el total (3,1 %)", "7.777"], no: ["Descuento por línea", "Total descuentos"] };
+      esperadas[process.env.ENSAYO_FICHA_AMBOS ?? "1010644"] = { si: ["Descuento por línea", "3,33", "Descuento sobre el total", "5,55", "Total descuentos (9,8 %)", "8,88"], no: [] };
+    } catch {}
+    for (const [n, esp] of Object.entries(esperadas)) {
+      if (!numeros.includes(n)) continue;
+      await abrirVista(page, "Documentos");
+      await page.getByRole("heading", { name: "Facturas y notas" }).waitFor();
+      await page.getByPlaceholder("Buscar factura...").fill(n);
+      await page.waitForTimeout(1500);
+      const filaDoc = page.locator("table.documents-tabla tbody tr").filter({ hasText: n }).first();
+      await filaDoc.waitFor({ timeout: 20000 });
+      await filaDoc.click();
+      await page.locator(".document-detail").waitFor({ timeout: 20000 });
+      await page.waitForTimeout(800);
+      const ficha = (await page.locator(".document-detail").innerText()).replace(/\s+/g, " ");
+      check(`CA-13 ficha ${n}: muestra ${esp.si.join(" / ")}`, esp.si.every((s) => ficha.includes(s)), ficha.slice(0, 600));
+      check(`CA-13 ficha ${n}: no muestra ${esp.no.join(" / ") || "(nada que excluir)"}`, esp.no.every((s) => !ficha.includes(s)), "");
+      await page.screenshot({ path: path.join(outDir, `ficha-${n}.png`), fullPage: true });
+    }
   } finally {
     await ctx.close();
   }
@@ -487,6 +592,7 @@ async function casoSifenNc(browser) {
     if (corre("grilla")) await casoGrilla(browser);
     if (corre("simple")) await casoSimple(browser);
     if (corre("validacion")) await casoValidacion(browser);
+    if (corre("desglose")) await casoDesglose(browser);
     const enSifen = [];
     if (corre("sifen")) enSifen.push(casoSifen(browser));
     if (corre("sifen-usd")) enSifen.push(casoSifenUsd(browser));
