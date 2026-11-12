@@ -16,7 +16,7 @@ Orden: DES-001 cierra las preguntas con FE; DES-002 a DES-006 son la API y puede
 | DES-008 | Web: columna "Descuento" con conmutador en `GrillaLineas`, campo en la hoja del modo simple, campo "Descuento sobre el total", subtotal neto por linea, fila "Descuento" en totales, mensajes de RN-16 y del error de RN-04 | RN-13 a RN-18, RN-22 | Playwright `playwright-descuentos.cjs` casos `grilla` (1440, 1280), `simple` (390), `validacion`: CA-07, CA-08 | Hecha (2026-11-11) |
 | DES-009 | Web: columna y fila "Descuento" en `ResultadoEmision` y en la ficha de Documentos; ficha con solo nota total para facturas con descuento | RN-19, RN-20 | Playwright caso `resultado` contra el mock: CA-09; reconocimiento UX sin aumentos de emojis | Hecha (2026-11-11) |
 | DES-010 | Regresion: `npm run test`, `typecheck`, `lint` de api y shared; `build` web; `playwright-editor-pc.cjs`, `playwright-moneda-extranjera.cjs` (sin emitir), `playwright-nota-credito-parcial.cjs`, `playwright-reconocimiento-ux.cjs` contra el stack local reconstruido | CA-04 | Resultados por guion anotados en la evidencia | Hecha (2026-11-11) |
-| DES-011 | SIFEN test: factura `PYG` con descuento por linea y global contra FE real desde el stack local, con aviso previo a `facturacion-electronica-7c`; comparar `GET /totales` y el KUDE; una en USD si FE lo confirma | RN-07, RN-08 | CA-06, CA-10: `document_uuid`, totales de FE y de FS lado a lado, captura del KUDE | Pendiente |
+| DES-011 | SIFEN test: factura `PYG` con descuento por linea y global contra FE real desde el stack local, con aviso previo a `facturacion-electronica-7c`; comparar `GET /totales` y el KUDE; una en USD si FE lo confirma | RN-07, RN-08 | CA-06, CA-10: `document_uuid`, totales de FE y de FS lado a lado, captura del KUDE | Hecha (2026-11-11): 001-001-1010640 aprobada |
 | DES-012 | Cierre: repasar SPEC, PLAN y TASKS con lo aprendido (en especial RN-06 y la nota de riesgo sobre redondeo), `docs/BACKLOG.md` (FS-66) y `docs/HOJA_DE_RUTA_v0.1.md`; despliegue en `segel-fs` **solo con orden directa del usuario** y con respaldo previo | Regla de cierre de `AGENTS.md` | Documentos actualizados; evidencia completa en esta tabla | Pendiente |
 
 ## Evidencia
@@ -29,4 +29,17 @@ Orden: DES-001 cierra las preguntas con FE; DES-002 a DES-006 son la API y puede
 - Hallazgo y correccion: la columna nueva dejaba la descripcion en unos 40 px y el conmutador tapaba la columna IVA. Se reacomodaron los anchos de la grilla y el conmutador va debajo del titulo.
 - Regresion: `playwright-editor-pc.cjs` 18/18, `playwright-nc-cuerpo.cjs` 4/4, `playwright-documentos-escritorio.cjs` 31/31, `playwright-ux-resto-app.cjs` nuevo/componentes/teclado 50/50 (CA-04 actualizado: con la remision habilitada el menu Nuevo abre su formulario), `playwright-catalogo-moneda.cjs` 48/48.
 - RN-21 (borradores): no aplica; el editor no guarda borradores locales, solo avisa al salir con cambios.
-- Pendiente: CA-10 en SIFEN test (corrida en curso, aviso previo a FE) y DES-012.
+- **CA-10 en SIFEN test (aviso previo a FE):** `playwright-descuentos.cjs sifen` 3/3. Factura `001-001-1010640` con el vector PYG de FE (3 x 19.990 con descuento 1.110 IVA 10; 7 x 4.370 IVA 5; global 3.333, que no divide exacto) **aprobada**. Es el caso que FE no tenia verificado (dSub10 con decimales en el XML). Totales lado a lado:
+
+  | Campo | Vista previa FS | Oficial FE (`/totales`) |
+  |---|---|---|
+  | Bruto | 90.560 | 90.560 |
+  | Descuento total | 6.663 | 6.663 |
+  | IVA 10 % | 4.948 | 4.948 |
+  | IVA 5 % | 1.403 | 1.403 |
+  | Total IVA | 6.351 | 6.351 |
+  | Total antes del redondeo | 83.897 | 83.897 (`total` 83.850 + `redondeo` 47) |
+  | Total a pagar | 83.897 | 83.850 (redondeo SEDECO a 50) |
+
+  La unica diferencia es el redondeo a 50 guaranies, que FS no calcula por diseno (fuera de alcance de la SPEC); al aprobarse, FS toma los totales oficiales de FE (`fuente: "FE"`) y conserva `descuento_global` y `nota_credito_por_referencia`.
+- Pendiente: DES-012 (cierre de documentos y despliegue con orden directa).
