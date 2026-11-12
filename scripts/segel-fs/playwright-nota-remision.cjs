@@ -282,10 +282,11 @@ async function casoAnular(browser) {
     const anular = ficha.getByRole("button", { name: /Anular nota de remisión/ });
     check("RN-26: la ficha ofrece 'Anular nota de remisión'", (await anular.count()) === 1 && (await anular.isEnabled()));
     await anular.click();
-    const dialogo = page.getByRole("dialog");
-    await dialogo.waitFor({ timeout: 10000 });
-    await dialogo.locator("textarea, input[type=text]").first().fill("Prueba de anulación de nota de remisión desde FS");
-    await dialogo.getByRole("button", { name: /Anular/ }).last().click();
+    // Ventana de motivo de Documentos: textarea "Motivo" y boton "Confirmar".
+    const motivo = page.getByLabel("Motivo");
+    await motivo.waitFor({ timeout: 10000 });
+    await motivo.fill("Prueba de anulación de nota de remisión desde FS");
+    await page.getByRole("button", { name: "Confirmar", exact: true }).click();
     let estado = "";
     for (let i = 0; i < 12; i += 1) {
       await page.waitForTimeout(5000);

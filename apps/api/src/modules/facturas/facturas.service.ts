@@ -1861,7 +1861,14 @@ export async function processNextQueuedFiscalEmission(
     // ser 4xx). Otro 500 sigue el camino de reintentos: podria haber pasado despues de numerar.
     const sinNumeradorNre =
       statusFe === 500 && cuerpoFe?.error === "ISSUE_NRE_FAILED" && typeof cuerpoFe.message === "string" && /numerador/i.test(cuerpoFe.message);
-    if (esRemisionPendiente && error instanceof FiscalGatewayError && statusFe && ([400, 404, 409, 422].includes(statusFe) || sinNumeradorNre)) {
+    // FE v0.50 (guia §66, "validar antes de numerar"): numerador faltante, bloqueado o agotado responde 409 con estos
+    // codigos en todas las emisiones, antes de tomar numero. Reintentar no lo arregla.
+    const numeradorFe = statusFe === 409 && ["NUMERADOR_NO_CONFIGURADO", "NUMERADOR_BLOQUEADO", "NUMERADOR_RANGO_AGOTADO"].includes(String(cuerpoFe?.error));
+    if (
+      error instanceof FiscalGatewayError &&
+      statusFe &&
+      (numeradorFe || (esRemisionPendiente && ([400, 404, 409, 422].includes(statusFe) || sinNumeradorNre)))
+    ) {
       const cuerpo = cuerpoFe;
       const mensajeFe = typeof cuerpo?.message === "string" ? cuerpo.message : typeof cuerpo?.error === "string" ? cuerpo.error : error.message;
       return repository.failPendingEmission({
@@ -1871,9 +1878,13 @@ export async function processNextQueuedFiscalEmission(
         estado: "ERROR_OPERATIVO",
         error: {
           code: "VALIDACION_FE",
-          message: /numerador/i.test(mensajeFe)
-            ? "Este punto de expedición todavía no tiene numeración para notas de remisión. Pedila a Segel."
-            : `El servicio fiscal rechazó la nota de remisión: ${mensajeFe}`,
+          message: numeradorFe && cuerpoFe?.error === "NUMERADOR_BLOQUEADO"
+            ? "La numeración de este punto de expedición está bloqueada. Pedí a Segel que la habilite."
+            : numeradorFe && cuerpoFe?.error === "NUMERADOR_RANGO_AGOTADO"
+              ? "Se agotó la numeración de este punto de expedición. Pedí a Segel que cargue un rango nuevo."
+              : /numerador/i.test(mensajeFe)
+                ? `Este punto de expedición todavía no tiene numeración para ${esRemisionPendiente ? "notas de remisión" : "este tipo de documento"}. Pedila a Segel.`
+                : `El servicio fiscal rechazó la nota de remisión: ${mensajeFe}`,
           details: error.details ?? null,
           recoverable: false,
           retry_after_seconds: null,

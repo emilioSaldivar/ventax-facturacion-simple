@@ -409,3 +409,30 @@ describe("RN-23: la ficha de una remision en error operativo muestra el motivo d
     expect(r.accion_detalle).toMatchObject({ titulo: "No se pudo emitir la nota de remisión", descripcion: expect.stringContaining("Pedila a Segel") });
   });
 });
+
+describe("FE v0.50 (guia §66): 409 NUMERADOR_* en cualquier emision queda ERROR_OPERATIVO sin reintentos", () => {
+  async function correr(fiscalRequest: unknown, body: Record<string, unknown>) {
+    let fallo: Record<string, unknown> | null = null;
+    const error = new FiscalGatewayError("UPSTREAM_ERROR", "rechazo", { status: 409, body });
+    const gateway = { emitNotaRemision: async () => { throw error; }, emitFactura: async () => { throw error; } } as unknown as FiscalGateway;
+    const repository = {
+      claimNextPendingEmission: async () => ({ outboxId: "o1", documentoId: "d1", facturadorId: "f1", facturadorApiKey: null, fiscalRequest, attempts: 0, documentoCreatedAt: new Date().toISOString(), accionNotificadaAt: null }),
+      failPendingEmission: async (input: Record<string, unknown>) => { fallo = input; return { id: "d1", estado: input.estado }; },
+      markAccionNotificada: async () => undefined
+    } as unknown as FacturaRepository;
+    await processNextQueuedFiscalEmission(repository, gateway);
+    return fallo as unknown as Record<string, unknown>;
+  }
+  it("factura con NUMERADOR_NO_CONFIGURADO", async () => {
+    const f = await correr({ external_ref: "fac_1" }, { error: "NUMERADOR_NO_CONFIGURADO", message: "No existe numerador configurado para la combinación fiscal" });
+    expect(f).toMatchObject({ outboxEstado: "FAILED_PERM", estado: "ERROR_OPERATIVO" });
+    expect((f.error as { message: string }).message).toContain("todavía no tiene numeración para este tipo de documento");
+  });
+  it("remision con NUMERADOR_RANGO_AGOTADO", async () => {
+    const { pedido } = construirPedidoFe(context, base(), "nre_409", AHORA);
+    const f = await correr(pedido, { error: "NUMERADOR_RANGO_AGOTADO", message: "Rango agotado" });
+    expect(f).toMatchObject({ estado: "ERROR_OPERATIVO" });
+    expect((f.error as { message: string }).message).toContain("Se agotó la numeración");
+  });
+});
+
