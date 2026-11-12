@@ -26,7 +26,7 @@ const ESPERA_APROBACION_MS = Number(process.env.ENSAYO_ESPERA_MS ?? 25 * 60 * 10
 const outDir = path.join(process.cwd(), "test-results", "descuentos");
 fs.mkdirSync(outDir, { recursive: true });
 const pedidos = process.argv.slice(2);
-const SIFEN_CASOS = ["sifen", "sifen-usd", "sifen-mix", "sifen-nc"];
+const SIFEN_CASOS = ["sifen", "sifen-usd", "sifen-mix", "sifen-nc", "verificar"];
 const corre = (caso) => (pedidos.length === 0 ? !SIFEN_CASOS.includes(caso) : pedidos.includes(caso));
 const emitidas = [];
 
@@ -105,7 +105,7 @@ async function api(page, metodo, ruta, cuerpo) {
 const conmutador = (page) => page.locator("table.grilla-lineas thead").getByRole("group", { name: "Descuento en porcentaje o monto" });
 
 /** Emite la factura cargada en la grilla, guarda los totales de FS, espera la aprobacion y los totales de FE. */
-async function emitirYEsperar(page, etiqueta) {
+async function emitirYEsperar(page, etiqueta, totalEsperado) {
   const crear = page.getByRole("button", { name: "Crear factura" });
   await page.waitForFunction((b) => b && !b.disabled, await crear.elementHandle(), { timeout: 20000 });
   await crear.click();
@@ -113,9 +113,9 @@ async function emitirYEsperar(page, etiqueta) {
   if (await conf.isVisible({ timeout: 3000 }).catch(() => false)) await conf.click();
   await page.getByRole("button", { name: "Crear nueva factura" }).waitFor({ timeout: 60000 });
   let t = await texto(page);
-  const numero = (t.match(/Factura (\d[\d-]{5,})/) ?? [])[1] ?? null;
+  // En lote el numero llega con la aprobacion: la factura recien creada se ubica por su total (la mas nueva).
   const lista = await api(page, "GET", "/facturas?tipo=FACTURA&limit=10&offset=0");
-  const doc = (lista.json?.items ?? []).find((d) => d.numero_fiscal === numero) ?? null;
+  const doc = (lista.json?.items ?? []).find((d) => Math.abs(Number(d.totals?.total) - totalEsperado) < 0.005) ?? null;
   const totalsFs = doc ? ((await api(page, "GET", `/facturas/${doc.id}`)).json?.totals ?? null) : null;
   const inicio = Date.now();
   let aprobada = false;
@@ -128,6 +128,7 @@ async function emitirYEsperar(page, etiqueta) {
   }
   aprobada = aprobada || (await page.locator(".paso.hecho").count()) >= 4;
   t = await texto(page);
+  let numero = (t.match(/Factura (\d[\d-]{5,})/) ?? [])[1] ?? null;
   let totalsFe = null;
   if (aprobada && doc) {
     const fin = Date.now() + 3 * 60 * 1000;
@@ -135,6 +136,7 @@ async function emitirYEsperar(page, etiqueta) {
       const d = (await api(page, "GET", `/facturas/${doc.id}`)).json;
       if (d?.totals?.fuente === "FE") {
         totalsFe = d.totals;
+        numero = d.numero_fiscal ?? numero;
         break;
       }
       await page.waitForTimeout(10000);
@@ -143,9 +145,9 @@ async function emitirYEsperar(page, etiqueta) {
   const kude = page.locator('a[href$="kude.pdf"]').first();
   const kudeUrl = (await kude.count()) ? await kude.getAttribute("href") : null;
   await page.screenshot({ path: path.join(outDir, `${etiqueta}.png`), fullPage: true });
-  const r = { etiqueta, numero, aprobada, estado, id: doc?.id ?? null, totalsFs, totalsFe, kudeUrl, texto: t.slice(0, 500) };
+  const r = { etiqueta, numero, aprobada, estado, id: doc?.id ?? null, totalsFs, totalsFe, kudeUrl, texto: t };
   emitidas.push(r);
-  fs.writeFileSync(path.join(outDir, `${etiqueta}.json`), JSON.stringify(r, null, 2));
+  fs.writeFileSync(path.join(outDir, `${etiqueta}.json`), JSON.stringify({ ...r, texto: t.slice(0, 600) }, null, 2));
   return r;
 }
 
@@ -189,7 +191,9 @@ async function kudeConDescuento(page, r, montos) {
   }
   fs.writeFileSync(path.join(outDir, `${r.etiqueta}-kude.txt`), txt);
   const plano = txt.replace(/\s+/g, " ");
-  check(`${r.etiqueta} KUDE: menciona el descuento`, /descuento/i.test(plano), (plano.match(/.{0,60}descuento.{0,60}/i) ?? [""])[0]);
+  check(`${r.etiqueta} KUDE: tiene la columna Descuento`, /descuento/i.test(plano), (plano.match(/.{0,60}descuento.{0,60}/i) ?? [""])[0]);
+  // El KUDE de FE imprime el descuento por unidad en cada item y el total de la operacion neto; el global se prorratea
+  // en los montos de los items y no aparece como linea propia (DES-016, hallazgo del 2026-11-12).
   for (const m of montos) check(`${r.etiqueta} KUDE: muestra ${m}`, plano.includes(m), (plano.match(new RegExp(`.{0,40}${m.replace(/[.]/g, "\\\\.")}.{0,40}`)) ?? [""])[0]);
 }
 
@@ -357,10 +361,10 @@ async function casoSifenUsd(browser) {
     await page.waitForTimeout(2500);
     const previa = await totalesTexto(page);
     check("CA-10b: vista previa USD con total 81,68 y descuento 8,88", /81,68/.test(previa) && /8,88/.test(previa), previa);
-    const r = await emitirYEsperar(page, "sifen-usd");
+    const r = await emitirYEsperar(page, "sifen-usd", 81.68);
     compararFeFs("CA-10b USD", r, { descuento: 8.88, total: 81.68, iva_10: 4.81, iva_5: 1.37 });
     check("CA-10b: el resultado muestra la fila Descuento con 8,88", /Descuento/i.test(r.texto) && /8,88/.test(r.texto), r.texto.slice(0, 400));
-    await kudeConDescuento(page, r, ["8,88", "81,68"]);
+    await kudeConDescuento(page, r, ["1,11", "52,96", "28,72", "81,68"]);
   } catch (e) {
     check("sifen-usd: sin excepciones", false, e.message);
     await page.screenshot({ path: path.join(outDir, "sifen-usd-error.png"), fullPage: true }).catch(() => undefined);
@@ -383,9 +387,9 @@ async function casoSifenMix(browser) {
     await page.waitForTimeout(2500);
     let previa = await totalesTexto(page);
     check("DES-014a: vista previa con descuento 21.500 y total 208.500", /21\.500/.test(previa) && /208\.500/.test(previa), previa);
-    const ra = await emitirYEsperar(page, "sifen-mix-a");
+    const ra = await emitirYEsperar(page, "sifen-mix-a", 208500);
     compararFeFs("DES-014a PYG % por linea con exenta", ra, { descuento: 21500 });
-    await kudeConDescuento(page, ra, ["21.500"]);
+    await kudeConDescuento(page, ra, ["10.000", "1.500", "180.000", "28.500", "208.500"]);
 
     await page.getByRole("button", { name: "Crear nueva factura" }).click();
     await page.locator("table.grilla-lineas").waitFor();
@@ -397,12 +401,30 @@ async function casoSifenMix(browser) {
     await page.waitForTimeout(2500);
     previa = await totalesTexto(page);
     check("DES-014b: vista previa con descuento 7.777 y total 242.223", /7\.777/.test(previa) && /242\.223/.test(previa), previa);
-    const rb = await emitirYEsperar(page, "sifen-mix-b");
+    const rb = await emitirYEsperar(page, "sifen-mix-b", 242223);
     compararFeFs("DES-014b PYG solo global", rb, { descuento: 7777 });
-    await kudeConDescuento(page, rb, ["7.777"]);
+    await kudeConDescuento(page, rb, ["145.334", "96.889", "242.200"]);
   } catch (e) {
     check("sifen-mix: sin excepciones", false, e.message);
     await page.screenshot({ path: path.join(outDir, "sifen-mix-error.png"), fullPage: true }).catch(() => undefined);
+  } finally {
+    await ctx.close();
+  }
+}
+
+// verificar: sin emitir, toma las facturas de ENSAYO_VERIFICAR (numeros separados por coma) y compara sus totales
+// FS/FE guardados; util para re-leer una corrida anterior.
+async function casoVerificar(browser) {
+  const numeros = (process.env.ENSAYO_VERIFICAR ?? "").split(",").map((x) => x.trim()).filter(Boolean);
+  if (!numeros.length) return;
+  const { ctx, page } = await entrar(browser, 1440, 900, "completo");
+  try {
+    const lista = await api(page, "GET", "/facturas?tipo=FACTURA&limit=50&offset=0");
+    for (const n of numeros) {
+      const d = (lista.json?.items ?? []).find((x) => x.numero_fiscal === n);
+      check(`verificar ${n}: factura aprobada con totales de FE`, d?.estado === "EMITIDA" && d?.totals?.fuente === "FE", JSON.stringify(d?.totals));
+      if (d) fs.writeFileSync(path.join(outDir, `verificar-${n}.json`), JSON.stringify(d, null, 2));
+    }
   } finally {
     await ctx.close();
   }
@@ -470,6 +492,7 @@ async function casoSifenNc(browser) {
     if (corre("sifen-usd")) enSifen.push(casoSifenUsd(browser));
     if (corre("sifen-mix")) enSifen.push(casoSifenMix(browser));
     await Promise.all(enSifen);
+    if (pedidos.includes("verificar")) await casoVerificar(browser);
     if (corre("sifen-nc")) await casoSifenNc(browser);
   } finally {
     await browser.close();
