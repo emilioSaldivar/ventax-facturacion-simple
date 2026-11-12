@@ -67,6 +67,15 @@ scripts/tutoriales/
 4. Segunda linea con `MANT-01` (Gs.): "Item del catálogo en Gs.: cargá el precio en USD."; se escribe el precio. Subtitulo M-10: no se convierte.
 5. Tercera linea a mano con "Guardar en el catálogo" marcada; se explica que se guarda en USD al emitir. Se sale sin emitir (el editor avisa cambios sin emitir; se confirma salir).
 
+### V10 — Anular una factura (aprox. 2,5 min) [SPEC §3.13, M-11]
+1. Que es anular y que dispone SIFEN (subtitulos M-11): factura aprobada, 48 horas desde la aprobacion, irreversible; pasado el plazo, nota de credito.
+2. Factura de ejemplo: "Nueva factura", SEGEL SA `80026570-0`, contado, "Servicio de consultoría" 1 × 120.000; emision y espera hasta "Aprobada" (cortada).
+3. "Ver en Documentos" → ficha → "Anular factura" (se señala la zona de peligro) → motivo "Error en el monto facturado; se emite una nueva." → confirmar. Espera la respuesta de SIFEN (cortada). Estado "Anulada" en la ficha y en la lista.
+4. Subtitulo sobre lo que pasa si SIFEN no la procesa (R-8, sin forzarlo): aparece "Reintentar anulación" y la factura sigue vigente.
+5. Correo: si la factura tenia correo del cliente, le llega el aviso de anulacion.
+6. Fuera de plazo: buscar `1010551` (2026-11-09) → "Anular factura" → motivo → confirmar → mensaje "Pasó el plazo para anular…". Subtitulo: corresponde una nota de credito (V4). FE rechaza antes de SIFEN: no hay evento.
+7. Cierre: la factura "Sin nombre" no admite nota de credito, por eso se anula dentro de las 48 horas; la nota de remision tiene 7 dias.
+
 ## 4. Cambios en los guiones de la v0.1
 
 - **V1, escena 4:** el subtitulo de "Reenviar código" pasa a "Si no te llega, el botón "Reenviar código" se habilita en un minuto" (H-13).
@@ -91,7 +100,7 @@ Antes de emitir: aviso a la sesion de FE con la cantidad (V8: 1 remision; V4: 2 
 - **`lib.cjs`:** `senalar` centra el elemento cuando quedaria debajo del subtitulo.
 - **V4** usa el juego `facturasV4` de `estado.json` (`1010622` CI total, `1010620` contado parcial, `1010621` para el atajo de la ficha, que se cancela).
 
-## 7. Hallazgos de la grabacion v0.2 (en `BACKLOG` como FS-81 a FS-87: H-17 = FS-81, H-18 y H-19 = FS-82, H-20 = FS-83, H-21 = FS-84, H-22 = FS-85, H-23 = FS-86, H-24 = FS-87, H-25 = FS-88, H-26 = FS-89, H-27 = FS-90)
+## 7. Hallazgos de la grabacion v0.2 (en `BACKLOG` como FS-81 a FS-87: H-17 = FS-81, H-18 y H-19 = FS-82, H-20 = FS-83, H-21 = FS-84, H-22 = FS-85, H-23 = FS-86, H-24 = FS-87, H-25 = FS-88, H-26 = FS-89, H-27 = FS-90, H-28 = FS-95, H-29 = FS-96, H-30 = FS-97, H-31 = FS-98)
 
 | Id | Hallazgo | Donde | Video |
 |---|---|---|---|
@@ -105,6 +114,10 @@ Antes de emitir: aviso a la sesion de FE con la cantidad (V8: 1 remision; V4: 2 
 | H-25 | La ventana "Crear nota de crédito" de la ficha muestra el "Motivo" con letra monoespaciada | `DocumentsView.tsx` | V4 |
 | H-26 | Con "Descuento sobre el total", la columna "Subtotal" de la grilla mezcla lineas con y sin prorrateo: la linea 1 sigue en 180.000 (sin prorrateo; la hoja de la misma linea dice 156.000) y la linea 2 pasa a 44.000 (con prorrateo); la columna suma 224.000 con "Total a pagar" 200.000. RN-17 de descuentos dice que el prorrateo del global no se muestra por linea | `GrillaLineas`, `previewSubtotalsByLineId` | V7 |
 | H-27 | En escritorio, el "Modo simple" abre la linea como hoja a pantalla completa con diseño de celular (botones en mayusculas "AGREGAR Y GUARDAR", "EX") | `main.tsx`, hoja de linea | V7 |
+| H-28 | La ficha de una nota de credito muestra "Anular nota de crédito" siempre deshabilitado (`canCancelDocumento` solo admite factura y remision), aunque FE la admite hasta 168 horas (§7.2, v0.49) | `DocumentsView.tsx` | V10 (lectura del codigo) |
+| H-29 | "Anular factura" sigue habilitado pasadas las 48 horas: el operador escribe el motivo y recien entonces ve que paso el plazo; y el mensaje no dice que corresponde una nota de credito | `DocumentsView.tsx` `canCancelDocumento`; `facturas.service.ts` CANCEL_WINDOW_EXPIRED | V10 |
+| H-30 | El motivo de la anulacion se acepta con 3 caracteres en la pantalla y con 1 en la API (`cancelacionSchema` `min(1)`), pero FE pide al menos 5: con menos, "el evento falla" (guia §7.3). La inutilizacion ya exige 5 | `DocumentsView.tsx` `submitReasonModal`; `facturas.routes.ts` `cancelacionSchema` | V10 (lectura del codigo) |
+| H-31 | La ficha muestra "Segel informo envio de email." sin tildes | `DocumentsView.tsx`, ficha | V10 |
 | H-24 | En el formulario del catalogo, el "IVA" queda mas abajo que el "Precio (USD)" por la ayuda "Con hasta 2 decimales" (desalineado) | `CatalogView.tsx` | V9 |
 
 ## 8. Riesgos

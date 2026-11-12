@@ -26,6 +26,7 @@
 | TUT2-007 | Revision final de V1, V2, V4, V5, V8, V9 | una captura por escena; `cobertura.cjs` sin filas pendientes salvo las de V7 | HECHO (2026-11-12): hojas de capturas revisadas; `cobertura.cjs` 88/97 (faltan las 8 de V7 y `4-rechazada`, justificada en la v0.1) |
 | TUT2-008 | V7 descuentos: guion y prueba seca | Playwright sin emitir: CA-12 de descuentos visible en las escenas 3 a 5 | HECHO (2026-11-12): en seco, 14 pasos, sin emitir; totales "Descuento (8 %)" y "Descuento (20 %)", Total a pagar 200.000 |
 | TUT2-009 | V7 descuentos: grabacion | 1 factura aprobada con "Descuento (20 %)"; mp4 | **Espera la orden del usuario (P-10, D-11)** |
+| TUT2-011 | V10 anular una factura (SPEC D-15): guion, prueba en seco y grabacion | 1 factura aprobada y luego "Anulada" en SIFEN test; intento fuera de plazo con el mensaje de plazo; mp4; cobertura §3.13 | HECHO (2026-11-12): factura `1010659` aprobada y "Anulada" (evento aceptado); `1010551` fuera de plazo con "Pasó el plazo…", sigue emitida (sin evento); 17 pasos, 2:15 |
 | TUT2-010 | Cierre: SPEC/PLAN/TASKS con lo aprendido; `BACKLOG` (hallazgos nuevos y estado de la cadena) | — | Pendiente |
 
 ## Antes de cada corrida
@@ -57,3 +58,17 @@ Los mp4 anteriores de V1, V2, V4 y V5 quedaron en `test-results/tutoriales/_v0.1
 **Cobertura** (`node scripts/tutoriales/cobertura.cjs`): 88/97. Faltan las 8 filas de V7 (espera la orden) y `4-rechazada` en V3 (justificada en la v0.1).
 
 **Hallazgos** H-17 a H-27 en PLAN §7, pasados a `BACKLOG` como FS-81 a FS-90.
+
+### 2026-11-12 (TUT2-011, V10 anular una factura)
+
+Pedido del usuario del mismo dia: video propio que explique lo que dispone SIFEN segun las reglas de FE. Reglas tomadas de `GUIA_INTEGRACION_CONSUMIDORES.md` v0.18 (§7.2, §7.3, §7.5, §7.6, §14.7, §37.2). FE (`facturacion-electronica-7c`) avisado dos veces; confirmo, leyendo su base local, que `1010551` estaba aprobada desde el 2026-11-09 00:25 (-03) y que el chequeo de las 48 horas corre antes de SIFEN.
+
+| Video | mp4 | Duracion | Pasos | Guardia | SIFEN test |
+|---|---|---|---|---|---|
+| V10 anular una factura | `v10-anular-factura.mp4` | 2:15 | 17 | sin fallas | factura `1010659` aprobada y anulada (`cancelacion_status` ACCEPTED); `1010551`: 409 de plazo, sigue EMITIDA |
+
+**Corrida fallida:** la primera grabacion emitio y anulo `1010658` (anulacion ACCEPTED), pero el guion espero el texto "Anulada" y encontraba primero la opcion oculta del filtro "Estado"; ahora espera la pastilla de la fila. Quedaron dos facturas anuladas en SIFEN test (`1010658` y `1010659`).
+
+**Cobertura:** 100/103 contando la prueba en seco de V7 (que cubre 5 de sus 8 filas; faltan las que necesitan emitir: resultado y nota de credito total) y `4-rechazada`, justificada en la v0.1. Sin V7, 94/103.
+
+**Hallazgos** H-28 a H-31 en PLAN §7, en `BACKLOG` como FS-95 a FS-98 (FS-91 y FS-92 ya los usaba otra sesion). FS-97 (motivo de anulacion de menos de 5 caracteres) es de prioridad alta.

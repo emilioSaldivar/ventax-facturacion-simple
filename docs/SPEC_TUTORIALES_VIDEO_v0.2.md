@@ -23,6 +23,7 @@ Pedido del usuario del 2026-11-12:
 |---|---|---|---|---|
 | V7 | Descuentos en la factura | "Agregar descuento" y lo que aparece (columna "Descuento" con el conmutador "%" / moneda, campo "Descuento sobre el total"); descuento por linea en porcentaje y en monto; descuento sobre el total y que se reparte entre las lineas; los dos juntos; la fila "Descuento (x %)" de los totales; "Ocultar descuentos" y "Quitar descuentos"; el mismo descuento en "Modo simple" (hoja de la linea); una factura emitida con descuento, su resultado y su ficha; que una factura con descuento solo admite nota de credito total. | 3 a 4 min | 1 factura PYG |
 | V8 | Nota de remision | Cuando se usa; "Notas de remisión" → "Nueva nota de remisión"; los bloques "Motivo del traslado", "Destinatario" (agenda y domicilio), "Transporte", "Salida y entrega", "Vehículo, transportista y chofer", "Artículos" (sin precios), "Información para el Fisco"; el panel "Resumen" que bloquea "Emitir nota de remisión" mientras falte algo; emision, resultado y "Entregar al cliente"; la nota en "Emitidas · N" y en Documentos; que pasa si el facturador no la tiene habilitada ("No habilitado"). | 4 a 5 min | 1 nota de remision |
+| V10 | Anular una factura | Que es anular (un evento de cancelacion ante SIFEN sobre una factura aprobada, que la deja sin efecto fiscal) y que dispone SIFEN segun la guia de FE (§7): solo facturas aprobadas; **48 horas desde la aprobacion** para la factura y **168 horas** para la nota de remision (Manual Tecnico, Tabla J, 4009/4010); pasado el plazo, la factura no se anula y corresponde **nota de credito** (4009); el motivo es obligatorio (5 a 150 caracteres); es irreversible. "Anular factura" en la ficha, motivo, confirmacion y estado "Anulada"; "Reintentar anulación" si SIFEN no pudo procesarla (rechazo transitorio, la factura sigue vigente); una factura con mas de 48 horas: la app avisa que paso el plazo; la factura "Sin nombre", que no admite nota de credito, se corrige anulandola dentro del plazo; aviso por correo al cliente si la factura tenia correo. | 2 a 3 min | 1 factura PYG y su anulacion; 1 intento fuera de plazo (FE responde 409 antes de SIFEN, sin evento) |
 | V9 | Catalogo en dolares | En "Catálogo", el campo "Moneda" ("Guaraníes (Gs.)" / "Dólares (USD)") y el precio con centavos; el filtro "Moneda" ("Todas", "Gs.", "USD"); en una factura en dolares, un articulo en USD trae su precio y uno en guaranies no (se carga a mano); "Guardar en el catálogo" desde una linea en dolares; un articulo, una moneda. | 2 a 3 min | nada |
 
 ### 2.2 Videos de la v0.1 que se regraban
@@ -85,6 +86,19 @@ Se suman a `SPEC_TUTORIALES_VIDEO_v0.1` §3. Etiquetas tal como estan en el codi
 | En una factura en USD, articulo en Gs.: "Item del catálogo en Gs.: cargá el precio en USD." | No se convierte: la cotizacion la decide el operador. | V9 |
 | "Guardar en el catálogo" en una linea en USD | Guarda el articulo en dolares. | V9 |
 
+### 3.13 Anular una factura (v0.2, pedido del usuario del 2026-11-12)
+
+| Elemento | Que hace | Video |
+|---|---|---|
+| Ficha: "Anular factura" (zona de peligro, debajo de las acciones) | Abre la ventana de anulacion. Solo con la factura aprobada. | V10 |
+| Ventana "Anular factura": motivo y confirmacion | Envia el evento a SIFEN. Irreversible. | V10 |
+| Estado "Anulada" en la ficha y en la lista | La factura queda sin efecto fiscal. | V10 |
+| "Reintentar anulación" con el aviso "SIFEN no pudo procesar la anulación en este momento y la factura sigue vigente" | Rechazo transitorio de SIFEN (codigo 0100, cerca del 15 % segun FE): se reintenta. Se explica con subtitulo (R-8). | V10 |
+| Mensaje "Pasó el plazo para anular desde la aprobación (48 horas la factura, 168 horas la nota de remisión)." | Fuera de plazo: corresponde nota de credito (V4). | V10 |
+| Menu de la fila en Documentos: "Anular" | Mismo camino desde la lista. | V10 |
+
+Reglas de SIFEN segun FE (`GUIA_INTEGRACION_CONSUMIDORES.md` v0.18, §7.2, §7.5, §7.6, §14.7, §37.2): ventana de 48 h para la factura y 168 h para nota de credito, debito, remision y autofactura; codigo 4009 (factura fuera de plazo: nota de credito) y 4010 (los demas); 0100 transitorio, reintentable; motivo de 5 a 150 caracteres; un rechazo no cambia la factura, que sigue aprobada; si la factura tenia correo del comprador, al aceptarse la anulacion el comprador recibe un aviso con el XML del documento anulado y del evento.
+
 ## 4. Estados
 
 Sin estados nuevos. V8 explica con subtitulo los mismos de la factura ("Creada" → … → "Aprobada"; "Nota de remisión emitida" en Documentos).
@@ -93,6 +107,7 @@ Sin estados nuevos. V8 explica con subtitulo los mismos de la factura ("Creada" 
 
 - **M-8 Descuentos.** Hay dos descuentos y se pueden usar juntos: por linea (porcentaje o monto por unidad) y sobre el total (se reparte entre todas las lineas, como exige SIFEN). Los totales muestran un solo "Descuento" con su porcentaje. Una factura con descuento solo admite nota de credito total.
 - **M-9 Remision.** La nota de remision acompaña el traslado de la mercaderia y no lleva precios. El transportista tiene que ser real: SIFEN verifica su RUC. Si la pestaña dice "No habilitado", se pide a Segel.
+- **M-11 Anular.** Anular deja la factura sin efecto ante SIFEN y no se deshace. SIFEN lo admite solo dentro de las 48 horas desde la aprobacion (la nota de remision, 7 dias); despues se corrige con una nota de credito. Si SIFEN no puede procesarla en el momento, la factura sigue vigente y se reintenta.
 - **M-10 Moneda del catalogo.** Cada articulo tiene una sola moneda. En una factura de otra moneda, el articulo se ofrece sin precio y no se convierte.
 
 ## 6. Decisiones
@@ -103,6 +118,7 @@ Sin estados nuevos. V8 explica con subtitulo los mismos de la factura ("Creada" 
 | D-11 | Cuando se graba V7 | **Cuando el usuario lo indique.** La pantalla de descuentos cambio dos veces el 2026-11-12 (`5b11e34` desglose, `6ee9031` fila unica y ocultos por defecto). El guion se escribe y se prueba en seco; la grabacion espera la orden. | 2026-11-12 (usuario) |
 | D-12 | Totales de V7 | V7 muestra la fila unica "Descuento (x %)" y los descuentos ocultos por defecto (D-8 y D-9 de descuentos). El usuario habia elegido "grabar con el desglose aunque no este en produccion"; ese desglose quedo reemplazado el mismo dia por la fila unica, que ya esta en `segel-fs` desde el despliegue E-2 de solo frontend (`segel-fs-2026.11.12.1`). Se graba lo que haya en la punta de la rama (R-5). | 2026-11-12 |
 | D-13 | Transportista de V8 | **SEGEL SA (80026570-0) como empresa transportista** ("Tercero"), porque SIFEN rechaza un RUC de transportista inexistente (2303, H-12). Chofer, vehiculo y locales con datos de ejemplo sin RUC. Mismo permiso que D-6 de la v0.1. | 2026-11-12 (propuesta) |
+| D-15 | Anulacion | Video propio V10, que explica lo que dispone SIFEN segun las reglas publicadas por FE (§3.13). Se emite y se anula una factura en SIFEN test; el plazo vencido se muestra con una factura de mas de 48 horas (`1010551`, del 2026-11-09): FE responde `409 CANCEL_WINDOW_EXPIRED` sin llegar a SIFEN. La anulacion de la nota de credito no se muestra: FS hoy no la ofrece (H-28). | 2026-11-12 (usuario) |
 | D-14 | Regrabaciones | Se regraban V1, V4 y V5 ("lo que quedo sin grabar": P-6 y P-7) y V2 (etiquetas de la remision). V3 y V6 quedan. | 2026-11-12 (P-6/P-7 por el usuario; V2 y V3/V6 propuesta, P-8) |
 
 ## 7. Restricciones nuevas
@@ -120,5 +136,6 @@ Sin estados nuevos. V8 explica con subtitulo los mismos de la factura ("Creada" 
 - **CA-7** Existen `v7-descuentos.mp4`, `v8-nota-remision.mp4` y `v9-catalogo-usd.mp4` a 1440 x 900, con subtitulos en cada paso (V7 cuando el usuario lo indique, D-11).
 - **CA-8** V7 cubre §3.10 y M-8; V8 cubre §3.11 y M-9; V9 cubre §3.12 y M-10. `cobertura.cjs` no lista filas pendientes de V7 a V9.
 - **CA-9** La factura de V7 y la nota de V8 terminan aprobadas en SIFEN test, o el video explica el estado que muestra.
+- **CA-11** Existe `v10-anular-factura.mp4`; la factura queda "Anulada" en SIFEN test; el video dice M-11 y cubre §3.13.
 - **CA-10** V1, V2, V4 y V5 regrabados sin H-11 ni H-13, sin la actividad real y sin decir que la remision es solo por planilla.
 - **CA-3** de la v0.1 vale para los nueve videos (ningun dato real del facturador, contraseña, codigo, usuario ni correo real).

@@ -99,6 +99,13 @@ module.exports = [
   ["3.12-misma-moneda", ["v9"], "Articulo en USD en factura USD"],
   ["3.12-otra-moneda", ["v9"], "Articulo en Gs. en factura USD"],
   ["3.12-guardar", ["v9"], "Guardar en el catálogo en USD"],
+  // §3.13 Anular una factura (v0.2)
+  ["3.13-boton", ["v10"], "Anular factura en la ficha"],
+  ["3.13-motivo", ["v10"], "Motivo y confirmacion"],
+  ["3.13-anulada", ["v10"], "Estado Anulada"],
+  ["3.13-reintentar", ["v10"], "Reintentar anulación"],
+  ["3.13-plazo", ["v10"], "Pasó el plazo: nota de crédito"],
+  ["3.13-lista", ["v10"], "Anular desde el menu de la fila"],
   // §4 Estados
   ["4-resultado-ok", ["v3"], "Creada → Aprobada · KUDE listo"],
   ["4-rechazada", ["v3", "v2"], "Rechazada por SIFEN"],
