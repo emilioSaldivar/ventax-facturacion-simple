@@ -136,7 +136,7 @@ t.correr("v3-facturas", { modoEditor: "simple" }, async (s) => {
   await t.senalar(s, condicion.getByRole("button", { name: "Crédito" }), { clic: true });
   await t.paso(s, "Elegí el plazo: 30, 60 o 90 días.");
   await t.senalar(s, page.getByLabel("Plazo en días"), { ms: 400 });
-  await page.getByLabel("Plazo en días").selectOption("30");
+  await page.getByLabel("Plazo en días").fill("30");
   await t.paso(s, "Esta vez escribimos el RUC con el dígito verificador: también se completa.");
   await cargarCliente(s, { tipo: "RUC", numero: "80026570-0" });
   await linea(s, 1, { descripcion: "Soporte técnico mensual", precio: "450000" });

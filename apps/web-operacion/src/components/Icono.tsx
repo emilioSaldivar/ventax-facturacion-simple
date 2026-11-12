@@ -3,7 +3,7 @@ import React from "react";
 /** SPEC_UX_NUEVA_FACTURA_v0.1, E.1 y PLAN 2: iconos SVG de trazo, sin emojis ni dependencias. */
 export type NombreIcono =
   | "factura" | "agenda" | "documentos" | "notas" | "recibos" | "catalogo" | "credito" | "debito" | "remision" | "autofactura" | "estado" | "menu" | "salir"
-  | "buscar" | "mas" | "papelera" | "guardar" | "lapiz" | "tilde" | "reloj" | "alerta" | "whatsapp" | "copiar"
+  | "buscar" | "mas" | "menos" | "papelera" | "guardar" | "lapiz" | "tilde" | "reloj" | "alerta" | "whatsapp" | "copiar"
   | "compartir" | "pdf" | "chevron-abajo" | "chevron-derecha" | "chevron-izquierda"
   | "mas-opciones" | "ojo" | "ojo-tachado" | "punto";
 
@@ -24,6 +24,7 @@ const TRAZOS_ICONO: Record<NombreIcono, React.ReactNode> = {
   salir: <><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><path d="m16 17 5-5-5-5" /><path d="M21 12H9" /></>,
   buscar: <><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></>,
   mas: <><path d="M12 5v14" /><path d="M5 12h14" /></>,
+  menos: <path d="M5 12h14" />,
   papelera: <><path d="M3 6h18" /><path d="M8 6V4h8v2" /><path d="M19 6l-1 14H6L5 6" /></>,
   guardar: <><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" /><path d="M17 21v-8H7v8" /><path d="M7 3v5h8" /></>,
   lapiz: <><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" /></>,

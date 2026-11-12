@@ -4,6 +4,8 @@ import "./styles.css";
 
 import { useConfirmar } from "./components/Dialogo";
 import { Icono, type NombreIcono } from "./components/Icono";
+import { CampoPlazo } from "./components/CampoPlazo";
+import { PLAZO_CREDITO_DEFECTO, errorPlazo, plazoValido } from "./lib/plazoCredito";
 import { MenuFila } from "./components/MenuFila";
 import { MenuNuevo } from "./components/MenuNuevo";
 import type { TipoDeCarga } from "./carga-masiva";
@@ -1230,7 +1232,10 @@ function InvoiceEditor({
   const [tipoTransaccion, setTipoTransaccion] = useState<TipoTransaccionServicio>(
     context?.fiscal_context.tipo_transaccion_default ?? 2
   );
-  const [creditoPlazoDias, setCreditoPlazoDias] = useState<number>(context?.fiscal_context.credito_plazo_dias ?? 30);
+  // SPEC_PLAZO_CREDITO_v0.1, RN-01 y D-1: arranca en 30 dias, no en el plazo del punto; se guarda como texto para poder escribirlo.
+  const [creditoPlazoTexto, setCreditoPlazoTexto] = useState<string>(String(PLAZO_CREDITO_DEFECTO));
+  const creditoPlazoDias = plazoValido(creditoPlazoTexto);
+  const errorPlazoCredito = condicionVenta === "CREDITO" ? errorPlazo(creditoPlazoTexto) : null;
   const [cliente, setCliente] = useState<FacturaClienteInput>({
     documento_tipo: "RUC",
     documento: "",
@@ -1374,6 +1379,10 @@ function InvoiceEditor({
       );
 
     if (!cliente.documento.trim() || !cliente.razon_social.trim() || items.length === 0 || !tipoCambioValido) {
+      return null;
+    }
+    // SPEC_PLAZO_CREDITO_v0.1, RN-05: con Credito y un plazo fuera de 1 a 365 no hay vista previa ni emision.
+    if (condicionVenta === "CREDITO" && creditoPlazoDias === null) {
       return null;
     }
     // SPEC_VALIDACIONES_RECEPTOR_v0.1 RV-08: sin receptor valido no hay vista previa ni emision.
@@ -2133,7 +2142,7 @@ function InvoiceEditor({
     setMoneda("PYG");
     setTipoCambio("");
     setTipoTransaccion(context?.fiscal_context.tipo_transaccion_default ?? 2);
-    setCreditoPlazoDias(context?.fiscal_context.credito_plazo_dias ?? 30);
+    setCreditoPlazoTexto(String(PLAZO_CREDITO_DEFECTO));
     setCliente({
       documento_tipo: "RUC",
       documento: "",
@@ -2209,6 +2218,7 @@ function InvoiceEditor({
     if (revisionCliente.errores.length > 0) return `Corregí los datos del cliente: ${revisionCliente.errores[0]!.mensaje}`;
     if (innominadoSobreTope) return MENSAJE_TOPE_INNOMINADO;
     if (!tipoCambioValido) return "Falta el tipo de cambio";
+    if (errorPlazoCredito) return `Plazo de crédito: ${errorPlazoCredito.charAt(0).toLowerCase()}${errorPlazoCredito.slice(1)}`;
     if (errorDescuentoGlobal) return `Descuento sobre el total: ${errorDescuentoGlobal}`;
     if (lineasConDatos.length === 0) return "Agregá al menos una línea";
     if (primeraInvalida >= 0) return `Corregí la línea ${primeraInvalida + 1} para poder crear la factura`;
@@ -2331,21 +2341,13 @@ function InvoiceEditor({
           </div>
         </div>
         {condicionVenta === "CREDITO" || modoCompleto ? (
-          <label className="banda-campo banda-plazo">
-            <span className="banda-etiqueta">Plazo (días)</span>
-            <select
-              aria-label="Plazo en días"
-              disabled={condicionVenta !== "CREDITO"}
-              onChange={(event) => setCreditoPlazoDias(Number(event.target.value))}
-              value={creditoPlazoDias}
-            >
-              {[30, 60, 90].map((days) => (
-                <option key={days} value={days}>
-                  {days}
-                </option>
-              ))}
-            </select>
-          </label>
+          <CampoPlazo
+            deshabilitado={condicionVenta !== "CREDITO"}
+            error={errorPlazoCredito}
+            etiqueta="Plazo (días)"
+            onCambio={setCreditoPlazoTexto}
+            valor={creditoPlazoTexto}
+          />
         ) : null}
         <label className="banda-campo banda-servicio">
           <span className="banda-etiqueta">Tipo de servicio</span>

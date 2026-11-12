@@ -173,7 +173,10 @@ La fuente de verdad de este proyecto es:
 - `docs/SPEC_DESPLIEGUE_SEGEL_FS_v0.3.md`
 - `docs/PLAN_DESPLIEGUE_SEGEL_FS_v0.3.md`
 - `docs/TASKS_DESPLIEGUE_SEGEL_FS_v0.3.md`
-- `docs/BACKLOG.md` (archivo unico de pendientes y estados)
+- `docs/SPEC_PLAZO_CREDITO_v0.1.md`
+- `docs/PLAN_PLAZO_CREDITO_v0.1.md`
+- `docs/TASKS_PLAZO_CREDITO_v0.1.md`
+- `docs/BACKLOG.md` (archivo unico de pendientes, hallazgos y estados; ver "Regla Del Backlog Unico")
 - `docs/HOJA_DE_RUTA_v0.1.md` (prioridades y decisiones del 2026-11-11; el estado vigente esta en `BACKLOG.md`)
 - `spec/openapi.yaml`
 
@@ -223,6 +226,7 @@ La ejecucion de validaciones debe planificarse por grupos de tareas abarcables e
 Si una validacion falla o no puede corregirse de inmediato, se debe:
 
 - documentar el bloqueo/falla y evidencia concreta en la matriz de `TASKS`;
+- registrarla en `docs/BACKLOG.md` con un ID FS nuevo si no queda resuelta en la misma tarea (ver "Regla Del Backlog Unico");
 - registrar impacto, alcance y decision temporal;
 - refinar luego `SPEC`/`PLAN`/`TASKS` con el usuario antes de continuar cambios inciertos.
 
@@ -244,6 +248,15 @@ Cualquier agente que trabaje en este repositorio debe:
 - no copiar logica fiscal SIFEN al frontend ni al backend SaaS si debe vivir en `facturacion-electronica`;
 - no exponer certificados, CSC, passwords ni secretos fiscales en UI, logs o respuestas no autorizadas.
 - **NUNCA escribir credenciales reales (passwords, API keys, tokens, secrets SMTP, claves privadas) en ningun archivo del repositorio** — ni en documentacion, ni en ejemplos, ni en comentarios de codigo. Si una tarea requiere documentar como configurar una credencial, usar siempre un placeholder explicito como `<rotar-en-zoho-y-agregar-aqui>` o `YOUR_SECRET_HERE`. Las credenciales reales solo existen en archivos `.env` locales que estan en `.gitignore` y en el servidor. Cualquier credencial real detectada en un archivo rastreado por git debe ser eliminada de inmediato y el secreto rotado.
+
+## Regla Del Backlog Unico
+
+Decision del usuario del 2026-11-11, reforzada el 2026-11-12. `docs/BACKLOG.md` es el **unico** registro de pendientes, hallazgos y estados del proyecto, para todas las sesiones y agentes. Toda sesion debe:
+
+- registrar en el BACKLOG, **en el momento en que la encuentra y antes de seguir**, toda falla, hallazgo, riesgo o pedido que no se cierre en la misma tarea (visto en codigo, pruebas, Playwright, despliegues, mensajes de FE o del usuario). Anotarlo solo en `TASKS`, en una memoria de sesion o en el chat no cuenta como registrado;
+- seguir el "Protocolo de registro" del propio BACKLOG: releer el archivo justo antes de editar (otras sesiones lo editan en paralelo), tomar el "Proximo ID libre" de la serie FS y subirlo en la misma edicion, una sola fila por ID, sin credenciales ni datos personales;
+- al avanzar o cerrar una tarea, actualizar el estado de su fila en el mismo cambio que la evidencia de `TASKS`, y mover la fila a "Cerrados" solo cuando no quede nada abierto;
+- verificar un estado en el codigo o en git antes de escribirlo; lo que dependa de produccion queda "sin confirmar" mientras no haya autorizacion (Regla De Oro).
 
 ## Regla De Oro: Produccion Solo Con Autorizacion Explicita
 

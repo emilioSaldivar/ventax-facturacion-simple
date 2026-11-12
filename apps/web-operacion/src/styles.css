@@ -3346,10 +3346,111 @@ dd {
   grid-column: 1 / -1;
 }
 
+/* SPEC_PLAZO_CREDITO_v0.1: plazo en dias con botones de 5 en 5, con el alto y el borde de los controles de la banda. */
+.plazo-campo {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) 36px;
+  min-height: 38px;
+  overflow: hidden;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-control);
+  background: var(--color-surface);
+}
+
+.plazo-campo:focus-within {
+  border-color: var(--color-brand);
+}
+
+.plazo-campo.invalido {
+  border-color: var(--color-danger);
+}
+
+.plazo-campo.deshabilitado {
+  background: var(--color-bg);
+}
+
+.banda-campo .plazo-campo .plazo-numero {
+  min-width: 0;
+  min-height: 36px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--color-ink);
+  font-weight: 600;
+  text-align: center;
+  padding: 0 var(--esp-1);
+}
+
+.banda-campo .plazo-campo .plazo-numero:focus {
+  outline: none;
+}
+
+.banda-campo .plazo-campo .plazo-numero:disabled {
+  color: var(--color-muted);
+}
+
+.plazo-boton {
+  display: grid;
+  place-items: center;
+  min-height: 36px;
+  border: 0;
+  border-radius: 0;
+  background: var(--color-ground-card);
+  color: var(--color-brand-dark);
+  padding: 0;
+  cursor: pointer;
+}
+
+.plazo-boton:hover:not(:disabled) {
+  background: var(--color-bg);
+}
+
+.plazo-boton:disabled {
+  color: var(--color-muted);
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.plazo-boton:focus-visible {
+  outline-offset: -2px;
+}
+
+@media (max-width: 719px) {
+  .plazo-campo {
+    grid-template-columns: 44px minmax(0, 1fr) 44px;
+    min-height: 44px;
+  }
+
+  .banda-campo .plazo-campo .plazo-numero,
+  .plazo-boton {
+    min-height: 42px;
+  }
+
+  .banda-campo .plazo-campo .plazo-numero {
+    font-size: var(--fs-16);
+  }
+}
+
 @media (min-width: 1024px) {
   .invoice-editor.completo .banda-comprobante {
-    grid-template-columns: 220px 110px minmax(0, 1fr) 220px 170px;
+    grid-template-columns: 220px 140px minmax(0, 1fr) 220px 170px;
     align-items: end;
+  }
+
+  /* SPEC_PLAZO_CREDITO_v0.1: en la fila de escritorio el error del plazo va debajo, en una linea, sin desalinear la banda. */
+  .invoice-editor.completo .banda-plazo {
+    position: relative;
+  }
+
+  .invoice-editor.completo .banda-plazo .campo-error {
+    position: absolute;
+    top: calc(100% + var(--esp-1));
+    left: 0;
+    white-space: nowrap;
+  }
+
+  .invoice-editor.completo .banda-comprobante:has(.banda-plazo .campo-error) {
+    padding-bottom: calc(14px + var(--esp-5));
   }
 
 }
