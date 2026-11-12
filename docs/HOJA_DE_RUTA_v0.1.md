@@ -2,6 +2,8 @@
 
 **Fecha:** 2026-11-11 · **Rama:** `feat/identidad-segel` · **Produccion:** `segel-fs` (FS `ed8b493`, FE `segel-rc4.32`, paquete de consumidores v0.49)
 
+> **Unificado en `docs/BACKLOG.md` (decision del usuario, 2026-11-11).** El estado vigente de cada punto se lleva solo en el BACKLOG; este archivo queda como registro de como se fijaron las prioridades y las decisiones del 2026-11-11.
+
 ## Para que sirve
 
 Hasta hoy los pendientes estaban repartidos en tres lugares sin un orden comun:
