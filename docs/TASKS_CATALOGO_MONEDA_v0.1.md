@@ -19,7 +19,7 @@ Estimacion total: 7 a 9 horas de implementacion y prueba, sin contar el desplieg
 | CAM-011 | Regresion: `ux-resto-app` (caso `agenda`), `editor-pc`, `documentos-escritorio`, reconocimiento sin subir la linea base; `npm run test`, `typecheck`, `lint` (api); `typecheck`, `build` (web); lista §12 de PAUTAS | CA-09 | resultados por guion anotados aqui | Hecha (2026-11-11) |
 | CAM-012 | Emision real en SIFEN test desde el stack local: factura en USD con articulo del catalogo en USD y una linea guardada desde el editor; aviso previo a FE (`facturacion-electronica-7c`) | CA-10 | documento aprobado, KUDE con precios en USD; `document_uuid` y numero anotados aqui | Hecha (2026-11-11) |
 | CAM-013 | Cierre de la cadena: SPEC, PLAN y TASKS releidos y ajustados con lo descubierto; decisiones DP-1 y DP-2 resueltas o confirmadas | — | repaso con el usuario | Hecha (2026-11-11): DP-1 y DP-2 cerradas con la propuesta; RN-13a agregada; PLAN sin cambios de diseño |
-| CAM-014 | Despliegue en `segel-fs` (produccion): respaldo previo, migracion `0046`, API y frontend; verificacion sin emitir | — | **solo con orden directa del usuario**; procedimiento de `TASKS_DESPLIEGUE_SEGEL_FS_v0.2.md` E-6 | Pasa a `TASKS_DESPLIEGUE_SEGEL_FS_v0.3` (DSF-010); espera la orden del usuario |
+| CAM-014 | Despliegue en `segel-fs` (produccion): respaldo previo, migracion `0046`, API y frontend; verificacion sin emitir | — | **solo con orden directa del usuario**; procedimiento de `TASKS_DESPLIEGUE_SEGEL_FS_v0.2.md` E-6 | Pasa a `TASKS_DESPLIEGUE_SEGEL_FS_v0.3` (DSF-010); espera la orden del usuario. Desplegado en `segel-fs` el 2026-11-12 (`segel-fs-2026.11.12` = `8e5a172`); evidencia en `TASKS_DESPLIEGUE_SEGEL_FS_v0.3` E-1. |
 
 ## Decisiones pendientes
 
