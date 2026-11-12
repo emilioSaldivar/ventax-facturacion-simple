@@ -45,6 +45,8 @@ export interface FacturaItemInput {
   cantidad: number;
   precio_unitario: number;
   iva_tipo?: TipoIva;
+  /** SPEC_DESCUENTOS_FACTURA_v0.1 RN-01: descuento por unidad. */
+  descuento?: number;
 }
 
 export interface FacturaPreviewInput {
@@ -57,6 +59,8 @@ export interface FacturaPreviewInput {
   credito_plazo_dias?: number | null;
   cliente: FacturaClienteInput;
   items: FacturaItemInput[];
+  /** SPEC_DESCUENTOS_FACTURA_v0.1 RN-01: descuento sobre el total. */
+  descuento_global?: number;
 }
 
 export interface FacturaItemPreview extends TaxCalculatedLine {

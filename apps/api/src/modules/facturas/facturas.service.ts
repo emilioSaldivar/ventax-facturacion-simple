@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import { env } from "../../config/env";
-import { calculateDocumentTotalsMoneda, type TaxInputLine, type TaxTotals } from "@facturacion-simple/shared";
+import { DescuentoInvalidoError, calculateDocumentTotalsMoneda, type TaxInputLine, type TaxTotals } from "@facturacion-simple/shared";
 import { HttpError } from "../../shared/errors/http-error";
 import { logger } from "../../shared/logging/logger";
 import { deriveAccion, esNotaTrabada, puedeReintentarEmision } from "./facturas.accion";
@@ -75,13 +75,17 @@ export function previewFactura(
       descripcion,
       cantidad: item.cantidad,
       precio_unitario: item.precio_unitario,
-      iva_tipo: item.iva_tipo ?? "IVA_10"
+      iva_tipo: item.iva_tipo ?? "IVA_10",
+      ...(item.descuento && item.descuento > 0 ? { descuento: item.descuento } : {})
     };
   });
 
   try {
     // SPEC_MONEDA_EXTRANJERA_v0.1, RN-03: fuera de PYG, presentacion con 2 decimales.
-    const calculated = calculateDocumentTotalsMoneda(taxLines, input.moneda ?? "PYG");
+    // SPEC_DESCUENTOS_FACTURA_v0.1 RN-04 a RN-06: descuentos con la regla de FE.
+    const calculated = calculateDocumentTotalsMoneda(taxLines, input.moneda ?? "PYG", input.descuento_global ?? 0);
+    // RN-09: una factura con descuento solo admite nota de credito total (por referencia en FE).
+    if ((calculated.totals.descuento ?? 0) > 0) calculated.totals.nota_credito_por_referencia = true;
     const items: FacturaItemPreview[] = calculated.items.map((item, index) => ({
       ...item,
       catalogo_item_id: input.items[index]?.catalogo_item_id?.trim() || null
@@ -96,6 +100,9 @@ export function previewFactura(
   } catch (error) {
     if (error instanceof HttpError) {
       throw error;
+    }
+    if (error instanceof DescuentoInvalidoError) {
+      throw new HttpError(400, "VALIDATION_ERROR", error.message, { path: error.path });
     }
     if (error instanceof Error) {
       throw new HttpError(400, "VALIDATION_ERROR", error.message);
@@ -2029,6 +2036,8 @@ export function totalesDesdeFe(fe: FiscalDocumentoTotalesResponse, previos?: Tax
     ...(t.descuento > 0 ? { descuento: t.descuento } : {}),
     ...(t.anticipo > 0 ? { anticipo: t.anticipo } : {}),
     ...(previos?.nota_credito_por_referencia ? { nota_credito_por_referencia: true } : {}),
+    // SPEC_DESCUENTOS_FACTURA_v0.1 RN-08: el descuento global cargado se conserva al tomar los totales de FE.
+    ...((previos?.descuento_global ?? 0) > 0 ? { descuento_global: previos!.descuento_global } : {}),
     redondeo: t.redondeo,
     total_guaranies: fe.total_guaranies,
     fuente: "FE"

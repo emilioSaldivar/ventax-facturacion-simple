@@ -3549,6 +3549,12 @@ components:
           minItems: 1
           items:
             $ref: "#/components/schemas/FacturaItemInput"
+        descuento_global:
+          type: number
+          minimum: 0
+          description: >-
+            SPEC_DESCUENTOS_FACTURA_v0.1 RN-01 y RN-04. Descuento sobre el total (FE `descuentoGlobal`); se reparte por
+            peso sobre el bruto, como FE. Si deja una linea sin precio, 400 con `details.path = ["descuento_global"]`.
 
     FacturaEmitRequest:
       allOf:
@@ -3617,6 +3623,12 @@ components:
           description: Entero en `PYG`; hasta 2 decimales en otra moneda (RN-02).
         iva_tipo:
           $ref: "#/components/schemas/IvaTipo"
+        descuento:
+          type: number
+          minimum: 0
+          description: >-
+            SPEC_DESCUENTOS_FACTURA_v0.1 RN-01 a RN-03. Descuento por unidad (FE `items[].descuento`), menor que el
+            precio. Entero en PYG ("En guaraníes, el descuento va sin decimales"); hasta 2 decimales en otra moneda.
 
     FacturaPreviewResponse:
       type: object
@@ -3659,6 +3671,12 @@ components:
         iva_monto:
           type: number
           description: Redondeado por linea.
+        descuento:
+          type: number
+          description: SPEC_DESCUENTOS_FACTURA_v0.1 RN-06. Descuento por unidad; solo si la linea lo tiene.
+        descuento_global:
+          type: number
+          description: Parte del descuento global de la linea; solo si existe. `subtotal` es el neto de la linea.
 
     DocumentoTotals:
       type: object
@@ -3677,7 +3695,7 @@ components:
         total:
           type: number
         descuento:
-          type: integer
+          type: number
           description: 'Solo en facturas de carga con los totales del backend fiscal (SPEC_TOTALES_FE_EN_CARGA_v0.1). Descuentos por articulo y global.'
         nota_credito_por_referencia:
           type: boolean
@@ -3695,6 +3713,9 @@ components:
         redondeo:
           type: number
           description: dRedon de FE. Solo con `fuente` FE.
+        descuento_global:
+          type: number
+          description: SPEC_DESCUENTOS_FACTURA_v0.1 RN-05. Descuento sobre el total cargado; se conserva con `fuente` FE.
 
     DocumentoVinculo:
       type: object

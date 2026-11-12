@@ -21,30 +21,43 @@ export function tieneDecimalesValidos(valor: number, moneda: string): boolean {
  * Calculo de presentacion en la moneda de la factura (SPEC RN-03): en otra moneda se calcula en centavos con la
  * misma regla entera de guaranies y se devuelve en unidades con 2 decimales. El KUDE de FE es el oficial.
  */
-export function calculateDocumentTotalsMoneda(lines: TaxInputLine[], moneda: string = "PYG"): TaxCalculationResult {
-  if (decimalesDeMoneda(moneda) === 0) return calculateDocumentTotals(lines);
+export function calculateDocumentTotalsMoneda(lines: TaxInputLine[], moneda: string = "PYG", descuentoGlobal = 0): TaxCalculationResult {
+  if (decimalesDeMoneda(moneda) === 0) return calculateDocumentTotals(lines, descuentoGlobal);
   for (const line of lines) {
     if (!tieneDecimalesValidos(line.precio_unitario, moneda)) {
       throw new Error("precio_unitario admite hasta 2 decimales.");
     }
   }
-  const enCentavos = calculateDocumentTotals(lines.map((line) => ({ ...line, precio_unitario: Math.round(line.precio_unitario * 100) })));
+  const aCentavos = (valor: number) => Math.round(valor * 100);
+  const enCentavos = calculateDocumentTotals(
+    lines.map((line) => ({
+      ...line,
+      precio_unitario: aCentavos(line.precio_unitario),
+      ...(line.descuento !== undefined ? { descuento: aCentavos(line.descuento) } : {})
+    })),
+    aCentavos(descuentoGlobal)
+  );
   const unidades = (centavos: number) => Math.round(centavos) / 100;
+  const t = enCentavos.totals;
   return {
     items: enCentavos.items.map((item) => ({
       ...item,
       precio_unitario: unidades(item.precio_unitario),
       subtotal: unidades(item.subtotal),
       base_imponible: unidades(item.base_imponible),
-      iva_monto: unidades(item.iva_monto)
+      iva_monto: unidades(item.iva_monto),
+      ...(item.descuento !== undefined ? { descuento: unidades(item.descuento) } : {}),
+      ...(item.descuento_global !== undefined ? { descuento_global: unidades(item.descuento_global) } : {})
     })),
     totals: {
-      subtotal: unidades(enCentavos.totals.subtotal),
-      total_sin_iva: unidades(enCentavos.totals.total_sin_iva),
-      iva_5: unidades(enCentavos.totals.iva_5),
-      iva_10: unidades(enCentavos.totals.iva_10),
-      total_iva: unidades(enCentavos.totals.total_iva),
-      total: unidades(enCentavos.totals.total)
+      subtotal: unidades(t.subtotal),
+      total_sin_iva: unidades(t.total_sin_iva),
+      iva_5: unidades(t.iva_5),
+      iva_10: unidades(t.iva_10),
+      total_iva: unidades(t.total_iva),
+      total: unidades(t.total),
+      ...(t.descuento !== undefined ? { descuento: unidades(t.descuento) } : {}),
+      ...(t.descuento_global !== undefined ? { descuento_global: unidades(t.descuento_global) } : {})
     }
   };
 }

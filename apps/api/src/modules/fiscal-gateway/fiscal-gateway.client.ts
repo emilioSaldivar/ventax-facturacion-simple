@@ -139,7 +139,7 @@ const numerosInutilizadosMock = new Map<string, string>();
  * con el mismo formato que FE (gTotSub) y que el flujo local sea el mismo que contra FE.
  */
 const totalesMockPorDocumento = new Map<string, { moneda: string; tipo_cambio: number | null; totals: TaxTotalsMock }>();
-type TaxTotalsMock = { subtotal: number; total_sin_iva: number; iva_5: number; iva_10: number; total_iva: number; total: number };
+type TaxTotalsMock = { subtotal: number; total_sin_iva: number; iva_5: number; iva_10: number; total_iva: number; total: number; descuento?: number };
 
 function registrarTotalesMock(documentUuid: string, request: { moneda?: string; tipo_cambio?: number | null; totals: TaxTotalsMock }): void {
   totalesMockPorDocumento.set(documentUuid, { moneda: request.moneda ?? "PYG", tipo_cambio: request.tipo_cambio ?? null, totals: request.totals });
@@ -331,7 +331,8 @@ export class MockFiscalGateway implements FiscalGateway {
     const t = guardado.totals;
     const totales: FeDetalleTotales = {
       bruto: t.subtotal,
-      descuento: 0,
+      // SPEC_DESCUENTOS_FACTURA_v0.1 (PLAN, mock): el total de descuentos del pedido, como lo informaria FE.
+      descuento: t.descuento ?? 0,
       anticipo: 0,
       total: t.total,
       redondeo: 0,
@@ -1789,8 +1790,12 @@ export class RealFiscalGateway implements FiscalGateway {
         descripcion: item.descripcion,
         cantidad: item.cantidad,
         precioUnitario: item.precio_unitario,
-        ivaTipo: mapIvaTipo(item.iva_tipo)
+        ivaTipo: mapIvaTipo(item.iva_tipo),
+        // SPEC_DESCUENTOS_FACTURA_v0.1 RN-07: descuento por unidad solo si existe; el precio sigue siendo el bruto.
+        ...((item.descuento ?? 0) > 0 ? { descuento: item.descuento } : {})
       })),
+      // RN-07: descuento sobre el total solo si existe; FE lo reparte (NT001). Los pagos van por el total neto.
+      ...((request.totals.descuento_global ?? 0) > 0 ? { descuentoGlobal: request.totals.descuento_global } : {}),
       envio: buildEnvio(request.fiscal_context.fiscal_envio_modo)
     };
 

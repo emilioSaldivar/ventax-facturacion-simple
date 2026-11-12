@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { calculateDocumentTotals, calculateTaxLine, cantidadEscalada, roundHalfUp } from "../src/money/tax";
+import { DescuentoInvalidoError, calculateDocumentTotals, calculateTaxLine, cantidadEscalada, roundHalfUp } from "../src/money/tax";
+import { calculateDocumentTotalsMoneda } from "../src/money/moneda";
 
 describe("tax calculation", () => {
   it("calculates IVA_10 by line from tax-included PYG prices", () => {
@@ -152,5 +153,89 @@ describe("tax calculation", () => {
       expect(cantidadEscalada(0.00001)).toBeNull();
       expect(cantidadEscalada(Number.NaN)).toBeNull();
     });
+  });
+});
+
+describe("SPEC_DESCUENTOS_FACTURA_v0.1", () => {
+  it("CA-01: ejemplo de FE en guaranies", () => {
+    const r = calculateDocumentTotalsMoneda(
+      [
+        { descripcion: "Zapatillas", cantidad: 2, precio_unitario: 100000, iva_tipo: "IVA_10", descuento: 10000 },
+        { descripcion: "Medias", cantidad: 1, precio_unitario: 50000, iva_tipo: "IVA_10" }
+      ],
+      "PYG",
+      30000
+    );
+    expect(r.totals).toMatchObject({ subtotal: 250000, descuento: 50000, descuento_global: 30000, total: 200000 });
+    expect(r.totals.total_sin_iva + r.totals.total_iva).toBe(200000);
+    expect(r.items.reduce((a, i) => a + i.subtotal, 0)).toBe(200000);
+    expect(r.items.reduce((a, i) => a + (i.descuento_global ?? 0), 0)).toBe(30000);
+  });
+
+  it("vector PYG de FE (global que no divide exacto): total 83.897 y descuento 6.663", () => {
+    const r = calculateDocumentTotalsMoneda(
+      [
+        { descripcion: "A", cantidad: 3, precio_unitario: 19990, iva_tipo: "IVA_10", descuento: 1110 },
+        { descripcion: "B", cantidad: 7, precio_unitario: 4370, iva_tipo: "IVA_5" }
+      ],
+      "PYG",
+      3333
+    );
+    expect(r.totals.total).toBe(83897);
+    expect(r.totals.descuento).toBe(6663);
+    // FE: dTotOpeItem 54.432,84 y 29.464,16 -> por linea en enteros 54.433 y 29.464.
+    expect(r.items.map((i) => i.subtotal)).toEqual([54433, 29464]);
+  });
+
+  it("CA-02 y vector USD de FE: total 81,68, descuento 8,88", () => {
+    const fe = calculateDocumentTotalsMoneda(
+      [
+        { descripcion: "A", cantidad: 3, precio_unitario: 19.99, iva_tipo: "IVA_10", descuento: 1.11 },
+        { descripcion: "B", cantidad: 7, precio_unitario: 4.37, iva_tipo: "IVA_5" }
+      ],
+      "USD",
+      5.55
+    );
+    expect(fe.totals).toMatchObject({ total: 81.68, descuento: 8.88, descuento_global: 5.55 });
+    expect(fe.totals.iva_10).toBeCloseTo(4.81, 2);
+    expect(fe.totals.iva_5).toBeCloseTo(1.37, 2);
+    const ca02 = calculateDocumentTotalsMoneda(
+      [
+        { descripcion: "A", cantidad: 3, precio_unitario: 10.5, iva_tipo: "IVA_10", descuento: 0.5 },
+        { descripcion: "B", cantidad: 1, precio_unitario: 20, iva_tipo: "IVA_10" }
+      ],
+      "USD",
+      5
+    );
+    expect(ca02.totals).toMatchObject({ subtotal: 51.5, descuento: 6.5, total: 45 });
+  });
+
+  it("CA-03: descuento igual al precio y global que deja una linea sin precio", () => {
+    expect(() =>
+      calculateDocumentTotals([{ descripcion: "A", cantidad: 1, precio_unitario: 100000, iva_tipo: "IVA_10", descuento: 100000 }])
+    ).toThrowError(new DescuentoInvalidoError("El descuento tiene que ser menor que el precio", ["items", 0, "descuento"]));
+    try {
+      calculateDocumentTotals(
+        [
+          { descripcion: "A", cantidad: 2, precio_unitario: 100000, iva_tipo: "IVA_10", descuento: 10000 },
+          { descripcion: "B", cantidad: 1, precio_unitario: 50000, iva_tipo: "IVA_10" }
+        ],
+        250000
+      );
+      throw new Error("no fallo");
+    } catch (e) {
+      expect(e).toBeInstanceOf(DescuentoInvalidoError);
+      expect((e as DescuentoInvalidoError).path).toEqual(["descuento_global"]);
+      expect((e as Error).message).toMatch(/deja la línea \d sin precio/);
+    }
+  });
+
+  it("CA-04: sin descuentos el resultado es identico al de siempre", () => {
+    const lineas = [
+      { descripcion: "A", cantidad: 2, precio_unitario: 110000, iva_tipo: "IVA_10" as const },
+      { descripcion: "B", cantidad: 1.5, precio_unitario: 21000, iva_tipo: "IVA_5" as const }
+    ];
+    expect(calculateDocumentTotals(lineas, 0)).toEqual(calculateDocumentTotals(lineas));
+    expect(calculateDocumentTotals(lineas).totals).not.toHaveProperty("descuento");
   });
 });

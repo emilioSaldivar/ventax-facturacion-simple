@@ -8,14 +8,19 @@ export interface TaxInputLine {
   cantidad: number;
   precio_unitario: PygAmount;
   iva_tipo: TipoIva;
+  /** SPEC_DESCUENTOS_FACTURA_v0.1 RN-01: descuento por unidad (FE `items[].descuento`). */
+  descuento?: PygAmount;
 }
 
 export interface TaxCalculatedLine extends TaxInputLine {
   line_no: number;
   codigo: string | null;
+  /** Importe neto de la linea: bruto menos el descuento por unidad y el prorrateo del global (RN-06). */
   subtotal: PygAmount;
   base_imponible: PygAmount;
   iva_monto: PygAmount;
+  /** RN-06: parte del descuento global que le toca a la linea (solo con descuentos). */
+  descuento_global?: PygAmount;
 }
 
 export interface TaxTotals {
@@ -25,8 +30,13 @@ export interface TaxTotals {
   iva_10: PygAmount;
   total_iva: PygAmount;
   total: PygAmount;
-  /** SPEC_TOTALES_FE_EN_CARGA_v0.1: solo en facturas de carga, con los montos de FE. No entra en el calculo propio. */
+  /**
+   * Total de descuentos (por linea mas global). SPEC_DESCUENTOS_FACTURA_v0.1 RN-05 en la factura manual;
+   * SPEC_TOTALES_FE_EN_CARGA_v0.1 en las de carga (montos de FE).
+   */
   descuento?: PygAmount;
+  /** SPEC_DESCUENTOS_FACTURA_v0.1 RN-05: descuento sobre el total cargado por el operador. */
+  descuento_global?: PygAmount;
   /** SPEC_TOTALES_FE_EN_CARGA_v0.1, RN-08: anticipo aplicado; FE no admite la nota de credito total por referencia. */
   anticipo?: PygAmount;
   /** SPEC_TOTALES_FE_EN_CARGA_v0.1, RN-07: con descuento, anticipo o IVA exonerado, la nota de credito va por referencia en FE. */
@@ -121,9 +131,113 @@ export function calculateTaxLine(line: TaxInputLine, lineNo: number): TaxCalcula
   };
 }
 
-export function calculateDocumentTotals(lines: TaxInputLine[]): TaxCalculationResult {
+/** Error de validacion de un descuento, con la ruta del campo (SPEC_DESCUENTOS_FACTURA_v0.1 RN-03 y RN-04). */
+export class DescuentoInvalidoError extends Error {
+  constructor(
+    message: string,
+    public readonly path: (string | number)[]
+  ) {
+    super(message);
+    this.name = "DescuentoInvalidoError";
+  }
+}
+
+const bruto = (cantidad: number, precio: number): bigint => {
+  // cantidad x 10.000 x precio, redondeado a la unidad (como calculateTaxLine)
+  const producto = BigInt(cantidad) * BigInt(precio);
+  const escala = BigInt(ESCALA_CANTIDAD);
+  return (2n * producto + escala) / (2n * escala);
+};
+
+function lineaConNeto(line: TaxInputLine, lineNo: number, neto: number, descuentoGlobal: number): TaxCalculatedLine {
+  const base_imponible =
+    line.iva_tipo === "EXENTA" ? neto : line.iva_tipo === "IVA_10" ? roundHalfUp(neto * 10, 11) : roundHalfUp(neto * 20, 21);
+  return {
+    ...line,
+    descuento: line.descuento ?? 0,
+    line_no: lineNo,
+    codigo: normalizeOptionalCode(line.codigo),
+    subtotal: neto,
+    base_imponible,
+    iva_monto: neto - base_imponible,
+    descuento_global: descuentoGlobal
+  };
+}
+
+/**
+ * SPEC_DESCUENTOS_FACTURA_v0.1 RN-03 a RN-06, en unidades enteras (guaranies o centavos), como FE/xmlgen:
+ * - por linea, `descuento < precio_unitario`;
+ * - el global se reparte por peso sobre el bruto (`bruto_i / Σ bruto`), igual que xmlgen; los restos se asignan por
+ *   mayor fraccion para que Σ subtotal sea exactamente `Σ cantidad × (precio − descuento) − descuentoGlobal`;
+ * - si el neto de alguna linea queda en cero o menos, error en `descuento_global` nombrando la linea.
+ * Base e IVA por linea sobre el neto, con la misma regla entera de siempre. Los totales oficiales son los de FE.
+ */
+function calculateConDescuentos(lines: TaxInputLine[], descuentoGlobal: number): TaxCalculationResult {
+  assertNonNegativeInteger(descuentoGlobal, "descuento_global");
+  const brutos = lines.map((line, i) => {
+    const cantidad = assertCantidad(line.cantidad, "cantidad");
+    assertNonNegativeInteger(line.precio_unitario, "precio_unitario");
+    const descuento = line.descuento ?? 0;
+    assertNonNegativeInteger(descuento, "descuento");
+    if (descuento > 0 && descuento >= line.precio_unitario) {
+      throw new DescuentoInvalidoError("El descuento tiene que ser menor que el precio", ["items", i, "descuento"]);
+    }
+    return { bruto: bruto(cantidad, line.precio_unitario), descLinea: bruto(cantidad, descuento) };
+  });
+  const sumaBruto = brutos.reduce((a, b) => a + b.bruto, 0n);
+  const G = BigInt(descuentoGlobal);
+
+  // Reparto proporcional del global con restos por mayor fraccion (exacto en enteros).
+  const partes = brutos.map((b) => (sumaBruto > 0n ? (G * b.bruto) / sumaBruto : 0n));
+  const restos = brutos.map((b, i) => ({ i, resto: sumaBruto > 0n ? (G * b.bruto) % sumaBruto : 0n }));
+  let faltante = G - partes.reduce((a, b) => a + b, 0n);
+  restos.sort((a, b) => (b.resto > a.resto ? 1 : b.resto < a.resto ? -1 : a.i - b.i));
+  for (const r of restos) {
+    if (faltante <= 0n) break;
+    partes[r.i]! += 1n;
+    faltante -= 1n;
+  }
+
+  const items = lines.map((line, i) => {
+    const b = brutos[i]!;
+    // RN-04 con la cuenta exacta de FE: (bruto − descLinea) × Σbruto − G × bruto > 0.
+    if (G > 0n && (b.bruto - b.descLinea) * sumaBruto - G * b.bruto <= 0n) {
+      throw new DescuentoInvalidoError(`El descuento sobre el total deja la línea ${i + 1} sin precio`, ["descuento_global"]);
+    }
+    const neto = Number(b.bruto - b.descLinea - partes[i]!);
+    return lineaConNeto(line, i + 1, neto, Number(partes[i]!));
+  });
+
+  const totals = sumarTotales(items);
+  totals.subtotal = Number(sumaBruto);
+  totals.descuento = Number(brutos.reduce((a, b) => a + b.descLinea, 0n) + G);
+  if (descuentoGlobal > 0) totals.descuento_global = descuentoGlobal;
+  return { items, totals };
+}
+
+function sumarTotales(items: TaxCalculatedLine[]): TaxTotals {
+  return items.reduce<TaxTotals>(
+    (acc, line) => {
+      acc.subtotal += line.subtotal;
+      acc.total_sin_iva += line.base_imponible;
+      acc.total += line.subtotal;
+      if (line.iva_tipo === "IVA_5") acc.iva_5 += line.iva_monto;
+      if (line.iva_tipo === "IVA_10") acc.iva_10 += line.iva_monto;
+      acc.total_iva = acc.iva_5 + acc.iva_10;
+      return acc;
+    },
+    { subtotal: 0, total_sin_iva: 0, iva_5: 0, iva_10: 0, total_iva: 0, total: 0 }
+  );
+}
+
+export function calculateDocumentTotals(lines: TaxInputLine[], descuentoGlobal = 0): TaxCalculationResult {
   if (lines.length === 0) {
     throw new Error("Debe existir al menos una linea.");
+  }
+
+  // SPEC_DESCUENTOS_FACTURA_v0.1: sin descuentos el calculo y la forma del resultado son los de siempre (CA-04).
+  if (descuentoGlobal > 0 || lines.some((line) => (line.descuento ?? 0) > 0)) {
+    return calculateConDescuentos(lines, descuentoGlobal);
   }
 
   const items = lines.map((line, index) => calculateTaxLine(line, index + 1));

@@ -7,7 +7,7 @@ import { clienteNaturalezaTipos } from "../clientes/clientes.types";
 import { operationalContextRepository } from "../context/context.repository";
 import { getOperationalContext } from "../context/context.service";
 import { validateRequest } from "../../shared/validation/validate-request";
-import { agregarErroresReceptor, revisarReceptor } from "../../shared/validation/receptor";
+import { ISSUE_OPERADOR, agregarErroresReceptor, revisarReceptor } from "../../shared/validation/receptor";
 import { createFiscalGateway, fiscalGateway } from "../fiscal-gateway/fiscal-gateway.client";
 import { buildFiscalGatewayConfig } from "../fiscal-gateway/fiscal-gateway.config";
 import type { FiscalGateway } from "../fiscal-gateway/fiscal-gateway.types";
@@ -70,12 +70,16 @@ const facturaBaseSchema = z.object({
         cantidad: z.coerce.number().positive(),
         // SPEC_MONEDA_EXTRANJERA_v0.1, RN-02: decimales segun la moneda (se valida abajo).
         precio_unitario: z.coerce.number().min(0),
-        iva_tipo: z.enum(ivaTipos).default("IVA_10")
+        iva_tipo: z.enum(ivaTipos).default("IVA_10"),
+        // SPEC_DESCUENTOS_FACTURA_v0.1 RN-01: descuento por unidad; los decimales por moneda se validan abajo.
+        descuento: z.coerce.number().min(0).optional()
       })
     )
     .min(1),
   moneda: z.enum(monedasFactura).default("PYG"),
-  tipo_cambio: z.coerce.number().positive().nullable().optional()
+  tipo_cambio: z.coerce.number().positive().nullable().optional(),
+  // SPEC_DESCUENTOS_FACTURA_v0.1 RN-01: descuento sobre el total.
+  descuento_global: z.coerce.number().min(0).optional()
 });
 
 type FacturaBase = z.infer<typeof facturaBaseSchema>;
@@ -84,6 +88,14 @@ type FacturaBase = z.infer<typeof facturaBaseSchema>;
 function refinarFactura(input: FacturaBase, ctx: z.RefinementCtx): void {
   // SPEC_VALIDACIONES_RECEPTOR_v0.1 RV-01 a RV-06 y RV-08: el receptor se valida antes de encolar nada.
   agregarErroresReceptor(ctx, revisarReceptor(input.cliente).errores, ["cliente"]);
+  if (input.descuento_global !== undefined && input.descuento_global > 0 && !tieneDecimalesValidos(input.descuento_global, input.moneda)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["descuento_global"],
+      message: input.moneda === "PYG" ? "En guaraníes, el descuento va sin decimales" : "El descuento admite hasta 2 decimales",
+      params: ISSUE_OPERADOR
+    });
+  }
   if (input.moneda !== "PYG") {
     if (!input.tipo_cambio) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["tipo_cambio"], message: "Con moneda extranjera el tipo de cambio es obligatorio." });
@@ -94,6 +106,19 @@ function refinarFactura(input: FacturaBase, ctx: z.RefinementCtx): void {
   input.items.forEach((item, indice) => {
     if (cantidadEscalada(item.cantidad) === null) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["items", indice, "cantidad"], message: "La cantidad admite hasta 4 decimales." });
+    }
+    // SPEC_DESCUENTOS_FACTURA_v0.1 RN-02 y RN-03.
+    if (item.descuento !== undefined && item.descuento > 0) {
+      if (!tieneDecimalesValidos(item.descuento, input.moneda)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["items", indice, "descuento"],
+          message: input.moneda === "PYG" ? "En guaraníes, el descuento va sin decimales" : "El descuento admite hasta 2 decimales",
+          params: ISSUE_OPERADOR
+        });
+      } else if (item.descuento >= item.precio_unitario) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["items", indice, "descuento"], message: "El descuento tiene que ser menor que el precio", params: ISSUE_OPERADOR });
+      }
     }
     if (!tieneDecimalesValidos(item.precio_unitario, input.moneda)) {
       ctx.addIssue({

@@ -94,6 +94,8 @@ interface FacturaItemRow {
   subtotal: number;
   base_imponible: number;
   iva_monto: number;
+  descuento?: number | string | null;
+  descuento_global?: number | string | null;
 }
 
 interface PendingFiscalEmissionRow {
@@ -589,9 +591,11 @@ export class PgFacturaRepository implements FacturaRepository {
               iva_tipo,
               subtotal,
               base_imponible,
-              iva_monto
+              iva_monto,
+              descuento,
+              descuento_global
             )
-            values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+            values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
           `,
           [
             input.tenantId,
@@ -606,7 +610,9 @@ export class PgFacturaRepository implements FacturaRepository {
             item.iva_tipo,
             item.subtotal,
             item.base_imponible,
-            item.iva_monto
+            item.iva_monto,
+            item.descuento ?? 0,
+            item.descuento_global ?? 0
           ]
         );
       }
@@ -732,9 +738,11 @@ export class PgFacturaRepository implements FacturaRepository {
               iva_tipo,
               subtotal,
               base_imponible,
-              iva_monto
+              iva_monto,
+              descuento,
+              descuento_global
             )
-            values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+            values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
           `,
           [
             input.tenantId,
@@ -749,7 +757,9 @@ export class PgFacturaRepository implements FacturaRepository {
             item.iva_tipo,
             item.subtotal,
             item.base_imponible,
-            item.iva_monto
+            item.iva_monto,
+            item.descuento ?? 0,
+            item.descuento_global ?? 0
           ]
         );
       }
@@ -910,9 +920,11 @@ export class PgFacturaRepository implements FacturaRepository {
               iva_tipo,
               subtotal,
               base_imponible,
-              iva_monto
+              iva_monto,
+              descuento,
+              descuento_global
             )
-            values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+            values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
           `,
           [
             input.tenantId,
@@ -927,7 +939,9 @@ export class PgFacturaRepository implements FacturaRepository {
             item.iva_tipo,
             item.subtotal,
             item.base_imponible,
-            item.iva_monto
+            item.iva_monto,
+            item.descuento ?? 0,
+            item.descuento_global ?? 0
           ]
         );
       }
@@ -1723,7 +1737,9 @@ export class PgFacturaRepository implements FacturaRepository {
           iva_tipo,
           subtotal,
           base_imponible,
-          iva_monto
+          iva_monto,
+          descuento,
+          descuento_global
         from factura_items_snapshot
         where factura_operativa_id = $1
         order by line_no
@@ -1741,7 +1757,9 @@ export class PgFacturaRepository implements FacturaRepository {
       iva_tipo: row.iva_tipo,
       subtotal: Number(row.subtotal),
       base_imponible: Number(row.base_imponible),
-      iva_monto: Number(row.iva_monto)
+      iva_monto: Number(row.iva_monto),
+      ...(Number(row.descuento ?? 0) > 0 ? { descuento: Number(row.descuento) } : {}),
+      ...(Number(row.descuento_global ?? 0) > 0 ? { descuento_global: Number(row.descuento_global) } : {})
     }));
   }
 
@@ -1764,7 +1782,9 @@ export class PgFacturaRepository implements FacturaRepository {
           iva_tipo,
           subtotal,
           base_imponible,
-          iva_monto
+          iva_monto,
+          descuento,
+          descuento_global
         from factura_items_snapshot
         where factura_operativa_id = any($1::uuid[])
         order by factura_operativa_id, line_no
@@ -1784,7 +1804,10 @@ export class PgFacturaRepository implements FacturaRepository {
         iva_tipo: row.iva_tipo,
         subtotal: Number(row.subtotal),
         base_imponible: Number(row.base_imponible),
-        iva_monto: Number(row.iva_monto)
+        iva_monto: Number(row.iva_monto),
+        // SPEC_DESCUENTOS_FACTURA_v0.1 RN-08: solo cuando la linea tiene descuento (sin cambio para las demas).
+        ...(Number(row.descuento ?? 0) > 0 ? { descuento: Number(row.descuento) } : {}),
+        ...(Number(row.descuento_global ?? 0) > 0 ? { descuento_global: Number(row.descuento_global) } : {})
       });
       byFacturaId.set(row.factura_operativa_id, items);
     }
