@@ -28,7 +28,7 @@ import { type ViewState, type OperationView, type CondicionVenta, type TipoTrans
 import { formatMonto, formatGuaranies, formatCantidad, fmtFecha, formatHora, formatIntegerInput, normalizeIntegerInput, buildWhatsAppShareUrl, firstText, iniciales } from "./lib/formato";
 import { BrandMark } from "./components/BrandMark";
 import { LoadingScreen } from "./components/LoadingScreen";
-import { FilasDescuento, TotalRow } from "./components/TotalRow";
+import { FilaDescuento, TotalRow } from "./components/TotalRow";
 import { useEsEscritorio } from "./lib/useEsEscritorio";
 import { cantidadValida, normalizeDecimalInput } from "./lib/formato";
 import { mensajeResultadoReintento, formatEmailStatus, getDocumentoNombreLower, getSimpleDocumentoEstado, esEstadoFinalOperador } from "./lib/documentos";
@@ -1276,6 +1276,8 @@ function InvoiceEditor({
   // SPEC_DESCUENTOS_FACTURA_v0.1 RN-13 y RN-15.
   const [descuentoModo, setDescuentoModo] = useState<ModoDescuento>("PORCENTAJE");
   const [descuentoGlobal, setDescuentoGlobal] = useState("");
+  // RN-24 (D-9): los controles de descuento van ocultos hasta que el operador elija agregar uno.
+  const [descuentosVisibles, setDescuentosVisibles] = useState(false);
   const [previewing, setPreviewing] = useState(false);
   const [emitting, setEmitting] = useState(false);
   const [emissionError, setEmissionError] = useState<string | null>(null);
@@ -1331,6 +1333,23 @@ function InvoiceEditor({
         ? "En guaraníes, el descuento va sin decimales"
         : "El descuento admite hasta 2 decimales"
       : null;
+  // RN-24: con algun descuento cargado los controles se muestran siempre.
+  const hayDescuentos = lines.some((line) => (line.descuento_ingresado ?? "").trim() !== "") || descuentoGlobal.trim() !== "";
+  const mostrarDescuentos = descuentosVisibles || hayDescuentos;
+  function alternarDescuentos() {
+    if (hayDescuentos) {
+      // "Quitar descuentos": borra los de todas las lineas y el global, y oculta los controles.
+      setLines((current) => current.map((line) => ((line.descuento_ingresado ?? "") === "" ? line : { ...line, descuento_ingresado: "" })));
+      setDescuentoGlobal("");
+      setDescuentosVisibles(false);
+      return;
+    }
+    const mostrar = !descuentosVisibles;
+    setDescuentosVisibles(mostrar);
+    if (mostrar && modoCompleto) {
+      window.setTimeout(() => document.querySelector<HTMLInputElement>(".descuento-global input")?.focus(), 0);
+    }
+  }
   const request = useMemo<FacturaPreviewRequest | null>(() => {
     const items = lines
       .map((line) => ({
@@ -2518,6 +2537,11 @@ function InvoiceEditor({
             {modoCompleto ? (enMonedaExtranjera ? ` · precios en ${moneda} con hasta 2 decimales` : " · precios en guaranies") : ""}
           </span>
           <span className="tarjeta-cabecera-espacio" />
+          {/* SPEC_DESCUENTOS_FACTURA_v0.1 RN-24: descuentos ocultos por defecto. */}
+          <button className="ghost-action compact con-icono" onClick={alternarDescuentos} type="button">
+            <Icono nombre={hayDescuentos ? "papelera" : mostrarDescuentos ? "ojo-tachado" : "mas"} tamano={14} />{" "}
+            {hayDescuentos ? "Quitar descuentos" : mostrarDescuentos ? "Ocultar descuentos" : "Agregar descuento"}
+          </button>
           {modoCompleto ? (
             <button className="ghost-action compact con-icono" onClick={agregarLinea} type="button">
               <Icono nombre="buscar" tamano={14} /> Buscar en el catálogo
@@ -2542,6 +2566,7 @@ function InvoiceEditor({
             subtotales={previewSubtotalsByLineId}
             descuentoModo={descuentoModo}
             onCambiarDescuentoModo={setDescuentoModo}
+            conDescuento={mostrarDescuentos}
           />
         ) : (
         <div className="sale-list" aria-label="Productos o servicios agregados">
@@ -2581,8 +2606,8 @@ function InvoiceEditor({
           ) : null}
         </div>
         )}
-        {/* SPEC_DESCUENTOS_FACTURA_v0.1 RN-15: descuento sobre el total, en los dos modos. */}
-        <label className="descuento-global">
+        {/* SPEC_DESCUENTOS_FACTURA_v0.1 RN-15: descuento sobre el total, en los dos modos (RN-24: solo si se pidio). */}
+        {mostrarDescuentos ? <label className="descuento-global">
           Descuento sobre el total ({moneda === "PYG" ? "Gs." : moneda})
           <input
             aria-invalid={errorDescuentoGlobal ? true : undefined}
@@ -2594,7 +2619,7 @@ function InvoiceEditor({
           />
           <small className="field-hint">Se reparte en proporción entre todas las líneas, como lo exige SIFEN.</small>
           {errorDescuentoGlobal ? <small className="campo-error">{errorDescuentoGlobal}</small> : null}
-        </label>
+        </label> : null}
       </section>
 
       {lineSheetOpen && activeLine && !modoCompleto ? (
@@ -2674,8 +2699,8 @@ function InvoiceEditor({
                   {enMonedaExtranjera ? <small className="field-hint">En {moneda === "USD" ? "dólares" : moneda}, con hasta 2 decimales (centavos).</small> : null}
                 </label>
 
-                {/* SPEC_DESCUENTOS_FACTURA_v0.1 RN-14: descuento de la linea con el mismo conmutador de la grilla. */}
-                <label>
+                {/* SPEC_DESCUENTOS_FACTURA_v0.1 RN-14: descuento de la linea con el mismo conmutador de la grilla (RN-24: solo si se pidio). */}
+                {mostrarDescuentos ? <label>
                   <span className="descuento-cabecera">
                     Descuento
                     <span className="descuento-modo" role="group" aria-label="Descuento en porcentaje o monto">
@@ -2697,7 +2722,7 @@ function InvoiceEditor({
                   {descuentoDeLinea(activeLine, descuentoModo, moneda).error ? (
                     <small className="campo-error">{descuentoDeLinea(activeLine, descuentoModo, moneda).error}</small>
                   ) : null}
-                </label>
+                </label> : null}
               </div>
 
               {catalogSearching[activeLine.id] ? <span className="field-hint">Buscando catálogo...</span> : null}
@@ -2812,8 +2837,8 @@ function InvoiceEditor({
           <h3>Totales en {etiquetaMoneda === "Gs." ? "Gs." : moneda}</h3>
           <div className="totals-grid">
             <TotalRow label="Subtotal" moneda={moneda} value={preview?.totals.subtotal ?? 0} />
-            {/* SPEC_DESCUENTOS_FACTURA_v0.1 RN-18b: desglose por linea, sobre el total y total descuentos. */}
-            {preview ? <FilasDescuento moneda={moneda} totals={preview.totals} /> : null}
+            {/* SPEC_DESCUENTOS_FACTURA_v0.1 RN-18c: una sola fila "Descuento (x %)". */}
+            {preview ? <FilaDescuento moneda={moneda} totals={preview.totals} /> : null}
             <TotalRow label="Total sin IVA" moneda={moneda} value={preview?.totals.total_sin_iva ?? 0} />
             <div className="totales-iva">
               <TotalRow label="IVA 5%" moneda={moneda} value={preview?.totals.iva_5 ?? 0} />
@@ -2844,7 +2869,7 @@ function InvoiceEditor({
           <section className="totals-section" aria-live="polite" ref={sendSectionRef}>
             <div className="totals-grid">
               <TotalRow label="Subtotal" moneda={moneda} value={preview?.totals.subtotal ?? 0} />
-              {preview ? <FilasDescuento moneda={moneda} totals={preview.totals} /> : null}
+              {preview ? <FilaDescuento moneda={moneda} totals={preview.totals} /> : null}
               <TotalRow label="Total sin IVA" moneda={moneda} value={preview?.totals.total_sin_iva ?? 0} />
               <div className="totales-iva">
                 <TotalRow label="IVA 5%" moneda={moneda} value={preview?.totals.iva_5 ?? 0} />
@@ -2967,12 +2992,15 @@ function GrillaLineas({
   onAplicarCatalogo,
   onGuardarCatalogo,
   descuentoModo,
-  onCambiarDescuentoModo
+  onCambiarDescuentoModo,
+  conDescuento
 }: {
   lines: InvoiceLineDraft[];
   moneda: MonedaFactura;
   descuentoModo: ModoDescuento;
   onCambiarDescuentoModo: (modo: ModoDescuento) => void;
+  /** RN-24: la columna "Descuento" solo cuando el operador la pidio o hay descuentos cargados. */
+  conDescuento: boolean;
   invalidas: Set<string>;
   subtotales: Map<string, number>;
   catalogSuggestions: Record<string, CatalogoItem[]>;
@@ -3017,8 +3045,8 @@ function GrillaLineas({
             <th className="col-descripcion">Descripción</th>
             <th className="col-cantidad">Cantidad</th>
             <th className="col-precio">Precio ({moneda === "PYG" ? "Gs." : moneda})</th>
-            {/* SPEC_DESCUENTOS_FACTURA_v0.1 RN-13: conmutador % / moneda para toda la grilla. */}
-            <th className="col-descuento">
+            {/* SPEC_DESCUENTOS_FACTURA_v0.1 RN-13: conmutador % / moneda para toda la grilla (RN-24: solo si se pidio). */}
+            {conDescuento ? <th className="col-descuento">
               <span className="descuento-cabecera">
                 Descuento
                 <span className="descuento-modo" role="group" aria-label="Descuento en porcentaje o monto">
@@ -3030,7 +3058,7 @@ function GrillaLineas({
                   </button>
                 </span>
               </span>
-            </th>
+            </th> : null}
             <th className="col-iva">IVA</th>
             <th className="col-subtotal">Subtotal</th>
             <th className="col-acciones"><span className="sr-only">Acciones</span></th>
@@ -3127,7 +3155,7 @@ function GrillaLineas({
                     value={enMonedaExtranjera ? line.precio_unitario.replace(".", ",") : formatIntegerInput(line.precio_unitario)}
                   />
                 </td>
-                <td className="col-descuento">
+                {conDescuento ? <td className="col-descuento">
                   <input
                     aria-invalid={descuentoLinea.error ? true : undefined}
                     aria-label={`Descuento, línea ${indice + 1}`}
@@ -3138,7 +3166,7 @@ function GrillaLineas({
                     placeholder={descuentoModo === "PORCENTAJE" ? "0 %" : "0"}
                     value={(line.descuento_ingresado ?? "").replace(".", ",")}
                   />
-                </td>
+                </td> : null}
                 <td className="col-iva">
                   <select
                     aria-label={`IVA, línea ${indice + 1}`}
@@ -3177,7 +3205,7 @@ function GrillaLineas({
               </tr>
               {invalida ? (
                 <tr className="fila-motivo" data-grilla-motivo={indice}>
-                  <td colSpan={8}>
+                  <td colSpan={conDescuento ? 8 : 7}>
                     <Icono nombre="alerta" tamano={14} /> {motivoLineaInvalida(line, moneda, descuentoModo)}
                   </td>
                 </tr>

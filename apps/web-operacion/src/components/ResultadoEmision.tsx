@@ -4,7 +4,7 @@ import { esClienteInnominado } from "../lib/innominado";
 import { etiquetaCondicionVenta, formatDocumentoTipo } from "../lib/estados";
 import { type DocumentoEstado, type OperationalContextResponse, type DocumentoResponse, type DeliveryLinkResponse, type EmailStatusResponse, type ClasePaso } from "../tipos";
 import { formatMonto, formatGuaranies, formatCantidad, formatHora, buildWhatsAppShareUrl, formatIva } from "../lib/formato";
-import { desgloseDescuentos } from "../lib/descuentos";
+import { filaDescuento } from "../lib/descuentos";
 import { formatEmailStatus, getDocumentoNombreLower, getSimpleDocumentoEstado, esEstadoFinalOperador } from "../lib/documentos";
 
 export function pasosPorEstado(estado: DocumentoEstado): Array<{ etiqueta: string; clase: ClasePaso }> {
@@ -237,10 +237,11 @@ export function ResultadoEmision({
             </div>
           ) : null}
           {esRemision ? null : <div className="resultado-totales">
-            {/* SPEC_DESCUENTOS_FACTURA_v0.1 RN-19b: el mismo desglose que el editor. */}
-            {desgloseDescuentos(documento.totals).map((fila) => (
-              <div className={fila.cierre ? "descuento-cierre" : "descuento-parcial"} key={fila.etiqueta}><span>{fila.etiqueta}</span><strong className="cifra">− {formatMonto(fila.monto, moneda)}</strong></div>
-            ))}
+            {/* SPEC_DESCUENTOS_FACTURA_v0.1 RN-19c: la misma fila "Descuento (x %)" que el editor. */}
+            {(() => {
+              const fila = filaDescuento(documento.totals);
+              return fila ? <div><span>{fila.etiqueta}</span><strong className="cifra">− {formatMonto(fila.monto, moneda)}</strong></div> : null;
+            })()}
             <div><span>Total sin IVA</span><strong className="cifra">{formatMonto(documento.totals.total_sin_iva, moneda)}</strong></div>
             <div><span>IVA 5%</span><strong className="cifra">{formatMonto(documento.totals.iva_5, moneda)}</strong></div>
             <div><span>IVA 10%</span><strong className="cifra">{formatMonto(documento.totals.iva_10, moneda)}</strong></div>

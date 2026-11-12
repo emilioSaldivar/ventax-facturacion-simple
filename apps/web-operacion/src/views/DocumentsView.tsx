@@ -8,7 +8,7 @@ import { EncabezadoPantalla } from "../components/EncabezadoPantalla";
 import { TIPOS_PROXIMAMENTE } from "../lib/tiposEmision";
 import { AvisoPuntoDistinto } from "../components/AvisoPuntoDistinto";
 import { useBorradorSinEmitir } from "../lib/borradores";
-import { desgloseDescuentos } from "../lib/descuentos";
+import { filaDescuento } from "../lib/descuentos";
 import { etiquetaPunto, nombrePunto, numeroConPunto } from "../lib/punto";
 import { Icono } from "../components/Icono";
 import { pasosPorEstado } from "../components/ResultadoEmision";
@@ -1128,12 +1128,15 @@ export function DocumentsView({
                   </div>
                 )}
                 {/* SPEC_DESCUENTOS_FACTURA_v0.1 RN-19: el descuento (oficial de FE si ya esta aprobada). */}
-                {desgloseDescuentos(selected.totals).map((fila) => (
-                  <div key={fila.etiqueta}>
-                    <dt>{fila.etiqueta}</dt>
-                    <dd>− {formatMonto(fila.monto, selected.moneda)}</dd>
-                  </div>
-                ))}
+                {(() => {
+                  const fila = filaDescuento(selected.totals);
+                  return fila ? (
+                    <div>
+                      <dt>{fila.etiqueta}</dt>
+                      <dd>− {formatMonto(fila.monto, selected.moneda)}</dd>
+                    </div>
+                  ) : null;
+                })()}
                 <div>
                   <dt>Email</dt>
                   <dd>{formatEmailStatus(emailStatus?.status ?? selected.delivery.email_status)}</dd>

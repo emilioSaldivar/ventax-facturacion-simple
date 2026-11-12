@@ -1,6 +1,6 @@
 # SPEC - Descuentos en la factura v0.1
 
-Estado: implementada y en produccion (`segel-fs-2026.11.12`); refinamiento del 2026-11-12 sobre la tarjeta de totales y la convivencia de los dos descuentos (seccion "Refinamiento del 2026-11-12"). Escrita el 2026-11-11 a pedido del usuario (FS-66).
+Estado: implementada y en produccion (`segel-fs-2026.11.12`); refinamiento del 2026-11-12 sobre la tarjeta de totales, la convivencia de los dos descuentos y los descuentos ocultos por defecto (seccion "Refinamiento del 2026-11-12"). Escrita el 2026-11-11 a pedido del usuario (FS-66).
 
 ## Alineacion
 
@@ -117,16 +117,27 @@ Pedido del usuario del 2026-11-12, con la version ya en produccion: (1) probar e
 | D-6 | **Conviven.** Verificado en el codigo de FE `v0.51` (`segel-rc4.34`, `src/domain/factura.schema.ts`, `validarDescuentos`, lineas 238-256): por item exige `descuento + anticipo < precioUnitario`; con global calcula un porcentaje sobre el bruto y lo resta a **cada** item, tenga o no descuento propio (`neto = precioUnitario − descuento − anticipo − precioUnitario × porcentaje`), y solo rechaza si ese neto queda en cero o negativo. La guia §43.2 lo dice con las mismas palabras ("se aplica a cada precio unitario, tenga o no el articulo descuento propio") y el ejemplo oficial §43.3 combina los dos. Aprobadas en SIFEN test con los dos descuentos a la vez: `001-001-1010640` (PYG) y `1010644` (USD). **No se bloquea ningun campo**: los dos siguen disponibles y la tarjeta de totales muestra cada uno en su fila (RN-18b). |
 | D-7 | El usuario prueba en local con `operador-ensayo` (stack `.local/segel-ensayo`, SIFEN test); la clave vive fuera del repo (`fe-local-data/segel-ensayo/operador-final.pass`). |
 
-- **RN-18b. Desglose de descuentos en los totales (reemplaza a RN-18).** La tarjeta de totales (modo completo) y la seccion de totales (modo simple) muestran, entre "Subtotal" y "Total sin IVA" y solo cuando corresponde:
-  - "Descuento por línea" con `Σ cantidad × descuento` (`totals.descuento − totals.descuento_global`), cuando es mayor que cero;
-  - "Descuento sobre el total" con `totals.descuento_global`, cuando es mayor que cero;
-  - "Total descuentos" con `totals.descuento`, solo cuando hay de los dos.
-  La fila que cierra el desglose (la unica cuando hay un solo tipo, "Total descuentos" cuando hay los dos) lleva entre parentesis el porcentaje sobre el subtotal bruto: `descuento × 100 / subtotal`, sin decimales si es entero y con un decimal si no ("12 %", "3,1 %"), con coma decimal. Los montos van en negativo con el formato de la moneda ("− Gs. 30.000"); las filas parciales en tinta atenuada y la de cierre en tinta normal. Sin descuentos no aparece ninguna fila (identico a hoy). "Total a pagar" sigue siendo el `total` neto.
-- **RN-19b. Resultado y ficha.** `ResultadoEmision` y la ficha de Documentos muestran el mismo desglose (las mismas filas y el mismo porcentaje) en lugar de la fila unica "Descuento". Con `fuente: "FE"` el `descuento` es el oficial y `descuento_global` el cargado (RN-08), asi que el de linea sale por diferencia.
-- **RN-23. Sin exclusion entre descuentos (D-6).** El campo "Descuento sobre el total" nunca se deshabilita por tener descuentos de linea, ni al reves. La unica validacion cruzada sigue siendo RN-04 (el global no puede dejar una linea sin precio).
+- **RN-18b (2026-11-12, reemplazada el mismo dia por RN-18c).** Primera version del refinamiento: desglose en tres filas ("Descuento por línea", "Descuento sobre el total", "Total descuentos"). El usuario la vio en local y decidio D-8: una sola fila. Queda en el historial de git (`5b11e34`).
 
-- **CA-12. Desglose en pantalla (Playwright 1440, 1280 y 390).** Con 2 × 100.000 y 1 × 50.000 (IVA 10 %): (a) solo 10 % en la linea 1: fila "Descuento por línea (8 %) − Gs. 20.000", sin fila "sobre el total" ni "Total descuentos"; (b) solo global 30.000: "Descuento sobre el total (12 %) − Gs. 30.000", sin fila "por línea"; (c) los dos: las tres filas, "Total descuentos (20 %) − Gs. 50.000" y "Total a pagar Gs. 200.000"; (d) sin descuentos: ninguna fila con "Descuento". En los tres anchos, sin desborde horizontal ni emojis.
-- **CA-13. Resultado y ficha con el desglose.** La ficha de `1010645` (solo global 7.777 sobre 250.000) muestra "Descuento sobre el total (3,1 %) − Gs. 7.777" y la de `1010644` (USD, de linea 3,33 y global 5,55) muestra las tres filas con "Total descuentos (9,8 %) − USD 8,88".
+Decisiones del usuario del 2026-11-12, al ver el desglose en local:
+
+| Id | Decision |
+|---|---|
+| D-8 | **Una sola fila en los totales**, sin importar si el descuento fue de linea, global o los dos: el cliente ya sabe que descuento le hicieron; el resumen tiene que ser siempre el mismo para que el operador lo reconozca sin volver a pensar que tipo aplico. La fila es "Descuento (x %)" con el porcentaje sobre el subtotal bruto de toda la operacion y el monto total de descuentos. |
+| D-9 | **Los descuentos van ocultos por defecto.** No se usan siempre; la columna de la grilla, el campo de la hoja y el campo "Descuento sobre el total" no se muestran hasta que el operador elija agregar un descuento. Si hay un descuento cargado, se muestran. |
+
+- **RN-18c. Fila unica de descuento en los totales (reemplaza a RN-18 y RN-18b).** La tarjeta de totales (modo completo) y la seccion de totales (modo simple) muestran, entre "Subtotal" y "Total sin IVA", una unica fila "Descuento (x %)" con `totals.descuento` en negativo con el formato de la moneda ("− Gs. 50.000"), solo cuando `totals.descuento > 0`. El porcentaje es `descuento × 100 / subtotal` (subtotal bruto): sin decimales si es entero y con un decimal si no ("12 %", "3,1 %"), con coma decimal. No se distingue si vino de lineas, del global o de los dos. Sin descuentos no aparece ninguna fila. "Total a pagar" sigue siendo el `total` neto.
+- **RN-19c. Resultado y ficha.** `ResultadoEmision` y la ficha de Documentos muestran la misma fila "Descuento (x %)". Con `fuente: "FE"` el `descuento` es el oficial de FE y el subtotal el `bruto` de FE.
+- **RN-23. Sin exclusion entre descuentos (D-6).** El campo "Descuento sobre el total" nunca se deshabilita por tener descuentos de linea, ni al reves. La unica validacion cruzada sigue siendo RN-04 (el global no puede dejar una linea sin precio).
+- **RN-24. Descuentos ocultos por defecto (D-9).** Al abrir Nueva factura no se ven la columna "Descuento" de la grilla (RN-13), el campo "Descuento" de la hoja de la linea (RN-14) ni el campo "Descuento sobre el total" (RN-15). En la cabecera de "Productos y servicios", en los dos modos, hay un boton secundario:
+  - sin descuentos y ocultos: "Agregar descuento"; al pulsarlo se muestran los tres controles y el foco va al campo "Descuento sobre el total" (modo completo) o queda en la cabecera (modo simple);
+  - mostrados y sin ningun descuento cargado: "Ocultar descuentos"; los vuelve a ocultar;
+  - con algun descuento cargado (texto en `descuento_ingresado` de alguna linea o en "Descuento sobre el total"): los controles se muestran siempre (aunque el operador no haya pulsado el boton, por ejemplo al rehacer una factura con descuento) y el boton dice "Quitar descuentos": borra los descuentos de todas las lineas y el global, y oculta los controles. Es una accion de un clic y reversible volviendo a cargarlos.
+  La preferencia no se guarda: cada factura nueva arranca oculta (D-9). La grilla sin la columna vuelve a los anchos previos a esta cadena (mas lugar para la descripcion). El conmutador "%" / moneda vive dentro de la columna y la hoja, asi que se oculta con ellos.
+
+- **CA-12. Fila unica en pantalla (Playwright 1440, 1280 y 390).** Con 2 × 100.000 y 1 × 50.000 (IVA 10 %): (a) solo 10 % en la linea 1: "Descuento (8 %) − Gs. 20.000"; (b) solo global 30.000: "Descuento (12 %) − Gs. 30.000"; (c) los dos: "Descuento (20 %) − Gs. 50.000" y "Total a pagar Gs. 200.000"; (d) sin descuentos: ninguna fila con "Descuento". Nunca aparecen "por línea", "sobre el total" ni "Total descuentos" en los totales. En los tres anchos, sin desborde horizontal ni emojis.
+- **CA-13. Resultado y ficha.** La ficha de `1010645` (solo global 7.777 sobre 250.000) muestra "Descuento (3,1 %) − Gs. 7.777" y la de `1010644` (USD, 3,33 + 5,55 sobre 90,56) muestra "Descuento (9,8 %) − USD 8,88".
+- **CA-14. Ocultos por defecto (Playwright 1440, 1280 y 390).** Al abrir Nueva factura no existe la columna "Descuento" en la grilla (modo completo), ni el campo "Descuento sobre el total", ni "Descuento de la línea" en la hoja (modo simple); la cabecera muestra "Agregar descuento". Al pulsarlo aparecen los tres (segun el modo) y el boton pasa a "Ocultar descuentos"; al pulsarlo de nuevo desaparecen. Con un descuento cargado el boton dice "Quitar descuentos"; al pulsarlo los totales vuelven a los de sin descuento, los controles se ocultan y el boton vuelve a "Agregar descuento". Sin desborde ni emojis.
 
 ## Fuera de alcance
 
