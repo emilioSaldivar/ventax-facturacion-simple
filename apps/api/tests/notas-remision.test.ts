@@ -303,6 +303,8 @@ describe("RN-24 gateway real: POST /v1/nota-remision", () => {
       expect(cuerpo).not.toHaveProperty("tipo_documento");
       expect(cuerpo.receptor.email).toBeUndefined();
       expect(r.numero_fiscal).toBe("0000509");
+      // Decision del usuario (2026-11-11): envio siempre por lote; FE exige `envio.mode` en la NRE.
+      expect(cuerpo.envio).toEqual({ mode: "BATCH" });
     } finally {
       vi.unstubAllGlobals();
     }

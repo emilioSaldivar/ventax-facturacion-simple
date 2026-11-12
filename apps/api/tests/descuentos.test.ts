@@ -118,6 +118,7 @@ describe("RN-07: pedido a FE", () => {
     expect(cuerpo.items[1]).not.toHaveProperty("descuento");
     expect(cuerpo.descuentoGlobal).toBe(30000);
     expect(JSON.stringify(cuerpo.condicionOperacion)).toContain("200000");
+    expect(cuerpo.envio).toEqual({ mode: "BATCH" });
   });
 
   it("sin descuentos, el pedido no lleva los campos", async () => {
