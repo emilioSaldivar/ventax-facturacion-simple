@@ -2679,7 +2679,7 @@ function InvoiceEditor({
                   <span className="descuento-cabecera">
                     Descuento
                     <span className="descuento-modo" role="group" aria-label="Descuento en porcentaje o monto">
-                      <button aria-pressed={descuentoModo === "PORCENTAJE"} className={descuentoModo === "PORCENTAJE" ? "active" : ""} onClick={(event) => { event.preventDefault(); setDescuentoModo("PORCENTAJE"); }} type="button">
+                      <button aria-label="Porcentaje" aria-pressed={descuentoModo === "PORCENTAJE"} className={descuentoModo === "PORCENTAJE" ? "active" : ""} onClick={(event) => { event.preventDefault(); setDescuentoModo("PORCENTAJE"); }} type="button">
                         %
                       </button>
                       <button aria-pressed={descuentoModo === "MONTO"} className={descuentoModo === "MONTO" ? "active" : ""} onClick={(event) => { event.preventDefault(); setDescuentoModo("MONTO"); }} type="button">
@@ -3021,7 +3021,7 @@ function GrillaLineas({
               <span className="descuento-cabecera">
                 Descuento
                 <span className="descuento-modo" role="group" aria-label="Descuento en porcentaje o monto">
-                  <button aria-pressed={descuentoModo === "PORCENTAJE"} className={descuentoModo === "PORCENTAJE" ? "active" : ""} onClick={() => onCambiarDescuentoModo("PORCENTAJE")} type="button">
+                  <button aria-label="Porcentaje" aria-pressed={descuentoModo === "PORCENTAJE"} className={descuentoModo === "PORCENTAJE" ? "active" : ""} onClick={() => onCambiarDescuentoModo("PORCENTAJE")} type="button">
                     %
                   </button>
                   <button aria-pressed={descuentoModo === "MONTO"} className={descuentoModo === "MONTO" ? "active" : ""} onClick={() => onCambiarDescuentoModo("MONTO")} type="button">

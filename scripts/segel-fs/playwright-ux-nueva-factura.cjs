@@ -226,7 +226,8 @@ async function marco(page, v) {
     await cargarCliente(p);
     await p.getByRole("button", { name: "+ Agregar producto" }).click();
     await p.getByPlaceholder("Ingresá descripción").fill("UX servicio simple");
-    await p.getByPlaceholder("0").fill("55000");
+    // Con los descuentos (DES-008) hay mas campos con placeholder "0" en la hoja: se apunta al precio por su nombre.
+    await p.getByRole("textbox", { name: "Precio" }).fill("55000");
     await p.getByRole("button", { name: "AGREGAR Y NO GUARDAR" }).click();
     await p.waitForTimeout(1200);
     check("CA-08 390: linea compacta con lapiz SVG", (await p.locator(".sale-item-card svg").count()) === 1 && (await texto(p, ".sale-item-card")).includes("Gs. 55.000"));

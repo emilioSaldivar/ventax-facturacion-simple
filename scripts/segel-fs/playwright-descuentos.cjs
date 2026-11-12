@@ -288,7 +288,7 @@ async function casoValidacion(browser) {
     const t = await texto(page);
     check("CA-03 (c): el global mayor que el bruto muestra el mensaje de la API", /deja la línea 1 sin precio/.test(t), t.slice(-300));
     check("CA-03 (c): y Crear factura queda bloqueado", await page.getByRole("button", { name: "Crear factura" }).isDisabled());
-    await page.locator("table.grilla-lineas thead").getByRole("group", { name: "Descuento en porcentaje o monto" }).getByRole("button", { name: "%" }).click();
+    await page.locator("table.grilla-lineas thead").getByRole("group", { name: "Descuento en porcentaje o monto" }).getByRole("button", { name: "Porcentaje" }).click();
     await page.locator('[data-grilla-fila="0"]').getByLabel(/^Descuento, línea/).fill("100");
     await page.waitForTimeout(400);
     check("RN-16: 100 % no es valido", (await texto(page)).includes("El porcentaje va de 0 a 99,99"));
@@ -380,7 +380,7 @@ async function casoSifenMix(browser) {
     await abrirVista(page, "Nueva factura");
     await page.locator("table.grilla-lineas").waitFor();
     await cliente(page);
-    await conmutador(page).getByRole("button", { name: "%" }).click();
+    await conmutador(page).getByRole("button", { name: "Porcentaje" }).click();
     await fila(page, 0, { descripcion: "Mix A IVA 10 DES", cantidad: "2", precio: "100000", descuento: "10" });
     const f1 = await fila(page, 1, { descripcion: "Mix B exenta DES", cantidad: "1", precio: "30000", descuento: "5" });
     await f1.getByLabel(/^IVA, línea/).selectOption("EXENTA");
