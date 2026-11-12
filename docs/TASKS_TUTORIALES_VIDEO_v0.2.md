@@ -10,7 +10,7 @@
 | P-7 | (v0.1) Regrabar V1 y V4 | **Resuelta (2026-11-12):** se regraban |
 | P-8 | Si se regraba tambien V2 (etiquetas de la remision) y si V3 y V6 quedan como estan. Propuesta: V2 si (dice "Por planilla", que ya no es cierto en el stack); V3 y V6 no (siguen siendo correctas; lo nuevo lo explican V7 y V9) | **Resuelta (2026-11-12):** se acepta la propuesta |
 | P-9 | Transportista de V8: SEGEL SA `80026570-0` como empresa transportista (SPEC D-13) | **Resuelta (2026-11-12):** se acepta |
-| P-10 | Orden para grabar V7 (descuentos) | Abierta: el usuario la da "en su momento" (SPEC D-11) |
+| P-10 | Orden para grabar V7 (descuentos) | **Resuelta (2026-11-12):** el usuario dio la orden ("realiza el video de descuentos") |
 
 ## Matriz
 
@@ -25,9 +25,9 @@
 | TUT2-006 | V2 regrabado (si P-8 se acepta) | mp4; escena de remision con las tres pestañas | HECHO (2026-11-12): 29 pasos, 3:35 |
 | TUT2-007 | Revision final de V1, V2, V4, V5, V8, V9 | una captura por escena; `cobertura.cjs` sin filas pendientes salvo las de V7 | HECHO (2026-11-12): hojas de capturas revisadas; `cobertura.cjs` 88/97 (faltan las 8 de V7 y `4-rechazada`, justificada en la v0.1) |
 | TUT2-008 | V7 descuentos: guion y prueba seca | Playwright sin emitir: CA-12 de descuentos visible en las escenas 3 a 5 | HECHO (2026-11-12): en seco, 14 pasos, sin emitir; totales "Descuento (8 %)" y "Descuento (20 %)", Total a pagar 200.000 |
-| TUT2-009 | V7 descuentos: grabacion | 1 factura aprobada con "Descuento (20 %)"; mp4 | **Espera la orden del usuario (P-10, D-11)** |
+| TUT2-009 | V7 descuentos: grabacion | 1 factura aprobada con "Descuento (20 %)"; mp4 | HECHO (2026-11-12): factura `1010660` aprobada; FS = FE (subtotal 250.000, descuento 50.000, total 200.000, `fuente` FE); 17 pasos, 2:28 |
 | TUT2-011 | V10 anular una factura (SPEC D-15): guion, prueba en seco y grabacion | 1 factura aprobada y luego "Anulada" en SIFEN test; intento fuera de plazo con el mensaje de plazo; mp4; cobertura §3.13 | HECHO (2026-11-12): factura `1010659` aprobada y "Anulada" (evento aceptado); `1010551` fuera de plazo con "Pasó el plazo…", sigue emitida (sin evento); 17 pasos, 2:15 |
-| TUT2-010 | Cierre: SPEC/PLAN/TASKS con lo aprendido; `BACKLOG` (hallazgos nuevos y estado de la cadena) | — | Pendiente |
+| TUT2-010 | Cierre: SPEC/PLAN/TASKS con lo aprendido; `BACKLOG` (hallazgos nuevos y estado de la cadena) | — | HECHO (2026-11-12): SPEC con V10 y estado cerrado; PLAN con ajustes (§6) y hallazgos H-17 a H-31 (§7); BACKLOG con FS-81 a FS-90 y FS-95 a FS-98 y la fila TUT v0.2 en DONE |
 
 ## Antes de cada corrida
 
@@ -72,3 +72,15 @@ Pedido del usuario del mismo dia: video propio que explique lo que dispone SIFEN
 **Cobertura:** 100/103 contando la prueba en seco de V7 (que cubre 5 de sus 8 filas; faltan las que necesitan emitir: resultado y nota de credito total) y `4-rechazada`, justificada en la v0.1. Sin V7, 94/103.
 
 **Hallazgos** H-28 a H-31 en PLAN §7, en `BACKLOG` como FS-95 a FS-98 (FS-91 y FS-92 ya los usaba otra sesion). FS-97 (motivo de anulacion de menos de 5 caracteres) es de prioridad alta.
+
+### 2026-11-12 (TUT2-009, V7 descuentos)
+
+Orden del usuario del mismo dia. Stack local en `6ee9031` (sin cambios de la app desde la prueba en seco); FE avisado.
+
+| Video | mp4 | Duracion | Pasos | Guardia | SIFEN test |
+|---|---|---|---|---|---|
+| V7 descuentos | `v7-descuentos.mp4` | 2:28 | 17 | sin fallas | factura `1010660` (SEGEL SA; 2 × 100.000 con 10 % y 1 × 50.000; descuento sobre el total 30.000) aprobada; totales de FE: subtotal 250.000, descuento 50.000, total 200.000 |
+
+Escenas verificadas en capturas y en un cuadro del video: "Agregar descuento", "Descuento (8 %)", aviso "El porcentaje va de 0 a 99,99", "Descuento (20 %)" con Total a pagar 200.000, hoja del modo simple con "Descuento" y su conmutador, resultado y ficha con la columna "Descuento" y la fila "Descuento (20 %)", ventana de nota de credito con "Parcial" deshabilitado. Un intento, sin fallas.
+
+**Cobertura final:** 102/103 (falta solo `4-rechazada` en V3, justificada en la v0.1).

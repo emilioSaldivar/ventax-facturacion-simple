@@ -1,6 +1,6 @@
 # SPEC — Tutoriales en video para operadores v0.2
 
-**Estado:** borrador (2026-11-12), escrito con la punta de la rama en `6ee9031`
+**Estado:** cerrado (2026-11-12): diez videos grabados contra `6ee9031` (TASKS v0.2)
 **Rama:** `feat/identidad-segel` (marca Segel). No va a `master`.
 **Cadena:** `SPEC_TUTORIALES_VIDEO_v0.2` → `PLAN_TUTORIALES_VIDEO_v0.2` → `TASKS_TUTORIALES_VIDEO_v0.2`
 **Base:** `SPEC_TUTORIALES_VIDEO_v0.1` sigue vigente (motivo, doble uso, mapa §3.1 a §3.9, estados §4, mensajes M-1 a M-7, decisiones D-1 a D-9, restricciones R-1 a R-8). Esta version solo agrega y cambia lo que se dice aca.

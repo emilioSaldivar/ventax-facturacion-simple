@@ -27,7 +27,7 @@ Las filas de la tabla de iniciativas de julio y agosto (mas abajo) conservan su 
 | Critico | FS-56 | Nota de remision, entrega E2 (datos guardados, domicilio en la agenda, facturas asociadas) | **CON CADENA** | idem | Implementar cuando se pida |
 | Critico | FS-62 y FS-60 | Validaciones del receptor (RUC con DV, correo, telefono, nombre, direccion) | **DONE en produccion** (2026-11-12) | `SPEC/PLAN/TASKS_VALIDACIONES_RECEPTOR_v0.1` | VAL-013 (no bloquea) |
 | Critico | ATO-009 | Textos del operador en produccion | **DONE en produccion** (2026-11-12) | `SPEC/PLAN/TASKS_AJUSTES_TEXTOS_OPERADOR_v0.1` | — |
-| Bajo | TUT v0.2 | Tutoriales en video: V7 descuentos, V8 nota de remision, V9 catalogo en dolares; regrabar V1, V2, V4, V5 (hallazgos de la v0.1 en FS-75 a FS-80) | **EN CURSO** (2026-11-12): V1, V2, V4, V5, V8, V9 y V10 (anular factura) grabados; V7 con guion probado en seco | `SPEC/PLAN/TASKS_TUTORIALES_VIDEO_v0.2` | V7 espera la orden del usuario; hallazgos FS-81 a FS-90 y FS-95 a FS-98 |
+| Bajo | TUT v0.2 | Tutoriales en video: V7 descuentos, V8 nota de remision, V9 catalogo en dolares; regrabar V1, V2, V4, V5 (hallazgos de la v0.1 en FS-75 a FS-80) | **DONE (2026-11-12)**: V1, V2, V4, V5 regrabados; V7 descuentos, V8 remision, V9 catalogo USD y V10 anular factura grabados (cobertura 102/103) | `SPEC/PLAN/TASKS_TUTORIALES_VIDEO_v0.2` | Cierre TUT2-010; hallazgos FS-81 a FS-90 y FS-95 a FS-98 |
 | Critico | FS-55, FS-57 | Nota de debito y autofactura | **PENDIENTE** | FE ya las publico | Cadena cuando se pida |
 | Menos critico | FS-67 | Recibos asociados a facturas a credito | **PENDIENTE** | — | Cadena |
 | Menos critico | FS-68 | Documentos asociados entre si | **PENDIENTE** | — | Cadena |
