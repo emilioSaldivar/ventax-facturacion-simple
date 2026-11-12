@@ -24,7 +24,7 @@ Repite el procedimiento de E-6 (`TASKS_DESPLIEGUE_SEGEL_FS_v0.2`), que ya funcio
 
 ### 2.1 Imagenes (estacion, unos 5 minutos)
 
-- `git archive <tag>` a un directorio temporal; `docker build` de `infra/docker/api.Dockerfile` (etiquetas `segel-fs-prod-api:<sha>` y `segel-fs-prod-migrate:<sha>`) y `infra/docker/frontend.Dockerfile` (`segel-fs-prod-frontend:<sha>`) con `--build-arg BUILD_COMMIT_SHA=<sha>` y `--network host` (red local sin ruta directa).
+- `git archive <tag>` a un directorio temporal; `docker build` de `infra/docker/api.Dockerfile` (etiquetas `segel-fs-api:<sha>` y `segel-fs-migrate:<sha>`) y `infra/docker/frontend.Dockerfile` (`segel-fs-frontend:<sha>`) con `--build-arg BUILD_COMMIT_SHA=<sha>` y `--network host` (red local sin ruta directa).
 - `docker save` de las tres imagenes y transferencia por SSH a la VPS (`docker load`), como en E-6. No se usan `build-images.sh` ni `deploy.sh` de FE porque transfieren tambien las imagenes de FE.
 
 ### 2.2 Respaldo (VPS, RN-01)
@@ -41,7 +41,7 @@ Repite el procedimiento de E-6 (`TASKS_DESPLIEGUE_SEGEL_FS_v0.2`), que ya funcio
 
 | Que | Como | Esperado |
 |---|---|---|
-| Migraciones | `docker logs segel-fs-migrate-1` y el conteo de la tabla de migraciones | `0046` a `0049` aplicadas; 49 |
+| Migraciones | `docker logs segel-fs-migrate-1` y `select count(*), max(version) from schema_migrations` | `0046` a `0049` aplicadas; 49 |
 | Version | `curl -sI http://10.100.0.145:8092/api/v1/health` y `/app/` | `X-App-Version: <sha>`; 200 |
 | Salud | `docker ps` (api, frontend `healthy`); salud de FE por la red interna | OK |
 | Datos | `select count(*) from facturas_operativas`; `select count(*), count(*) filter (where moneda='PYG') from catalogo_items where deleted_at is null`; `select count(*) from factura_items_snapshot where descuento <> 0 or descuento_global <> 0`; facturadores y usuarios | Iguales a antes; todos PYG; 0 lineas con descuento |

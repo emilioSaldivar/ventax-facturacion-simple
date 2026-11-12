@@ -21,7 +21,7 @@ Llevar a produccion (`segel-fs`, VPS propia de Segel) la version de FS que hoy e
 
 ## Que entra
 
-Todo lo que hay entre `ed8b493` y el commit que se etiquete (62 commits al 2026-11-11, 91 archivos de codigo y pruebas). Por cadena:
+Todo lo que hay entre `ed8b493` y el commit que se etiquete (63 commits al 2026-11-11; 64 archivos en `apps`, `packages`, `db` y `spec`). Por cadena:
 
 | Cadena | Que cambia para el operador | Migraciones | Evidencia |
 |---|---|---|---|
