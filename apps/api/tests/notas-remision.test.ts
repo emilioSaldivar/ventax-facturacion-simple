@@ -389,3 +389,23 @@ describe("FE rc4.32: punto sin numerador tipo 7 responde 500 ISSUE_NRE_FAILED", 
   });
 });
 
+
+describe("RN-23: la ficha de una remision en error operativo muestra el motivo de FE", () => {
+  it("titulo y descripcion propios", async () => {
+    const { deriveAccion } = await import("../src/modules/facturas/facturas.accion");
+    const r = deriveAccion({
+      id: "d1",
+      tipo: "NOTA_REMISION",
+      estado: "ERROR_OPERATIVO",
+      document_uuid: null,
+      cdc: null,
+      numero_fiscal: null,
+      fiscal_status_raw: null,
+      sifen_result_code: null,
+      sifen_result_message: "Este punto de expedición todavía no tiene numeración para notas de remisión. Pedila a Segel.",
+      sifen_last_checked_at: null,
+      created_at: new Date().toISOString()
+    } as never);
+    expect(r.accion_detalle).toMatchObject({ titulo: "No se pudo emitir la nota de remisión", descripcion: expect.stringContaining("Pedila a Segel") });
+  });
+});

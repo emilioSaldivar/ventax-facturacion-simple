@@ -149,6 +149,18 @@ export function deriveAccion(documento: DeriveAccionInput): { accion: DocumentoA
           }
         };
       }
+      // SPEC_NOTA_REMISION_v0.1 RN-23 y RN-01b: la nota de remision muestra el motivo concreto de FE.
+      if (documento.tipo === "NOTA_REMISION" && documento.sifen_result_message) {
+        return {
+          accion: "REQUIERE_ACCION",
+          accion_detalle: {
+            titulo: "No se pudo emitir la nota de remisión",
+            descripcion: documento.sifen_result_message,
+            acciones_sugeridas: ["CORREGIR_REEMITIR"],
+            soporte_payload: null
+          }
+        };
+      }
       return {
         accion: "REQUIERE_ACCION",
         accion_detalle: {

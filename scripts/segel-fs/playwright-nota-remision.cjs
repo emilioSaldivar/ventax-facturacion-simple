@@ -197,7 +197,7 @@ async function emitirYEsperar(page, etiqueta) {
   let final = false;
   while (!final && Date.now() - inicio < ESPERA_APROBACION_MS) {
     aprobada = (await page.locator(".paso.hecho").count()) >= 4;
-    const estado = (await page.locator(".resultado-emision .estado-documento").first().getAttribute("data-estado").catch(() => null)) ?? "";
+    const estado = (await page.locator(".resultado-emision [data-estado]").first().getAttribute("data-estado").catch(() => null)) ?? "";
     final = aprobada || ["RECHAZADA", "ERROR_OPERATIVO", "ERROR_TEMPORAL", "ANULADA"].includes(estado);
     if (!final) {
       await page.waitForTimeout(20000);
@@ -209,7 +209,7 @@ async function emitirYEsperar(page, etiqueta) {
   aprobada = aprobada || (await page.locator(".paso.hecho").count()) >= 4;
   const texto = (await page.locator("main").innerText()).replace(/\s+/g, " ");
   const numero = (texto.match(/(\d{3}-\d{3}-\d{7}|\b\d{7}\b)/) ?? [])[1] ?? null;
-  const estadoFinal = (await page.locator(".resultado-emision .estado-documento").first().getAttribute("data-estado").catch(() => null)) ?? null;
+  const estadoFinal = (await page.locator(".resultado-emision [data-estado]").first().getAttribute("data-estado").catch(() => null)) ?? null;
   await page.screenshot({ path: path.join(outDir, `${etiqueta}.png`), fullPage: true });
   emitidas.push({ etiqueta, numero, aprobada, estado: estadoFinal, segundos: Math.round((Date.now() - inicio) / 1000) });
   return { aprobada, texto, estado: estadoFinal };
@@ -270,7 +270,8 @@ async function casoAnular(browser) {
   const { ctx, page } = await entrar(browser, 1440, 900);
   try {
     await abrirVista(page, "Documentos");
-    await page.getByRole("button", { name: /^Notas de remisión/ }).click();
+    // Pestaña de Documentos (no la entrada del menu lateral con el mismo nombre).
+    await page.getByRole("group", { name: "Tipo de documento" }).getByRole("button", { name: /^Notas de remisión/ }).click();
     await page.getByPlaceholder(/Buscar/).first().fill(objetivo.replace(/^\d{3}-\d{3}-/, ""));
     await page.getByPlaceholder(/Buscar/).first().press("Enter");
     const fila = page.locator("table.documents-tabla tbody tr", { hasText: objetivo.replace(/^\d{3}-\d{3}-/, "") }).first();

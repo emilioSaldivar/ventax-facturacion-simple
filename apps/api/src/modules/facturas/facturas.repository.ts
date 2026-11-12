@@ -1276,13 +1276,20 @@ export class PgFacturaRepository implements FacturaRepository {
           set
             estado = $2,
             fiscal_response_snapshot = $3::jsonb,
+            -- SPEC_NOTA_REMISION_v0.1 RN-23: el rechazo de FE antes de numerar queda visible para el operador.
+            sifen_result_message = case when $4::text is not null then $4::text else sifen_result_message end,
             updated_at = now()
           where id = $1
             and deleted_at is null
           returning
             ${COLUMNAS_DOCUMENTO}
         `,
-        [input.documentoId, input.estado, JSON.stringify(input.error)]
+        [
+          input.documentoId,
+          input.estado,
+          JSON.stringify(input.error),
+          input.estado === "ERROR_OPERATIVO" && input.error.code === "VALIDACION_FE" && typeof input.error.message === "string" ? input.error.message : null
+        ]
       );
 
       await client.query("commit");

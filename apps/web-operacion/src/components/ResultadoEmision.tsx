@@ -147,7 +147,7 @@ export function ResultadoEmision({
             </li>
           ))}
         </ol>
-        <span className={documento.estado === "EMITIDA" ? "status-pill ready" : "status-pill blocked"}>{estadoSimpleTexto(documento)}</span>
+        <span className={documento.estado === "EMITIDA" ? "status-pill ready" : "status-pill blocked"} data-estado={documento.estado}>{estadoSimpleTexto(documento)}</span>
       </section>
 
       <div className="resultado-cuerpo">
