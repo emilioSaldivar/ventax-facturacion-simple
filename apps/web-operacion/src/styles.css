@@ -3092,12 +3092,12 @@ dd {
 }
 
 .grilla-lineas .col-numero { width: 32px; color: var(--color-muted); font-size: var(--fs-12); font-variant-numeric: tabular-nums; }
-.grilla-lineas .col-codigo { width: 100px; }
-.grilla-lineas .col-cantidad { width: 90px; }
-.grilla-lineas .col-precio { width: 120px; }
-.grilla-lineas .col-iva { width: 88px; }
-.grilla-lineas .col-subtotal { width: 120px; text-align: right; white-space: nowrap; font-weight: 500; font-size: 13px; }
-.grilla-lineas .col-acciones { width: 84px; }
+.grilla-lineas .col-codigo { width: 80px; }
+.grilla-lineas .col-cantidad { width: 72px; }
+.grilla-lineas .col-precio { width: 110px; }
+.grilla-lineas .col-iva { width: 76px; }
+.grilla-lineas .col-subtotal { width: 110px; text-align: right; white-space: nowrap; font-weight: 500; font-size: 13px; }
+.grilla-lineas .col-acciones { width: 64px; }
 
 .grilla-lineas th.col-cantidad,
 .grilla-lineas th.col-precio,
@@ -5173,7 +5173,13 @@ dd {
 
 /* SPEC_DESCUENTOS_FACTURA_v0.1 RN-13 a RN-18. */
 .grilla-lineas .col-descuento {
-  width: 120px;
+  width: 96px;
+}
+/* El conmutador va debajo del titulo para no invadir la columna IVA. */
+.grilla-lineas th.col-descuento .descuento-cabecera {
+  align-items: flex-start;
+  flex-direction: column;
+  gap: 2px;
 }
 .grilla-lineas .col-descuento input {
   width: 100%;
