@@ -80,7 +80,7 @@ async function casoGrilla(browser) {
       await abrirVista(page, "Nueva factura");
       await page.locator("table.grilla-lineas").waitFor();
       const cabecera = await page.locator("table.grilla-lineas thead").innerText();
-      check(`CA-07 ${ancho}: columna Descuento con conmutador % y Gs.`, cabecera.includes("Descuento") && (await page.locator("table.grilla-lineas thead").getByRole("group", { name: "Descuento en porcentaje o monto" }).count()) === 1);
+      check(`CA-07 ${ancho}: columna Descuento con conmutador % y Gs.`, cabecera.includes("Descuento") && (await page.locator("table.grilla-lineas thead [role=group]").count()) === 1);
       await cliente(page);
       const f0 = await fila(page, 0, { descripcion: "Zapatillas DES", cantidad: "2", precio: "100000", descuento: "10" });
       await page.waitForTimeout(400);
