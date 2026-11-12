@@ -465,10 +465,17 @@ async function casoNuevo(browser) {
       check(`CA-04 ${ancho}: "Nota de crédito" abre Notas de crédito`, await page.getByRole("heading", { name: "Notas de crédito" }).waitFor({ timeout: 10000 }).then(() => true, () => false));
       await boton.click();
       await page.getByRole("menuitem", { name: /^Nota de remisión/ }).click();
-      // Las pestañas de Documentos tambien se llaman "Tipo de documento": se apunta al select de la carga.
+      // SPEC_NOTA_REMISION_v0.1 RN-01: con la remision habilitada para el facturador, abre "Nueva nota de remisión";
+      // sin ella, la carga masiva con el tipo elegido (SPEC_UX_RESTO_APP_v0.1 CA-04).
+      const formulario = page.locator(".remision-form");
       const tipo = page.locator('select[aria-label="Tipo de documento"]');
-      const llego = await tipo.waitFor({ timeout: 10000 }).then(() => true, () => false);
-      check(`CA-04 ${ancho}: "Nota de remisión" abre la carga masiva con el tipo elegido`, llego && (await tipo.inputValue()) === "NOTA_REMISION", llego ? await tipo.inputValue() : "sin selector");
+      const llego = await formulario.or(tipo).first().waitFor({ timeout: 10000 }).then(() => true, () => false);
+      const abrioFormulario = (await formulario.count()) > 0;
+      check(
+        `CA-04 ${ancho}: "Nota de remisión" abre el formulario (remision habilitada) o la carga con el tipo elegido`,
+        llego && (abrioFormulario || (await tipo.inputValue()) === "NOTA_REMISION"),
+        llego ? (abrioFormulario ? "formulario" : await tipo.inputValue()) : "sin destino"
+      );
       await page.mouse.click(5, 300);
       await boton.click();
       await page.mouse.click(700, 700);
