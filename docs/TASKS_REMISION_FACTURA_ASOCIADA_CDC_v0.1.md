@@ -8,7 +8,7 @@
 
 ## Estado
 
-Cadena escrita el 2026-11-12 por pedido del usuario (primero CDC electronico a mano; la impresa despues). **FE respondio y D-NRE2-1 esta decidida (opcion A); no se implementa hasta que el usuario lo indique** (regla `documentar-antes-de-implementar-con-fe`). Lo de FS no cambia nada para FE hasta BL-213; con FE sin BL-213 la nota con asociada externa queda `ERROR_OPERATIVO` sin consumir numero.
+Cadena escrita el 2026-11-12 por pedido del usuario (primero CDC electronico a mano; la impresa despues). **FE respondio y D-NRE2-1 esta decidida (opcion A); no se implementa hasta que el usuario lo indique; la implementacion la hara otra sesion/agente, despues de FS-138** (regla `documentar-antes-de-implementar-con-fe`). Lo de FS no cambia nada para FE hasta BL-213; con FE sin BL-213 la nota con asociada externa queda `ERROR_OPERATIVO` sin consumir numero.
 
 ## Matriz
 

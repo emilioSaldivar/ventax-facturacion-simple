@@ -8,7 +8,7 @@
 
 ## Estado
 
-Cadena escrita el 2026-11-12 por pedido del usuario (nota de credito antes que remision; dos caminos: desde SIFEN por CDC y a mano). **FE respondio a-d (2026-11-12). PLAN refinado a implementacion fina el 2026-11-12 (archivos, lineas, columnas, rutas, pantallas). Instruccion del usuario del 2026-11-12: esta iteracion solo documenta; la implementacion (NCX-001 a NCX-009) es la iteracion siguiente.** El camino a mano con referencia impresa se prueba end-to-end con el FE actual (FS valida los formatos porque FE no lo hace); el camino por CDC electronico y los descuentos en la NC esperan `segel-rc4.35`.
+Cadena escrita el 2026-11-12 por pedido del usuario (nota de credito antes que remision; dos caminos: desde SIFEN por CDC y a mano). **FE respondio a-d (2026-11-12). PLAN refinado a implementacion fina el 2026-11-12 (archivos, lineas, columnas, rutas, pantallas). Instruccion del usuario del 2026-11-12: esta iteracion solo documenta; la implementacion (NCX-001 a NCX-009) es la iteracion siguiente, **a cargo de otra sesion/agente** (decision del usuario): esa sesion arranca leyendo `AGENTS.md`, esta SPEC, el PLAN (en especial §0) y el BACKLOG FS-138, y releyendo `git log` de `feat/identidad-segel` antes de editar.** El camino a mano con referencia impresa se prueba end-to-end con el FE actual (FS valida los formatos porque FE no lo hace); el camino por CDC electronico y los descuentos en la NC esperan `segel-rc4.35`.
 
 ## Matriz
 
