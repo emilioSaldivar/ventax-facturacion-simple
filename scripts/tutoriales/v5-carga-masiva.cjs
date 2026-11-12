@@ -182,7 +182,7 @@ t.correr("v5-carga-masiva", {}, async (s) => {
   await t.paso(s, "“Reintentar fallas” vuelve a enviar solo las que fallaron. Si SIFEN rechazó una, corregila y emitila de nuevo; el número rechazado se inutiliza con “Inutilizar número”.");
 
   // 4. Remisiones
-  await t.paso(s, "Las notas de remisión se cargan igual. Hoy se emiten solo por planilla.", { cubre: ["3.6-remisiones", "3.2-remision"] });
+  await t.paso(s, "Las notas de remisión se cargan igual. Por planilla emitís muchas a la vez; para una sola, usá “Nueva nota de remisión”.", { cubre: ["3.6-remisiones", "3.2-remision"] });
   await t.abrirSeccion(s, "Notas de remisión");
   await t.senalar(s, page.getByRole("button", { name: "Por planilla" }).first(), { clic: true }).catch(() => undefined);
   const plantilla = page.getByRole("button", { name: "Descargar plantilla de notas de remisión" });

@@ -1,4 +1,4 @@
-// Lista de control del mapa de la app (SPEC_TUTORIALES_VIDEO_v0.1 §3 y §4), una entrada por fila.
+// Lista de control del mapa de la app (SPEC_TUTORIALES_VIDEO_v0.1 §3 y §4; v0.2 §3.10 a §3.12), una entrada por fila.
 // Cada `paso` de un guion declara en `cubre` los ids de esta lista; cobertura.cjs compara (CA-6).
 // [id, video(s) que deben cubrirlo, fila del SPEC]
 module.exports = [
@@ -16,7 +16,7 @@ module.exports = [
   ["3.2-nueva-factura", ["v3"], "Nueva factura"],
   ["3.2-notas-credito", ["v4"], "Notas de crédito"],
   ["3.2-notas-debito", ["v2"], "Notas de débito (Próximamente)"],
-  ["3.2-remision", ["v2", "v5"], "Notas de remisión (Por planilla)"],
+  ["3.2-remision", ["v2", "v5", "v8"], "Notas de remisión (Nueva, Emitidas, Por planilla)"],
   ["3.2-autofacturas", ["v2"], "Autofacturas (Próximamente)"],
   ["3.2-documentos", ["v2"], "Documentos"],
   ["3.2-agenda", ["v6"], "Agenda / Clientes"],
@@ -72,6 +72,33 @@ module.exports = [
   // §3.9 Cliente final
   ["3.9-enlace-factura", ["v3"], "Enlace de la factura"],
   ["3.9-publicas", ["v6"], "Paginas publicas de presupuesto y recibo"],
+  // §3.10 Descuentos (v0.2)
+  ["3.10-boton", ["v7"], "Agregar / Ocultar / Quitar descuentos"],
+  ["3.10-linea", ["v7"], "Columna Descuento con % / moneda"],
+  ["3.10-invalida", ["v7"], "El descuento tiene que ser menor que el precio"],
+  ["3.10-global", ["v7"], "Descuento sobre el total"],
+  ["3.10-totales", ["v7"], "Fila Descuento (x %)"],
+  ["3.10-simple", ["v7"], "Descuento en el modo simple"],
+  ["3.10-resultado", ["v7"], "Resultado y ficha con descuento"],
+  ["3.10-nc-total", ["v7"], "Solo admite nota de crédito total"],
+  // §3.11 Nota de remision manual (v0.2)
+  ["3.11-pestana", ["v8"], "Nueva nota de remisión"],
+  ["3.11-motivo", ["v8"], "Motivo del traslado"],
+  ["3.11-destinatario", ["v8"], "Destinatario y domicilio"],
+  ["3.11-transporte", ["v8"], "Transporte"],
+  ["3.11-salida-entrega", ["v8"], "Salida y entrega"],
+  ["3.11-vehiculo", ["v8"], "Vehículo, transportista y chofer"],
+  ["3.11-articulos", ["v8"], "Artículos sin precio"],
+  ["3.11-fisco", ["v8"], "Información para el Fisco"],
+  ["3.11-resumen", ["v8"], "Resumen y bloqueo de Emitir"],
+  ["3.11-resultado", ["v8"], "Resultado, Emitidas y ficha"],
+  ["3.11-no-habilitado", ["v8", "v2"], "No habilitado"],
+  // §3.12 Catalogo con moneda (v0.2)
+  ["3.12-moneda", ["v9"], "Moneda del articulo y precio con centavos"],
+  ["3.12-filtro", ["v9"], "Precio con moneda y filtro Moneda"],
+  ["3.12-misma-moneda", ["v9"], "Articulo en USD en factura USD"],
+  ["3.12-otra-moneda", ["v9"], "Articulo en Gs. en factura USD"],
+  ["3.12-guardar", ["v9"], "Guardar en el catálogo en USD"],
   // §4 Estados
   ["4-resultado-ok", ["v3"], "Creada → Aprobada · KUDE listo"],
   ["4-rechazada", ["v3", "v2"], "Rechazada por SIFEN"],

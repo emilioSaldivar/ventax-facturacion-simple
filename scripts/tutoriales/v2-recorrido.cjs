@@ -69,7 +69,8 @@ t.correr("v2-recorrido", {}, async (s) => {
 
   // 5. Notas de remision
   await t.abrirSeccion(s, "Notas de remisión");
-  await t.paso(s, "Las notas de remisión tienen dos pestañas: las emitidas y la carga por planilla, que es como se emiten hoy.", { cubre: ["3.2-remision"] });
+  await t.paso(s, "Las notas de remisión tienen tres pestañas: la nota nueva, las emitidas y la carga por planilla. Si tu facturador no la tiene, dice “No habilitado”.", { cubre: ["3.2-remision", "3.11-no-habilitado"] });
+  await t.senalar(s, page.getByRole("button", { name: "Nueva nota de remisión" }).first(), { ms: 700 });
   await t.senalar(s, page.getByRole("button", { name: /^Emitidas/ }).first(), { ms: 700 });
   await t.senalar(s, page.getByRole("button", { name: "Por planilla" }).first(), { ms: 700 });
 

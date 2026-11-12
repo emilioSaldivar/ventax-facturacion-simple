@@ -247,6 +247,12 @@ async function sinSubtitulo(s) {
 async function senalar(s, locator, { clic = false, escribir = null, ms = 700 } = {}) {
   const { page } = s;
   await locator.scrollIntoViewIfNeeded();
+  // Si el elemento queda debajo del subtitulo (franja inferior), se centra en la pantalla (v0.2).
+  const previa = await locator.boundingBox();
+  if (previa && previa.y + previa.height > ALTO - 170) {
+    await locator.evaluate((el) => el.scrollIntoView({ block: "center" })).catch(() => undefined);
+    await page.waitForTimeout(250);
+  }
   const caja = await locator.boundingBox();
   if (caja) {
     await page.mouse.move(caja.x + caja.width / 2, caja.y + caja.height / 2, { steps: 18 });

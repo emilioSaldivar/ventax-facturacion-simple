@@ -44,7 +44,9 @@ async function emitirYEsperar(s, clave) {
 
 t.correr("v4-notas-credito", {}, async (s) => {
   const { page } = s;
-  const { facturas } = t.leerEstado();
+  // v0.2: juego de facturas propio (PLAN v0.2 §2), sin notas previas; si no existe, las de V3.
+  const estadoV4 = t.leerEstado();
+  const facturas = estadoV4.facturasV4 ?? estadoV4.facturas;
   if (!facturas?.ci || !facturas?.contado || !facturas?.usd) throw new Error("Faltan las facturas de V3 en estado.json.");
   const notas = {};
   await t.ingresar(s);
@@ -97,7 +99,7 @@ t.correr("v4-notas-credito", {}, async (s) => {
   await crear.waitFor();
   await t.senalar(s, crear, { clic: true });
   await page.waitForTimeout(800);
-  await t.paso(s, "Se abre la misma nota de crédito, con la factura ya elegida. Acá la cancelamos.");
+  await t.paso(s, "Desde la ficha hay un atajo con lo mínimo: toda la factura o algunas líneas, y el motivo. Acá lo cancelamos.");
   await t.senalar(s, page.getByRole("dialog").getByRole("button", { name: "Cancelar", exact: true }), { clic: true });
   await t.paso(s, "Una factura “Sin nombre” no ofrece nota de crédito: SIFEN no la admite. Se anula dentro de las 48 horas.");
 

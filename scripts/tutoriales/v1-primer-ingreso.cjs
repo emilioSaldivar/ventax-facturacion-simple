@@ -71,7 +71,7 @@ t.correr("v1-primer-ingreso", {}, async (s) => {
   fijarCodigo();
   await t.paso(s, "Te llega un código de 6 dígitos a tu correo. Vale 15 minutos.", { cubre: ["3.1-otp"] });
   await t.senalar(s, page.getByText(/Ingresá el código de 6 dígitos/), { ms: 1200 });
-  await t.paso(s, "Si no te llegó, revisá el correo no deseado o pedí otro con “Reenviar código”.");
+  await t.paso(s, "Si no te llegó, revisá el correo no deseado. Pasado un minuto se habilita “Reenviar código”.");
   await t.senalar(s, page.getByRole("button", { name: /Reenviar/ }), { ms: 1000 });
   await t.senalar(s, page.getByLabel("Código de verificación", { exact: true }), { escribir: CODIGO });
   await t.senalar(s, page.getByRole("button", { name: "Verificar y activar cuenta" }), { clic: true });

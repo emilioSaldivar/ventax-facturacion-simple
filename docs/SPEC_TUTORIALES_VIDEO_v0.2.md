@@ -57,7 +57,7 @@ Se suman a `SPEC_TUTORIALES_VIDEO_v0.1` §3. Etiquetas tal como estan en el codi
 | Fila "Descuento (x %)" en los totales, entre "Subtotal" y "Total sin IVA" | Un solo resumen, venga el descuento de las lineas, del total o de los dos (D-8). | V7 |
 | "Modo simple": campo "Descuento" en la hoja de la linea | Lo mismo en el modo simple. | V7 |
 | Resultado y ficha con la columna "Descuento" y la fila "Descuento (x %)" | Lo que queda registrado. | V7 |
-| Ficha: "Esta factura solo admite nota de crédito total" | Limite de las facturas con descuento. | V7 |
+| Ficha: en "Crear nota de crédito", "Parcial" deshabilitado (el motivo va en el titulo del boton) | Limite de las facturas con descuento. | V7 |
 
 ### 3.11 Nota de remision manual (`SPEC_NOTA_REMISION_v0.1`, RN-09 a RN-20)
 
@@ -65,10 +65,10 @@ Se suman a `SPEC_TUTORIALES_VIDEO_v0.1` §3. Etiquetas tal como estan en el codi
 |---|---|---|
 | Pestaña "Nueva nota de remisión" (subtitulo con el punto activo) | Formulario de una nota. | V8 |
 | "Motivo del traslado": "Motivo" ("Traslado por ventas", "Traslado entre locales de la empresa"), "Responsable de la emisión", "Kilómetros", "Fecha prevista de la factura" | Por que se traslada. | V8 |
-| "Destinatario": "Buscar en la agenda", "Domicilio del destinatario" con departamento, distrito y ciudad | A quien va. El domicilio que falte se pide y se puede guardar en la agenda. | V8 |
-| "Transporte": "Tipo de transporte" (propio, "Tercero"), "Modalidad", "Quién paga el flete", "Inicio del traslado", "Fin del traslado", "Costo del flete" | Como y cuando. | V8 |
-| "Salida y entrega": "Local de salida", "Lugar de entrega", "Local de destino" | Desde donde y hasta donde. | V8 |
-| "Vehículo, transportista y chofer": "Tipo de vehículo", "Matrícula", "Transportista" ("Contribuyente (con RUC)" / "No contribuyente"), "RUC del transportista", "Nombre del chofer", "Documento del chofer" ("Sin puntos") | Quien lleva. Los datos quedan guardados para la proxima. | V8 |
+| "Destinatario": "Buscar en la agenda", "Domicilio del destinatario" con departamento, distrito y ciudad | A quien va. El domicilio se completa en la nota (guardarlo en la agenda es de la entrega E2). | V8 |
+| "Transporte": "Tipo de transporte" ("Propio", "De un tercero"), "Modalidad", "Quién paga el flete" (con un tercero), "Inicio del traslado", "Fin del traslado", "Costo del flete" | Como y cuando. | V8 |
+| "Salida y entrega": domicilio del "Local de salida" y "Entregar en el domicilio del destinatario" | Desde donde y hasta donde. | V8 |
+| "Vehículo, transportista y chofer": "Tipo de vehículo", "Matrícula", "Transportista" ("Contribuyente (con RUC)" / "No contribuyente"), "RUC del transportista", "Nombre del chofer", "Documento del chofer" ("Sin puntos") | Quien lleva. En E1 se escriben en cada nota (los datos guardados son de E2). | V8 |
 | "Artículos" con la ayuda "Sin precios: la nota de remisión solo informa qué se traslada." | Que se traslada. Se pueden traer del catalogo (sin precio). | V8 |
 | "Información para el Fisco (opcional)" | Cadena de frio, carga peligrosa u otro dato (RG 41/2014). | V8 |
 | Panel "Resumen" y "Emitir nota de remisión" con el motivo de bloqueo | No deja emitir mientras falte algo. | V8 |
@@ -92,7 +92,7 @@ Sin estados nuevos. V8 explica con subtitulo los mismos de la factura ("Creada" 
 ## 5. Mensajes obligatorios nuevos
 
 - **M-8 Descuentos.** Hay dos descuentos y se pueden usar juntos: por linea (porcentaje o monto por unidad) y sobre el total (se reparte entre todas las lineas, como exige SIFEN). Los totales muestran un solo "Descuento" con su porcentaje. Una factura con descuento solo admite nota de credito total.
-- **M-9 Remision.** La nota de remision acompaña el traslado de la mercaderia y no lleva precios. El transportista tiene que ser real: SIFEN verifica su RUC. Transportista, vehiculo y locales se guardan para la proxima. Si la pestaña dice "No habilitado", se pide a Segel.
+- **M-9 Remision.** La nota de remision acompaña el traslado de la mercaderia y no lleva precios. El transportista tiene que ser real: SIFEN verifica su RUC. Si la pestaña dice "No habilitado", se pide a Segel.
 - **M-10 Moneda del catalogo.** Cada articulo tiene una sola moneda. En una factura de otra moneda, el articulo se ofrece sin precio y no se convierte.
 
 ## 6. Decisiones

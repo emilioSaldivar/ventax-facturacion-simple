@@ -80,7 +80,34 @@ Prueba seca (TUT2-001) → V9 (no emite) → V8 → V1 → V4 → V5 → V2 al f
 
 Antes de emitir: aviso a la sesion de FE con la cantidad (V8: 1 remision; V4: 2 NC; V5: 3 facturas y 2 remisiones; V7: 1 factura).
 
-## 6. Riesgos
+## 6. Ajustes al guionar (2026-11-12, contra `6ee9031`)
+
+- **Remision E1 sin datos guardados:** no hay listas de transportistas, vehiculos ni locales, ni casilla para guardar el domicilio en la agenda (todo eso es E2). V8 escribe todo en la nota y el subtitulo no promete "queda guardado".
+- **Transporte "Propio" precarga el transportista con el facturador.** En la grabacion esos datos llegan reemplazados (`Empresa Ejemplo S.A.`, `80000000-0`): emitir con "Propio" mandaria a SIFEN el RUC de ejemplo. V8 usa "De un tercero" y escribe SEGEL SA (D-13). El chofer ficticio esta probado: la remision `0000510` (2026-11-11) salio aprobada con "Juan Perez" `1234567`.
+- **"Guardar en catálogo" en modo completo** es un icono por linea ("Guardar en catálogo, línea N") que guarda en el momento, no al emitir. V9 lo usa asi.
+- **V9 carga el cliente** (SEGEL SA) aunque no emite: sin cliente la vista previa no corre y la grilla muestra subtotales y totales en 0 (H-17).
+- **Selectores:** el precio del catalogo se busca por rol con prefijo (`/^Precio \(USD\)/`), porque el nombre accesible incluye la ayuda; los `select` dentro de `label` por rol `combobox`.
+- **V7 en modo "%"** responde "El porcentaje va de 0 a 99,99" (no "El descuento tiene que ser menor que el precio", que es del modo monto); el guion acepta los dos.
+- **`lib.cjs`:** `senalar` centra el elemento cuando quedaria debajo del subtitulo.
+- **V4** usa el juego `facturasV4` de `estado.json` (`1010622` CI total, `1010620` contado parcial, `1010621` para el atajo de la ficha, que se cancela).
+
+## 7. Hallazgos de la grabacion v0.2 (en `BACKLOG` como FS-81 a FS-87: H-17 = FS-81, H-18 y H-19 = FS-82, H-20 = FS-83, H-21 = FS-84, H-22 = FS-85, H-23 = FS-86, H-24 = FS-87, H-25 = FS-88, H-26 = FS-89, H-27 = FS-90)
+
+| Id | Hallazgo | Donde | Video |
+|---|---|---|---|
+| H-17 | Sin cliente cargado, la grilla de Nueva factura muestra "Subtotal" 0,00 en cada linea y totales en 0 aunque haya precios: `previewSubtotalsByLineId` se llena con `preview?.items[i]?.subtotal ?? 0`, asi que el respaldo `cantidad × precio` nunca se usa | `main.tsx` ~2127 | V9 |
+| H-18 | En Nueva factura, la sugerencia de la agenda ("80026570-0 SEGEL SA Agenda") queda abierta debajo de "Número" despues de autocompletar y desalinea "Documento" | `main.tsx`, bloque Cliente | V9 |
+| H-19 | Texto "Del padron de la DNIT" sin tilde | `main.tsx`, bloque Cliente | V9 |
+| H-20 | La columna "Código" de la grilla corta los codigos de 7 caracteres ("MANT-0", "SOP-US") | `GrillaLineas` | V9 |
+| H-21 | Al pasar de "Propio" a "De un tercero", el transportista sigue precargado con los datos del propio facturador | `RemisionNuevaView.tsx` | V8 |
+| H-22 | Despues de emitir una remision, la pestaña "Emitidas · N" no se actualiza (seguia en 10 con 11 emitidas) | `RemisionView.tsx` | V8 |
+| H-23 | La ficha de la remision muestra "Email: Desconocido" cuando el cliente no tiene correo (deberia decir "Sin correo" o no mostrarse) | `DocumentsView.tsx`, ficha | V8 |
+| H-25 | La ventana "Crear nota de crédito" de la ficha muestra el "Motivo" con letra monoespaciada | `DocumentsView.tsx` | V4 |
+| H-26 | Con "Descuento sobre el total", la columna "Subtotal" de la grilla mezcla lineas con y sin prorrateo: la linea 1 sigue en 180.000 (sin prorrateo; la hoja de la misma linea dice 156.000) y la linea 2 pasa a 44.000 (con prorrateo); la columna suma 224.000 con "Total a pagar" 200.000. RN-17 de descuentos dice que el prorrateo del global no se muestra por linea | `GrillaLineas`, `previewSubtotalsByLineId` | V7 |
+| H-27 | En escritorio, el "Modo simple" abre la linea como hoja a pantalla completa con diseño de celular (botones en mayusculas "AGREGAR Y GUARDAR", "EX") | `main.tsx`, hoja de linea | V7 |
+| H-24 | En el formulario del catalogo, el "IVA" queda mas abajo que el "Precio (USD)" por la ayuda "Con hasta 2 decimales" (desalineado) | `CatalogView.tsx` | V9 |
+
+## 8. Riesgos
 
 - **Chofer ficticio en V8:** SIFEN verifica el RUC del transportista; no esta confirmado que no verifique el documento del chofer. Si rechaza, se consulta a FE y no se reintenta a ciegas.
 - **Pantalla de descuentos en movimiento (D-11):** otra sesion la cambio dos veces el 2026-11-12. V7 se prueba en seco el mismo dia de la grabacion y los selectores van por etiqueta.
