@@ -8,7 +8,7 @@
 
 ## Estado
 
-Cadena escrita el 2026-11-12 por pedido del usuario (nota de credito antes que remision; dos caminos: desde SIFEN por CDC y a mano). **FE respondio a-d (2026-11-12); no se implementa hasta la orden del usuario.** El camino a mano con referencia impresa se prueba end-to-end con el FE actual (FS valida los formatos porque FE no lo hace); el camino por CDC electronico y los descuentos en la NC esperan `segel-rc4.35`.
+Cadena escrita el 2026-11-12 por pedido del usuario (nota de credito antes que remision; dos caminos: desde SIFEN por CDC y a mano). **FE respondio a-d (2026-11-12). PLAN refinado a implementacion fina el 2026-11-12 (archivos, lineas, columnas, rutas, pantallas). Instruccion del usuario del 2026-11-12: esta iteracion solo documenta; la implementacion (NCX-001 a NCX-009) es la iteracion siguiente.** El camino a mano con referencia impresa se prueba end-to-end con el FE actual (FS valida los formatos porque FE no lo hace); el camino por CDC electronico y los descuentos en la NC esperan `segel-rc4.35`.
 
 ## Matriz
 
@@ -31,4 +31,5 @@ Cadena escrita el 2026-11-12 por pedido del usuario (nota de credito antes que r
 
 Se completa al cerrar cada tarea.
 
+- 2026-11-12, intento revertido: se habia empezado NCX-001 (`packages/shared/src/fiscal/cdc.ts` con prueba) antes de la instruccion de solo documentar; se revirtio. Leccion registrada en PLAN §0: la prueba usaba 12 CDC "reales" tipeados de memoria y fallo 2/5; los vectores se toman del stack local, nunca de memoria.
 - 2026-11-12, previo (sin codigo): consulta §31 en `fe-segel` (SIFEN test) de la factura 001-001-1010665: `APROBADO`, `rDE` con `gDatRec` (RUC 80026570-0, SEGEL SA), 3 `gCamItem` con `dDesProSer`, `dCantProSer`, `dPUniProSer`, `dDescItem`, `dPorcDesIt`, `dDescGloItem`, `dTotBruOpeItem`, `dTotOpeItem`, `iAfecIVA`, `dTasaIVA`, `dPropIVA`, y `gTotSub` completo (`dSub10` 165.832,18, `dSub5` 48.622,99, `dSubExe` 27.874,83, `dDescTotal` 40.000, `dRedon` 30, `dTotGralOpe` 242.300); `cMoneOpe` PYG; sin prefijos de namespace. Base de D-2 y del fixture de NCX-003.
