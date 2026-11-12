@@ -32,6 +32,7 @@ Todo lo que hay entre `ed8b493` y el commit que se etiquete (63 commits al 2026-
 | Textos del operador (ATO-009) | "Proximo numero 0000002" desaparece; ayuda del tipo de cambio; error visible al emitir un recibo desde la ficha; "Pedidos"; plantilla y "Ver nota de remision" correctos en remisiones; resultado "Nota de credito" tras una NC | ninguna | `TASKS_AJUSTES_TEXTOS_OPERADOR_v0.1` |
 | Catalogo y Agenda en tabla (URA-009, FS-53) | En escritorio, tabla a lo ancho con el alta en un panel lateral; en celular, tarjetas | ninguna | `TASKS_UX_RESTO_APP_v0.1` |
 | Falta de numerador en FE (RN-01b, FE v0.50) | Si FE rechaza una emision por numerador faltante, bloqueado o agotado (500 actual o 409 de FE v0.50), el documento queda en error a corregir con el motivo en la ficha, sin reintentos. Hoy no afecta a ninguna factura de produccion | ninguna | `TASKS_NOTA_REMISION_v0.1` NRE-030 |
+| Rechazo de FE antes de numerar (FS-74, RV-12) | Si FE responde `400` o `422` a una factura (dato que FS no reprodujo), ya no reintenta: queda en error a corregir con el motivo de FE, igual que la remision. Un `500` sigue reintentando. Decision del usuario del 2026-11-12 | ninguna | `TASKS_VALIDACIONES_RECEPTOR_v0.1` VAL-015 |
 | Herramientas de los tutoriales (TUT-001 a TUT-010) | Nada visible: guiones y scripts fuera de la app (se confirma en DSF-002) | ninguna | `TASKS_TUTORIALES_VIDEO_v0.1` |
 
 Sin cambios de `docker-compose`, variables de entorno, plantillas ni imagenes de FE (`git diff ed8b493..HEAD -- infra` vacio). El loader DNIT no se toca.
@@ -80,7 +81,7 @@ Sin cambios de `docker-compose`, variables de entorno, plantillas ni imagenes de
 ## Bloqueos y pendientes
 
 - DES-013 a DES-016 en verde (D-5) y la regresion final (DSF-005).
-- Propuesta abierta al usuario (surgio al responder a FE el 2026-11-12): tratar el `422` de FE **antes de numerar** como "corregir y emitir de nuevo" (`ERROR_OPERATIVO`) tambien en facturas y notas de credito, como ya se hace en la remision; hoy en esos tipos cae en reintentos temporales. No deberia ocurrir desde la app (FS valida antes), por eso no bloquea; se implementa solo si el usuario lo pide (BACKLOG FS-74).
+- FS-74 (`422`/`400` de FE antes de numerar como "corregir" en todos los tipos): el usuario lo pidio para esta version el 2026-11-12; implementado (RV-12, VAL-015) y entra en el tag.
 - No bloquean: NRE-014 (formulario precargado desde "Corregir y emitir de nuevo"), VAL-013 (errores por campo en Recibos), la entrega E2 de la remision y FS-72 (numeradores por punto en el export de FE).
 
 ## Fuera de alcance

@@ -411,9 +411,9 @@ describe("RN-23: la ficha de una remision en error operativo muestra el motivo d
 });
 
 describe("FE v0.50 (guia §66): 409 NUMERADOR_* en cualquier emision queda ERROR_OPERATIVO sin reintentos", () => {
-  async function correr(fiscalRequest: unknown, body: Record<string, unknown>) {
+  async function correr(fiscalRequest: unknown, body: Record<string, unknown>, status = 409) {
     let fallo: Record<string, unknown> | null = null;
-    const error = new FiscalGatewayError("UPSTREAM_ERROR", "rechazo", { status: 409, body });
+    const error = new FiscalGatewayError("UPSTREAM_ERROR", "rechazo", { status, body });
     const gateway = { emitNotaRemision: async () => { throw error; }, emitFactura: async () => { throw error; } } as unknown as FiscalGateway;
     const repository = {
       claimNextPendingEmission: async () => ({ outboxId: "o1", documentoId: "d1", facturadorId: "f1", facturadorApiKey: null, fiscalRequest, attempts: 0, documentoCreatedAt: new Date().toISOString(), accionNotificadaAt: null }),
@@ -433,6 +433,22 @@ describe("FE v0.50 (guia §66): 409 NUMERADOR_* en cualquier emision queda ERROR
     const f = await correr(pedido, { error: "NUMERADOR_RANGO_AGOTADO", message: "Rango agotado" });
     expect(f).toMatchObject({ estado: "ERROR_OPERATIVO" });
     expect((f.error as { message: string }).message).toContain("Se agotó la numeración");
+  });
+  // SPEC_VALIDACIONES_RECEPTOR_v0.1 RV-12 (FS-74): 422 de FE antes de numerar, tambien en la factura.
+  it("factura con 422 VALIDATION_ERROR queda ERROR_OPERATIVO con el motivo de FE, sin reintentos", async () => {
+    const f = await correr({ external_ref: "fac_422" }, { error: "VALIDATION_ERROR", message: "RUC del receptor inválido: dígito verificador incorrecto" }, 422);
+    expect(f).toMatchObject({ outboxEstado: "FAILED_PERM", estado: "ERROR_OPERATIVO", retryAfterSeconds: 0 });
+    expect(f.error).toMatchObject({ code: "VALIDACION_FE", recoverable: false, suggested_action: "CORREGIR_Y_EMITIR" });
+    expect((f.error as { message: string }).message).toBe("El servicio fiscal rechazó la factura: RUC del receptor inválido: dígito verificador incorrecto");
+  });
+  it("factura con 400 de FE tambien queda ERROR_OPERATIVO", async () => {
+    const f = await correr({ external_ref: "fac_400" }, { error: "BAD_REQUEST", message: "envio.mode es obligatorio" }, 400);
+    expect(f).toMatchObject({ estado: "ERROR_OPERATIVO" });
+    expect((f.error as { message: string }).message).toContain("rechazó la factura: envio.mode es obligatorio");
+  });
+  it("factura con 500 sigue el camino de reintentos", async () => {
+    const f = await correr({ external_ref: "fac_500" }, { error: "ISSUE_FE_FAILED", message: "fallo interno" }, 500);
+    expect(f).toMatchObject({ outboxEstado: "FAILED_TEMP", estado: "ERROR_TEMPORAL" });
   });
 });
 

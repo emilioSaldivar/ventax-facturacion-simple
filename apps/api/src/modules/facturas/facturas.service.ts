@@ -1864,11 +1864,16 @@ export async function processNextQueuedFiscalEmission(
     // FE v0.50 (guia §66, "validar antes de numerar"): numerador faltante, bloqueado o agotado responde 409 con estos
     // codigos en todas las emisiones, antes de tomar numero. Reintentar no lo arregla.
     const numeradorFe = statusFe === 409 && ["NUMERADOR_NO_CONFIGURADO", "NUMERADOR_BLOQUEADO", "NUMERADOR_RANGO_AGOTADO"].includes(String(cuerpoFe?.error));
+    // SPEC_VALIDACIONES_RECEPTOR_v0.1 RV-12 (FS-74, 2026-11-12): un 400 o 422 de FE es un rechazo del pedido antes de
+    // numerar (datos que FS no reprodujo); repetir el mismo pedido nunca lo arregla. En todos los tipos queda
+    // ERROR_OPERATIVO con el motivo de FE para corregir y emitir de nuevo. Con FE v0.51 el 422 llega sin documento.
+    const rechazoPrevio = statusFe === 400 || statusFe === 422;
     if (
       error instanceof FiscalGatewayError &&
       statusFe &&
-      (numeradorFe || (esRemisionPendiente && ([400, 404, 409, 422].includes(statusFe) || sinNumeradorNre)))
+      (numeradorFe || rechazoPrevio || (esRemisionPendiente && ([404, 409].includes(statusFe) || sinNumeradorNre)))
     ) {
+      const nombreTipo = esRemisionPendiente ? "la nota de remisión" : "la factura";
       const cuerpo = cuerpoFe;
       const mensajeFe = typeof cuerpo?.message === "string" ? cuerpo.message : typeof cuerpo?.error === "string" ? cuerpo.error : error.message;
       return repository.failPendingEmission({
@@ -1884,7 +1889,7 @@ export async function processNextQueuedFiscalEmission(
               ? "Se agotó la numeración de este punto de expedición. Pedí a Segel que cargue un rango nuevo."
               : /numerador/i.test(mensajeFe)
                 ? `Este punto de expedición todavía no tiene numeración para ${esRemisionPendiente ? "notas de remisión" : "este tipo de documento"}. Pedila a Segel.`
-                : `El servicio fiscal rechazó la nota de remisión: ${mensajeFe}`,
+                : `El servicio fiscal rechazó ${nombreTipo}: ${mensajeFe}`,
           details: error.details ?? null,
           recoverable: false,
           retry_after_seconds: null,

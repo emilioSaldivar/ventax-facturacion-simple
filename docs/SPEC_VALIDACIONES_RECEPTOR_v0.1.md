@@ -48,6 +48,8 @@ Todas las reglas se aplican **antes** de llamar a FE, en la API y en la interfaz
 - **RV-10. Padron de la DNIT.** Al autocompletar un RUC desde el padron, el DV sale del padron. Si el operador escribio otro DV, se avisa: "Según la DNIT el dígito verificador es 0" y se ofrece corregirlo con un clic; no se cambia solo. Un RUC **no activo** en el padron se informa ("Este RUC figura como no activo en la DNIT") y el tipo de documento **no cambia solo de RUC a CI** (hoy pasa sin avisar, FS-60): el operador decide.
 - **RV-11. Datos ya cargados.** Los clientes existentes que no cumplan estas reglas no se modifican ni se bloquean en el listado. `GET /clientes` devuelve por cliente `observaciones: string[]` (vacio si cumple) y la agenda muestra la pastilla "Revisar datos" con los motivos; al editar o al usarlo en un documento se exige corregirlo. Un documento ya emitido con datos que hoy serian invalidos no cambia (snapshot).
 
+- **RV-12. Rechazo de FE antes de numerar (FS-74, decision del usuario del 2026-11-12).** Si a pesar de RV-01 a RV-11 FE responde `400` o `422` a una emision (dato que FS no reprodujo, o cambio de reglas en FE), el documento **no se reintenta**: queda `ERROR_OPERATIVO` con `VALIDACION_FE`, el mensaje "El servicio fiscal rechazó la factura: <motivo de FE>" (o "la nota de remisión") y la accion "Corregir y emitir de nuevo", en todos los tipos que pasan por la cola de emision. Un `500` sigue el camino de reintentos (pudo pasar despues de numerar). Con FE `segel-rc4.34` (v0.51) el `422` llega sin documento creado, asi que no hay nada que adoptar; con `rc4.32` el `422` tambien es previo a la numeracion. La nota de credito se emite en el acto y ya devuelve el error de FE al operador.
+
 ## Fuera de alcance
 
 - Validar el RUC contra el padron como condicion para emitir (el padron no esta siempre al dia; solo se usa para completar y avisar).
@@ -68,6 +70,7 @@ Todas las reglas se aplican **antes** de llamar a FE, en la API y en la interfaz
 - CA-08. Un cliente existente con RUC `xxx` se lista con "Revisar datos" y "RUC sin dígito verificador"; al editarlo no se puede guardar sin corregirlo; al elegirlo en el editor se pide corregirlo antes de emitir.
 - CA-09. Regresion: suites de api y web en verde; `playwright-ux-resto-app.cjs` casos `agenda`, `nuevo` y `ficha`; `playwright-nc-cuerpo.cjs`.
 - CA-10. Escritorio primero: Playwright en 1440 y 1280, y 390 para agenda y editor.
+- CA-11 (RV-12). Con el gateway devolviendo `422` a `emitFactura`, el worker deja la factura en `ERROR_OPERATIVO`, `FAILED_PERM`, `VALIDACION_FE`, con el mensaje de FE y `CORREGIR_Y_EMITIR`; con `400`, igual; con `500`, `ERROR_TEMPORAL` y reintento. Vitest.
 
 ## Decisiones pendientes
 
