@@ -19,14 +19,14 @@ Las filas de la tabla de iniciativas de julio y agosto (mas abajo) conservan su 
 
 | Prioridad | ID | Tema | Estado | Documentos | Siguiente paso |
 |---|---|---|---|---|---|
-| Critico | FS-73 | **Despliegue de la version nueva en `segel-fs`** (validaciones, catalogo USD, descuentos, remision E1 habilitada para SALUMAX, ATO-009, URA-009; migraciones 0046 a 0049) | **EN CURSO** | `SPEC/PLAN/TASKS_DESPLIEGUE_SEGEL_FS_v0.3` | D-1..D-8 tomadas el 2026-11-12; falta prueba fina de descuentos (DES-013..016), regresion final, tag y la orden directa |
-| Critico | FS-74 | FE `400`/`422` antes de numerar quedan "corregir y emitir de nuevo" en todos los tipos de la cola (antes solo en remision; la factura reintentaba) | **DONE en la rama, sin desplegar** | `SPEC_VALIDACIONES_RECEPTOR_v0.1` RV-12, VAL-015 | FS-73 (entra en esta version por decision del usuario, 2026-11-12) |
-| Critico | FS-59 | Catalogo en moneda extranjera (USD) | **DONE en la rama, sin desplegar** | `SPEC/PLAN/TASKS_CATALOGO_MONEDA_v0.1` | FS-73 |
-| Critico | FS-66 | Descuentos en la factura | **DONE en la rama, sin desplegar** | `SPEC/PLAN/TASKS_DESCUENTOS_FACTURA_v0.1` | DES-013 (USD en SIFEN test, decision D-5); FS-73 |
-| Critico | FS-56 | Nota de remision manual, entrega E1 | **DONE en la rama, sin desplegar** | `SPEC/PLAN/TASKS_NOTA_REMISION_v0.1` | FS-73 (queda "Proximamente" en produccion hasta que un cliente la pida); NRE-014 |
+| Critico | FS-73 | **Despliegue de la version nueva en `segel-fs`** (validaciones, catalogo USD, descuentos, remision E1 habilitada para SALUMAX, ATO-009, URA-009, FS-74; migraciones 0046 a 0049) | **DONE en produccion** (2026-11-12 01:15 -03, `segel-fs-2026.11.12` = `8e5a172`) | `SPEC/PLAN/TASKS_DESPLIEGUE_SEGEL_FS_v0.3` E-1 | El usuario revisa pantallas con su acceso (CA-08); FE despliega rc4.34 |
+| Critico | FS-74 | FE `400`/`422` antes de numerar quedan "corregir y emitir de nuevo" en todos los tipos de la cola | **DONE en produccion** (2026-11-12) | `SPEC_VALIDACIONES_RECEPTOR_v0.1` RV-12, VAL-015 | — |
+| Critico | FS-59 | Catalogo en moneda extranjera (USD) | **DONE en produccion** (2026-11-12) | `SPEC/PLAN/TASKS_CATALOGO_MONEDA_v0.1` | — |
+| Critico | FS-66 | Descuentos en la factura | **DONE en produccion** (2026-11-12) | `SPEC/PLAN/TASKS_DESCUENTOS_FACTURA_v0.1` | — |
+| Critico | FS-56 | Nota de remision manual, entrega E1 | **DONE en produccion** (2026-11-12; habilitada para SALUMAX, en gris "No habilitado" para los otros tres) | `SPEC/PLAN/TASKS_NOTA_REMISION_v0.1` | NRE-014; E2 (incluye revision del formulario con `/design`) |
 | Critico | FS-56 | Nota de remision, entrega E2 (datos guardados, domicilio en la agenda, facturas asociadas) | **CON CADENA** | idem | Implementar cuando se pida |
-| Critico | FS-62 y FS-60 | Validaciones del receptor (RUC con DV, correo, telefono, nombre, direccion) | **DONE en la rama, sin desplegar** | `SPEC/PLAN/TASKS_VALIDACIONES_RECEPTOR_v0.1` | FS-73; VAL-013 (no bloquea) |
-| Critico | ATO-009 | Textos del operador en produccion | **DONE en la rama, sin desplegar** | `SPEC/PLAN/TASKS_AJUSTES_TEXTOS_OPERADOR_v0.1` | FS-73 |
+| Critico | FS-62 y FS-60 | Validaciones del receptor (RUC con DV, correo, telefono, nombre, direccion) | **DONE en produccion** (2026-11-12) | `SPEC/PLAN/TASKS_VALIDACIONES_RECEPTOR_v0.1` | VAL-013 (no bloquea) |
+| Critico | ATO-009 | Textos del operador en produccion | **DONE en produccion** (2026-11-12) | `SPEC/PLAN/TASKS_AJUSTES_TEXTOS_OPERADOR_v0.1` | — |
 | Critico | FS-55, FS-57 | Nota de debito y autofactura | **PENDIENTE** | FE ya las publico | Cadena cuando se pida |
 | Menos critico | FS-67 | Recibos asociados a facturas a credito | **PENDIENTE** | — | Cadena |
 | Menos critico | FS-68 | Documentos asociados entre si | **PENDIENTE** | — | Cadena |
