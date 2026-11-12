@@ -22,7 +22,7 @@ const outDir = path.join(process.cwd(), "test-results", "nota-remision");
 fs.mkdirSync(outDir, { recursive: true });
 const pedidos = process.argv.slice(2);
 const corre = (caso) => (pedidos.length === 0 ? !["motivo1", "motivo7", "motivo1-390", "sin-numerador", "anular"].includes(caso) : pedidos.includes(caso));
-const ESPERA_APROBACION_MS = Number(process.env.ENSAYO_ESPERA_MS ?? 17 * 60 * 1000); // lote de FE test cada 15 min
+const ESPERA_APROBACION_MS = Number(process.env.ENSAYO_ESPERA_MS ?? 25 * 60 * 1000); // lote de FE + verificacion de FS (hasta 15 min en lote)
 
 const resultados = [];
 const emitidas = [];
@@ -205,6 +205,8 @@ async function emitirYEsperar(page, etiqueta) {
       if ((await verificar.count()) > 0 && (await verificar.first().isEnabled())) await verificar.first().click().catch(() => undefined);
     }
   }
+  // Ultima mirada: la aprobacion puede llegar en los segundos finales de la espera.
+  aprobada = aprobada || (await page.locator(".paso.hecho").count()) >= 4;
   const texto = (await page.locator("main").innerText()).replace(/\s+/g, " ");
   const numero = (texto.match(/(\d{3}-\d{3}-\d{7}|\b\d{7}\b)/) ?? [])[1] ?? null;
   const estadoFinal = (await page.locator(".resultado-emision .estado-documento").first().getAttribute("data-estado").catch(() => null)) ?? null;

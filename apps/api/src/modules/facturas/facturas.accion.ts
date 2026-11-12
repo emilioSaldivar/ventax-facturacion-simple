@@ -279,7 +279,7 @@ function resolucionDeRechazada(documento: DeriveAccionInput): { accion: Document
 
 function buildOkDetalle(documento: DeriveAccionInput): DocumentoAccionDetalle {
   return {
-    titulo: documento.tipo === "NOTA_CREDITO" ? "Nota de crédito emitida" : "Factura emitida",
+    titulo: documento.tipo === "NOTA_CREDITO" ? "Nota de crédito emitida" : documento.tipo === "NOTA_REMISION" ? "Nota de remisión emitida" : "Factura emitida",
     descripcion: "El documento fue aprobado por SIFEN. No requiere ninguna acción.",
     acciones_sugeridas: [],
     soporte_payload: null
