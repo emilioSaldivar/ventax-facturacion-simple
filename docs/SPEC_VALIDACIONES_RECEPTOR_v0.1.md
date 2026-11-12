@@ -72,5 +72,5 @@ Todas las reglas se aplican **antes** de llamar a FE, en la API y en la interfaz
 ## Decisiones pendientes
 
 - D-1. Resuelta el 2026-11-11: FE confirmo el algoritmo con letras (ver Contrato de FE).
-- D-2. Si el operador escribe solo la base del RUC y el padron no lo tiene, FS exige el DV (propuesta) en lugar de calcularlo: calcularlo haria pasar un RUC con un digito mal tipeado. El usuario puede preferir que FS lo complete y lo muestre para confirmar.
-- D-3. Telefonos del exterior con mas de 15 digitos no existen en el E.164, asi que el tope de 15 alcanza; se confirma con el usuario que no haya clientes con telefonos "0981 123 456 int. 12" que hoy se guardan tal cual.
+- D-2 (resuelta 2026-11-11 con la propuesta: FS exige el DV). Si el operador escribe solo la base del RUC y el padron no lo tiene, FS exige el DV (propuesta) en lugar de calcularlo: calcularlo haria pasar un RUC con un digito mal tipeado. El usuario puede preferir que FS lo complete y lo muestre para confirmar.
+- D-3 (cerrada 2026-11-11: en `segel-fs` ningun cliente activo incumple, VAL-009). Telefonos del exterior con mas de 15 digitos no existen en el E.164, asi que el tope de 15 alcanza; se confirma con el usuario que no haya clientes con telefonos "0981 123 456 int. 12" que hoy se guardan tal cual.

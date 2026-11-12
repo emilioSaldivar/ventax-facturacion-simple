@@ -105,6 +105,7 @@ Que el operador cargue descuentos por linea y sobre el total en la factura manua
 - **RN-19. Resultado y ficha.** `ResultadoEmision` y la ficha de Documentos agregan la columna "Descuento" a la tabla de lineas cuando alguna linea lo tiene, y la fila "Descuento" a los totales cuando `totals.descuento > 0`. Con `fuente: "FE"`, muestran el `descuento` oficial de FE. El KUDE lo arma FE; FS no dibuja nada mas.
 - **RN-20. Nota de credito en la ficha.** Para una factura con descuento, la ficha ofrece solo la nota total y muestra el texto ya existente de las facturas con `nota_credito_por_referencia` ("Esta factura solo admite nota de crédito total"). Sin cambio de pantalla: lo decide `totals.nota_credito_por_referencia` (RN-09).
 - **RN-21. Borradores y plantillas.** El borrador local del editor (`lib/borradores.ts`) guarda los descuentos de las lineas y el global. "Convertir en factura" desde un presupuesto no trae descuentos (D-5).
+- **RN-21a (cierre, 2026-11-11).** RN-21 no aplica: el editor no guarda borradores locales (solo avisa al salir con cambios sin emitir), asi que no hay nada que persistir. "Convertir en factura" desde un presupuesto sigue sin traer descuentos (D-5).
 - **RN-22. Textos.** Sin emojis; voseo en los textos de ayuda; "Descuento" y "Descuento sobre el total" como etiquetas; `docs/PAUTAS_FRONTEND_v0.1.md` para tokens, componentes y accesibilidad (cada campo con `aria-label` "Descuento, línea N").
 
 ## Fuera de alcance
@@ -120,8 +121,8 @@ Que el operador cargue descuentos por linea y sobre el total en la factura manua
 ## Decisiones pendientes
 
 - **DP-1.** Resuelta el 2026-11-11 con FE: no hay reparto de centavos; RN-06 reproduce xmlgen (8 decimales, sin ajuste, total por formula directa).
-- **DP-2.** Si el conmutador "%" / moneda es por grilla (propuesta, mas simple) o por linea. Se implementa por grilla; se cambia si el usuario lo pide al ver la pantalla.
-- **DP-3.** Si "Descuento sobre el total" se ofrece tambien como porcentaje. Propuesta: no en v0.1 (FE lo recibe como monto y el usuario decidio monto en D-2).
+- **DP-2 (resuelta 2026-11-11 con la propuesta).** Si el conmutador "%" / moneda es por grilla (propuesta, mas simple) o por linea. Se implemento por grilla; se cambia si el usuario lo pide al ver la pantalla.
+- **DP-3 (resuelta 2026-11-11 con la propuesta: solo monto).** Si "Descuento sobre el total" se ofrece tambien como porcentaje. Propuesta: no en v0.1 (FE lo recibe como monto y el usuario decidio monto en D-2).
 
 ## Criterios de aceptacion
 
@@ -135,4 +136,5 @@ Que el operador cargue descuentos por linea y sobre el total en la factura manua
 - **CA-08. Editor modo simple (Playwright 390).** La hoja de la linea muestra "Descuento" con el conmutador; el pie muestra la fila "Descuento" y el total neto; sin desbordes horizontales.
 - **CA-09. Resultado y ficha (Playwright).** Tras crear la factura de CA-01 contra el mock, `ResultadoEmision` muestra la columna "Descuento" y la fila "Descuento"; la ficha en Documentos tambien. Sin emojis nuevos (reconocimiento UX sin aumentos).
 - **CA-10. SIFEN test.** Una factura con descuento por linea y global, en `PYG`, emitida contra FE real en SIFEN test desde el stack local (`.local/segel-ensayo`), con aviso previo a la sesion de FE: aprobada; `GET /totales` devuelve `descuento` igual al calculado por FS y `total` igual salvo `redondeo`; el KUDE muestra los descuentos. Una segunda en USD si FE lo confirma para esa clave.
+- **CA-10b. USD en SIFEN test (pendiente, decision del usuario).** Una factura en USD con descuento por linea y global, con el vector USD de FE (3 x 19,99 con 1,11; 7 x 4,37; global 5,55; tipo de cambio 6.181,34): aprobada; `/totales` con `descuento 8,88`, `total 81,68`, `iva_10 4,81`, `iva_5 1,37`. Puede hacerse antes o despues del despliegue: el calculo en USD ya coincide con el vector de FE en las pruebas unitarias, y el XML lo arma FE.
 - **CA-11. Contrato.** `spec/openapi.yaml` actualizado (RN-11) y el frontend consume solo lo documentado.

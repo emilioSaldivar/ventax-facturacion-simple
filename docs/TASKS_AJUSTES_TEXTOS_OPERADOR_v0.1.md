@@ -12,7 +12,7 @@
 | ATO-006 | A-8 error del recibo desde la ficha | CA-7 | HECHO |
 | ATO-007 | Guiones con textos viejos actualizados | CA-8 | HECHO |
 | ATO-008 | Validacion: typecheck, build, stack local, guion nuevo y regresion | CA-8 | HECHO |
-| ATO-009 | Despliegue en `segel-fs` (produccion) | ver plan abajo | PENDIENTE: el usuario lo deja para despues (2026-11-11); requiere su confirmacion directa |
+| ATO-009 | Despliegue en `segel-fs` (produccion) | ver plan abajo | Pasa a `TASKS_DESPLIEGUE_SEGEL_FS_v0.3`: los commits `395f365` y `add786b` ya estan en la rama y salen con la version nueva (2026-11-11) |
 
 ## Plan de despliegue (ATO-009)
 

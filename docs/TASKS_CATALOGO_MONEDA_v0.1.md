@@ -18,8 +18,8 @@ Estimacion total: 7 a 9 horas de implementacion y prueba, sin contar el desplieg
 | CAM-010 | Guiones y documentos previos: `playwright-ux-nueva-factura.cjs` CA-05 reescrito; nota de reemplazo en `SPEC_UX_NUEVA_FACTURA_v0.1` CA-05, `SPEC_EDITOR_FACTURA_PC_v0.1` D-4/CA-06 y `SPEC_MONEDA_EXTRANJERA_v0.1` "Fuera de alcance"; `BACKLOG.md` FS-59 apunta a esta cadena | — | diff revisado; `ux-nueva-factura` en verde en lo que no emite | Hecha (2026-11-11) |
 | CAM-011 | Regresion: `ux-resto-app` (caso `agenda`), `editor-pc`, `documentos-escritorio`, reconocimiento sin subir la linea base; `npm run test`, `typecheck`, `lint` (api); `typecheck`, `build` (web); lista §12 de PAUTAS | CA-09 | resultados por guion anotados aqui | Hecha (2026-11-11) |
 | CAM-012 | Emision real en SIFEN test desde el stack local: factura en USD con articulo del catalogo en USD y una linea guardada desde el editor; aviso previo a FE (`facturacion-electronica-7c`) | CA-10 | documento aprobado, KUDE con precios en USD; `document_uuid` y numero anotados aqui | Hecha (2026-11-11) |
-| CAM-013 | Cierre de la cadena: SPEC, PLAN y TASKS releidos y ajustados con lo descubierto; decisiones DP-1 y DP-2 resueltas o confirmadas | — | repaso con el usuario | Pendiente |
-| CAM-014 | Despliegue en `segel-fs` (produccion): respaldo previo, migracion `0046`, API y frontend; verificacion sin emitir | — | **solo con orden directa del usuario**; procedimiento de `TASKS_DESPLIEGUE_SEGEL_FS_v0.2.md` E-6 | Pendiente |
+| CAM-013 | Cierre de la cadena: SPEC, PLAN y TASKS releidos y ajustados con lo descubierto; decisiones DP-1 y DP-2 resueltas o confirmadas | — | repaso con el usuario | Hecha (2026-11-11): DP-1 y DP-2 cerradas con la propuesta; RN-13a agregada; PLAN sin cambios de diseño |
+| CAM-014 | Despliegue en `segel-fs` (produccion): respaldo previo, migracion `0046`, API y frontend; verificacion sin emitir | — | **solo con orden directa del usuario**; procedimiento de `TASKS_DESPLIEGUE_SEGEL_FS_v0.2.md` E-6 | Pasa a `TASKS_DESPLIEGUE_SEGEL_FS_v0.3` (DSF-010); espera la orden del usuario |
 
 ## Decisiones pendientes
 
@@ -38,4 +38,4 @@ Estimacion total: 7 a 9 horas de implementacion y prueba, sin contar el desplieg
 - Playwright `scripts/segel-fs/playwright-catalogo-moneda.cjs`, 1440 / 1280 / 390: **48/48** (API con la sesion del operador; alta en USD y Gs.; filtros; cambio de moneda con el error de decimales; editor USD con precio 12,50; articulo en Gs. sin precio en una factura USD y al reves; guardado en el catalogo desde una factura USD con `moneda: "USD"`). Los articulos de prueba se borran al final.
 - CA-05 de `playwright-ux-nueva-factura.cjs` reescrito segun RN-16. Ese guion emitio 3 facturas aprobadas en SIFEN test (1010637 USD, 1010638 y 1010639 PYG, con aviso previo a FE); sus 2 fallas eran verificaciones viejas (iconos del menu y un RUC con DV incorrecto), corregidas en `cba6d2b`.
 - **CA-10 con SALUMAX (2026-11-11, `altas-fs` en `f31afc7`, `slx-tics`, punto 001-001, aviso previo a FE):** `playwright-catalogo-moneda.cjs sifen` **53/53**. Factura USD `001-001-9000051` con el articulo del catalogo "Prueba CAM sifen USD" a 12,50 x 2 = USD 25,00, aprobada en SIFEN test, KUDE disponible. Los articulos de prueba se borraron al final.
-- Pendiente: CAM-014 (despliegue con orden directa).
+- Despliegue: `SPEC/PLAN/TASKS_DESPLIEGUE_SEGEL_FS_v0.3`.

@@ -2,7 +2,7 @@
 
 SPEC: `docs/SPEC_NOTA_REMISION_v0.1.md` · PLAN: `docs/PLAN_NOTA_REMISION_v0.1.md`.
 
-Todas las tareas estan **Pendiente** (2026-11-11). La implementacion arranca cuando el usuario cierre las decisiones DP-1 a DP-7 de la SPEC (o acepte las propuestas) y FE responda los puntos 2 a 5 de la coordinacion del PLAN. Validacion siempre contra el stack local levantado con `desplegar.sh` (FE mock), salvo donde dice SIFEN test.
+Estado al 2026-11-11: **E1 hecha y probada** (stack del ensayo y SALUMAX en SIFEN test); **E2 con cadena, sin implementar**; E3 cerrada salvo lo que depende de E2. Las decisiones DP-1 a DP-7 estan resueltas en la SPEC. El despliegue va por `TASKS_DESPLIEGUE_SEGEL_FS_v0.3`.
 
 ## Entrega E1 — emitir con datos cargados a mano
 
@@ -21,7 +21,7 @@ Todas las tareas estan **Pendiente** (2026-11-11). La implementacion arranca cua
 | NRE-011 | Web: `SelectorDomicilio` (listas encadenadas, carga, `503` visible) y `LineasRemision` (sin precio, busqueda en el catalogo que copia codigo y descripcion) | RN-08, RN-10, RN-17 | typecheck, build; Playwright `validaciones` | Hecha (2026-11-11) |
 | NRE-012 | Web: `RemisionNuevaView` con los siete bloques, valores por defecto, panel derecho con resumen y motivo de bloqueo, transportista/vehiculo/locales inline (sin listas), `lib/validacionRemision.ts` espejo, flujo validar → emitir → `ResultadoEmision` ("Descargar para el traslado" con motivo 7), "Crear nueva" renueva la clave | RN-09 a RN-14, RN-19, RN-20 | typecheck, build; Playwright `motivo1`, `motivo7`, `validaciones` en 1440, 1280 y 390 (CA-02, CA-03 sin listas guardadas) | Hecha (2026-11-11) |
 | NRE-013 | Web: pestaña "Nueva nota de remision" en `RemisionView`, estado del tipo en `tiposEmision.ts`, tarjeta del menu "Nuevo", texto "Proximamente" sin permiso, motivo en Informacion y estado | RN-01, RN-02 | Playwright `permiso` (CA-01) con y sin `nota_remision_habilitada` (contexto interceptado) | Hecha (2026-11-11) |
-| NRE-014 | Web: ficha de Documentos con "Anular" (168 h) y "Corregir y emitir de nuevo" para NRE, que abre el formulario precargado | RN-23, RN-26 | Playwright `corregir` (CA-06) | Pendiente |
+| NRE-014 | Web: ficha de Documentos con "Anular" (168 h) y "Corregir y emitir de nuevo" para NRE, que abre el formulario precargado | RN-23, RN-26 | Playwright `corregir` (CA-06) | Pendiente (no bloquea el despliegue: en produccion la remision queda "Proximamente"); decision del usuario sobre cuando |
 | NRE-015 | Guion `scripts/segel-fs/playwright-nota-remision.cjs` con los casos `permiso`, `motivo1`, `motivo7`, `validaciones`, `corregir`; capturas en `test-results/nota-remision/` | CA-01 a CA-04, CA-06 | corrida completa en 1440, 1280 y 390 contra el stack local; sin overflow ni emojis | Hecha (2026-11-11) |
 | NRE-016 | Regresion E1: `npm run test`, `typecheck`, `lint` de la API; `typecheck` y `build` del web; `playwright-documentos-escritorio.cjs`, `playwright-ux-resto-app.cjs`, `playwright-nc-cuerpo.cjs` | CA-08, CA-11 | todo en verde; evidencia aqui | Hecha (2026-11-11) |
 
@@ -60,11 +60,11 @@ Todas las tareas estan **Pendiente** (2026-11-11). La implementacion arranca cua
 
 | ID | Tarea | Reglas | Validacion | Estado |
 |---|---|---|---|---|
-| NRE-025 | Coordinacion con FE: respuestas a DP-1, DP-2, DP-3 y al punto 5 del PLAN; ajustar la SPEC si cambian | PLAN §7 | respuestas registradas en la SPEC | Pendiente |
-| NRE-026 | Re-exportar e importar el facturador del ensayo local para que `fe_consumer_permisos` traiga `NRE_EMIT` | RN-03 | `GET /me/context` → `nota_remision_habilitada: true` en el stack local real | Pendiente |
-| NRE-027 | Emision real en SIFEN test contra `fe-segel`: una nota motivo 1 con factura asociada y una motivo 7; cancelar una; KUDE de remision descargado. **Aviso previo al usuario y a FE** | CA-10 | numero, CDC, estado, KUDE y capturas en la evidencia; nada en `segel-fs` | Pendiente |
-| NRE-028 | Cierre documental: SPEC con el diseño final y las decisiones tomadas, PLAN con lo adoptado, BACKLOG FS-56 y `HOJA_DE_RUTA_v0.1` actualizados, lista §12 de `PAUTAS_FRONTEND_v0.1` | Regla de cierre de `AGENTS.md` | revision del diff de docs | Pendiente |
-| NRE-029 | Despliegue en `segel-fs`: solo con **orden directa del usuario**, con los facturadores habilitados por FE (DP-6) y re-importados, respaldo previo, migracion 0048, api y frontend; verificacion sin emitir | RN-01, RN-03 | plan de despliegue en `TASKS_DESPLIEGUE_SEGEL_FS_v0.2` seccion nueva | Pendiente |
+| NRE-025 | Coordinacion con FE: respuestas a DP-1, DP-2, DP-3 y al punto 5 del PLAN; ajustar la SPEC si cambian | PLAN §7 | respuestas registradas en la SPEC | Hecha (2026-11-11): DP-1, DP-2, DP-3, formato de fecha, unidad y artefactos registrados en la SPEC |
+| NRE-026 | Re-exportar e importar el facturador del ensayo local para que `fe_consumer_permisos` traiga `NRE_EMIT` | RN-03 | `GET /me/context` → `nota_remision_habilitada: true` en el stack local real | Hecha (2026-11-11): en el ensayo por SQL; con SALUMAX por el export real de FE e importacion EXISTENTE (NRE-036) |
+| NRE-027 | Emision real en SIFEN test contra `fe-segel`: una nota motivo 1 con factura asociada y una motivo 7; cancelar una; KUDE de remision descargado. **Aviso previo al usuario y a FE** | CA-10 | numero, CDC, estado, KUDE y capturas en la evidencia; nada en `segel-fs` | Hecha en parte (2026-11-11): motivo 1 sin factura asociada (las asociadas son E2) y motivo 7, aprobadas; anulacion aprobada; KUDE de remision verificado en la pantalla. Falta la nota con factura asociada (E2) |
+| NRE-028 | Cierre documental: SPEC con el diseño final y las decisiones tomadas, PLAN con lo adoptado, BACKLOG FS-56 y `HOJA_DE_RUTA_v0.1` actualizados, lista §12 de `PAUTAS_FRONTEND_v0.1` | Regla de cierre de `AGENTS.md` | revision del diff de docs | Hecha (2026-11-11): SPEC con RN-01b, RN-24b, RN-25b y DP-1 a DP-7 cerradas; PLAN §5.1; BACKLOG FS-56 |
+| NRE-029 | Despliegue en `segel-fs`: solo con **orden directa del usuario**, con los facturadores habilitados por FE (DP-6) y re-importados, respaldo previo, migracion 0048, api y frontend; verificacion sin emitir | RN-01, RN-03 | plan de despliegue en `TASKS_DESPLIEGUE_SEGEL_FS_v0.2` seccion nueva | Pasa a `TASKS_DESPLIEGUE_SEGEL_FS_v0.3`. Nota: sin re-importar facturadores, la remision no se ofrece en produccion (decision DP-6) |
 
 ## Evidencia
 
@@ -85,7 +85,7 @@ Todas las tareas estan **Pendiente** (2026-11-11). La implementacion arranca cua
 - Hallazgos corregidos en `f895ba5`: FE devuelve el numero de la NRE en `nro_documento` (no en `nro_factura`) y FS lo dejaba vacio (las dos notas del stack se completaron por SQL); la pantalla de resultado mostraba "Total a pagar Gs. 0", precio e IVA, y ahora muestra motivo y traslado.
 - `NRE_EMIT` del stack local se cargo por SQL en `facturadores.fe_consumer_permisos` (equivale a re-importar el export de FE, que ya lo informa).
 - Regresion: `playwright-documentos-escritorio.cjs` 31/31 (la verificacion B1 se actualizo: la ficha ofrece "Anular nota de remisión", RN-26).
-- Pendiente: NRE-014 (formulario precargado desde "Corregir y emitir de nuevo"), anular una NRE en SIFEN test, la entrega E2 y el despliegue con orden directa.
+- Pendiente: NRE-014 y la entrega E2. Despliegue: `SPEC/PLAN/TASKS_DESPLIEGUE_SEGEL_FS_v0.3`.
 
 ## Evidencia con SALUMAX (2026-11-11, `altas-fs` en la rama, FE `fe-altas` contra SIFEN test)
 

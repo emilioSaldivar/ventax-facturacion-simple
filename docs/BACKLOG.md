@@ -19,12 +19,13 @@ Las filas de la tabla de iniciativas de julio y agosto (mas abajo) conservan su 
 
 | Prioridad | ID | Tema | Estado | Documentos | Siguiente paso |
 |---|---|---|---|---|---|
-| Critico | FS-59 | Catalogo en moneda extranjera (USD) | **DONE en la rama, sin desplegar** | `SPEC/PLAN/TASKS_CATALOGO_MONEDA_v0.1` | Despliegue (orden del usuario) |
-| Critico | FS-66 | Descuentos en la factura | **DONE en la rama, sin desplegar** | `SPEC/PLAN/TASKS_DESCUENTOS_FACTURA_v0.1` | Factura USD con descuento en SIFEN test; despliegue |
-| Critico | FS-56 | Nota de remision manual, entrega E1 | **DONE en la rama, sin desplegar** | `SPEC/PLAN/TASKS_NOTA_REMISION_v0.1` | NRE-014; despliegue. Ningun cliente la usa todavia |
+| Critico | FS-73 | **Despliegue de la version nueva en `segel-fs`** (validaciones, catalogo USD, descuentos, remision E1, ATO-009, URA-009; migraciones 0046 a 0049) | **CON CADENA** | `SPEC/PLAN/TASKS_DESPLIEGUE_SEGEL_FS_v0.3` | Decisiones D-1 a D-8 del usuario y su orden directa |
+| Critico | FS-59 | Catalogo en moneda extranjera (USD) | **DONE en la rama, sin desplegar** | `SPEC/PLAN/TASKS_CATALOGO_MONEDA_v0.1` | FS-73 |
+| Critico | FS-66 | Descuentos en la factura | **DONE en la rama, sin desplegar** | `SPEC/PLAN/TASKS_DESCUENTOS_FACTURA_v0.1` | DES-013 (USD en SIFEN test, decision D-5); FS-73 |
+| Critico | FS-56 | Nota de remision manual, entrega E1 | **DONE en la rama, sin desplegar** | `SPEC/PLAN/TASKS_NOTA_REMISION_v0.1` | FS-73 (queda "Proximamente" en produccion hasta que un cliente la pida); NRE-014 |
 | Critico | FS-56 | Nota de remision, entrega E2 (datos guardados, domicilio en la agenda, facturas asociadas) | **CON CADENA** | idem | Implementar cuando se pida |
-| Critico | FS-62 y FS-60 | Validaciones del receptor (RUC con DV, correo, telefono, nombre, direccion) | **DONE en la rama, sin desplegar** | `SPEC/PLAN/TASKS_VALIDACIONES_RECEPTOR_v0.1` | VAL-013 (errores por campo en Recibos); despliegue |
-| Critico | ATO-009 | Textos del operador en produccion | **DONE en la rama, sin desplegar** | `SPEC/PLAN/TASKS_AJUSTES_TEXTOS_OPERADOR_v0.1` | Despliegue (orden del usuario) |
+| Critico | FS-62 y FS-60 | Validaciones del receptor (RUC con DV, correo, telefono, nombre, direccion) | **DONE en la rama, sin desplegar** | `SPEC/PLAN/TASKS_VALIDACIONES_RECEPTOR_v0.1` | FS-73; VAL-013 (no bloquea) |
+| Critico | ATO-009 | Textos del operador en produccion | **DONE en la rama, sin desplegar** | `SPEC/PLAN/TASKS_AJUSTES_TEXTOS_OPERADOR_v0.1` | FS-73 |
 | Critico | FS-55, FS-57 | Nota de debito y autofactura | **PENDIENTE** | FE ya las publico | Cadena cuando se pida |
 | Menos critico | FS-67 | Recibos asociados a facturas a credito | **PENDIENTE** | — | Cadena |
 | Menos critico | FS-68 | Documentos asociados entre si | **PENDIENTE** | — | Cadena |

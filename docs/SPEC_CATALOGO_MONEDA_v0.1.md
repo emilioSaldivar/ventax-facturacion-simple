@@ -58,6 +58,7 @@ No cambia. El precio de cada linea ya viaja a `POST /v1/factura` en la moneda de
 
 ### Editor de factura (`InvoiceEditor` en `main.tsx`: `applyCatalogItem`, `saveQuickCatalogItem`, `GrillaLineas`)
 
+- **RN-13a (cierre, 2026-11-11).** En una factura en USD, el precio del articulo se escribe en la linea con dos decimales (`12,50`, no `12,5`), con `toFixed(2)`; en el catalogo, al editar o duplicar un articulo en USD, el precio tambien se muestra con dos decimales.
 - **RN-13.** Al elegir un articulo cuya moneda es la de la factura, la linea completa codigo, descripcion, IVA **y precio**, y queda `lockedFromCatalog` con el mensaje "Item seleccionado del catálogo.", en cualquier moneda. Esto reemplaza la condicion `!enMonedaExtranjera` actual.
 - **RN-14.** Al elegir un articulo de otra moneda, la linea completa codigo, descripcion e IVA, deja el precio vacio para cargar, no queda `lockedFromCatalog` para el precio (igual que hoy en USD) y el mensaje dice la moneda del articulo: "Item del catálogo en Gs.: cargá el precio en USD." o "Item del catálogo en USD: cargá el precio en Gs.". No se convierte por tipo de cambio (decision (c)).
 - **RN-15.** Las sugerencias del catalogo en la celda de descripcion muestran el precio con su moneda (`formatMonto`), para que el operador distinga un articulo en Gs. de uno en USD antes de elegirlo.
@@ -83,8 +84,8 @@ No cambia. El precio de cada linea ya viaja a `POST /v1/factura` en la moneda de
 
 | Id | Pregunta | Propuesta mientras no se decida |
 |---|---|---|
-| DP-1 | En la busqueda desde el editor, ¿los articulos de otra moneda se muestran mezclados (ordenados despues) o en un grupo aparte "En otra moneda"? | Mezclados, ordenados despues, con el precio y la moneda visibles (RN-07, RN-15). Es lo que menos cambia la grilla. |
-| DP-2 | ¿El filtro de moneda del catalogo recuerda la ultima eleccion del operador? | No; arranca en "Todas" como los demas filtros de la pantalla. |
+| DP-1 (resuelta 2026-11-11 con la propuesta) | En la busqueda desde el editor, ¿los articulos de otra moneda se muestran mezclados (ordenados despues) o en un grupo aparte "En otra moneda"? | Mezclados, ordenados despues, con el precio y la moneda visibles (RN-07, RN-15). Es lo que menos cambia la grilla. |
+| DP-2 (resuelta 2026-11-11 con la propuesta) | ¿El filtro de moneda del catalogo recuerda la ultima eleccion del operador? | No; arranca en "Todas" como los demas filtros de la pantalla. |
 
 ## Criterios de aceptacion
 

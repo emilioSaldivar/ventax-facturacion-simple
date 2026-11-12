@@ -155,6 +155,23 @@ La fuente de verdad de este proyecto es:
 - `docs/SPEC_COMPRADOR_INNOMINADO_v0.1.md`
 - `docs/PLAN_COMPRADOR_INNOMINADO_v0.1.md`
 - `docs/TASKS_COMPRADOR_INNOMINADO_v0.1.md`
+- `docs/SPEC_VALIDACIONES_RECEPTOR_v0.1.md`
+- `docs/PLAN_VALIDACIONES_RECEPTOR_v0.1.md`
+- `docs/TASKS_VALIDACIONES_RECEPTOR_v0.1.md`
+- `docs/SPEC_CATALOGO_MONEDA_v0.1.md`
+- `docs/PLAN_CATALOGO_MONEDA_v0.1.md`
+- `docs/TASKS_CATALOGO_MONEDA_v0.1.md`
+- `docs/SPEC_DESCUENTOS_FACTURA_v0.1.md`
+- `docs/PLAN_DESCUENTOS_FACTURA_v0.1.md`
+- `docs/TASKS_DESCUENTOS_FACTURA_v0.1.md`
+- `docs/SPEC_NOTA_REMISION_v0.1.md`
+- `docs/PLAN_NOTA_REMISION_v0.1.md`
+- `docs/TASKS_NOTA_REMISION_v0.1.md`
+- `docs/SPEC_DESPLIEGUE_SEGEL_FS_v0.3.md`
+- `docs/PLAN_DESPLIEGUE_SEGEL_FS_v0.3.md`
+- `docs/TASKS_DESPLIEGUE_SEGEL_FS_v0.3.md`
+- `docs/BACKLOG.md` (archivo unico de pendientes y estados)
+- `docs/HOJA_DE_RUTA_v0.1.md` (prioridades y decisiones del 2026-11-11; el estado vigente esta en `BACKLOG.md`)
 - `spec/openapi.yaml`
 
 Los documentos bajo `contexto_facturacion_electronica/` y `contexto_pos_graciela/` son antecedentes. No son la especificacion final del nuevo producto.

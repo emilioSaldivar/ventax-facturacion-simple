@@ -17,7 +17,8 @@ Orden: DES-001 cierra las preguntas con FE; DES-002 a DES-006 son la API y puede
 | DES-009 | Web: columna y fila "Descuento" en `ResultadoEmision` y en la ficha de Documentos; ficha con solo nota total para facturas con descuento | RN-19, RN-20 | Playwright caso `resultado` contra el mock: CA-09; reconocimiento UX sin aumentos de emojis | Hecha (2026-11-11) |
 | DES-010 | Regresion: `npm run test`, `typecheck`, `lint` de api y shared; `build` web; `playwright-editor-pc.cjs`, `playwright-moneda-extranjera.cjs` (sin emitir), `playwright-nota-credito-parcial.cjs`, `playwright-reconocimiento-ux.cjs` contra el stack local reconstruido | CA-04 | Resultados por guion anotados en la evidencia | Hecha (2026-11-11) |
 | DES-011 | SIFEN test: factura `PYG` con descuento por linea y global contra FE real desde el stack local, con aviso previo a `facturacion-electronica-7c`; comparar `GET /totales` y el KUDE; una en USD si FE lo confirma | RN-07, RN-08 | CA-06, CA-10: `document_uuid`, totales de FE y de FS lado a lado, captura del KUDE | Hecha (2026-11-11): 001-001-1010640 aprobada |
-| DES-012 | Cierre: repasar SPEC, PLAN y TASKS con lo aprendido (en especial RN-06 y la nota de riesgo sobre redondeo), `docs/BACKLOG.md` (FS-66) y `docs/HOJA_DE_RUTA_v0.1.md`; despliegue en `segel-fs` **solo con orden directa del usuario** y con respaldo previo | Regla de cierre de `AGENTS.md` | Documentos actualizados; evidencia completa en esta tabla | Pendiente |
+| DES-012 | Cierre: repasar SPEC, PLAN y TASKS con lo aprendido (en especial RN-06 y la nota de riesgo sobre redondeo), `docs/BACKLOG.md` (FS-66) y `docs/HOJA_DE_RUTA_v0.1.md`; despliegue en `segel-fs` **solo con orden directa del usuario** y con respaldo previo | Regla de cierre de `AGENTS.md` | Documentos actualizados; evidencia completa en esta tabla | Hecha (2026-11-11) en lo documental: SPEC con RN-06a, RN-21a y CA-10b, DP-2 y DP-3 cerradas, BACKLOG FS-66 al dia. El despliegue pasa a `TASKS_DESPLIEGUE_SEGEL_FS_v0.3` |
+| DES-013 | SIFEN test en USD (CA-10b): factura con el vector USD de FE desde el stack local, con aviso previo a FE; comparar `/totales` | RN-07, RN-08 | numero, estado y totales lado a lado | Pendiente: **decision del usuario** (antes o despues del despliegue) |
 
 ## Evidencia
 
@@ -42,4 +43,4 @@ Orden: DES-001 cierra las preguntas con FE; DES-002 a DES-006 son la API y puede
   | Total a pagar | 83.897 | 83.850 (redondeo SEDECO a 50) |
 
   La unica diferencia es el redondeo a 50 guaranies, que FS no calcula por diseno (fuera de alcance de la SPEC); al aprobarse, FS toma los totales oficiales de FE (`fuente: "FE"`) y conserva `descuento_global` y `nota_credito_por_referencia`.
-- Pendiente: DES-012 (cierre de documentos y despliegue con orden directa).
+- Pendiente: DES-013 (USD en SIFEN test, cuando el usuario lo indique). Despliegue: `SPEC/PLAN/TASKS_DESPLIEGUE_SEGEL_FS_v0.3`.
