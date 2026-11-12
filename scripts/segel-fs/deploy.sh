@@ -11,7 +11,7 @@ SEGEL_HOST="${SEGEL_HOST:-segel-fs}"
 REMOTE_ROOT="${REMOTE_ROOT:-/home/esaldivar/segel}"
 FS_REF="${FS_REF:-HEAD}"
 FE_REPO="${FE_REPO:-$ROOT_DIR/../../FACTURACION_ELECTRONICA_MVP/facturacion-electronica}"
-FE_REF="${FE_REF:-segel-rc4.32}"
+FE_REF="${FE_REF:-segel-rc4.34}"
 
 IMAGES=(
   segel-fs-api segel-fs-migrate segel-fs-frontend segel-fs-dnit-ruc-loader-cron
