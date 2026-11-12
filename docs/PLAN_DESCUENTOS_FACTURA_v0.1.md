@@ -82,3 +82,15 @@ Preguntas hechas y respondidas por la sesion de FE el 2026-11-11 (xmlgen 1.0.277
 4. **Pagos en contado.** FE solo exige suma > 0; FS manda `pagos[0].monto = total` sin redondear (`dTotOpe`), como §43.3 y los ejemplos aprobados.
 
 Pendiente de verificar en SIFEN test (CA-10): una factura **PYG con descuento global que no divide exacto** (xmlgen deja `dSub10`, bases e IVA con decimales en el XML). FE no tiene ninguna aprobada asi; FS la emite en SIFEN test con aviso previo y le pasa el resultado a FE, que lo registra de su lado. Si SIFEN la rechaza, la cadena se detiene en PYG hasta que FE decida como redondea por item, y sigue solo con montos que dividan exacto o con USD.
+
+## Refinamiento del 2026-11-12: desglose de descuentos en los totales (RN-18b, RN-19b, RN-23)
+
+Sin cambios en la API ni en `packages/shared`: `totals.descuento` (total) y `totals.descuento_global` ya llegan en la vista previa, en el documento y en los totales oficiales de FE (RN-08). El de linea sale por diferencia.
+
+- `apps/web-operacion/src/lib/descuentos.ts` (nuevo): `desgloseDescuentos(totals)` devuelve las filas de RN-18b en orden (`{ etiqueta, monto, cierre }`): "Descuento por línea", "Descuento sobre el total" y "Total descuentos" segun que montos sean mayores que cero; `porcentajeDescuento(descuento, subtotal)` arma el texto "12 %" / "3,1 %" (una funcion pura, con pruebas de los cuatro casos de CA-12 y los dos de CA-13 en `apps/web-operacion/src/lib/descuentos.test.ts` si el paquete tiene vitest; si no, se cubre con Playwright).
+- `components/TotalRow.tsx`: `FilasDescuento({ totals, moneda })` que pinta las filas con `TotalRow` (`resta`; la fila de cierre con la clase `resta cierre`). Reemplaza las dos lineas `{(preview?.totals.descuento ?? 0) > 0 ? <TotalRow label="Descuento" .../> : null}` de `main.tsx` (tarjeta fija y seccion del modo simple).
+- `components/ResultadoEmision.tsx` y `views/DocumentsView.tsx`: el mismo desglose con sus marcas propias (`div > span/strong` y `dl > dt/dd`), usando `desgloseDescuentos`.
+- `styles.css`: `.total-row.resta` con etiqueta y monto en `--color-muted`; `.total-row.resta.cierre` en `--color-ink`. Sin colores nuevos.
+- Diseno: artboard "05 · Totales con descuentos" en el canvas de Nueva factura (https://claude.ai/artifact/3rYTQDeomdn88HLVrfPdQF) con las tres variantes (solo linea, solo global, los dos) y la nota de la decision D-6.
+- Playwright: `scripts/segel-fs/playwright-descuentos.cjs` caso nuevo `desglose` (CA-12, 1440/1280/390) y `verificar` ampliado con las filas de la ficha (CA-13); `grilla` y `simple` actualizan sus aserciones ("Total descuentos (20 %) − Gs. 50.000" y "Descuento por línea (15 %) − Gs. 15.000"). Regresion: `playwright-reconocimiento-ux.cjs` sin aumentos; `npm run typecheck` y `npm run build` del frontend; stack local reconstruido con API y frontend del mismo commit.
+- Produccion: queda para un despliegue posterior con orden del usuario (regla de oro de `AGENTS.md`); no entra en `segel-fs-2026.11.12`.

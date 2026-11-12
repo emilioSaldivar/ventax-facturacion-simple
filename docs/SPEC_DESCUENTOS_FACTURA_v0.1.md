@@ -1,6 +1,6 @@
 # SPEC - Descuentos en la factura v0.1
 
-Estado: borrador para refinamiento, escrito el 2026-11-11 a pedido del usuario (FS-66, critico comprometido para el 2026-11-12). Sin codigo.
+Estado: implementada y en produccion (`segel-fs-2026.11.12`); refinamiento del 2026-11-12 sobre la tarjeta de totales y la convivencia de los dos descuentos (seccion "Refinamiento del 2026-11-12"). Escrita el 2026-11-11 a pedido del usuario (FS-66).
 
 ## Alineacion
 
@@ -107,6 +107,26 @@ Que el operador cargue descuentos por linea y sobre el total en la factura manua
 - **RN-21. Borradores y plantillas.** El borrador local del editor (`lib/borradores.ts`) guarda los descuentos de las lineas y el global. "Convertir en factura" desde un presupuesto no trae descuentos (D-5).
 - **RN-21a (cierre, 2026-11-11).** RN-21 no aplica: el editor no guarda borradores locales (solo avisa al salir con cambios sin emitir), asi que no hay nada que persistir. "Convertir en factura" desde un presupuesto sigue sin traer descuentos (D-5).
 - **RN-22. Textos.** Sin emojis; voseo en los textos de ayuda; "Descuento" y "Descuento sobre el total" como etiquetas; `docs/PAUTAS_FRONTEND_v0.1.md` para tokens, componentes y accesibilidad (cada campo con `aria-label` "Descuento, línea N").
+
+## Refinamiento del 2026-11-12: totales y convivencia de los dos descuentos
+
+Pedido del usuario del 2026-11-12, con la version ya en produccion: (1) probar en local las pantallas de descuentos con un usuario de prueba; (2) que la tarjeta de totales de la derecha refleje los descuentos cuando los hay, con una propuesta de diseno en el canvas; (3) verificar con FE si el descuento global y el de linea pueden convivir: si FE admite los dos a la vez, esta bien que los dos campos esten en pantalla; si solo admite uno, al cargar un descuento de linea el global se tiene que bloquear.
+
+| Id | Decision |
+|---|---|
+| D-6 | **Conviven.** Verificado en el codigo de FE `v0.51` (`segel-rc4.34`, `src/domain/factura.schema.ts`, `validarDescuentos`, lineas 238-256): por item exige `descuento + anticipo < precioUnitario`; con global calcula un porcentaje sobre el bruto y lo resta a **cada** item, tenga o no descuento propio (`neto = precioUnitario − descuento − anticipo − precioUnitario × porcentaje`), y solo rechaza si ese neto queda en cero o negativo. La guia §43.2 lo dice con las mismas palabras ("se aplica a cada precio unitario, tenga o no el articulo descuento propio") y el ejemplo oficial §43.3 combina los dos. Aprobadas en SIFEN test con los dos descuentos a la vez: `001-001-1010640` (PYG) y `1010644` (USD). **No se bloquea ningun campo**: los dos siguen disponibles y la tarjeta de totales muestra cada uno en su fila (RN-18b). |
+| D-7 | El usuario prueba en local con `operador-ensayo` (stack `.local/segel-ensayo`, SIFEN test); la clave vive fuera del repo (`fe-local-data/segel-ensayo/operador-final.pass`). |
+
+- **RN-18b. Desglose de descuentos en los totales (reemplaza a RN-18).** La tarjeta de totales (modo completo) y la seccion de totales (modo simple) muestran, entre "Subtotal" y "Total sin IVA" y solo cuando corresponde:
+  - "Descuento por línea" con `Σ cantidad × descuento` (`totals.descuento − totals.descuento_global`), cuando es mayor que cero;
+  - "Descuento sobre el total" con `totals.descuento_global`, cuando es mayor que cero;
+  - "Total descuentos" con `totals.descuento`, solo cuando hay de los dos.
+  La fila que cierra el desglose (la unica cuando hay un solo tipo, "Total descuentos" cuando hay los dos) lleva entre parentesis el porcentaje sobre el subtotal bruto: `descuento × 100 / subtotal`, sin decimales si es entero y con un decimal si no ("12 %", "3,1 %"), con coma decimal. Los montos van en negativo con el formato de la moneda ("− Gs. 30.000"); las filas parciales en tinta atenuada y la de cierre en tinta normal. Sin descuentos no aparece ninguna fila (identico a hoy). "Total a pagar" sigue siendo el `total` neto.
+- **RN-19b. Resultado y ficha.** `ResultadoEmision` y la ficha de Documentos muestran el mismo desglose (las mismas filas y el mismo porcentaje) en lugar de la fila unica "Descuento". Con `fuente: "FE"` el `descuento` es el oficial y `descuento_global` el cargado (RN-08), asi que el de linea sale por diferencia.
+- **RN-23. Sin exclusion entre descuentos (D-6).** El campo "Descuento sobre el total" nunca se deshabilita por tener descuentos de linea, ni al reves. La unica validacion cruzada sigue siendo RN-04 (el global no puede dejar una linea sin precio).
+
+- **CA-12. Desglose en pantalla (Playwright 1440, 1280 y 390).** Con 2 × 100.000 y 1 × 50.000 (IVA 10 %): (a) solo 10 % en la linea 1: fila "Descuento por línea (8 %) − Gs. 20.000", sin fila "sobre el total" ni "Total descuentos"; (b) solo global 30.000: "Descuento sobre el total (12 %) − Gs. 30.000", sin fila "por línea"; (c) los dos: las tres filas, "Total descuentos (20 %) − Gs. 50.000" y "Total a pagar Gs. 200.000"; (d) sin descuentos: ninguna fila con "Descuento". En los tres anchos, sin desborde horizontal ni emojis.
+- **CA-13. Resultado y ficha con el desglose.** La ficha de `1010645` (solo global 7.777 sobre 250.000) muestra "Descuento sobre el total (3,1 %) − Gs. 7.777" y la de `1010644` (USD, de linea 3,33 y global 5,55) muestra las tres filas con "Total descuentos (9,8 %) − USD 8,88".
 
 ## Fuera de alcance
 

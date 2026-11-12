@@ -4,6 +4,7 @@ import { esClienteInnominado } from "../lib/innominado";
 import { etiquetaCondicionVenta, formatDocumentoTipo } from "../lib/estados";
 import { type DocumentoEstado, type OperationalContextResponse, type DocumentoResponse, type DeliveryLinkResponse, type EmailStatusResponse, type ClasePaso } from "../tipos";
 import { formatMonto, formatGuaranies, formatCantidad, formatHora, buildWhatsAppShareUrl, formatIva } from "../lib/formato";
+import { desgloseDescuentos } from "../lib/descuentos";
 import { formatEmailStatus, getDocumentoNombreLower, getSimpleDocumentoEstado, esEstadoFinalOperador } from "../lib/documentos";
 
 export function pasosPorEstado(estado: DocumentoEstado): Array<{ etiqueta: string; clase: ClasePaso }> {
@@ -236,7 +237,10 @@ export function ResultadoEmision({
             </div>
           ) : null}
           {esRemision ? null : <div className="resultado-totales">
-            {(documento.totals.descuento ?? 0) > 0 ? <div><span>Descuento</span><strong className="cifra">− {formatMonto(documento.totals.descuento!, moneda)}</strong></div> : null}
+            {/* SPEC_DESCUENTOS_FACTURA_v0.1 RN-19b: el mismo desglose que el editor. */}
+            {desgloseDescuentos(documento.totals).map((fila) => (
+              <div className={fila.cierre ? "descuento-cierre" : "descuento-parcial"} key={fila.etiqueta}><span>{fila.etiqueta}</span><strong className="cifra">− {formatMonto(fila.monto, moneda)}</strong></div>
+            ))}
             <div><span>Total sin IVA</span><strong className="cifra">{formatMonto(documento.totals.total_sin_iva, moneda)}</strong></div>
             <div><span>IVA 5%</span><strong className="cifra">{formatMonto(documento.totals.iva_5, moneda)}</strong></div>
             <div><span>IVA 10%</span><strong className="cifra">{formatMonto(documento.totals.iva_10, moneda)}</strong></div>

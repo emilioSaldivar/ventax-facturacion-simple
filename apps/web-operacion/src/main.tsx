@@ -28,7 +28,7 @@ import { type ViewState, type OperationView, type CondicionVenta, type TipoTrans
 import { formatMonto, formatGuaranies, formatCantidad, fmtFecha, formatHora, formatIntegerInput, normalizeIntegerInput, buildWhatsAppShareUrl, firstText, iniciales } from "./lib/formato";
 import { BrandMark } from "./components/BrandMark";
 import { LoadingScreen } from "./components/LoadingScreen";
-import { TotalRow } from "./components/TotalRow";
+import { FilasDescuento, TotalRow } from "./components/TotalRow";
 import { useEsEscritorio } from "./lib/useEsEscritorio";
 import { cantidadValida, normalizeDecimalInput } from "./lib/formato";
 import { mensajeResultadoReintento, formatEmailStatus, getDocumentoNombreLower, getSimpleDocumentoEstado, esEstadoFinalOperador } from "./lib/documentos";
@@ -2812,7 +2812,8 @@ function InvoiceEditor({
           <h3>Totales en {etiquetaMoneda === "Gs." ? "Gs." : moneda}</h3>
           <div className="totals-grid">
             <TotalRow label="Subtotal" moneda={moneda} value={preview?.totals.subtotal ?? 0} />
-            {(preview?.totals.descuento ?? 0) > 0 ? <TotalRow label="Descuento" moneda={moneda} resta value={preview!.totals.descuento!} /> : null}
+            {/* SPEC_DESCUENTOS_FACTURA_v0.1 RN-18b: desglose por linea, sobre el total y total descuentos. */}
+            {preview ? <FilasDescuento moneda={moneda} totals={preview.totals} /> : null}
             <TotalRow label="Total sin IVA" moneda={moneda} value={preview?.totals.total_sin_iva ?? 0} />
             <div className="totales-iva">
               <TotalRow label="IVA 5%" moneda={moneda} value={preview?.totals.iva_5 ?? 0} />
@@ -2843,7 +2844,7 @@ function InvoiceEditor({
           <section className="totals-section" aria-live="polite" ref={sendSectionRef}>
             <div className="totals-grid">
               <TotalRow label="Subtotal" moneda={moneda} value={preview?.totals.subtotal ?? 0} />
-              {(preview?.totals.descuento ?? 0) > 0 ? <TotalRow label="Descuento" moneda={moneda} resta value={preview!.totals.descuento!} /> : null}
+              {preview ? <FilasDescuento moneda={moneda} totals={preview.totals} /> : null}
               <TotalRow label="Total sin IVA" moneda={moneda} value={preview?.totals.total_sin_iva ?? 0} />
               <div className="totales-iva">
                 <TotalRow label="IVA 5%" moneda={moneda} value={preview?.totals.iva_5 ?? 0} />
