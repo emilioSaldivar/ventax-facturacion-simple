@@ -45,3 +45,13 @@ Orden del usuario con sus condiciones (DSF-006). Ejecutado desde la sesion de FS
 ### E-2. Vuelta atras
 
 No hizo falta.
+
+## E-2. Despliegue complementario del 2026-11-12, solo frontend: descuentos (fila unica y ocultos por defecto)
+
+Orden del usuario del 2026-11-12 por la manana ("implementa esto en produccion ahora, todo es visual... verifica eso y luego deploya en produccion con un tag"). Cambio: `SPEC_DESCUENTOS_FACTURA_v0.1` D-8 y D-9 (RN-18c, RN-19c, RN-24), commits `5b11e34`, `6ee9031` y docs; tag anotado **`segel-fs-2026.11.12.1`** = commit `a19c774`.
+
+- **Verificacion previa.** `git diff --stat 8e5a172 HEAD` sin `docs`, `scripts` ni `test-results`: solo 6 archivos de `apps/web-operacion` (sin cambios en `apps/api`, `packages`, `db`, `spec`, `infra` ni compose): el pedido a FE no cambia. Stack local `6ee9031`: Playwright 80/80 (CA-12, CA-13, CA-14) y reconocimiento UX sin subas. Emision en SIFEN test desde la pantalla nueva (aviso previo a `facturacion-electronica-7c`): factura `001-001-1010653` con descuento por linea y global **aprobada**, vista previa "Descuento (7,4 %) − Gs. 6.663" y total 83.897 (vector de FE).
+- **Imagenes.** `prod-build.sh segel-fs-2026.11.12.1` desde `git archive` del tag: `segel-fs-prod-frontend:bfcadb0` y `segel-fs-prod-api:bfcadb0` (el sufijo es el objeto del tag anotado, no el commit; el contenido es `a19c774`). Solo se desplego la de frontend; la API sigue en `8e5a172` (sin cambios de codigo).
+- **Corte (guion `prod-deploy-frontend.sh`, 10:35:22Z a 10:35:37Z, 07:35 -03).** Respaldo `backups/fs/20261112T103522Z` (dump sin el padron DNIT, `SHA256SUMS`, lista de imagenes); 311 facturas antes y despues. Imagen anterior etiquetada `segel-fs-frontend:antes-2026.11.12.1`; `up -d --no-build --no-deps --force-recreate frontend` (13 s); API, migrate, postgres, loader DNIT y FE sin tocar.
+- **Verificacion.** `/app/` 200, bundle `index-B3sZGs5M.js` con los textos "Agregar descuento", "Ocultar descuentos" y "Quitar descuentos" y sin "Descuento por línea" ni "Total descuentos"; `X-App-Version` de la API `8e5a172` (esperado); contenedores sanos; 0 pendientes de verificacion; 0 errores de frontend desde el corte y 0 errores de API en los 10 minutos previos.
+- **Vuelta atras.** `docker tag segel-fs-frontend:antes-2026.11.12.1 segel-fs-frontend:latest` y recrear `frontend`; sin cambios de base ni de API.

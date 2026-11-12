@@ -37,6 +37,11 @@ Todo lo que hay entre `ed8b493` y el commit que se etiquete (63 commits al 2026-
 
 Sin cambios de `docker-compose`, variables de entorno, plantillas ni imagenes de FE (`git diff ed8b493..HEAD -- infra` vacio). El loader DNIT no se toca.
 
+
+### Complemento del 2026-11-12 (solo frontend): `segel-fs-2026.11.12.1`
+
+Tras el corte de la madrugada, el usuario reviso los descuentos en local y decidio D-8 y D-9 de `SPEC_DESCUENTOS_FACTURA_v0.1` (fila unica "Descuento (x %)" en los totales; controles ocultos por defecto con Agregar/Ocultar/Quitar). Es un cambio visual sin API, migraciones ni cambios en el pedido a FE; se desplego solo la imagen de frontend con respaldo previo (E-2 de `TASKS_DESPLIEGUE_SEGEL_FS_v0.3`). La API queda en `8e5a172`.
+
 ## Que no entra todavia (para D-1)
 
 - Nota de remision **E2**: transportistas, vehiculos y locales guardados para reutilizar, domicilio del cliente en la agenda, remision asociada a una factura ("Nota de remision para esta venta" sigue "Proximamente" en la ficha). El formulario de E1 ya usa departamento, distrito y ciudad con los codigos SIFEN que publica FE (`GET /geografia`, MT150); la revision de su diseño con `/design` queda como tarea de E2.

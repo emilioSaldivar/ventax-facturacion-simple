@@ -415,6 +415,7 @@ async function casoSifen(browser) {
   try {
     await abrirVista(page, "Nueva factura");
     await page.locator("table.grilla-lineas").waitFor();
+    await mostrarDescuentos(page);
     await cliente(page);
     await page.locator("table.grilla-lineas thead").getByRole("group", { name: "Descuento en porcentaje o monto" }).getByRole("button", { name: "Gs." }).click();
     await fila(page, 0, { descripcion: "Articulo A DES", cantidad: "3", precio: "19990", descuento: "1110" });
@@ -459,6 +460,7 @@ async function casoSifenUsd(browser) {
   try {
     await abrirVista(page, "Nueva factura");
     await page.locator("table.grilla-lineas").waitFor();
+    await mostrarDescuentos(page);
     await page.locator('select[aria-label="Moneda"]').selectOption("USD");
     await page.getByLabel("Tipo de cambio").fill("6181,34");
     await cliente(page);
@@ -488,6 +490,7 @@ async function casoSifenMix(browser) {
   try {
     await abrirVista(page, "Nueva factura");
     await page.locator("table.grilla-lineas").waitFor();
+    await mostrarDescuentos(page);
     await cliente(page);
     await conmutador(page).getByRole("button", { name: "Porcentaje" }).click();
     await fila(page, 0, { descripcion: "Mix A IVA 10 DES", cantidad: "2", precio: "100000", descuento: "10" });
