@@ -39,6 +39,7 @@ Orden del usuario con sus condiciones (DSF-006). Ejecutado desde la sesion de FS
 - **Verificacion sin emitir:** CA-03 a CA-07 en DSF-011. Nada se emitio en produccion.
 - **FE:** avisada antes (01:12) y al cierre (01:17) con el mensaje unico que pidio (`facturacion-electronica-a3`); FE despliega `segel-rc4.34` (c4e243e) cuando el usuario lo ordene.
 - **Segunda lectura (04:23:44Z, 9 min despues):** 0 errores y 0 avisos en la API, 0 errores en el frontend, worker activo (3 entradas), api y frontend `healthy`, `X-App-Version 8e5a172`, contenedor de restauracion eliminado. CA-07 cumplido.
+- **FE despues de FS (01:23 -03):** la sesion de FE desplego `segel-rc4.34` = `c4e243e` (corte 04:23:21Z → 04:24:05Z, 44 s; solo FE; 52 migraciones sin cambios; 311 documentos APPROVED antes y despues; FS no tocado; rollback `:antes-rc4.34`). Desde entonces FE responde `422`/`409` antes de numerar en FE, NCE, NDE y NRE, que FS ya trata como "corregir y emitir de nuevo" (RV-12). `FE_REF=segel-rc4.34` en los scripts queda correcto.
 - **Vuelta atras disponible:** `prod-rollback.sh` (imagenes `:antes-2026.11.12`, `precio_unitario` a integer, filas 0046-0049 fuera de `schema_migrations`, columnas de SALUMAX a `[]`); el dump completo solo a mano porque excluye el padron.
 
 ### E-2. Vuelta atras
