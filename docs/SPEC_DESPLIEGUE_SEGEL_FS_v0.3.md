@@ -66,6 +66,7 @@ Sin cambios de `docker-compose`, variables de entorno, plantillas ni imagenes de
 - **RN-05. Nada de FE.** No se cambian imagenes, variables ni configuracion de FE. FE v0.50 (409 `NUMERADOR_*`) no es requisito: FS reconoce el formato actual y el nuevo.
 - **RN-06. Verificacion sin emitir.** Despues del arranque se comprueban version, migraciones, conteos, salud y contexto (CA-03 a CA-08) sin crear documentos. Una emision real solo si el usuario la pide (D-8).
 - **RN-07. Vuelta atras.** Volver a etiquetar `:antes-2026.11.12` como `:latest`, restaurar el respaldo y recrear `migrate`, `api` y `frontend`. Las migraciones no tienen reversa automatica; `precio_unitario` vuelve a `integer` solo si no hay articulos con decimales (en produccion no los habra si se vuelve atras el mismo dia).
+- **RN-09. FE no retrocede.** `scripts/segel-fs/build-images.sh` y `deploy.sh` reconstruyen tambien FE con `FE_REF`; su default era `segel-rc4.6.1` y un uso distraido habria retrocedido FE 26 versiones sobre una base con migraciones 044-052. El default pasa a `segel-rc4.32` (lo desplegado) y se mueve a `segel-rc4.34` cuando FE lo despliegue. Este despliegue no usa esos scripts (RN-02).
 - **RN-08. Evidencia.** Todo queda en `TASKS_DESPLIEGUE_SEGEL_FS_v0.3`: horas, tamano del respaldo, comandos ejecutados (sin secretos), salidas de verificacion y, si hubo, la vuelta atras.
 
 ## Impacto sobre lo que ya corre
@@ -79,6 +80,7 @@ Sin cambios de `docker-compose`, variables de entorno, plantillas ni imagenes de
 ## Bloqueos y pendientes
 
 - DES-013 a DES-016 en verde (D-5) y la regresion final (DSF-005).
+- Propuesta abierta al usuario (surgio al responder a FE el 2026-11-12): tratar el `422` de FE **antes de numerar** como "corregir y emitir de nuevo" (`ERROR_OPERATIVO`) tambien en facturas y notas de credito, como ya se hace en la remision; hoy en esos tipos cae en reintentos temporales. No deberia ocurrir desde la app (FS valida antes), por eso no bloquea; se implementa solo si el usuario lo pide (BACKLOG FS-74).
 - No bloquean: NRE-014 (formulario precargado desde "Corregir y emitir de nuevo"), VAL-013 (errores por campo en Recibos), la entrega E2 de la remision y FS-72 (numeradores por punto en el export de FE).
 
 ## Fuera de alcance
