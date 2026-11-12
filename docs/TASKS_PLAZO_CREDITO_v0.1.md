@@ -13,7 +13,7 @@
 | PLZ-007 | Stack local con el frontend nuevo; Playwright `pantalla` y reconocimiento UX | CA-01 a CA-04, CA-06 | Resultados en la evidencia | Hecha (2026-11-12): 87/87 y reconocimiento sin subas |
 | PLZ-008 | SIFEN test: 5, 35, 120 y 365 días desde la pantalla, con aviso a FE | CA-05 | Números y estados; confirmación de FE | Hecha (2026-11-12): 1010661 a 1010664 aprobadas; KUDE con "N dias"; números pasados a FE para revisar `dPlazoCre` en su base |
 | PLZ-009 | Cierre: repaso SPEC/PLAN/TASKS, BACKLOG FS-92 | Regla de cierre | — | Hecha (2026-11-12): SPEC y PLAN reflejan lo implementado (columna de 140 px y error en una linea agregados al PLAN) |
-| PLZ-010 | Despliegue de solo frontend en `segel-fs` | PLAN §2 | Solo con autorización explícita del usuario | Espera usuario |
+| PLZ-010 | Despliegue de solo frontend en `segel-fs` | PLAN §2 | Solo con autorización explícita del usuario | Hecha (2026-11-12, 14:48 -03): `segel-fs-2026.11.12.2` = `9481fc9`, imagen con `BUILD_COMMIT_SHA=8e5a172`; ver E-3 de `TASKS_DESPLIEGUE_SEGEL_FS_v0.3` |
 
 ## Evidencia
 

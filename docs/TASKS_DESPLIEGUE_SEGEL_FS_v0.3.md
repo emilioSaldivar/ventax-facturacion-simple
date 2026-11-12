@@ -63,3 +63,14 @@ Orden del usuario del 2026-11-12 por la manana ("implementa esto en produccion a
 - **Correccion:** imagen `segel-fs-prod-frontend:a19c774-api8e5a172` construida desde `git archive segel-fs-2026.11.12.1` (mismo codigo que E-2) con `BUILD_COMMIT_SHA=8e5a172`, el valor que devuelve la API. Respaldo `backups/fs/20261112T110049Z`; imagen anterior `segel-fs-frontend:antes-2026.11.12.1b`; recreado solo `frontend` (11:00:51Z a 11:01:02Z). El service worker sirve la navegacion por red y los assets por nombre con hash, asi que repetir la version en `sw.js` no deja nada viejo en cache.
 - **Verificacion:** bundle `index-Biyr-vNT.js` con la version embebida `"8e5a172"` igual al `X-App-Version` de `/api/v1/health`; `/app/` 200; 0 errores; 311 facturas; 0 pendientes. Con las dos versiones iguales `checkVersionHeader` no puede disparar el aviso (ni al entrar, ni al recargar, ni en el sondeo de 5 minutos).
 - **Regla para despliegues de solo frontend (va al PLAN):** construir el frontend con `BUILD_COMMIT_SHA` igual al `X-App-Version` que reporta la API en produccion, o desplegar API y frontend del mismo commit. `prod-build.sh` pasa a usar `git rev-parse --short "<tag>^{commit}"` para etiquetar con el commit y no con el objeto del tag.
+
+## E-3. Despliegue de solo frontend del 2026-11-12, tarde: plazo de credito escrito (FS-92)
+
+Orden del usuario del 2026-11-12 ("listo, publica esto en produccion"), despues de revisar en el stack local. Cambio: `SPEC_PLAZO_CREDITO_v0.1` (incrementador de 5 en 5 con escritura, 1 a 365, 30 por defecto). Commit `9481fc9`, tag anotado **`segel-fs-2026.11.12.2`**.
+
+- **Verificacion previa.** `git diff 8e5a172 HEAD` sin cambios en `apps/api`, `packages`, `db`, `spec` ni `infra`; desde `a19c774` (frontend en produccion) solo cambia el plazo. Stack local: Playwright 87/87 y reconocimiento UX sin subas; SIFEN test 5, 35, 120 y 365 dias aprobados (1010661 a 1010664) y confirmados por FE en su base (`TASKS_PLAZO_CREDITO_v0.1`).
+- **Imagen.** `segel-fs-prod-frontend:9481fc9-api8e5a172` desde `git archive segel-fs-2026.11.12.2` con `BUILD_COMMIT_SHA=8e5a172` (regla E-2b: el `X-App-Version` de la API en produccion, leido antes del corte); bundle `index-BkNG8HQf.js` con la version embebida `"8e5a172"` y el texto "Sumar 5 días".
+- **Corte** (`prod-deploy-frontend.sh`, 17:48:43Z a 17:48:54Z, 14:48 -03). Respaldo `backups/fs/20261112T174841Z` (dump sin el padron DNIT, `SHA256SUMS`, lista de imagenes); imagen anterior `segel-fs-frontend:antes-2026.11.12.2`; recreado solo `frontend`. API, migrate, postgres, loader DNIT y FE sin tocar.
+- **Verificacion.** `/app/` 200; bundle `index-BkNG8HQf.js`; `X-App-Version` 8e5a172 (sin aviso de version); 331 facturas antes y despues; 0 pendientes de verificacion; 0 errores de frontend desde el corte y 0 errores de API en los 10 minutos previos.
+- **Vuelta atras.** `docker tag segel-fs-frontend:antes-2026.11.12.2 segel-fs-frontend:latest` y recrear `frontend`.
+
