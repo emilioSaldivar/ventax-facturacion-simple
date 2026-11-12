@@ -12,7 +12,7 @@ SPEC: `docs/SPEC_VALIDACIONES_RECEPTOR_v0.1.md` · PLAN: `docs/PLAN_VALIDACIONES
 | VAL-006 | Web: agenda con errores por campo, boton bloqueado con motivo, pastilla "Revisar datos", aviso del DV de la DNIT | RV-09, RV-10, RV-11 | Playwright CA-01 a CA-04, CA-07, CA-08 en 1440/1280/390 | Hecha (2026-11-11) |
 | VAL-007 | Web: editor de factura, bloque Cliente, y recibo desde la ficha | RV-08, RV-09 | Playwright CA-01 a CA-03 en el editor, 1440/1280/390 | Hecha (2026-11-11) |
 | VAL-008 | `scripts/segel-fs/playwright-validaciones-receptor.cjs` | CA-01 a CA-08, CA-10 | corrida completa contra `.local/segel-ensayo` | Hecha (2026-11-11) |
-| VAL-009 | Consulta de diagnostico de clientes existentes y cifra para el usuario | RV-11 | corrida en local; en `segel-fs` solo lectura con confirmacion del usuario | Pendiente |
+| VAL-009 | Consulta de diagnostico de clientes existentes y cifra para el usuario | RV-11 | corrida en local; en `segel-fs` solo lectura con confirmacion del usuario | Hecha (2026-11-11): en `segel-fs` hay 4 clientes activos en agendas (RAJ SA 3, 5057016-1 1) y **ninguno** quedaria marcado. Conteo de solo lectura dentro del contenedor de la API, con las mismas reglas, sin sacar datos personales del servidor |
 | VAL-010 | Regresion: `npm run test`, `typecheck`, `lint` (api); `typecheck`, `build` (web); `playwright-ux-resto-app.cjs` agenda/nuevo/ficha; `playwright-nc-cuerpo.cjs` | CA-09 | salidas en esta tabla | Hecha (2026-11-11) |
 | VAL-011 | Cierre: repaso de SPEC/PLAN/TASKS, BACKLOG (FS-60, FS-62 cerrados por esta cadena), `HOJA_DE_RUTA` | — | revision | Pendiente |
 | VAL-012 | Despliegue en `segel-fs` | — | **solo con orden directa del usuario**; respaldo previo; aviso de la cifra de VAL-009 | Pendiente |

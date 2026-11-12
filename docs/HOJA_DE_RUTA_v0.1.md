@@ -207,6 +207,23 @@ Total: unas 5 a 6 jornadas de implementacion. Para el 2026-11-12 es realista: va
 | Descuentos | Sin empezar | - |
 | ATO-009 | Espera la orden directa de despliegue | - |
 
+## Decisiones del usuario (2026-11-11, noche)
+
+- **Despliegue:** se hara, pero el usuario confirma antes todos los puntos. Nada se despliega hasta su orden.
+- **Remision en produccion:** ningun facturador de `segel-fs` la usa por ahora (5057016-1 confirmado). No se cargan numeradores tipo 7 todavia; SALUMAX 003 queda sin numerador.
+- **Clientes a revisar (VAL-009):** contados en `segel-fs`; ninguno quedaria marcado.
+- **Envio siempre por lote** (RN-24b de la remision) y **KUDE desde que hay CDC** (RN-25b).
+
+## Para el futuro: permisos por usuario (pedido del usuario, 2026-11-11)
+
+Hoy FS no limita por usuario que documentos puede emitir: el menu se arma por facturador y FE no rechaza un perfil de otro tipo (MAPA de SALUMAX §9.6: Logistica, con perfiles solo de remision, puede emitir facturas por 001 y 002). La regla de la remision (RN-01b) es por emisor. Hace falta una configuracion en FS, por usuario (o por usuario y punto), de los tipos de documento que puede emitir (factura, nota de credito, nota de remision, recibo, nota de debito), administrada desde el backoffice, que:
+
+- arme el menu "Nuevo" y los espacios de cada tipo con lo habilitado;
+- rechace en la API la emision de un tipo no habilitado para el usuario, con mensaje claro;
+- se combine con lo que permite FE (permiso del consumidor y numeradores del emisor).
+
+Necesita su cadena SPEC/PLAN/TASKS. Relacionado: los numeradores por punto en el export de FE (cambio de contrato de FE, a decidir).
+
 ## Orden de trabajo propuesto para el compromiso del 2026-11-12
 
 1. **Hoy:** pedir a FE el permiso `NRE_EMIT` para las claves de prueba y de los facturadores que lo usen; confirmar con FE los descuentos en USD.
