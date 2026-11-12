@@ -35,11 +35,11 @@ Todas las tareas estan **Pendiente** (2026-11-11). La implementacion arranca cua
 
 | ID | Tarea | Reglas | Validacion | Estado |
 |---|---|---|---|---|
-| NRE-031 | Motivo 7: el resultado dice "Descargar para el traslado" y no ofrece WhatsApp ni correo | RN-20 | Playwright `motivo7` (comprobacion del texto tras la aprobacion) | Hecha (2026-11-11, `f31afc7`); falta la corrida |
+| NRE-031 | Motivo 7: el resultado dice "Descargar para el traslado" y no ofrece WhatsApp ni correo | RN-20 | Playwright `motivo7` (comprobacion del texto tras la aprobacion) | Hecha (2026-11-11): con SALUMAX, motivo 7 aprobada (`001-001-9000009`) y el resultado dice "Descargar para el traslado" sin WhatsApp ni correo |
 | NRE-032 | Guion: esperar la aprobacion por estado hasta el lote de FE test (17 min), con estados finales | — | `playwright-nota-remision.cjs` `emitirYEsperar` | Hecha (2026-11-11, `f31afc7`) |
-| NRE-033 | Anular una nota de remision aprobada en SIFEN test desde la ficha | RN-26 | Playwright `anular` con SALUMAX | Pendiente: corrida en curso |
-| NRE-034 | Emision desde celular (390 px), motivo 1 | CA-02 | Playwright `motivo1-390` con SALUMAX | Pendiente: corrida en curso |
-| NRE-035 | Punto sin numerador tipo 7 con un emisor que si lo tiene en otro punto (SALUMAX 003) | RN-01b, RN-23 | Playwright `sin-numerador` como `slx-licitaciones`: la nota queda `ERROR_OPERATIVO` con "Pedila a Segel" y sin numero tomado | Pendiente: corrida en curso |
+| NRE-033 | Anular una nota de remision aprobada en SIFEN test desde la ficha | RN-26 | Playwright `anular` con SALUMAX | Hecha (2026-11-11): `001-001-9000009` anulada en SIFEN test desde la ficha (estado ANULADA) |
+| NRE-034 | Emision desde celular (390 px), motivo 1 | CA-02 | Playwright `motivo1-390` con SALUMAX | Hecha (2026-11-11): `001-001-9000010` emitida desde 390 px, aprobada |
+| NRE-035 | Punto sin numerador tipo 7 con un emisor que si lo tiene en otro punto (SALUMAX 003) | RN-01b, RN-23 | Playwright `sin-numerador` como `slx-licitaciones`: la nota queda `ERROR_OPERATIVO` con "Pedila a Segel" y sin numero tomado | Hecha (2026-11-11): `slx-licitaciones` por 003 queda en ERROR_OPERATIVO sin numero, con el motivo "Pedila a Segel" en la ficha (corregido en `2192bfa`: antes mostraba el texto generico) |
 | NRE-036 | Importacion real del export con permisos y tipos (sin SQL) | RN-03 | re-export desde `fe-altas` e import EXISTENTE en `altas-fs`: `fe_consumer_permisos` con `NRE_EMIT` y `fe_tipos_documento` con `NRE` | Hecha (2026-11-11): advertencias `URL_NO_VERIFICADA`, `BASE_URL_DISTINTA`, `CONSUMIDOR_ESTADO_DESCONOCIDO`; `$.consumidor[].permisos` ya no figura entre los ignorados |
 | NRE-014 | "Corregir y emitir de nuevo" abre el formulario precargado | RN-23 | Playwright `corregir` | Pendiente |
 
@@ -86,3 +86,12 @@ Todas las tareas estan **Pendiente** (2026-11-11). La implementacion arranca cua
 - `NRE_EMIT` del stack local se cargo por SQL en `facturadores.fe_consumer_permisos` (equivale a re-importar el export de FE, que ya lo informa).
 - Regresion: `playwright-documentos-escritorio.cjs` 31/31 (la verificacion B1 se actualizo: la ficha ofrece "Anular nota de remisión", RN-26).
 - Pendiente: NRE-014 (formulario precargado desde "Corregir y emitir de nuevo"), anular una NRE en SIFEN test, la entrega E2 y el despliegue con orden directa.
+
+## Evidencia con SALUMAX (2026-11-11, `altas-fs` en la rama, FE `fe-altas` contra SIFEN test)
+
+- Notas aprobadas: `001-001-9000008` (motivo 1, escritorio), `001-001-9000009` (motivo 7, despues anulada) y `001-001-9000010` (motivo 1, celular). FE confirmo los tiempos en su base.
+- Punto 003 sin numerador tipo 7: FE responde `500 ISSUE_NRE_FAILED` antes de tomar numero; FS deja la nota en `ERROR_OPERATIVO` sin reintentos. FE v0.50 lo pasa a `409 NUMERADOR_NO_CONFIGURADO`; FS reconoce los dos (`a278e3f`).
+- Hallazgos corregidos: titulo "Factura emitida" en una remision (`8cb6fbc`); motivo generico en lugar del de FE (`2192bfa`); el guion esperaba poco y no volvia a mirar el estado al final (`8cb6fbc`).
+- Tiempos medidos: la espera la dan el lote de FE (en test se bajo a 1 minuto) y la verificacion de FS (5 min en cola, 15 min en lote). Por decision del usuario el envio sigue siempre por lote (RN-24b) y el KUDE se entrega desde que hay CDC (RN-25b).
+- Guion: `playwright-nota-remision.cjs` 29/34 en la primera corrida y luego 4/5 y 1/2 en las repeticiones; las fallas restantes son del propio guion (espera y selectores), no de la app. La verificacion "la ficha ofrece Anular" fallo en la ultima corrida aunque el boton se uso para anular; queda por ajustar.
+
