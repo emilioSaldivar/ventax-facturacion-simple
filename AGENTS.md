@@ -242,6 +242,16 @@ Cualquier agente que trabaje en este repositorio debe:
 - no exponer certificados, CSC, passwords ni secretos fiscales en UI, logs o respuestas no autorizadas.
 - **NUNCA escribir credenciales reales (passwords, API keys, tokens, secrets SMTP, claves privadas) en ningun archivo del repositorio** — ni en documentacion, ni en ejemplos, ni en comentarios de codigo. Si una tarea requiere documentar como configurar una credencial, usar siempre un placeholder explicito como `<rotar-en-zoho-y-agregar-aqui>` o `YOUR_SECRET_HERE`. Las credenciales reales solo existen en archivos `.env` locales que estan en `.gitignore` y en el servidor. Cualquier credencial real detectada en un archivo rastreado por git debe ser eliminada de inmediato y el secreto rotado.
 
+## Regla De Oro: Produccion Solo Con Autorizacion Explicita
+
+Decision del usuario del 2026-11-12. Ningun agente toca produccion (`segel-fs`, la VPS de Ventax ni ningun entorno donde facturen clientes reales) sin la autorizacion explicita del usuario **en el mismo mensaje y para esa accion concreta**. Esto incluye:
+
+- despliegues, migraciones, reinicios, cambios de configuracion, variables o imagenes;
+- **consultas de solo lectura**: SQL, `docker logs`, `docker ps`, `curl` a la API, conteos, lectura de archivos del servidor;
+- abrir una sesion SSH o un tunel hacia produccion, aunque sea "para mirar".
+
+Una autorizacion vale para la accion pedida, no para las siguientes: antes de cada nueva accion sobre produccion se vuelve a pedir. Si falta la autorizacion, el agente se detiene, explica que necesita hacer en produccion y por que, y espera. Los stacks locales y de prueba (`.local/*`, `altas-fs`, `fe-altas`, `fe-segel`) no estan cubiertos por esta regla.
+
 ## Limite De Dominio
 
 Este proyecto es responsable de:

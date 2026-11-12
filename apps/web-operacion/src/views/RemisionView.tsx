@@ -9,7 +9,8 @@ import { CargaMasivaView } from "../carga-masiva";
 import { actividadPunto, nombrePunto } from "../lib/punto";
 import type { DocumentoListResponse, OperationalContextResponse, UserSummary } from "../tipos";
 
-const SIN_PERMISO = "Tu clave fiscal todavía no tiene habilitada la nota de remisión. Pedila a Segel.";
+// SPEC_NOTA_REMISION_v0.1 RN-02b: sin permiso o numerador en FE la pestaña queda en gris, "No habilitado".
+const SIN_PERMISO = "Este facturador no tiene habilitada la nota de remisión. Pedila a Segel.";
 
 export function RemisionView({
   context,
@@ -55,7 +56,7 @@ export function RemisionView({
           title={habilitada ? undefined : SIN_PERMISO}
           type="button"
         >
-          Nueva nota de remisión{habilitada ? "" : " · Próximamente"}
+          Nueva nota de remisión{habilitada ? "" : " · No habilitado"}
         </button>
         <button aria-pressed="false" onClick={onVerEmitidas} type="button">
           Emitidas{emitidas !== null ? ` · ${emitidas}` : ""}

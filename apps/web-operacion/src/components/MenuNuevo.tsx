@@ -6,7 +6,7 @@ export interface OpcionNuevo {
   nombre: string;
   descripcion: string;
   icono: NombreIcono;
-  /** "Próximamente" o "Por planilla". */
+  /** "Próximamente", "No habilitado" o "Por planilla". */
   etiqueta?: string;
   deshabilitado?: boolean;
   onElegir: () => void;
@@ -15,7 +15,7 @@ export interface OpcionNuevo {
 /**
  * Boton "Nuevo" de la barra de escritorio (SPEC_UX_RESTO_APP_v0.1 A.3, D-4; PLAN §3, URA-004): un solo lugar con todo
  * lo que se puede emitir. aria-haspopup y aria-expanded; al abrir, el foco pasa a la primera opcion habilitada; Escape
- * o un clic afuera cierran y el foco vuelve al boton. Las opciones "Próximamente" no se pueden elegir (RN-02).
+ * o un clic afuera cierran y el foco vuelve al boton. Las opciones "Próximamente" y "No habilitado" no se pueden elegir (RN-02).
  */
 export function MenuNuevo({ bloques, pie }: { bloques: Array<{ titulo: string; opciones: OpcionNuevo[] }>; pie?: ReactNode }) {
   const [abierto, setAbierto] = useState(false);

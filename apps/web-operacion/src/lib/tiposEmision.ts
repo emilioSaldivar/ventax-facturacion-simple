@@ -5,7 +5,12 @@ import type { NombreIcono } from "../components/Icono";
 import type { OperationalContextResponse, OperationView } from "../tipos";
 
 export type TipoEmision = "FACTURA" | "NOTA_CREDITO" | "NOTA_DEBITO" | "NOTA_REMISION" | "AUTOFACTURA";
-export type EstadoTipoEmision = "DISPONIBLE" | "POR_PLANILLA" | "PROXIMAMENTE";
+// NO_HABILITADO (SPEC_NOTA_REMISION_v0.1 RN-02b, 2026-11-12): el tipo ya existe en FS pero este facturador no lo
+// tiene configurado en FE (permiso o numerador); se ve en gris, sin entrada, distinto de "Proximamente" (no implementado).
+export type EstadoTipoEmision = "DISPONIBLE" | "POR_PLANILLA" | "PROXIMAMENTE" | "NO_HABILITADO";
+
+/** Estados sin entrada: el boton va deshabilitado y un clic no navega ni consulta la API (RN-02). */
+export const sinEntrada = (estado: EstadoTipoEmision): boolean => estado === "PROXIMAMENTE" || estado === "NO_HABILITADO";
 
 export interface DefinicionTipoEmision {
   tipo: TipoEmision;
@@ -20,7 +25,8 @@ export interface DefinicionTipoEmision {
 
 export const ETIQUETA_ESTADO_TIPO: Record<Exclude<EstadoTipoEmision, "DISPONIBLE">, string> = {
   POR_PLANILLA: "Por planilla",
-  PROXIMAMENTE: "Próximamente"
+  PROXIMAMENTE: "Próximamente",
+  NO_HABILITADO: "No habilitado"
 };
 
 export const TIPOS_EMISION: DefinicionTipoEmision[] = [
@@ -59,9 +65,10 @@ export const TIPOS_EMISION: DefinicionTipoEmision[] = [
     icono: "remision",
     // URA-006: espacio propio (Emitidas y Por planilla).
     vista: "remision",
-    // SPEC_NOTA_REMISION_v0.1 RN-01 y RN-02: con NRE_EMIT se emite desde la app; si no, por planilla o Proximamente.
+    // SPEC_NOTA_REMISION_v0.1 RN-01, RN-02 y RN-02b: con NRE_EMIT y numerador se emite desde la app; si no, por
+    // planilla; sin ninguna de las dos, "No habilitado" (ya implementado, falta configuracion en FE).
     estado: (context) =>
-      context?.nota_remision_habilitada ? "DISPONIBLE" : context?.carga_masiva_habilitada ? "POR_PLANILLA" : "PROXIMAMENTE"
+      context?.nota_remision_habilitada ? "DISPONIBLE" : context?.carga_masiva_habilitada ? "POR_PLANILLA" : "NO_HABILITADO"
   },
   {
     tipo: "AUTOFACTURA",

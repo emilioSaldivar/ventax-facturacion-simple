@@ -10,7 +10,7 @@ import type { TipoDeCarga } from "./carga-masiva";
 import { PastillaEstado } from "./components/PastillaEstado";
 import { hayBorradorSinEmitir, useBorradorSinEmitir } from "./lib/borradores";
 import { numeroCorrelativo } from "./lib/formato";
-import { ETIQUETA_ESTADO_TIPO, TIPOS_EMISION } from "./lib/tiposEmision";
+import { ETIQUETA_ESTADO_TIPO, TIPOS_EMISION, sinEntrada } from "./lib/tiposEmision";
 import { actividadPunto, nombrePunto } from "./lib/punto";
 import { estadoRecibo, etiquetaCondicionVenta, formatDocumentoTipo } from "./lib/estados";
 import {
@@ -848,7 +848,7 @@ function OperationHome({
         view: t.vista,
         icon: t.icono,
         group: "emitir" as GrupoMenu,
-        disabled: estado === "PROXIMAMENTE" || t.vista === null || bloqueado,
+        disabled: sinEntrada(estado) || t.vista === null || bloqueado,
         etiqueta: estado === "DISPONIBLE" ? undefined : ETIQUETA_ESTADO_TIPO[estado],
         hint: t.tipo === "FACTURA" && numeracionDelCliente ? "Este punto emite por carga masiva" : t.descripcion,
         abrir: () => {
@@ -895,7 +895,7 @@ function OperationHome({
           descripcion: t.tipo === "FACTURA" && numeracionDelCliente ? "Este punto emite por carga masiva" : t.descripcion,
           icono: t.icono,
           etiqueta: estado === "DISPONIBLE" ? undefined : ETIQUETA_ESTADO_TIPO[estado],
-          deshabilitado: estado === "PROXIMAMENTE" || t.vista === null || bloqueado,
+          deshabilitado: sinEntrada(estado) || t.vista === null || bloqueado,
           onElegir: () => {
             // SPEC_NOTA_REMISION_v0.1: con NRE_EMIT abre "Nueva nota de remisión"; sin el, la planilla.
             if (t.tipo === "NOTA_REMISION") abrirRemision(estado !== "DISPONIBLE");

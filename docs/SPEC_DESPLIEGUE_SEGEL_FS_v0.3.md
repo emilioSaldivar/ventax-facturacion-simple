@@ -1,6 +1,6 @@
 # SPEC - Despliegue en `segel-fs` de la version con validaciones, catalogo en USD, descuentos y nota de remision v0.3
 
-Estado: **en refinamiento** (2026-11-11). Solo documentacion: el despliegue se ejecuta cuando el usuario confirme las decisiones D-1 a D-8 y de la orden directa. Reemplaza, para esta version, la seccion E-6 de `TASKS_DESPLIEGUE_SEGEL_FS_v0.2` como procedimiento de referencia.
+Estado: **decisiones tomadas el 2026-11-12**; falta la prueba fina de descuentos (DES-013 a DES-016), la regresion final y la orden directa del usuario. Reemplaza, para esta version, la seccion E-6 de `TASKS_DESPLIEGUE_SEGEL_FS_v0.2` como procedimiento de referencia.
 
 ## Alineacion
 
@@ -28,7 +28,7 @@ Todo lo que hay entre `ed8b493` y el commit que se etiquete (63 commits al 2026-
 | Validaciones del receptor (FS-62, FS-60) | La agenda, la factura y el recibo no aceptan RUC sin digito verificador o con uno incorrecto, correos con espacios, telefonos fuera de 6 a 15 digitos ni nombres de menos de 4 letras; el mensaje dice que corregir. El padron ya no cambia un RUC a CI por su cuenta. Los clientes ya cargados no cambian: en `segel-fs` ninguno queda marcado "Revisar datos" (VAL-009) | ninguna | `TASKS_VALIDACIONES_RECEPTOR_v0.1` |
 | Catalogo en moneda extranjera (FS-59) | Cada articulo tiene moneda (Gs. o USD); en una factura en USD, un articulo en USD completa su precio y "Guardar en el catalogo" funciona | `0046` (`moneda`, `precio_unitario` pasa a `numeric(18,2)`) | `TASKS_CATALOGO_MONEDA_v0.1` |
 | Descuentos (FS-66) | Columna "Descuento" por linea (porcentaje o monto) y "Descuento sobre el total"; fila "Descuento" en totales, resultado y ficha. Una factura con descuento solo admite nota de credito total | `0047` (`descuento` y `descuento_global` por linea, default 0) | `TASKS_DESCUENTOS_FACTURA_v0.1` |
-| Nota de remision manual, E1 (FS-56) | La pestaña "Nueva nota de remision" existe, pero en produccion queda **"Proximamente"** para todos (ver RN-03). Las notas de remision de carga masiva pasan a ofrecer "Anular" en la ficha | `0048` (permisos y tipos del consumidor, domicilio del cliente, tablas reutilizables vacias), `0049` (tipos de documento del emisor) | `TASKS_NOTA_REMISION_v0.1` |
+| Nota de remision manual, E1 (FS-56) | La pestaña "Nueva nota de remision" se **habilita para SALUMAX** (D-3, RN-03) y queda en gris, **"No habilitado"**, para los otros tres facturadores hasta que FE les configure permiso y numerador. Las notas de remision de carga masiva pasan a ofrecer "Anular" en la ficha | `0048` (permisos y tipos del consumidor, domicilio del cliente, tablas reutilizables vacias), `0049` (tipos de documento del emisor) | `TASKS_NOTA_REMISION_v0.1` |
 | Textos del operador (ATO-009) | "Proximo numero 0000002" desaparece; ayuda del tipo de cambio; error visible al emitir un recibo desde la ficha; "Pedidos"; plantilla y "Ver nota de remision" correctos en remisiones; resultado "Nota de credito" tras una NC | ninguna | `TASKS_AJUSTES_TEXTOS_OPERADOR_v0.1` |
 | Catalogo y Agenda en tabla (URA-009, FS-53) | En escritorio, tabla a lo ancho con el alta en un panel lateral; en celular, tarjetas | ninguna | `TASKS_UX_RESTO_APP_v0.1` |
 | Falta de numerador en FE (RN-01b, FE v0.50) | Si FE rechaza una emision por numerador faltante, bloqueado o agotado (500 actual o 409 de FE v0.50), el documento queda en error a corregir con el motivo en la ficha, sin reintentos. Hoy no afecta a ninguna factura de produccion | ninguna | `TASKS_NOTA_REMISION_v0.1` NRE-030 |
@@ -36,24 +36,32 @@ Todo lo que hay entre `ed8b493` y el commit que se etiquete (63 commits al 2026-
 
 Sin cambios de `docker-compose`, variables de entorno, plantillas ni imagenes de FE (`git diff ed8b493..HEAD -- infra` vacio). El loader DNIT no se toca.
 
-## Decisiones del usuario a confirmar antes de ejecutar
+## Que no entra todavia (para D-1)
 
-| ID | Decision | Propuesta |
+- Nota de remision **E2**: transportistas, vehiculos y locales guardados para reutilizar, domicilio del cliente en la agenda, remision asociada a una factura ("Nota de remision para esta venta" sigue "Proximamente" en la ficha). El formulario de E1 ya usa departamento, distrito y ciudad con los codigos SIFEN que publica FE (`GET /geografia`, MT150); la revision de su diseño con `/design` queda como tarea de E2.
+- Nota de debito y autofactura (FS-55, FS-57): "Proximamente", sin cadena.
+- Permisos por usuario y por tipo de documento (FS-70), frecuencia de verificacion (FS-71), numeradores por punto en el export de FE (FS-72).
+- Recibos asociados a facturas a credito (FS-67), documentos asociados entre si (FS-68), backoffice, contraseñas y recupero (FS-69).
+- Remision para 5057016-1, RAJ y 80093554-3: en gris hasta que FE les configure permiso y numerador y el usuario pida habilitarlos (mismo SQL que SALUMAX o re-importacion, a su eleccion).
+
+## Decisiones del usuario (tomadas el 2026-11-12)
+
+| ID | Decision | Resolucion |
 |---|---|---|
-| D-1 | **Cuando.** Fecha y franja horaria del despliegue | Fuera del horario en que RAJ y SALUMAX facturan; el corte es menor a un minuto (solo se recrean `migrate`, `api` y `frontend`) |
-| D-2 | **Que commit.** El HEAD de `feat/identidad-segel` al momento de la orden, etiquetado `segel-fs-2026.11.12` | Si, sin cherry-picks: la rama se probo entera |
-| D-3 | **Remision en produccion.** No re-importar ningun facturador en esta version: `fe_consumer_permisos` y `fe_tipos_documento` quedan vacios y la pestaña dice "Proximamente" | Si (decision del 2026-11-11: nadie la usa todavia). Cuando un cliente la pida: FE carga el numerador tipo 7 en **todos** sus puntos, se re-exporta e importa, y se le avisa que la pestaña se activa sola |
-| D-4 | **SALUMAX.** Su alta en FS la hizo el usuario con un export anterior al cambio; si alguien lo re-importa, Logistica y TICS veran la remision y Licitaciones (003) tendra el error de numerador | No re-importar hasta decidir el 003 (FS-72 o numerador en 003) |
-| D-5 | **Descuentos en USD en SIFEN test (DES-013).** ¿Antes o despues del despliegue? | Antes, desde el stack local, con aviso a FE: no bloquea, pero cierra CA-10b |
-| D-6 | **Comunicacion a los operadores.** Que se les avisa: desaparece el "Proximo numero", descuentos disponibles, moneda del catalogo, validacion del RUC con DV (quien cargue un RUC sin DV vera el mensaje y tendra que corregirlo) | Un mensaje corto por cliente, lo redacta FS a pedido |
-| D-7 | **Quien ejecuta.** La sesion de FS, con orden directa en su sesion, desde la estacion por SSH a `segel-fs`; FE no se toca | Igual que E-6 |
-| D-8 | **Prueba en produccion.** Solo verificacion sin emitir (CA-03 a CA-08) o ademas una factura real con descuento de 1 unidad al cliente de prueba del usuario | Sin emitir; el usuario decide si quiere la factura de prueba y con que cliente |
+| D-1 | **Cuando.** Fecha y franja horaria del despliegue | El usuario quiere hacerlo **el 2026-11-12 fuera del horario transaccional**, despues de entender que entra y que no (tabla "Que entra" y "Que no entra todavia"). El corte es menor a un minuto (solo se recrean `migrate`, `api` y `frontend`) |
+| D-2 | **Que commit.** El HEAD de `feat/identidad-segel` al momento de la orden, etiquetado `segel-fs-2026.11.12` | **Si.** Verificado el 2026-11-12 que ninguna otra rama tiene trabajo que falte aqui: la unica rama sin fusionar es `hotfix/comprador-innominado` y sus dos commits (`ed8b493`, `812a200`) ya estan en esta rama con el mismo contenido (`de57c38` e INN-010). Sin stashes |
+| D-3 | **Remision en produccion.** SALUMAX la necesita; el resto no esta configurado en FE | **Se habilita para SALUMAX** cargando por SQL `fe_consumer_permisos = ["NRE_EMIT"]` y `fe_tipos_documento = ["NRE"]` en su facturador (opcion B, equivalente a importar el export; `TASKS_NOTA_REMISION` evidencia E1). **No se re-exporta ni re-importa**: el usuario no quiere arriesgar la clave del consumidor hasta tener algo mas limpio desde el backoffice. Los valores se confirman con la sesion de FE (o su backoffice) antes del SQL. Para los otros tres facturadores la pestaña queda en gris "No habilitado" (RN-02b de la remision), no "Proximamente": la funcion existe, falta configuracion |
+| D-4 | **SALUMAX, punto 003 (Licitaciones).** No tiene numerador tipo 7 en FE y no lo tendra: Licitaciones no emite remisiones | **Se deja asi.** Si alguien del 003 intenta una remision, FE la rechaza antes de numerar (sin hueco) y FS la deja en error a corregir con "Este punto de expedicion todavia no tiene numeracion para notas de remision. Pedila a Segel." Logistica (001/002) y TICS (001) emiten con normalidad |
+| D-5 | **Descuentos: prueba fina antes del despliegue.** | **Antes.** Se agregan DES-013 a DES-016 en `TASKS_DESCUENTOS_FACTURA_v0.1` (USD en SIFEN test, matriz PYG con IVA mixto y exentas, nota de credito total sobre factura con descuento en SIFEN test, descuento visible en el KUDE) y se ejecutan desde el stack local con aviso a FE. El despliegue espera a que esten en verde |
+| D-6 | **Comunicacion a los operadores.** | **No hace falta**: no es un cambio operativo, es visual y el formulario es intuitivo |
+| D-7 | **Quien ejecuta y cuando se toca produccion.** | La sesion de FS, por SSH, igual que E-6, **solo con autorizacion explicita del usuario para cada accion, incluidas las consultas de solo lectura**. Quedo como regla de oro en `AGENTS.md` ("Regla De Oro: Produccion Solo Con Autorizacion Explicita") |
+| D-8 | **Prueba en produccion.** Venia de E-6: el ingreso del operador no se probo porque la sesion de FS no tiene credenciales de produccion, y se habia propuesto una factura real minima como alternativa | **Retirada.** Solo verificacion sin emitir (CA-03 a CA-07); la revision de pantallas (CA-08) la hace el usuario con su propio acceso cuando quiera |
 
 ## Reglas
 
 - **RN-01. Respaldo primero.** `pg_dump -Fc` de la base de FS sin el padron DNIT, en la VPS, con la lista de imagenes y SHA256; restauracion comprobada en un Postgres descartable antes de tocar nada (D-28 de v0.2). No se copia a la estacion.
 - **RN-02. Imagenes del commit etiquetado.** API/migrate y frontend se construyen en la estacion con `BUILD_COMMIT_SHA` igual al commit del tag, desde `git archive` (sin archivos sin versionar), y se transfieren por SSH. Las imagenes actuales quedan etiquetadas `:antes-2026.11.12` para volver atras.
-- **RN-03. Remision oculta hasta que se decida.** No se ejecuta ninguna importacion de export de FE en esta version. `nota_remision_habilitada` debe responder `false` para los 4 facturadores despues del despliegue (CA-06). Es el efecto esperado de D-3 y D-4, no un defecto.
+- **RN-03. Remision solo para SALUMAX, por SQL.** No se ejecuta ninguna importacion de export de FE. Tras las migraciones, dentro del mismo despliegue, se cargan en el facturador `80018828-4` las dos columnas (`fe_consumer_permisos = '["NRE_EMIT"]'`, `fe_tipos_documento = '["NRE"]'`) despues de confirmar con la sesion de FE que en produccion su consumidor tiene `NRE_EMIT` y numeradores tipo 7 en 001 y 002. `nota_remision_habilitada` queda `true` para SALUMAX y `false` para los otros tres, que ven la pestaña en gris "No habilitado" (CA-06). El SQL queda anotado en E-1 y se revierte poniendo `'[]'` en ambas columnas.
 - **RN-04. Migraciones aditivas.** `0046` a `0049` agregan columnas, tablas e indices y cambian `catalogo_items.precio_unitario` de `integer` a `numeric(18,2)`. Ninguna borra ni reescribe datos. El unico articulo de produccion queda en `PYG` con el mismo precio.
 - **RN-05. Nada de FE.** No se cambian imagenes, variables ni configuracion de FE. FE v0.50 (409 `NUMERADOR_*`) no es requisito: FS reconoce el formato actual y el nuevo.
 - **RN-06. Verificacion sin emitir.** Despues del arranque se comprueban version, migraciones, conteos, salud y contexto (CA-03 a CA-08) sin crear documentos. Una emision real solo si el usuario la pide (D-8).
@@ -70,8 +78,8 @@ Sin cambios de `docker-compose`, variables de entorno, plantillas ni imagenes de
 
 ## Bloqueos y pendientes
 
-- Decisiones D-1 a D-8.
-- No bloquean: NRE-014 (formulario precargado desde "Corregir y emitir de nuevo"), VAL-013 (errores por campo en Recibos), DES-013 (USD en SIFEN test), la entrega E2 de la remision y FS-72 (numeradores por punto en el export de FE).
+- DES-013 a DES-016 en verde (D-5) y la regresion final (DSF-005).
+- No bloquean: NRE-014 (formulario precargado desde "Corregir y emitir de nuevo"), VAL-013 (errores por campo en Recibos), la entrega E2 de la remision y FS-72 (numeradores por punto en el export de FE).
 
 ## Fuera de alcance
 
@@ -87,8 +95,8 @@ Sin cambios de `docker-compose`, variables de entorno, plantillas ni imagenes de
 - **CA-03.** `migrate` aplica `0046`, `0047`, `0048` y `0049` sin error (49 migraciones).
 - **CA-04.** `X-App-Version` del frontend y de la API igual al commit del tag; `/app/` responde 200; `api` y `frontend` `healthy`; salud de FE por la red interna OK.
 - **CA-05.** Conteos iguales a los previos: facturas, articulos (todos con `moneda = 'PYG'`), facturadores, usuarios; `factura_items_snapshot` con `descuento = 0` en todas las lineas.
-- **CA-06.** `nota_remision_habilitada = false` para los 4 facturadores (`fe_tipos_documento` vacio); la pestaña dice "Proximamente".
+- **CA-06.** `GET /me/context` responde `nota_remision_habilitada = true` para los usuarios de SALUMAX y `false` para los otros tres facturadores (`fe_tipos_documento` vacio), cuya pestaña dice "No habilitado" en gris.
 - **CA-07.** 0 errores en el log de la API en los primeros 10 minutos; el worker de verificacion sigue corriendo (siguiente verificacion programada visible).
-- **CA-08.** Con una sesion de operador que el usuario indique (o sin ella, si no la hay): Nueva factura sin "Proximo numero", columna "Descuento" visible, catalogo con selector de moneda, agenda en tabla; sin emitir.
+- **CA-08.** El usuario, con su acceso: Nueva factura sin "Proximo numero", columna "Descuento" visible, catalogo con selector de moneda, agenda en tabla, "Nueva nota de remision" habilitada para Logistica/TICS de SALUMAX; sin emitir.
 - **CA-09.** Imagenes `:antes-2026.11.12` presentes y procedimiento de vuelta atras anotado antes de dar por cerrado.
 - **CA-10.** `docs/BACKLOG.md` con las filas FS-59, FS-62/60, FS-66, FS-56 (E1), ATO-009 y URA-009 en **DONE, en produccion**, y esta cadena cerrada.

@@ -8,7 +8,7 @@ import { PastillaEstado } from "../components/PastillaEstado";
 import { getOperationalTitle, mapBusinessReadinessChecks } from "../lib/contexto";
 import { firstText, formatShortDate } from "../lib/formato";
 import { actividadPunto, nombrePunto } from "../lib/punto";
-import { ETIQUETA_ESTADO_TIPO, TIPOS_EMISION } from "../lib/tiposEmision";
+import { ETIQUETA_ESTADO_TIPO, TIPOS_EMISION, sinEntrada } from "../lib/tiposEmision";
 import { type OperationalContextResponse, type OperationView, type ReadinessResponse, type UserSummary } from "../tipos";
 
 export function StatusView({
@@ -116,7 +116,7 @@ export function StatusView({
           {TIPOS_EMISION.map((t) => {
             const estado = t.estado(context);
             const bloqueado = t.tipo === "FACTURA" ? !canEmit || numeracionDelCliente : t.tipo === "NOTA_CREDITO" ? !canEmit : false;
-            const deshabilitado = estado === "PROXIMAMENTE" || t.vista === null || bloqueado;
+            const deshabilitado = sinEntrada(estado) || t.vista === null || bloqueado;
             return (
               <li key={t.tipo}>
                 <button className="estado-tipo" disabled={deshabilitado} onClick={() => (t.vista ? onGoTo(t.vista) : undefined)} type="button">

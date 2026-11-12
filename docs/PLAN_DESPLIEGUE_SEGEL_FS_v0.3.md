@@ -36,6 +36,7 @@ Repite el procedimiento de E-6 (`TASKS_DESPLIEGUE_SEGEL_FS_v0.2`), que ya funcio
 
 - Etiquetar las imagenes actuales como `:antes-2026.11.12` (api, migrate, frontend) y las nuevas como `:latest`.
 - En `/home/esaldivar/segel/fs`: `export APP_ENV_FILE=.env.segel` y `docker compose --env-file .env.segel -f docker-compose.yml up -d --no-build migrate api frontend`, luego `docker compose ... restart frontend` (como `up.sh`). Solo esos tres servicios; `postgres` y el loader DNIT no se tocan.
+- Con `migrate` terminado: el SQL de SALUMAX (RN-03, DSF-010b), una sola fila. El contexto se recalcula en el proximo `GET /me/context`; no hace falta reiniciar.
 
 ### 2.4 Verificacion sin emitir (VPS y estacion por tunel)
 
@@ -45,7 +46,7 @@ Repite el procedimiento de E-6 (`TASKS_DESPLIEGUE_SEGEL_FS_v0.2`), que ya funcio
 | Version | `curl -sI http://10.100.0.145:8092/api/v1/health` y `/app/` | `X-App-Version: <sha>`; 200 |
 | Salud | `docker ps` (api, frontend `healthy`); salud de FE por la red interna | OK |
 | Datos | `select count(*) from facturas_operativas`; `select count(*), count(*) filter (where moneda='PYG') from catalogo_items where deleted_at is null`; `select count(*) from factura_items_snapshot where descuento <> 0 or descuento_global <> 0`; facturadores y usuarios | Iguales a antes; todos PYG; 0 lineas con descuento |
-| Remision oculta | `select emisor_id, fe_consumer_permisos, fe_tipos_documento from facturadores where deleted_at is null` | permisos y tipos vacios en los 4 (CA-06) |
+| Remision | `select emisor_id, fe_consumer_permisos, fe_tipos_documento from facturadores where deleted_at is null` | SALUMAX con `["NRE_EMIT"]` y `["NRE"]`; los otros tres vacios (CA-06) |
 | Log | `docker logs --since 10m segel-fs-api-1 | grep -c '"level":50'` | 0 |
 | Verificacion fiscal | `select min(verificacion_next_at) from facturas_operativas where estado in ('PENDIENTE_SIFEN','EMITIENDO')` | fecha futura o sin pendientes |
 | Pantallas (CA-08) | Con el usuario de prueba que indique el usuario, o el usuario mismo | sin "Proximo numero"; columna Descuento; selector de moneda; agenda en tabla |
@@ -61,13 +62,15 @@ Repite el procedimiento de E-6 (`TASKS_DESPLIEGUE_SEGEL_FS_v0.2`), que ya funcio
 
 1. `docker compose ... stop api frontend`.
 2. Reetiquetar `:antes-2026.11.12` como `:latest` (api, migrate, frontend).
-3. Restaurar el respaldo (`pg_restore --clean` sobre la base de FS) **solo si** hace falta volver el esquema; si la vuelta es por la app y no por datos, basta con las imagenes (las columnas nuevas no molestan a la version anterior: `precio_unitario numeric` se lee como numero y las columnas con default no se insertan).
-4. `up -d --no-build migrate api frontend` y `restart frontend`; verificar `X-App-Version: ed8b493`.
+3. Si hace falta volver la remision de SALUMAX: `update facturadores set fe_consumer_permisos = '[]', fe_tipos_documento = '[]' where emisor_id = '80018828-4'`.
+4. Restaurar el respaldo (`pg_restore --clean` sobre la base de FS) **solo si** hace falta volver el esquema; si la vuelta es por la app y no por datos, basta con las imagenes (las columnas nuevas no molestan a la version anterior: `precio_unitario numeric` se lee como numero y las columnas con default no se insertan).
+5. `up -d --no-build migrate api frontend` y `restart frontend`; verificar `X-App-Version: ed8b493`.
 
 ## 4. Riesgos
 
 - **`precio_unitario` a `numeric`.** Irreversible en caliente si ya hubiera precios con decimales; el mismo dia no los habra. Mitigacion: respaldo y vuelta atras por imagenes.
-- **Re-importacion involuntaria de un facturador.** Activaria la remision para ese emisor (si tiene `NRE_EMIT` y numerador tipo 7 en algun punto). Mitigacion: D-3 y D-4; aviso en el backoffice queda para FS-70/FS-72.
+- **Re-importacion de un facturador.** Reescribe la clave del consumidor y activaria la remision si FE ya le dio permiso y numerador. Por eso SALUMAX se habilita por SQL (D-3) y no se re-importa nadie en esta version.
+- **Licitaciones (003) de SALUMAX intenta una remision.** FE rechaza antes de numerar; FS deja la nota en error a corregir con el mensaje "Pedila a Segel" (D-4, probado con SALUMAX en SIFEN test, NRE-035).
 - **Clientes cargados con RUC sin DV despues del despliegue.** Ya no se puede; el operador ve el mensaje y corrige. Mitigacion: D-6.
 - **Datos del ensayo en el stack local distintos de produccion** (padron DNIT presente, mas facturas). Las pruebas con SALUMAX cubrieron el caso sin padron.
 - **Tiempo de SIFEN** no cambia con esta version: sigue el lote de FE y la verificacion de FS (FS-71).

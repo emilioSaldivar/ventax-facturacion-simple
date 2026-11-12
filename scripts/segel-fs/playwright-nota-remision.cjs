@@ -114,7 +114,7 @@ async function casoPermiso(browser) {
     await abrirVista(page, "Notas de remisión");
     const pestana = page.getByRole("button", { name: /^Nueva nota de remisión/ });
     await pestana.waitFor();
-    check("CA-01 sin NRE_EMIT: la pestaña Nueva dice Próximamente y esta deshabilitada", (await pestana.isDisabled()) && (await pestana.innerText()).includes("Próximamente"));
+    check("CA-01 sin NRE_EMIT: la pestaña Nueva dice No habilitado y esta deshabilitada (RN-02b)", (await pestana.isDisabled()) && (await pestana.innerText()).includes("No habilitado") && !(await pestana.innerText()).includes("Próximamente"));
     check("CA-01 sin NRE_EMIT: se explica como pedirlo", (await page.locator("main").innerText()).includes("Pedila a Segel"));
   } finally {
     await ctx.close();
