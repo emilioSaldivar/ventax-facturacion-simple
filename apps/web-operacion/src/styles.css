@@ -3097,7 +3097,7 @@ dd {
 .grilla-lineas .col-precio { width: 110px; }
 .grilla-lineas .col-iva { width: 76px; }
 .grilla-lineas .col-subtotal { width: 110px; text-align: right; white-space: nowrap; font-weight: 500; font-size: 13px; }
-.grilla-lineas .col-acciones { width: 64px; }
+.grilla-lineas .col-acciones { width: 76px; }
 
 .grilla-lineas th.col-cantidad,
 .grilla-lineas th.col-precio,
