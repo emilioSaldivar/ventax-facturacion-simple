@@ -5170,3 +5170,46 @@ dd {
     grid-column: 1 / -1;
   }
 }
+
+/* SPEC_DESCUENTOS_FACTURA_v0.1 RN-13 a RN-18. */
+.grilla-lineas .col-descuento {
+  width: 120px;
+}
+.grilla-lineas .col-descuento input {
+  width: 100%;
+}
+.descuento-cabecera {
+  align-items: center;
+  display: inline-flex;
+  gap: var(--esp-2);
+}
+.descuento-modo {
+  border: 1px solid var(--color-linea, #dde3e7);
+  border-radius: 6px;
+  display: inline-flex;
+  overflow: hidden;
+}
+.descuento-modo button {
+  background: transparent;
+  border: 0;
+  color: var(--color-muted);
+  cursor: pointer;
+  font-size: var(--fs-12);
+  font-weight: 600;
+  min-height: 24px;
+  min-width: 32px;
+  padding: 0 6px;
+}
+.descuento-modo button.active {
+  background: var(--color-texto, #1f2933);
+  color: #fff;
+}
+.descuento-global {
+  display: grid;
+  gap: 4px;
+  margin-top: var(--esp-3);
+  max-width: 320px;
+}
+.total-row.resta strong {
+  color: var(--color-muted);
+}

@@ -148,6 +148,8 @@ export interface FacturaItemInput {
   cantidad: number;
   precio_unitario: number;
   iva_tipo: TipoIva;
+  /** SPEC_DESCUENTOS_FACTURA_v0.1 RN-01: descuento por unidad. */
+  descuento?: number;
 }
 
 export interface FacturaPreviewRequest {
@@ -159,6 +161,8 @@ export interface FacturaPreviewRequest {
   credito_plazo_dias?: number | null;
   cliente: FacturaClienteInput;
   items: FacturaItemInput[];
+  /** SPEC_DESCUENTOS_FACTURA_v0.1 RN-01: descuento sobre el total. */
+  descuento_global?: number;
 }
 
 export interface FacturaPreviewResponse {
@@ -168,6 +172,7 @@ export interface FacturaPreviewResponse {
     base_imponible: number;
     iva_monto: number;
     catalogo_item_id: string | null;
+    descuento_global?: number;
   }>;
   totals: {
     subtotal: number;
@@ -178,6 +183,8 @@ export interface FacturaPreviewResponse {
     total: number;
     /** SPEC_TOTALES_FE_EN_CARGA_v0.1: facturas de carga con descuentos, anticipos o IVA exonerado. */
     descuento?: number;
+    /** SPEC_DESCUENTOS_FACTURA_v0.1 RN-05. */
+    descuento_global?: number;
     anticipo?: number;
     nota_credito_por_referencia?: boolean;
     /** SPEC_MONEDA_EXTRANJERA_v0.1, A-2: "FE" con los totales oficiales del documento aprobado. */
@@ -472,6 +479,8 @@ export interface InvoiceLineDraft {
   precio_unitario: string;
   iva_tipo: TipoIva;
   lockedFromCatalog: boolean;
+  /** SPEC_DESCUENTOS_FACTURA_v0.1 RN-13: lo que escribio el operador (porcentaje o monto, segun el modo de la grilla). */
+  descuento_ingresado?: string;
 }
 
 export interface ClienteSearchResult {

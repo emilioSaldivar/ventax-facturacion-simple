@@ -1273,6 +1273,9 @@ function InvoiceEditor({
   const [catalogMessage, setCatalogMessage] = useState<Record<string, string | null>>({});
   const [preview, setPreview] = useState<FacturaPreviewResponse | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
+  // SPEC_DESCUENTOS_FACTURA_v0.1 RN-13 y RN-15.
+  const [descuentoModo, setDescuentoModo] = useState<ModoDescuento>("PORCENTAJE");
+  const [descuentoGlobal, setDescuentoGlobal] = useState("");
   const [previewing, setPreviewing] = useState(false);
   const [emitting, setEmitting] = useState(false);
   const [emissionError, setEmissionError] = useState<string | null>(null);
@@ -1314,10 +1317,20 @@ function InvoiceEditor({
           !line.descripcion.trim() ||
           !cantidadValida(Number(line.cantidad)) ||
           !precioValido(Number(line.precio_unitario), moneda) ||
-          Number(line.precio_unitario) <= 0
+          Number(line.precio_unitario) <= 0 ||
+          // SPEC_DESCUENTOS_FACTURA_v0.1 RN-16.
+          descuentoDeLinea(line, descuentoModo, moneda).error !== null
       )
       .map((line) => line.id)
   );
+  // RN-15: descuento sobre el total, en la moneda de la factura.
+  const descuentoGlobalNumero = Number((descuentoGlobal || "0").replace(",", "."));
+  const errorDescuentoGlobal =
+    descuentoGlobal.trim() && (!Number.isFinite(descuentoGlobalNumero) || descuentoGlobalNumero < 0 || !precioValido(descuentoGlobalNumero, moneda))
+      ? moneda === "PYG"
+        ? "En guaraníes, el descuento va sin decimales"
+        : "El descuento admite hasta 2 decimales"
+      : null;
   const request = useMemo<FacturaPreviewRequest | null>(() => {
     const items = lines
       .map((line) => ({
@@ -1326,7 +1339,12 @@ function InvoiceEditor({
         descripcion: line.descripcion.trim(),
         cantidad: Number(line.cantidad),
         precio_unitario: Number(line.precio_unitario),
-        iva_tipo: line.iva_tipo
+        iva_tipo: line.iva_tipo,
+        // SPEC_DESCUENTOS_FACTURA_v0.1 RN-13: monto por unidad, calculado al armar el pedido.
+        ...(() => {
+          const d = descuentoDeLinea(line, descuentoModo, moneda);
+          return d.monto > 0 && !d.error ? { descuento: d.monto } : {};
+        })()
       }))
       .filter(
         (line) =>
@@ -1361,9 +1379,10 @@ function InvoiceEditor({
         telefono: revision.normalizado.telefono ?? null,
         email: revision.normalizado.email ?? null
       },
-      items
+      items,
+      ...(descuentoGlobalNumero > 0 && !errorDescuentoGlobal ? { descuento_global: descuentoGlobalNumero } : {})
     };
-  }, [cliente, condicionVenta, creditoPlazoDias, lines, tipoTransaccion, moneda, tipoCambio, enMonedaExtranjera, tipoCambioValido]);
+  }, [cliente, condicionVenta, creditoPlazoDias, lines, tipoTransaccion, moneda, tipoCambio, enMonedaExtranjera, tipoCambioValido, descuentoModo, descuentoGlobalNumero, errorDescuentoGlobal]);
   const requestFingerprint = useMemo(() => (request ? JSON.stringify(request) : null), [request]);
 
   useEffect(() => {
@@ -2171,6 +2190,7 @@ function InvoiceEditor({
     if (revisionCliente.errores.length > 0) return `Corregí los datos del cliente: ${revisionCliente.errores[0]!.mensaje}`;
     if (innominadoSobreTope) return MENSAJE_TOPE_INNOMINADO;
     if (!tipoCambioValido) return "Falta el tipo de cambio";
+    if (errorDescuentoGlobal) return `Descuento sobre el total: ${errorDescuentoGlobal}`;
     if (lineasConDatos.length === 0) return "Agregá al menos una línea";
     if (primeraInvalida >= 0) return `Corregí la línea ${primeraInvalida + 1} para poder crear la factura`;
     if (!preview) return "Calculando…";
@@ -2520,6 +2540,8 @@ function InvoiceEditor({
             onQuitar={removeLine}
             onUpdate={updateLine}
             subtotales={previewSubtotalsByLineId}
+            descuentoModo={descuentoModo}
+            onCambiarDescuentoModo={setDescuentoModo}
           />
         ) : (
         <div className="sale-list" aria-label="Productos o servicios agregados">
@@ -2541,7 +2563,7 @@ function InvoiceEditor({
                   <span>{formatCantidad(quantity)} x {formatMonto(price, moneda)} · {formatIva(line.iva_tipo)}</span>
                   {lineasInvalidasIds.has(line.id) ? (
                     <small className="line-invalid-hint">
-                      {motivoLineaInvalida(line, moneda)}
+                      {motivoLineaInvalida(line, moneda, descuentoModo)}
                     </small>
                   ) : null}
                   <b className="cifra">{formatMonto(subtotal, moneda)}</b>
@@ -2559,6 +2581,20 @@ function InvoiceEditor({
           ) : null}
         </div>
         )}
+        {/* SPEC_DESCUENTOS_FACTURA_v0.1 RN-15: descuento sobre el total, en los dos modos. */}
+        <label className="descuento-global">
+          Descuento sobre el total ({moneda === "PYG" ? "Gs." : moneda})
+          <input
+            aria-invalid={errorDescuentoGlobal ? true : undefined}
+            className="cifra"
+            inputMode="decimal"
+            onChange={(event) => setDescuentoGlobal(enMonedaExtranjera ? normalizeDecimalInput(event.target.value) : normalizeIntegerInput(event.target.value))}
+            placeholder={enMonedaExtranjera ? "0,00" : "0"}
+            value={enMonedaExtranjera ? descuentoGlobal.replace(".", ",") : formatIntegerInput(descuentoGlobal)}
+          />
+          <small className="field-hint">Se reparte en proporción entre todas las líneas, como lo exige SIFEN.</small>
+          {errorDescuentoGlobal ? <small className="campo-error">{errorDescuentoGlobal}</small> : null}
+        </label>
       </section>
 
       {lineSheetOpen && activeLine && !modoCompleto ? (
@@ -2636,6 +2672,31 @@ function InvoiceEditor({
                     value={enMonedaExtranjera ? activeLine.precio_unitario.replace(".", ",") : formatIntegerInput(activeLine.precio_unitario)}
                   />
                   {enMonedaExtranjera ? <small className="field-hint">En {moneda === "USD" ? "dólares" : moneda}, con hasta 2 decimales (centavos).</small> : null}
+                </label>
+
+                {/* SPEC_DESCUENTOS_FACTURA_v0.1 RN-14: descuento de la linea con el mismo conmutador de la grilla. */}
+                <label>
+                  <span className="descuento-cabecera">
+                    Descuento
+                    <span className="descuento-modo" role="group" aria-label="Descuento en porcentaje o monto">
+                      <button aria-pressed={descuentoModo === "PORCENTAJE"} className={descuentoModo === "PORCENTAJE" ? "active" : ""} onClick={(event) => { event.preventDefault(); setDescuentoModo("PORCENTAJE"); }} type="button">
+                        %
+                      </button>
+                      <button aria-pressed={descuentoModo === "MONTO"} className={descuentoModo === "MONTO" ? "active" : ""} onClick={(event) => { event.preventDefault(); setDescuentoModo("MONTO"); }} type="button">
+                        {moneda === "PYG" ? "Gs." : moneda}
+                      </button>
+                    </span>
+                  </span>
+                  <input
+                    aria-label="Descuento de la línea"
+                    inputMode="decimal"
+                    onChange={(event) => updateLine(activeLine.id, { descuento_ingresado: normalizeDecimalInput(event.target.value) })}
+                    placeholder={descuentoModo === "PORCENTAJE" ? "0 %" : "0"}
+                    value={(activeLine.descuento_ingresado ?? "").replace(".", ",")}
+                  />
+                  {descuentoDeLinea(activeLine, descuentoModo, moneda).error ? (
+                    <small className="campo-error">{descuentoDeLinea(activeLine, descuentoModo, moneda).error}</small>
+                  ) : null}
                 </label>
               </div>
 
@@ -2751,6 +2812,7 @@ function InvoiceEditor({
           <h3>Totales en {etiquetaMoneda === "Gs." ? "Gs." : moneda}</h3>
           <div className="totals-grid">
             <TotalRow label="Subtotal" moneda={moneda} value={preview?.totals.subtotal ?? 0} />
+            {(preview?.totals.descuento ?? 0) > 0 ? <TotalRow label="Descuento" moneda={moneda} resta value={preview!.totals.descuento!} /> : null}
             <TotalRow label="Total sin IVA" moneda={moneda} value={preview?.totals.total_sin_iva ?? 0} />
             <div className="totales-iva">
               <TotalRow label="IVA 5%" moneda={moneda} value={preview?.totals.iva_5 ?? 0} />
@@ -2781,6 +2843,7 @@ function InvoiceEditor({
           <section className="totals-section" aria-live="polite" ref={sendSectionRef}>
             <div className="totals-grid">
               <TotalRow label="Subtotal" moneda={moneda} value={preview?.totals.subtotal ?? 0} />
+              {(preview?.totals.descuento ?? 0) > 0 ? <TotalRow label="Descuento" moneda={moneda} resta value={preview!.totals.descuento!} /> : null}
               <TotalRow label="Total sin IVA" moneda={moneda} value={preview?.totals.total_sin_iva ?? 0} />
               <div className="totales-iva">
                 <TotalRow label="IVA 5%" moneda={moneda} value={preview?.totals.iva_5 ?? 0} />
@@ -2865,13 +2928,15 @@ function lineaTieneDatos(line: InvoiceLineDraft): boolean {
   return Boolean(line.descripcion.trim() || line.codigo.trim() || line.precio_unitario.trim());
 }
 
-function motivoLineaInvalida(line: InvoiceLineDraft, moneda: string): string {
+function motivoLineaInvalida(line: InvoiceLineDraft, moneda: string, modoDescuento: ModoDescuento = "PORCENTAJE"): string {
   if (!line.descripcion.trim()) return "Falta la descripción";
   if (!cantidadValida(Number(line.cantidad))) return "Cantidad no válida (hasta 4 decimales)";
   if (!line.precio_unitario.trim() || Number(line.precio_unitario) <= 0) return "Falta el precio";
   if (!precioValido(Number(line.precio_unitario), moneda)) {
     return moneda === "PYG" ? "Precio con decimales: no válido en guaraníes" : "Precio con más de 2 decimales";
   }
+  const descuento = descuentoDeLinea(line, modoDescuento, moneda);
+  if (descuento.error) return descuento.error;
   return "Línea no válida";
 }
 
@@ -2899,10 +2964,14 @@ function GrillaLineas({
   onUpdate,
   onQuitar,
   onAplicarCatalogo,
-  onGuardarCatalogo
+  onGuardarCatalogo,
+  descuentoModo,
+  onCambiarDescuentoModo
 }: {
   lines: InvoiceLineDraft[];
   moneda: MonedaFactura;
+  descuentoModo: ModoDescuento;
+  onCambiarDescuentoModo: (modo: ModoDescuento) => void;
   invalidas: Set<string>;
   subtotales: Map<string, number>;
   catalogSuggestions: Record<string, CatalogoItem[]>;
@@ -2947,6 +3016,20 @@ function GrillaLineas({
             <th className="col-descripcion">Descripción</th>
             <th className="col-cantidad">Cantidad</th>
             <th className="col-precio">Precio ({moneda === "PYG" ? "Gs." : moneda})</th>
+            {/* SPEC_DESCUENTOS_FACTURA_v0.1 RN-13: conmutador % / moneda para toda la grilla. */}
+            <th className="col-descuento">
+              <span className="descuento-cabecera">
+                Descuento
+                <span className="descuento-modo" role="group" aria-label="Descuento en porcentaje o monto">
+                  <button aria-pressed={descuentoModo === "PORCENTAJE"} className={descuentoModo === "PORCENTAJE" ? "active" : ""} onClick={() => onCambiarDescuentoModo("PORCENTAJE")} type="button">
+                    %
+                  </button>
+                  <button aria-pressed={descuentoModo === "MONTO"} className={descuentoModo === "MONTO" ? "active" : ""} onClick={() => onCambiarDescuentoModo("MONTO")} type="button">
+                    {moneda === "PYG" ? "Gs." : moneda}
+                  </button>
+                </span>
+              </span>
+            </th>
             <th className="col-iva">IVA</th>
             <th className="col-subtotal">Subtotal</th>
             <th className="col-acciones"><span className="sr-only">Acciones</span></th>
@@ -2958,7 +3041,15 @@ function GrillaLineas({
             const invalida = invalidas.has(line.id);
             const cantidad = Number(line.cantidad) || 0;
             const precio = Number(line.precio_unitario) || 0;
-            const subtotal = subtotales.get(line.id) ?? (enMonedaExtranjera ? Math.round(cantidad * precio * 100) / 100 : Math.round(cantidad * precio));
+            // RN-17: el subtotal de la linea es el neto del descuento por unidad (sin el prorrateo del global).
+            const descuentoLinea = descuentoDeLinea(line, descuentoModo, moneda);
+            const precioNeto = precio - (descuentoLinea.error ? 0 : descuentoLinea.monto);
+            const subtotal =
+              descuentoLinea.monto > 0 || !subtotales.has(line.id)
+                ? enMonedaExtranjera
+                  ? Math.round(cantidad * precioNeto * 100) / 100
+                  : Math.round(cantidad * precioNeto)
+                : subtotales.get(line.id)!;
             const sugerencias = filaConFoco === line.id ? catalogSuggestions[line.id] ?? [] : [];
             const puedeGuardar =
               !line.catalogo_item_id && !line.lockedFromCatalog && conDatos && !invalida && precioValidoEnMoneda(precio, moneda);
@@ -3035,6 +3126,18 @@ function GrillaLineas({
                     value={enMonedaExtranjera ? line.precio_unitario.replace(".", ",") : formatIntegerInput(line.precio_unitario)}
                   />
                 </td>
+                <td className="col-descuento">
+                  <input
+                    aria-invalid={descuentoLinea.error ? true : undefined}
+                    aria-label={`Descuento, línea ${indice + 1}`}
+                    className="cifra"
+                    inputMode="decimal"
+                    onChange={(event) => onUpdate(line.id, { descuento_ingresado: normalizeDecimalInput(event.target.value) })}
+                    onKeyDown={(event) => alPresionar(event, indice)}
+                    placeholder={descuentoModo === "PORCENTAJE" ? "0 %" : "0"}
+                    value={(line.descuento_ingresado ?? "").replace(".", ",")}
+                  />
+                </td>
                 <td className="col-iva">
                   <select
                     aria-label={`IVA, línea ${indice + 1}`}
@@ -3074,7 +3177,7 @@ function GrillaLineas({
               {invalida ? (
                 <tr className="fila-motivo" data-grilla-motivo={indice}>
                   <td colSpan={8}>
-                    <Icono nombre="alerta" tamano={14} /> {motivoLineaInvalida(line, moneda)}
+                    <Icono nombre="alerta" tamano={14} /> {motivoLineaInvalida(line, moneda, descuentoModo)}
                   </td>
                 </tr>
               ) : null}
@@ -3126,6 +3229,30 @@ function precioValido(valor: number, moneda: string): boolean {
   if (!Number.isFinite(valor)) return false;
   if (moneda === "PYG") return Number.isInteger(valor);
   return Math.abs(valor * 100 - Math.round(valor * 100)) < 1e-6;
+}
+
+/** SPEC_DESCUENTOS_FACTURA_v0.1 RN-13: el conmutador de la grilla vale para todas las lineas. */
+type ModoDescuento = "PORCENTAJE" | "MONTO";
+
+/**
+ * RN-13 y RN-16: descuento por unidad de la linea a partir de lo escrito. Devuelve el monto (0 sin descuento) o un
+ * mensaje de error. En porcentaje: hasta 2 decimales y menor que 100; el monto se redondea a la moneda.
+ */
+function descuentoDeLinea(line: InvoiceLineDraft, modo: ModoDescuento, moneda: string): { monto: number; error: string | null } {
+  const texto = (line.descuento_ingresado ?? "").trim().replace(",", ".");
+  if (!texto || Number(texto) === 0) return { monto: 0, error: null };
+  const valor = Number(texto);
+  if (!Number.isFinite(valor) || valor < 0) return { monto: 0, error: "Descuento no válido" };
+  const precio = Number(line.precio_unitario);
+  let monto = valor;
+  if (modo === "PORCENTAJE") {
+    if (valor >= 100 || Math.abs(valor * 100 - Math.round(valor * 100)) > 1e-6) return { monto: 0, error: "El porcentaje va de 0 a 99,99" };
+    monto = moneda === "PYG" ? Math.round((precio * valor) / 100) : Math.round(precio * valor) / 100;
+  } else if (!precioValido(valor, moneda)) {
+    return { monto: 0, error: moneda === "PYG" ? "En guaraníes, el descuento va sin decimales" : "El descuento admite hasta 2 decimales" };
+  }
+  if (precio > 0 && monto >= precio) return { monto, error: "El descuento tiene que ser menor que el precio" };
+  return { monto, error: null };
 }
 
 function getOperationViewHint(value: OperationView): string {

@@ -1126,6 +1126,13 @@ export function DocumentsView({
                     <dd>{formatMonto(selected.totals.total, selected.moneda)}{selected.moneda && selected.moneda !== "PYG" && selected.tipo_cambio ? <small className="muted"> · Tipo de cambio {selected.tipo_cambio.toLocaleString("es-PY")}</small> : null}{selected.moneda && selected.moneda !== "PYG" && selected.totals.fuente === "FE" && selected.totals.total_guaranies != null ? <small className="muted"> · Equivale a {formatGuaranies(selected.totals.total_guaranies)}</small> : null}</dd>
                   </div>
                 )}
+                {/* SPEC_DESCUENTOS_FACTURA_v0.1 RN-19: el descuento (oficial de FE si ya esta aprobada). */}
+                {(selected.totals.descuento ?? 0) > 0 ? (
+                  <div>
+                    <dt>Descuento</dt>
+                    <dd>− {formatMonto(selected.totals.descuento!, selected.moneda)}</dd>
+                  </div>
+                ) : null}
                 <div>
                   <dt>Email</dt>
                   <dd>{formatEmailStatus(emailStatus?.status ?? selected.delivery.email_status)}</dd>

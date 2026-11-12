@@ -108,6 +108,8 @@ export function ResultadoEmision({
   const nombreTitulo = nombreTipo.charAt(0).toUpperCase() + nombreTipo.slice(1);
 
   const esRemision = documento.tipo === "NOTA_REMISION";
+  // SPEC_DESCUENTOS_FACTURA_v0.1 RN-19: columna "Descuento" solo si alguna linea lo tiene.
+  const conDescuentoPorLinea = (documento.items ?? []).some((item) => (item.descuento ?? 0) > 0);
   const traslado = esRemision && documento.remision?.motivo === 7;
   return (
     <div className="resultado-emision" aria-live="polite">
@@ -206,6 +208,7 @@ export function ResultadoEmision({
                     {esRemision ? null : (
                       <>
                         <th className="cifra">Precio</th>
+                        {conDescuentoPorLinea ? <th className="cifra">Descuento</th> : null}
                         <th>IVA</th>
                         <th className="cifra">Subtotal</th>
                       </>
@@ -221,6 +224,7 @@ export function ResultadoEmision({
                       {esRemision ? null : (
                         <>
                           <td className="cifra">{formatMonto(item.precio_unitario, moneda).replace(/^(Gs\.|[A-Z]{3}) /, "")}</td>
+                          {conDescuentoPorLinea ? <td className="cifra">{(item.descuento ?? 0) > 0 ? formatMonto(item.descuento!, moneda).replace(/^(Gs\.|[A-Z]{3}) /, "") : "—"}</td> : null}
                           <td>{formatIva(item.iva_tipo)}</td>
                           <td className="cifra">{formatMonto(item.subtotal, moneda).replace(/^(Gs\.|[A-Z]{3}) /, "")}</td>
                         </>
@@ -232,6 +236,7 @@ export function ResultadoEmision({
             </div>
           ) : null}
           {esRemision ? null : <div className="resultado-totales">
+            {(documento.totals.descuento ?? 0) > 0 ? <div><span>Descuento</span><strong className="cifra">− {formatMonto(documento.totals.descuento!, moneda)}</strong></div> : null}
             <div><span>Total sin IVA</span><strong className="cifra">{formatMonto(documento.totals.total_sin_iva, moneda)}</strong></div>
             <div><span>IVA 5%</span><strong className="cifra">{formatMonto(documento.totals.iva_5, moneda)}</strong></div>
             <div><span>IVA 10%</span><strong className="cifra">{formatMonto(documento.totals.iva_10, moneda)}</strong></div>
