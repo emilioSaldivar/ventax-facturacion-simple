@@ -74,3 +74,12 @@ Repite el procedimiento de E-6 (`TASKS_DESPLIEGUE_SEGEL_FS_v0.2`), que ya funcio
 - **Clientes cargados con RUC sin DV despues del despliegue.** Ya no se puede; el operador ve el mensaje y corrige. Mitigacion: D-6.
 - **Datos del ensayo en el stack local distintos de produccion** (padron DNIT presente, mas facturas). Las pruebas con SALUMAX cubrieron el caso sin padron.
 - **Tiempo de SIFEN** no cambia con esta version: sigue el lote de FE y la verificacion de FS (FS-71).
+
+## Regla agregada el 2026-11-12: despliegues de solo frontend
+
+El frontend muestra "Nueva version disponible" cuando su `VITE_APP_VERSION` difiere del `X-App-Version` de la API (`apps/web-operacion/src/api/version.ts`). Por eso:
+
+- si se despliega **solo el frontend**, la imagen se construye con `BUILD_COMMIT_SHA` igual al `X-App-Version` que reporta la API en produccion (y se documenta el commit real del frontend en la evidencia);
+- si se despliegan **API y frontend**, los dos del mismo commit, etiquetados con el commit (no con el objeto de un tag anotado: `git rev-parse --short "<tag>^{commit}"`).
+
+Antecedente: E-2 y E-2b de `TASKS_DESPLIEGUE_SEGEL_FS_v0.3`.
