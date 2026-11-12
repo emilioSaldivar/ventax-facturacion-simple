@@ -27,6 +27,7 @@ Las filas de la tabla de iniciativas de julio y agosto (mas abajo) conservan su 
 | Critico | FS-56 | Nota de remision, entrega E2 (datos guardados, domicilio en la agenda, facturas asociadas) | **CON CADENA** | idem | Implementar cuando se pida |
 | Critico | FS-62 y FS-60 | Validaciones del receptor (RUC con DV, correo, telefono, nombre, direccion) | **DONE en produccion** (2026-11-12) | `SPEC/PLAN/TASKS_VALIDACIONES_RECEPTOR_v0.1` | VAL-013 (no bloquea) |
 | Critico | ATO-009 | Textos del operador en produccion | **DONE en produccion** (2026-11-12) | `SPEC/PLAN/TASKS_AJUSTES_TEXTOS_OPERADOR_v0.1` | — |
+| Bajo | TUT v0.2 | Tutoriales en video: V7 descuentos, V8 nota de remision, V9 catalogo en dolares; regrabar V1, V2, V4, V5 (hallazgos de la v0.1 en FS-75 a FS-80) | **CON CADENA** (2026-11-12) | `SPEC/PLAN/TASKS_TUTORIALES_VIDEO_v0.2` | P-8 y P-9 del usuario; V7 espera su orden |
 | Critico | FS-55, FS-57 | Nota de debito y autofactura | **PENDIENTE** | FE ya las publico | Cadena cuando se pida |
 | Menos critico | FS-67 | Recibos asociados a facturas a credito | **PENDIENTE** | — | Cadena |
 | Menos critico | FS-68 | Documentos asociados entre si | **PENDIENTE** | — | Cadena |

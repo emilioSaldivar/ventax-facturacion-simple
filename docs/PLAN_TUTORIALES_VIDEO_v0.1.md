@@ -144,7 +144,7 @@ Salen del inventario. **H-1 a H-7 quedaron corregidos antes de grabar** (D-8, `S
 
 Lo que aparezca en la segunda pasada se agrega aca con un id nuevo y va a `BACKLOG`, sin arreglarlo en esta cadena (SPEC §8).
 
-Hallazgos de la grabacion (2026-11-11), pendientes de pasar a `BACKLOG`:
+Hallazgos de la grabacion (2026-11-11). Pasados a `BACKLOG` el 2026-11-12: H-9 = FS-75, H-10 = FS-76, H-11 = FS-77, H-12 = FS-78, H-14 y H-15 = FS-79, H-16 = FS-80. H-13 es del guion, no de la app:
 
 | Id | Hallazgo | Donde | Video |
 |---|---|---|---|
