@@ -46,12 +46,18 @@ module.exports = [
   ["3.4-recuperacion", ["v2"], "Verificar estado fiscal / Reintentar / Inutilizar"],
   ["3.4-info-fiscal", ["v2"], "Información fiscal"],
   ["3.4-cargas", ["v5"], "Cargas por planilla"],
-  // §3.5 Notas de credito
-  ["3.5-pestanas", ["v4"], "Nueva nota de crédito / Emitidas"],
-  ["3.5-buscar", ["v4"], "Buscar factura y Elegible"],
-  ["3.5-total-parcial", ["v4"], "Toda la factura / Algunas líneas"],
-  ["3.5-emitir", ["v4"], "Motivo y Emitir nota de crédito"],
-  ["3.5-avisos", ["v4"], "Avisos M-4 y Sin nombre"],
+  // §3.5b Notas de credito, pantalla unica (SPEC_TUTORIALES_VIDEO_v0.3; reemplaza §3.5 de la v0.1)
+  ["3.5b-encabezado", ["v4"], "Encabezado y pestañas Nueva nota de crédito / Emitidas"],
+  ["3.5b-factura", ["v4"], "Buscar factura, Elegible o motivo, Cambiar factura"],
+  ["3.5b-tabla", ["v4"], "Qué se devuelve o ajusta: columnas y Devolver"],
+  ["3.5b-toda", ["v4"], "Toda la factura"],
+  ["3.5b-ajuste", ["v4"], "Agregar ajuste, Ajuste % / monto, Ajuste sobre el total"],
+  ["3.5b-validacion", ["v4"], "Supera lo disponible en este ítem"],
+  ["3.5b-motivo", ["v4"], "Motivo en SIFEN sugerido y Detalle para el cliente"],
+  ["3.5b-resumen", ["v4"], "Resumen con saldo y Emitir nota de crédito"],
+  ["3.5b-ficha", ["v4"], "Crear nota de crédito desde la ficha abre la misma pantalla"],
+  ["3.5b-neto", ["v7"], "Factura con descuento: columna Neto u."],
+  ["3.5b-avisos", ["v4"], "Avisos M-4 y Sin nombre"],
   // §3.6 Carga masiva
   ["3.6-nueva", ["v5"], "Nueva carga y planilla de ejemplo"],
   ["3.6-estados", ["v5"], "Estados de la carga"],
@@ -106,6 +112,12 @@ module.exports = [
   ["3.13-reintentar", ["v10"], "Reintentar anulación"],
   ["3.13-plazo", ["v10"], "Pasó el plazo: nota de crédito"],
   ["3.13-lista", ["v10"], "Anular desde el menu de la fila"],
+  // §3.14 Nota de credito sobre una factura de otro sistema (SPEC_TUTORIALES_VIDEO_v0.3)
+  ["3.14-entrada", ["v11"], "¿La factura no está en el sistema? Traela por CDC o cargala a mano"],
+  ["3.14-cdc", ["v11"], "Traer por CDC: campo, validación y factura leída de SIFEN"],
+  ["3.14-manual", ["v11"], "Cargar a mano con referencia impresa y aviso de datos no verificados"],
+  ["3.14-ficha", ["v11"], "Ficha de la externa: pastilla, sin KuDE ni anulación, Eliminar factura externa"],
+  ["3.14-nc", ["v11"], "Nota de crédito sobre la externa"],
   // §4 Estados
   ["4-resultado-ok", ["v3"], "Creada → Aprobada · KUDE listo"],
   ["4-rechazada", ["v3", "v2"], "Rechazada por SIFEN"],

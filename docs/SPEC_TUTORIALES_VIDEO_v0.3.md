@@ -1,6 +1,6 @@
 # SPEC — Tutoriales en video para operadores v0.3
 
-**Estado:** borrador (2026-11-13), escrito con la punta de la rama en `3613087` (stack local en ese commit)
+**Estado:** cerrada (2026-11-13). Escrita y grabada con el stack local en `3613087` (punta de la app en la rama)
 **Rama:** `feat/identidad-segel` (marca Segel). No va a `master`.
 **Cadena:** `SPEC_TUTORIALES_VIDEO_v0.3` → `PLAN_TUTORIALES_VIDEO_v0.3` → `TASKS_TUTORIALES_VIDEO_v0.3`
 **Base:** `SPEC_TUTORIALES_VIDEO_v0.1` y `v0.2` siguen vigentes (mapa, estados, mensajes M-1 a M-11, decisiones D-1 a D-15, restricciones R-1 a R-10). Aca solo lo que cambia. **BACKLOG:** FS-146.
@@ -47,7 +47,7 @@ Etiquetas leidas del arbol de accesibilidad en `3613087` (2026-11-13). Se vuelve
 | "Qué se devuelve o ajusta": columnas "Facturado", "Precio", "IVA", "Ya devuelto o ajustado", "Devolver" (con "máx. N"), "Importe" | Devolver cantidades. | V4 |
 | "Toda la factura" | Llena "Devolver" con el saldo de cada linea. | V4 |
 | "Agregar ajuste" / "Ocultar ajustes" / "Quitar ajustes"; columna "Ajuste" con "%" / moneda; "Ajuste sobre el total" ("Se reparte en proporción a lo que la factura tiene en cada tasa") | Ajustes por item y sobre el total (nota por monto, FS-136). | V4 |
-| Validacion: "Supera lo disponible en este ítem", "Indicá qué se devuelve o se ajusta" | Topes por item y por saldo. | V4 |
+| Validacion: "Supera lo que queda por devolver (N)." en "Devolver", "Supera lo disponible en este ítem" en "Ajuste", "Indicá qué se devuelve o se ajusta" | Topes por item y por saldo. | V4 |
 | "Motivo en SIFEN" ("Sugerido según lo que cargaste; podés cambiarlo") y "Detalle para el cliente" | Motivo fiscal (2 Devolución, 3 Descuento, 1 Devolución y ajuste de precios, 4, 8) y texto para el cliente. | V4 |
 | "Resumen": "Devolución de ítems", "Ajuste por ítem", "Ajuste sobre el total", "Total de la nota", "Saldo de la factura", "Saldo después de la nota", "Emitir nota de crédito" con el motivo de bloqueo | Control antes de emitir. | V4 |
 | Ficha: "Crear nota de crédito" lleva a la misma pantalla con la factura elegida | Un solo camino (FS-77). | V4 |
@@ -73,8 +73,10 @@ Etiquetas leidas del arbol de accesibilidad en `3613087` (2026-11-13). Se vuelve
 
 | Id | Tema | Decision | Fecha |
 |---|---|---|---|
-| D-16 | Que se regraba | V4 completo, V7 (cierre) y V11 nuevo. V3 no (P-12). Ajustes visuales y textos menores, no (pedido del usuario) | 2026-11-13 (propuesta) |
-| D-17 | Factura externa para "Traer por CDC" | Hace falta una factura **nueva** emitida fuera de FS (las de prueba `9300006` a `9300008` ya estan cargadas y con notas). Propuesta: pedirla a la sesion de FE en su pila de prueba, a nombre de SEGEL SA. Alternativa sin FE: V11 muestra el campo CDC y la validacion, y emite solo sobre la factura cargada a mano (P-11) | 2026-11-13 (propuesta) |
+| D-16 | Que se regraba | V4 completo, V7 (cierre) y V11 nuevo. V3 no (P-12). Ajustes visuales y textos menores, no (pedido del usuario) | 2026-11-13 (aceptada con la orden de grabar) |
+| D-17 | Factura externa para "Traer por CDC" | Hace falta una factura **nueva** emitida fuera de FS (las de prueba `9300006` a `9300008` ya estan cargadas y con notas). Propuesta: pedirla a la sesion de FE en su pila de prueba, a nombre de SEGEL SA. Alternativa sin FE: V11 muestra el campo CDC y la validacion, y emite solo sobre la factura cargada a mano (P-11) | 2026-11-13 (aceptada: FE emitio `9300011`, `9300013` y `9300014`; se uso `9300014`, las otras se consumieron en corridas fallidas) |
+
+| D-18 | CDC real en pantalla | El CDC lleva el RUC del emisor real: en pantalla se escribe un CDC de ejemplo (RUC 80000000-0, digito verificador valido) y el guion lo cambia por el real solo en la llamada a la API (PLAN §6) | 2026-11-13 |
 
 ## 6. Criterios de aceptacion
 
@@ -82,3 +84,7 @@ Etiquetas leidas del arbol de accesibilidad en `3613087` (2026-11-13). Se vuelve
 - **CA-13** `v11-nota-credito-externa.mp4`: una externa traida por CDC (o solo la validacion, segun P-11) y una cargada a mano con referencia impresa; nota de credito aprobada sobre al menos una; cubre §3.14 y M-13.
 - **CA-14** `v7-descuentos.mp4` regrabado sin la frase "solo admite nota de crédito por el total"; el cierre muestra la columna "Neto u.".
 - **CA-3** de la v0.1 vale para los videos nuevos.
+
+## 7. Resultado (2026-11-13)
+
+CA-12, CA-13 y CA-14 cumplidos: `v4-notas-credito.mp4` (3:55; NC `1010053`, `1010054`, `1010055`), `v11-nota-credito-externa.mp4` (2:50; NC `1010058` por CDC y `1010059` a mano) y `v7-descuentos.mp4` (2:47; factura `1010681`). Cobertura 113/114 (falta `4-rechazada`, justificada en la v0.1). Evidencia en `TASKS_TUTORIALES_VIDEO_v0.3`.

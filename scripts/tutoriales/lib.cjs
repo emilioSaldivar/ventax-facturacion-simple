@@ -24,6 +24,10 @@ const USUARIO_DEMO = "operador.demo";
 const CORREO_DEMO = "ejemplo@ejemplo.com";
 const CORREO_DEMO_OFUSCADO = "ej***@ejemplo.com";
 const ACTIVIDAD_EJEMPLO = "SERVICIOS DE CONSULTORÍA INFORMÁTICA";
+// v0.3 (V11): un CDC real lleva el RUC del emisor. En pantalla se escribe un CDC de ejemplo (RUC 80000000-0, mismo
+// resto y digito verificador valido); la ruta lo cambia por el real al ir a la API y el real por el de ejemplo al volver.
+// TUT_CDC="<ejemplo>:<real>" (sin espacios). Sin la variable no cambia nada.
+const CDC_PARES = (process.env.TUT_CDC ?? "").split(",").filter(Boolean).map((par) => par.split(":"));
 
 /** Claves que pertenecen al emisor dentro de cualquier respuesta. */
 const OBJETOS_EMISOR = new Set(["facturador", "tenant", "emisor"]);
@@ -85,6 +89,7 @@ function anonimizar(nodo, ambito = null) {
       continue;
     }
     let s = v;
+    for (const [ejemplo, real] of CDC_PARES) if (s.includes(real)) s = s.split(real).join(ejemplo);
     if (/xContenDE|xml/i.test(k) && s.startsWith("<")) s = "";
     if (ambito === "emisor") s = reemplazarEmisor(k, s);
     else if (ambito === "usuario") s = reemplazarUsuario(k, s);
@@ -192,7 +197,9 @@ async function abrir(video, { modoEditor = "completo", grabar = true } = {}) {
   }, modoEditor);
   await ctx.addInitScript(superposiciones);
   await ctx.route(/\/api\/v1\//, async (route) => {
-    const respuesta = await route.fetch().catch(() => null);
+    let cuerpoPedido = route.request().postData();
+    if (cuerpoPedido) for (const [ejemplo, real] of CDC_PARES) cuerpoPedido = cuerpoPedido.split(ejemplo).join(real);
+    const respuesta = await route.fetch(cuerpoPedido ? { postData: cuerpoPedido } : undefined).catch(() => null);
     if (!respuesta) return route.abort();
     const tipo = respuesta.headers()["content-type"] ?? "";
     if (!tipo.includes("application/json")) return route.fulfill({ response: respuesta });

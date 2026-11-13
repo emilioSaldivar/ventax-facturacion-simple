@@ -143,18 +143,21 @@ t.correr("v7-descuentos", { modoEditor: "completo" }, async (s) => {
   t.guardarEstado({ descuentos: numero });
   await t.paso(s, "Aprobada. El resultado muestra el descuento de cada línea y el resumen en los totales.", { ms: 1500 });
 
-  // 9. Ficha y nota de credito solo total
+  // 9. Ficha y nota de credito (v0.3, SPEC_TUTORIALES_VIDEO_v0.3 §3.5b, CA-14): la factura con descuento admite
+  // nota de credito; lo que se devuelve va al precio con descuento ("Neto u."). No se emite.
   await t.senalar(s, page.getByRole("button", { name: "Ver en Documentos" }), { clic: true });
   const fila = page.locator("tbody tr").filter({ hasText: numero.split("-").pop() }).first();
   await fila.waitFor({ timeout: 20000 });
   await t.senalar(s, fila, { clic: true });
   const crear = page.getByRole("button", { name: "Crear nota de crédito" }).first();
   await crear.waitFor();
-  await t.paso(s, "Una factura con descuento solo admite nota de crédito por el total.", { cubre: ["3.10-nc-total"] });
+  await t.paso(s, "Una factura con descuento también admite nota de crédito, por toda la factura o por una parte.", { cubre: ["3.10-nc-total"] });
   await t.senalar(s, crear, { clic: true });
-  const parcial = page.getByRole("dialog").getByRole("button", { name: "Parcial" });
-  await parcial.waitFor();
-  await t.senalar(s, parcial, { ms: 1500 });
-  await t.senalar(s, page.getByRole("dialog").getByRole("button", { name: "Cancelar", exact: true }), { clic: true });
-  await t.paso(s, "Resumen: dos descuentos que conviven, un solo total de descuento, y nota de crédito solo total.", { ms: 1500 });
+  const neto = page.getByRole("columnheader", { name: "Neto u." });
+  await neto.waitFor({ timeout: 20000 });
+  await t.senalar(s, neto, { ms: 800 });
+  await t.paso(s, "La columna “Neto u.” muestra el precio por unidad con los descuentos: 78.000 en la consultoría.", { cubre: ["3.5b-neto"] });
+  await t.senalar(s, page.getByLabel("Devolver, línea 1", { exact: true }), { ms: 800 });
+  await t.paso(s, "Lo que devolvés se calcula a ese precio. El video de notas de crédito lo muestra paso a paso.");
+  await t.paso(s, "Resumen: dos descuentos que conviven, un solo total de descuento, y la nota de crédito al precio con descuento.", { ms: 1500 });
 });

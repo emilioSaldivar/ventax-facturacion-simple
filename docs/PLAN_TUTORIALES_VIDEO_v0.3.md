@@ -11,6 +11,8 @@ scripts/tutoriales/
   v11-nota-credito-externa.cjs  nuevo
   v7-descuentos.cjs             cambia solo el cierre (escena 9)
   mapa.cjs                      filas 3.5-* reemplazadas por 3.5b-*; filas 3.14-*
+  preparar-v4.cjs               nuevo (en la grabacion): emite sin grabar la factura de 2 lineas de la combinada
+  lib.cjs                       TUT_CDC: CDC de ejemplo en pantalla, real en la API (§6)
 ```
 
 ## 2. Datos
@@ -54,3 +56,23 @@ TUT3-001 (prueba seca y eleccion de facturas) → V7 → V4 → V11. Aviso previ
 - **Textos en movimiento:** la sesion de ajustes visuales cambia textos de la app; TUT3-001 relee las etiquetas el mismo dia de la grabacion.
 - **Saldo de la factura:** si una factura elegida ya tiene notas, la pantalla la marca y el guion falla rapido; se elige otra.
 - **Externa a mano:** si los datos no coinciden con una factura real, SIFEN puede rechazar (receptor 2441, total 2417). La referencia impresa no la verifica SIFEN contra un DTE; precedente aprobado (`1010035`).
+
+## 6. Ajustes hechos al grabar (2026-11-13)
+
+- **Facturas de V4:** total `1010655`, por monto `1010654`, ficha `1010633`; no habia una de 2 lineas sin descuento y sin notas, asi que `preparar-v4.cjs` emitio `1010680` fuera de camara (en lugar de emitirla dentro del guion con la espera cortada).
+- **Tope de "Devolver":** el texto real es "Supera lo que queda por devolver (N)."; "Supera lo disponible en este ítem" es el del ajuste. SPEC §3.5b corregido.
+- **CDC real (D-18):** `lib.cjs` lee `TUT_CDC="<ejemplo>:<real>"`; la ruta de la API cambia el de ejemplo por el real en el cuerpo de los pedidos y el real por el de ejemplo en las respuestas (antes de los otros reemplazos). El de ejemplo se arma con `01` + `80000000` + `0` + las posiciones 12 a 43 del real + digito verificador modulo 11. La guardia sigue buscando el RUC real.
+- **Ayuda del campo CDC:** "0105 0570 ..." (comienzo de un CDC real, FS-148); V11 la cambia por "0180 0000 ..." con un script de inicio que observa el DOM, para que no aparezca ni un cuadro.
+- **Volver a "Notas de crédito":** el menu no reinicia la seccion desde "Traer una factura" ni desde el resultado (FS-149); V11 usa "Crear nueva nota de crédito" o sigue en la pantalla.
+- **V11, nota por CDC:** ajuste del 20 % en su item (60.000); a mano, nota total (200.000).
+- **Suspension del equipo:** dos corridas de V11 fallaron porque el equipo se suspendio durante la espera de SIFEN (FS-151, no es defecto); cada una consumio una factura externa (`9300011`, `9300013`), que quedan con nota y no se pueden volver a traer. Las grabaciones largas se corren con `systemd-inhibit --what=sleep:idle:handle-lid-switch --mode=block` (no cambia el sistema). La espera de V11 subio a 45 min.
+
+## 7. Hallazgos
+
+| Id | Hallazgo | BACKLOG |
+|---|---|---|
+| H-32 | Lista de candidatas: "La factura ya esta acreditada por completo." (sin tilde, "acreditada") | FS-145 |
+| H-33 | Ayuda del campo CDC fija con el comienzo de un CDC real | FS-148 |
+| H-34 | El menu no reinicia "Notas de crédito" si ya se esta en ella | FS-149 |
+| H-35 | "Cargar a mano": columna "Descripción" angosta en 1440 | FS-150 |
+| H-36 | Demora aparente de la verificacion: suspension del equipo (no es defecto) | FS-151 (cerrado) |
