@@ -23,8 +23,8 @@ Implementada y validada en el stack local (`.local/segel-ensayo`, FS `ncu-local3
 | NCU-005 | Pantalla: `NotaCreditoEditor` (PC y celular), `CreditNoteView` con factura inicial, ficha que navega a la pantalla, borrar la ventana corta y `NotaCreditoPorMonto` (PLAN 4) | `typecheck`, `build` | DONE |
 | NCU-006 | `spec/openapi.yaml` (PLAN 5) | YAML valido; la UI consume lo documentado | DONE |
 | NCU-007 | Playwright CA-01 a CA-09 en `fe-segel` `segel-rc4.36` (SIFEN test), 1440/1280/390; regresion de factura externa (PLAN 6) | Resultado, capturas, numeros aprobados | DONE |
-| NCU-008 | Prueba manual del usuario en el stack local antes del despliegue | Visto bueno del usuario | PENDIENTE |
-| NCU-009 | Repaso SPEC/PLAN/TASKS; BACKLOG FS-141 y FS-77; preparar el plan de despliegue de FS-136/138/139/141 con `segel-rc4.36` | Lectura cruzada; plan presentado al usuario | PENDIENTE |
+| NCU-008 | Prueba manual del usuario en el stack local antes del despliegue | Visto bueno del usuario | Reemplazada por la revision en produccion (CA-08 de la cadena de despliegue v0.4, decision del usuario del 2026-11-13) |
+| NCU-009 | Repaso SPEC/PLAN/TASKS; BACKLOG FS-141 y FS-77; preparar el plan de despliegue de FS-136/138/139/141 con `segel-rc4.36` | Lectura cruzada; plan presentado al usuario | DONE: desplegada en `segel-fs` el 2026-11-13 (`TASKS_DESPLIEGUE_SEGEL_FS_v0.4` E-1) |
 | NCU-010 | Nombre "Ajuste" en pantalla y en las lineas enviadas a SIFEN (SPEC D-10, PLAN §7) | `test` shared y API, `typecheck`, `build`; Playwright con las etiquetas nuevas | DONE |
 
 ## Evidencia

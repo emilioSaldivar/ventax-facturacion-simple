@@ -1,6 +1,6 @@
 # SPEC - Despliegue en `segel-fs` de la nota de credito unificada v0.4
 
-Estado: **escrita el 2026-11-13; decisiones D-1 a D-8 pendientes del usuario**. Repite el procedimiento de `SPEC/PLAN/TASKS_DESPLIEGUE_SEGEL_FS_v0.3` (E-1, 2026-11-12) con tres migraciones nuevas, dos variables de entorno y una dependencia de FE.
+Estado: **decisiones tomadas el 2026-11-13 (03:20Z)**: el usuario autorizo en la sesion de FS el procedimiento completo, ahora, con `FE_NC_MONEDA_EXTRANJERA=true`, vuelta atras automatica y la prueba de solo lectura del CDC de SALUMAX `01800188284001002001643622026110310393617567` hecha por el (D-1, D-2, D-4, D-5, D-8 sin prueba manual previa; D-6 y D-7 sin cambio). Repite el procedimiento de `SPEC/PLAN/TASKS_DESPLIEGUE_SEGEL_FS_v0.3` (E-1, 2026-11-12) con tres migraciones nuevas, dos variables de entorno y una dependencia de FE.
 
 ## Alineacion
 
