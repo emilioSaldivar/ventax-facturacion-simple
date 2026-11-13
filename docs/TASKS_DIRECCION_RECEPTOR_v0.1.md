@@ -23,8 +23,8 @@
 | DIR-017 | Con `segel-rc4.38`: la ruta de ciudades por departamento reenvía la de FE, revalidación por `ETag`, filtro por la marca del catálogo | RN-04, RN-07 | Pruebas del servicio y Playwright de CA-04b | Espera FE |
 | DIR-018 | Ficha: dirección incompleta con la aclaración "No sale en la factura: falta número, departamento y ciudad." | RN-08, D-6 | Playwright 1440/390 con 1010687 (completa, sin aclaración) y 1010688 (incompleta, con aclaración) | Hecha (2026-11-13) |
 | DIR-019 | Cierre de pruebas antes del despliegue: Playwright de pantallas de FS y de KuDE de factura y remisión en SIFEN test | Regla de cierre | Corrida completa en el stack local | Hecha (2026-11-13) |
-| DIR-015 | Cierre: repaso SPEC/PLAN/TASKS y BACKLOG | Regla de cierre | — | Pendiente |
-| DIR-016 | Despliegue en `segel-fs` (API, migración y frontend) | PLAN §2 | Solo con autorización explícita del usuario | Espera usuario |
+| DIR-015 | Cierre: repaso SPEC/PLAN/TASKS y BACKLOG | Regla de cierre | — | Hecha (2026-11-13): SPEC (RN-06 comillas, RN-08 ficha, D-5 y D-6), PLAN (§4 catálogo de FE, §5 ajustes) y TASKS al día; BACKLOG FS-152 a FS-155, FS-157 y FS-161 |
+| DIR-016 | Despliegue en `segel-fs` (API, migración y frontend) | PLAN §2 | Solo con autorización explícita del usuario | Espera usuario: tag local `segel-fs-2026.11.13.2` = `061e36a`; procedimiento E-3 de `TASKS_DESPLIEGUE_SEGEL_FS_v0.4` ensayado en local (deploy y rollback OK); va después de FE `segel-rc4.37.1` |
 
 ## Evidencia
 
