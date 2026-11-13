@@ -152,6 +152,9 @@ La fuente de verdad de este proyecto es:
 - `docs/SPEC_TUTORIALES_VIDEO_v0.2.md`
 - `docs/PLAN_TUTORIALES_VIDEO_v0.2.md`
 - `docs/TASKS_TUTORIALES_VIDEO_v0.2.md`
+- `docs/SPEC_TUTORIALES_VIDEO_v0.3.md`
+- `docs/PLAN_TUTORIALES_VIDEO_v0.3.md`
+- `docs/TASKS_TUTORIALES_VIDEO_v0.3.md`
 - `docs/SPEC_AJUSTES_TEXTOS_OPERADOR_v0.1.md`
 - `docs/PLAN_AJUSTES_TEXTOS_OPERADOR_v0.1.md`
 - `docs/TASKS_AJUSTES_TEXTOS_OPERADOR_v0.1.md`
@@ -179,6 +182,9 @@ La fuente de verdad de este proyecto es:
 - `docs/SPEC_PLAZO_CREDITO_v0.1.md`
 - `docs/PLAN_PLAZO_CREDITO_v0.1.md`
 - `docs/TASKS_PLAZO_CREDITO_v0.1.md`
+- `docs/SPEC_AJUSTES_VISUALES_OPERADOR_v0.1.md`
+- `docs/PLAN_AJUSTES_VISUALES_OPERADOR_v0.1.md`
+- `docs/TASKS_AJUSTES_VISUALES_OPERADOR_v0.1.md`
 - `docs/SPEC_NOTA_CREDITO_POR_MONTO_v0.1.md`
 - `docs/PLAN_NOTA_CREDITO_POR_MONTO_v0.1.md`
 - `docs/TASKS_NOTA_CREDITO_POR_MONTO_v0.1.md`
