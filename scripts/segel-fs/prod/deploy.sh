@@ -90,7 +90,8 @@ echo "CA-05 facturas=$NF (esperado $ESP_F) externas=$NE combinadas=$NC"
 echo "CA-06 FE_NC_DESCUENTOS/FE_NC_MONEDA_EXTRANJERA en el contenedor: $EV"
 echo "CA-07 errores api desde el corte: $ERR"
 docker ps --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}' | grep segel-fs
-[[ "$MIG" == "0050,0051,0052" ]] || FALLA=1
+# ESP_MIGRACIONES: las migraciones >=0050 que tienen que quedar (SPEC_DIRECCION_RECEPTOR_v0.1 suma 0053).
+[[ "$MIG" == "${ESP_MIGRACIONES:-0050,0051,0052}" ]] || FALLA=1
 [[ "$VA" == "$SHA" && "$VF" == "$SHA" && "$APP" == "200" && "$HA" == "healthy" && "$HF" == "healthy" ]] || FALLA=1
 # Externas y combinadas esperadas: 0 en el estreno de 0050-0052; despues, las que informe lectura.sh (hotfix 2026.11.13.1).
 [[ "$NF" == "$ESP_F" && "$NE" == "${ESP_EXTERNAS:-0}" && "$NC" == "${ESP_COMBINADAS:-0}" ]] || FALLA=1

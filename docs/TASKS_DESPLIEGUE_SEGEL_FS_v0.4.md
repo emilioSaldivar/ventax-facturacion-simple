@@ -50,3 +50,21 @@ Autorizacion del usuario en esta sesion para lectura, imagenes y despliegue. Sin
 - Segundo intento: respaldo `/home/esaldivar/segel/backups/fs/20261113T095447Z`, restauracion de prueba 362 / `0052` sin avisos; corte 09:54:59Z → 09:55:33Z (34 s), `migrate` sin migraciones nuevas; CA-03 `0050,0051,0052`; CA-04 `361e10a` en API y frontend, `/app/` 200, ambos healthy, FE responde; CA-05 362 / 1 externa / 3 combinadas (lo esperado); CA-06 `true/true`; CA-07 0 errores. Salida completa en el scratchpad de la sesion (`prod-deploy-2026.11.13.1-b.log`).
 - Vuelta atras disponible: `rollback.sh 2026.11.13.1` (`:antes-2026.11.13.1` = `44359dd`: api `4da89010a4a5`, frontend `dbaf373e2753`).
 - Pendiente: el usuario repite en produccion sus casos (0000361 solo ajuste sobre el total; 0000360 motivo con la factura entera).
+
+### E-3. Hotfix de dirección del cliente (FS-152 a FS-155) — PREPARADO, sin ejecutar (2026-11-13)
+
+Alcance: FS `2fb80c9` (API, migración `0053_domicilio_cliente.sql` aditiva y frontend; `SPEC/PLAN/TASKS_DIRECCION_RECEPTOR_v0.1`) y FE `segel-rc4.37.1` (`cbec3e7`, plantillas del KuDE y validaciones del domicilio; sesión `facturacion-electronica-da`). Validado en el stack local de ensayo con las dos versiones juntas (TASKS DIR-012 a DIR-014). Sin cambio de variables.
+
+Orden y autorizaciones (cada paso con autorización explícita del usuario, Regla de Oro):
+
+1. **FE despliega `segel-rc4.37.1`** en `segel-fs` (lo hace la sesión de FE, con orden del usuario en esa sesión) e informa el id de imagen de `fe-segel-api-1` para la guarda.
+2. **Lectura previa** (`lectura.sh`): versión de API y frontend (`361e10a`), migraciones 52 / `0052`, documentos, externas y combinadas, pendientes, errores e id de FE.
+3. **Imágenes:** tag local `segel-fs-2026.11.13.2` = `2fb80c9`; `build.sh segel-fs-2026.11.13.2` construye y carga `segel-fs-prod-api:2fb80c9` y `segel-fs-prod-frontend:2fb80c9`.
+4. **Corte:** `ssh segel-fs 'ESP_MIGRACIONES=0050,0051,0052,0053 ESP_EXTERNAS=<lectura> ESP_COMBINADAS=<lectura> bash -s -- 2fb80c9 2026.11.13.2 <documentos> 0052 true fe-segel-api-1=<id rc4.37.1> rollback_auto' < scripts/segel-fs/prod/deploy.sh`. El respaldo se restaura de prueba con la migración `0052` antes del corte; `migrate` aplica `0053`.
+5. **Verificación:** CA-03 `0050,0051,0052,0053`; CA-04 `X-App-Version 2fb80c9` en API y frontend; CA-05 documentos, externas y combinadas iguales a la lectura; CA-07 0 errores. En pantalla, con la cuenta de revisión: "Agregar dirección", Departamento → Ciudad y una factura de prueba solo si el usuario la pide.
+6. **Vuelta atrás:** `rollback.sh 2026.11.13.2` (imágenes `:antes-2026.11.13.2` = `361e10a`). Las columnas de `0053` son nulas y la versión anterior las ignora.
+
+Ajuste de `deploy.sh` para este corte: la verificación CA-03 comparaba con la lista fija `0050,0051,0052` y, con `0053`, habría disparado la vuelta atrás automática. Ahora usa `ESP_MIGRACIONES` (por omisión la lista anterior), como se hizo con `ESP_EXTERNAS` y `ESP_COMBINADAS` en E-2.
+
+Después del despliegue: los clientes ya cargados conservan su calle y su dirección no sale en la factura hasta completar número, departamento y ciudad (RN-05).
+
