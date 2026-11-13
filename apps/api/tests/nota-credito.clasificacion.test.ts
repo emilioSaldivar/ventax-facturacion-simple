@@ -65,6 +65,15 @@ describe("clasificarRespuestaNotaCredito", () => {
     );
   });
 
+  it("SPEC_NOTA_CREDITO_FACTURA_EXTERNA RN-08: INVALID_REFERENCED_DOCUMENT sin moneda usa el motivo de FE", () => {
+    expect(() =>
+      clasificarRespuestaNotaCredito(error("UPSTREAM_ERROR", 422, { error: "INVALID_REFERENCED_DOCUMENT", message: "La factura asociada no existe en SIFEN (2403)", details: { cdc: "x" } }))
+    ).toThrow(expect.objectContaining({ statusCode: 409, message: "El servicio fiscal no aceptó la factura asociada: La factura asociada no existe en SIFEN (2403)" }));
+    expect(() =>
+      clasificarRespuestaNotaCredito(error("UPSTREAM_ERROR", 422, { error: "INVALID_REFERENCED_DOCUMENT", message: "otra", details: { moneda_factura: "USD", moneda_nota: "PYG" } }))
+    ).toThrow(expect.objectContaining({ statusCode: 409, message: "La moneda de la nota de credito no coincide con la de la factura." }));
+  });
+
   it.each([400, 401, 404, 409, 422, 429])("%s no persiste y responde 502 como antes", (status) => {
     expect(() => clasificarRespuestaNotaCredito(error("UPSTREAM_ERROR", status, { error: "OTRO" }))).toThrow(
       expect.objectContaining({ statusCode: 502 })

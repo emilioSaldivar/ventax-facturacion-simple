@@ -68,6 +68,13 @@ async function entrar(browser, ancho, alto) {
   await page.locator('input[name="password"]').fill(clave);
   await page.getByRole("button", { name: "Ingresar" }).click();
   await esperarSesion(page);
+  // Tras un redespliegue la app ofrece "Nueva version disponible": se acepta para trabajar con el frontend nuevo.
+  const actualizar = page.getByRole("button", { name: "Actualizar" });
+  if (await actualizar.isVisible({ timeout: 3000 }).catch(() => false)) {
+    await actualizar.click();
+    await page.waitForLoadState("domcontentloaded");
+    await esperarSesion(page);
+  }
   return { ctx, page };
 }
 
@@ -210,10 +217,13 @@ async function esperarAprobado(page, id, etiqueta) {
     check("CA-06: externa con CDC a mano guardada (aviso de datos no verificados)", /datos no verificados en SIFEN/.test(fichaElectronica), fichaElectronica.slice(0, 200));
     const externaElectronica = ((await api(page, "GET", "/facturas?tipo=FACTURA&limit=10&offset=0")).json?.items ?? []).find((d) => d.cdc === CDC_EXTERNO);
     const rechazo = await api(page, "POST", `/facturas/${externaElectronica?.id}/nota-credito`, { motivo: "Prueba sin soporte de FE" });
+    // rc4.34: 404 → NOTA_CREDITO_FE_SIN_SOPORTE_EXTERNA. rc4.35 (BL-213): FE consulta SIFEN, el CDC armado no existe
+    // (2403) → 422 INVALID_REFERENCED_DOCUMENT con el motivo de FE. En los dos casos, 409 sin numerar ni guardar nota.
+    const razon = rechazo.json?.error?.details?.reason ?? rechazo.json?.error?.details?.fe_code;
     check(
-      "CA-06 API: FE sin BL-213 responde 409 NOTA_CREDITO_FE_SIN_SOPORTE_EXTERNA y no se guarda nota",
-      rechazo.status === 409 && rechazo.json?.error?.details?.reason === "NOTA_CREDITO_FE_SIN_SOPORTE_EXTERNA",
-      JSON.stringify(rechazo.json?.error ?? {}).slice(0, 250)
+      "CA-06 API: FE rechaza la NC sobre un CDC externo inexistente antes de numerar (409) y no se guarda nota",
+      rechazo.status === 409 && ["NOTA_CREDITO_FE_SIN_SOPORTE_EXTERNA", "INVALID_REFERENCED_DOCUMENT"].includes(razon),
+      JSON.stringify(rechazo.json?.error ?? {}).slice(0, 300)
     );
     const sinNota = ((await api(page, "GET", "/facturas?tipo=NOTA_CREDITO&limit=20&offset=0")).json?.items ?? []).every((n) => n.documento_relacionado_id !== externaElectronica?.id);
     check("CA-06: no quedo nota de credito sobre esa externa", sinNota);

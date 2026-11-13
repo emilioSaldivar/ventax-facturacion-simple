@@ -94,7 +94,13 @@ function clasificarError(error: FiscalGatewayError): ClasificacionNotaCredito {
   }
   if (feError === "INVALID_REFERENCED_DOCUMENT") {
     // RN-05: la moneda de la nota no coincide con la de la factura. FE no numero.
-    throw new HttpError(409, "CONFLICT", MENSAJE_MONEDA_DISTINTA, { gateway_code: error.code, fe_code: feError, details: error.details ?? null });
+    // SPEC_NOTA_CREDITO_FACTURA_EXTERNA_v0.1 RN-08: con rc4.35 el mismo codigo cubre otros motivos de la factura
+    // asociada (inexistente en SIFEN, otro emisor, no es factura); FE explica el motivo en `message`.
+    const detalleFe = (body?.details ?? null) as Record<string, unknown> | null;
+    const esMoneda = Boolean(detalleFe?.moneda_factura || detalleFe?.moneda) || /moneda/i.test(String(body?.message ?? ""));
+    const mensajeFe = typeof body?.message === "string" && body.message.trim() ? body.message.trim() : null;
+    const mensaje = esMoneda || !mensajeFe ? MENSAJE_MONEDA_DISTINTA : `El servicio fiscal no aceptó la factura asociada: ${mensajeFe}`;
+    throw new HttpError(409, "CONFLICT", mensaje, { gateway_code: error.code, fe_code: feError, details: error.details ?? null });
   }
 
   let code: string | null = null;

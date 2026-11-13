@@ -19,6 +19,11 @@ const clave = fs.readFileSync(process.env.ENSAYO_PASSWORD_FILE ?? "", "utf8").tr
 const CDC_A = process.env.ENSAYO_CDC_A ?? "";
 const CDC_B = process.env.ENSAYO_CDC_B ?? "";
 const ESPERA_MS = Number(process.env.ENSAYO_ESPERA_MS ?? 25 * 60 * 1000);
+// ENSAYO_DESCUENTOS=1: FE rc4.35 y FS con FE_NC_DESCUENTOS=true; la NC total copia las lineas reales con descuentos.
+const CON_DESCUENTOS = process.env.ENSAYO_DESCUENTOS === "1";
+// Montos de la factura B (sin descuentos): total y precio de la linea 1 (cantidad 2).
+const B_TOTAL = Number(process.env.ENSAYO_B_TOTAL ?? 211500);
+const B_LINEA1 = Number(process.env.ENSAYO_B_LINEA1 ?? 75000);
 const outDir = path.join(process.cwd(), "test-results", "nc-externa-cdc");
 fs.mkdirSync(outDir, { recursive: true });
 
@@ -46,6 +51,13 @@ async function entrar(browser, ancho, alto) {
   await page.locator('input[name="password"]').fill(clave);
   await page.getByRole("button", { name: "Ingresar" }).click();
   await esperarSesion(page);
+  // Tras un redespliegue la app ofrece "Nueva version disponible": se acepta para trabajar con el frontend nuevo.
+  const actualizar = page.getByRole("button", { name: "Actualizar" });
+  if (await actualizar.isVisible({ timeout: 3000 }).catch(() => false)) {
+    await actualizar.click();
+    await page.waitForLoadState("domcontentloaded");
+    await esperarSesion(page);
+  }
   return { ctx, page };
 }
 
@@ -131,24 +143,34 @@ async function notaDe(page, facturaId, total) {
     check("CA-02: NC total sobre A emitida desde la ficha", await popup.waitFor({ timeout: 90000 }).then(() => true, () => false));
     const ncA = await notaDe(page, a?.id);
     const ncADetalle = ncA ? (await api(page, "GET", `/facturas/${ncA.id}`)).json : null;
-    check(
-      "CA-02 (D-3): la NC total va por tasa (AJ-IVA10/AJ-IVA5/AJ-EXE), suma 242.300 y se guarda como MONTO",
-      ncADetalle?.nce_modo === "MONTO" && ncADetalle?.items?.map((i) => i.codigo).join(",") === "AJ-IVA10,AJ-IVA5,AJ-EXE" && ncADetalle?.totals?.total === 242300,
-      JSON.stringify(ncADetalle ? { modo: ncADetalle.nce_modo, items: ncADetalle.items.map((i) => [i.codigo, i.precio_unitario]), total: ncADetalle.totals.total } : null)
-    );
+    const resumenNcA = JSON.stringify(ncADetalle ? { modo: ncADetalle.nce_modo, items: ncADetalle.items.map((i) => [i.codigo, i.cantidad, i.precio_unitario, i.descuento ?? 0, i.descuento_global ?? 0]), total: ncADetalle.totals.total } : null);
+    if (CON_DESCUENTOS) {
+      check(
+        "CA-02 (D-3, rc4.35): la NC total copia las 3 lineas reales con sus descuentos (modo TOTAL)",
+        ncADetalle?.nce_modo === "TOTAL" && ncADetalle?.items?.length === 3 && (ncADetalle?.items?.[0]?.descuento ?? 0) > 0,
+        resumenNcA
+      );
+    } else {
+      check(
+        "CA-02 (D-3): la NC total va por tasa (AJ-IVA10/AJ-IVA5/AJ-EXE), suma 242.300 y se guarda como MONTO",
+        ncADetalle?.nce_modo === "MONTO" && ncADetalle?.items?.map((i) => i.codigo).join(",") === "AJ-IVA10,AJ-IVA5,AJ-EXE" && ncADetalle?.totals?.total === 242300,
+        resumenNcA
+      );
+    }
     await page.reload({ waitUntil: "domcontentloaded" });
     await esperarSesion(page);
 
     // ---- CA-03: traer B por API, NC parcial por lineas (1 x 75.000) desde la ventana y por monto por el saldo.
     const traidaB = await api(page, "POST", "/facturas/externas/sifen", { cdc: CDC_B });
     const b = traidaB.json;
-    check("CA-03: B traida por CDC (origen SIFEN, total 211.500, sin descuentos)", traidaB.status === 201 && b?.origen === "SIFEN" && b?.totals?.total === 211500 && !(b?.totals?.descuento > 0), JSON.stringify(b?.totals ?? traidaB.json).slice(0, 200));
+    const restoB = B_TOTAL - B_LINEA1;
+    check(`CA-03: B traida por CDC (origen SIFEN, total ${B_TOTAL}, sin descuentos)`, traidaB.status === 201 && b?.origen === "SIFEN" && b?.totals?.total === B_TOTAL && !(b?.totals?.descuento > 0), JSON.stringify(b?.totals ?? traidaB.json).slice(0, 200));
     const parcial = await api(page, "POST", `/facturas/${b?.id}/nota-credito`, { motivo: "Devolucion de una unidad", lineas: [{ line_no: 1, cantidad: 1 }] });
-    check("CA-03: NC parcial por lineas sobre B (1 x 75.000) aceptada", parcial.status === 201 && parcial.json?.totals?.total === 75000, JSON.stringify(parcial.json?.totals ?? parcial.json).slice(0, 200));
+    check(`CA-03: NC parcial por lineas sobre B (1 x ${B_LINEA1}) aceptada`, parcial.status === 201 && parcial.json?.totals?.total === B_LINEA1, JSON.stringify(parcial.json?.totals ?? parcial.json).slice(0, 200));
     const saldoB = (await api(page, "GET", `/facturas/${b?.id}/nota-credito/saldo`)).json;
-    check("CA-03: saldo de B 136.500 y la linea 1 con 1 de 2 acreditada", saldoB?.monto?.saldo === 136500 && saldoB?.lineas?.[0]?.cantidad_acreditada === 1, JSON.stringify({ saldo: saldoB?.monto?.saldo, l1: saldoB?.lineas?.[0] }));
-    const monto = await api(page, "POST", `/facturas/${b?.id}/nota-credito`, { motivo: "Ajuste por el saldo", monto: 136500, motivo_codigo: 8 });
-    check("CA-03: NC por monto sobre B por el saldo exacto aceptada", monto.status === 201 && monto.json?.totals?.total === 136500, JSON.stringify(monto.json?.totals ?? monto.json).slice(0, 200));
+    check(`CA-03: saldo de B ${restoB} y la linea 1 con 1 de 2 acreditada`, saldoB?.monto?.saldo === restoB && saldoB?.lineas?.[0]?.cantidad_acreditada === 1, JSON.stringify({ saldo: saldoB?.monto?.saldo, l1: saldoB?.lineas?.[0] }));
+    const monto = await api(page, "POST", `/facturas/${b?.id}/nota-credito`, { motivo: "Ajuste por el saldo", monto: restoB, motivo_codigo: 8 });
+    check("CA-03: NC por monto sobre B por el saldo exacto aceptada", monto.status === 201 && monto.json?.totals?.total === restoB, JSON.stringify(monto.json?.totals ?? monto.json).slice(0, 200));
     const saldoFinalB = (await api(page, "GET", `/facturas/${b?.id}/nota-credito/saldo`)).json;
     check("CA-03: B acreditada por completo", saldoFinalB?.monto?.admite === false && saldoFinalB?.monto?.saldo === 0, JSON.stringify(saldoFinalB?.monto));
     await ctx.close();
@@ -165,7 +187,7 @@ async function notaDe(page, facturaId, total) {
 
     // ---- Aprobacion en SIFEN test.
     const w = await entrar(browser, 1440, 900);
-    for (const [etiqueta, id, total] of [["nc-total-por-tasa-A", ncA?.id, 242300], ["nc-parcial-B", parcial.json?.id, 75000], ["nc-monto-B", monto.json?.id, 136500]]) {
+    for (const [etiqueta, id, total] of [[CON_DESCUENTOS ? "nc-total-con-descuentos-A" : "nc-total-por-tasa-A", ncA?.id, 242300], ["nc-parcial-B", parcial.json?.id, B_LINEA1], ["nc-monto-B", monto.json?.id, B_TOTAL - B_LINEA1]]) {
       if (!id) {
         check(`${etiqueta}: guardada en FS`, false);
         continue;

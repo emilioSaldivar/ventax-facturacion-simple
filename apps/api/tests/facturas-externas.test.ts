@@ -277,6 +277,23 @@ describe("facturas externas", () => {
       expect(g.getDocumentoTotales).not.toHaveBeenCalled();
     });
 
+    it("D-3 con FE_NC_DESCUENTOS (rc4.35): total sobre la 1010665 copia las lineas reales con descuentos", async () => {
+      env.FE_NC_DESCUENTOS = true;
+      const { repo, notas } = repositorio();
+      const { g, pedidos } = gateway(aprobada);
+      const factura = await traerDeSifen(context, CDC_1010665, repo, g);
+      await emitNotaCredito(context, factura.id, { motivo: "Devolucion total" }, repo, g);
+      const pedido = pedidos[0]!;
+      expect(pedido.enviar_descuentos).toBe(true);
+      expect(pedido.items.map((i) => [i.cantidad, i.precio_unitario, i.descuento ?? 0, i.descuento_global ?? 0])).toEqual([
+        [2, 100000, 10000, 14168],
+        [1, 52330, 0, 3707],
+        [1, 30000, 0, 2125]
+      ]);
+      // El repositorio real guarda TOTAL por defecto (sin `modo` en el pedido).
+      expect(notas[0]?.modo).toBeUndefined();
+    });
+
     it("total sobre una externa impresa sin descuentos copia las lineas y va con referencia IMPRESO", async () => {
       const { repo } = repositorio();
       const { g, pedidos } = gateway(aprobada);
