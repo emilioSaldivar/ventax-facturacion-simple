@@ -452,3 +452,21 @@ describe("FE v0.50 (guia §66): 409 NUMERADOR_* en cualquier emision queda ERROR
   });
 });
 
+// SPEC_DIRECCION_RECEPTOR_v0.1 RN-06 (DIR-007): caracteres en las direcciones de la remision.
+describe("remision: caracteres en direcciones", () => {
+  it("acepta barras, puntos, Nº y comillas; rechaza emojis con el campo correcto", () => {
+    const ok = base();
+    ok.cliente!.domicilio!.direccion = "Avda. Mcal. López Nº 1234 c/ Brasil - Dpto. 3/B";
+    ok.transporte.transportista.chofer.direccion = "Ruta 2 Km 30 #45";
+    expect(mensajes(ok)).toEqual([]);
+
+    const mal = base();
+    mal.transporte.transportista.chofer.direccion = "Ruta 🚚 1";
+    mal.transporte.transportista.domicilio_fiscal = "Asuncion 😀";
+    mal.transporte.salida = { ...local, direccion: "Ruta 2\u0007 km 15" };
+    const m = mensajes(mal);
+    expect(m.some((x) => x.startsWith("transporte.transportista.chofer.direccion:") && x.includes("🚚"))).toBe(true);
+    expect(m.some((x) => x.startsWith("transporte.transportista.domicilio_fiscal:") && x.includes("😀"))).toBe(true);
+    expect(m.some((x) => x.includes("un carácter invisible"))).toBe(true);
+  });
+});

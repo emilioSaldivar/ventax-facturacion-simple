@@ -50,8 +50,16 @@ export function normalizarCorreo(valor: string | null | undefined): string | nul
   return recortado ? recortado : null;
 }
 
+/**
+ * SPEC_DIRECCION_RECEPTOR_v0.1 RN-06: saltos de linea y tabulaciones pasan a espacio (xmlgen los borraria sin
+ * espacio), se juntan los espacios y las comillas tipograficas de los teclados pasan a ' y ".
+ */
 export function normalizarDireccion(valor: string | null | undefined): string | null {
-  const recortado = (valor ?? "").trim().replace(/\s+/g, " ");
+  const recortado = (valor ?? "")
+    .replace(/[\u2018\u2019\u201a\u2032]/g, "'")
+    .replace(/[\u201c\u201d\u201e\u2033]/g, '"')
+    .trim()
+    .replace(/\s+/g, " ");
   return recortado ? recortado : null;
 }
 
@@ -107,10 +115,32 @@ export function validarNombre(valor: string): ResultadoValidacion {
   return valor.length >= 4 && valor.length <= 255 ? OK : error("El nombre o razón social tiene que tener entre 4 y 255 caracteres.");
 }
 
-/** RV-06. Direccion normalizada (null = sin direccion). */
+/**
+ * SPEC_DIRECCION_RECEPTOR_v0.1 RN-06 (FS-154, regla acordada con FE): letras con o sin tilde, ñ, digitos,
+ * espacio y . , / - º ª ° # ( ) ' " &. Los saltos de linea ya llegan como espacio (`normalizarDireccion`).
+ */
+const CARACTER_NO_PERMITIDO_DIRECCION = /[^\p{L}\p{M}0-9 .,/\-ºª°#()'"&]/gu;
+
+export const MENSAJE_CARACTERES_DIRECCION = "Usá letras, números y . , / - º # ( ) ' \" &";
+
+/** Caracteres de `valor` fuera de la regla RN-06, sin repetir y en el orden en que aparecen. */
+export function caracteresNoPermitidosDireccion(valor: string): string[] {
+  return [...new Set(valor.match(CARACTER_NO_PERMITIDO_DIRECCION) ?? [])];
+}
+
+/** RN-06, solo caracteres (cada pantalla aplica su propio largo). `que` nombra el campo en el mensaje. */
+export function validarCaracteresDireccion(valor: string, que = "La dirección"): ResultadoValidacion {
+  const malos = caracteresNoPermitidosDireccion(valor);
+  if (malos.length === 0) return OK;
+  const muestra = malos.map((c) => (/[\u0000-\u001f\u007f]/.test(c) ? "un carácter invisible" : c)).join(" ");
+  return error(`${que} tiene caracteres no permitidos: ${muestra}. ${MENSAJE_CARACTERES_DIRECCION}`);
+}
+
+/** RV-06 y SPEC_DIRECCION_RECEPTOR_v0.1 RN-06. Direccion normalizada (null = sin direccion). */
 export function validarDireccion(valor: string | null): ResultadoValidacion {
   if (valor === null) return OK;
-  return valor.length <= 255 ? OK : error("La dirección puede tener hasta 255 caracteres.");
+  if (valor.length > 255) return error("La dirección puede tener hasta 255 caracteres.");
+  return validarCaracteresDireccion(valor);
 }
 
 /** RV-06. Numero de casa: hasta 6 digitos, "0" si no tiene. */
@@ -118,7 +148,27 @@ export function validarNumeroCasa(valor: string): ResultadoValidacion {
   return /^\d{1,6}$/.test(valor.trim()) ? OK : error("El número de casa son hasta 6 números; poné 0 si no tiene.");
 }
 
-export interface ReceptorAValidar {
+/**
+ * SPEC_DIRECCION_RECEPTOR_v0.1: domicilio del receptor con los codigos de geografia del MT150 que publica FE.
+ * Opcional: se envia a FE solo completo (RN-01); incompleto no es error (RN-02).
+ */
+export interface DomicilioReceptor {
+  numero_casa?: string | null;
+  departamento?: number | null;
+  departamento_descripcion?: string | null;
+  distrito?: number | null;
+  distrito_descripcion?: string | null;
+  ciudad?: number | null;
+  ciudad_descripcion?: string | null;
+}
+
+/** RN-01: calle, numero de casa valido, departamento y ciudad. */
+export function domicilioCompleto(receptor: { direccion?: string | null } & DomicilioReceptor): boolean {
+  const numero = (receptor.numero_casa ?? "").trim();
+  return Boolean(receptor.direccion?.trim()) && numero !== "" && validarNumeroCasa(numero).ok && Boolean(receptor.departamento) && Boolean(receptor.ciudad);
+}
+
+export interface ReceptorAValidar extends DomicilioReceptor {
   documento_tipo: string;
   documento: string;
   razon_social: string;
@@ -127,7 +177,7 @@ export interface ReceptorAValidar {
   email?: string | null;
 }
 
-export type CampoReceptor = "documento" | "razon_social" | "direccion" | "telefono" | "email";
+export type CampoReceptor = "documento" | "razon_social" | "direccion" | "numero_casa" | "telefono" | "email";
 
 /**
  * Normaliza (RV-07) y valida (RV-01 a RV-06) un receptor completo.
@@ -143,6 +193,7 @@ export function revisarReceptor<T extends ReceptorAValidar>(
     documento: innominado ? receptor.documento : normalizarDocumento(receptor.documento_tipo, receptor.documento),
     razon_social: innominado ? receptor.razon_social : normalizarNombre(receptor.razon_social),
     ...(receptor.direccion !== undefined ? { direccion: normalizarDireccion(receptor.direccion) } : {}),
+    ...(receptor.numero_casa !== undefined ? { numero_casa: (receptor.numero_casa ?? "").trim() || null } : {}),
     ...(receptor.telefono !== undefined ? { telefono: normalizarTelefono(receptor.telefono) } : {}),
     ...(receptor.email !== undefined ? { email: normalizarCorreo(receptor.email) } : {})
   };
@@ -153,6 +204,8 @@ export function revisarReceptor<T extends ReceptorAValidar>(
   agregar("documento", validarDocumento(normalizado.documento_tipo, normalizado.documento));
   if (!innominado) agregar("razon_social", validarNombre(normalizado.razon_social));
   agregar("direccion", validarDireccion(normalizado.direccion ?? null));
+  // RN-03: el numero de casa, si se escribio, tiene que ser valido; vacio no es error (RN-02).
+  if (normalizado.numero_casa) agregar("numero_casa", validarNumeroCasa(normalizado.numero_casa));
   agregar("telefono", validarTelefono(normalizado.telefono ?? null));
   agregar("email", validarCorreo(normalizado.email ?? null, opciones.maxCorreo));
   return { normalizado, errores };

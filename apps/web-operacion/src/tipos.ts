@@ -1,3 +1,5 @@
+import type { DomicilioReceptor } from "./lib/validacionReceptor";
+
 // Tipos de datos de la API compartidos por la app del operador (PLAN_UX_RESTO_APP_v0.1 §10.9).
 
 export interface UserSummary {
@@ -130,7 +132,7 @@ export interface ReadinessResponse {
 
 export type ClienteNaturaleza = "FISICA" | "JURIDICA";
 
-export interface FacturaClienteInput {
+export interface FacturaClienteInput extends DomicilioReceptor {
   cliente_id?: string | null;
   documento_tipo: FacturaDocumentoTipo;
   documento: string;
@@ -508,7 +510,7 @@ export interface InvoiceLineDraft {
   descuento_ingresado?: string;
 }
 
-export interface ClienteSearchResult {
+export interface ClienteSearchResult extends DomicilioReceptor {
   source: "AGENDA_FACTURADOR" | "IDENTIDAD_COMPARTIDA";
   cliente_id: string | null;
   documento_tipo: DocumentoIdentidadTipo;

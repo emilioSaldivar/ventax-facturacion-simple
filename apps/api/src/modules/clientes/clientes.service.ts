@@ -255,6 +255,14 @@ export function normalizeClienteInput(data: ClienteUpsertInput): ClienteUpsertIn
     direccion: normalizeOptional(data.direccion),
     telefono: normalizeOptional(data.telefono),
     email: normalizeOptional(data.email),
-    naturaleza: data.naturaleza
+    naturaleza: data.naturaleza,
+    // SPEC_DIRECCION_RECEPTOR_v0.1 RN-05: el domicilio pasa tal cual (undefined = no se toca el guardado).
+    numero_casa: data.numero_casa === undefined ? undefined : normalizeOptional(data.numero_casa),
+    departamento: data.departamento,
+    departamento_descripcion: data.departamento_descripcion,
+    distrito: data.distrito,
+    distrito_descripcion: data.distrito_descripcion,
+    ciudad: data.ciudad,
+    ciudad_descripcion: data.ciudad_descripcion
   };
 }

@@ -2,6 +2,7 @@
 // documento, contacto y acciones, "Nuevo cliente" en el encabezado y el alta o la edicion en un panel lateral de
 // 360 px, como el Catalogo; en celular, tarjetas y el formulario en una ventana (Dialogo). Las rutas de la API, los
 // cuerpos, la busqueda en agenda y DNIT y la sugerencia de naturaleza no cambian.
+import { CampoDireccion, DIRECCION_VACIA, direccionDe, textoDireccion, tieneDireccion } from "../components/CampoDireccion";
 import { useEffect, useState } from "react";
 import { useApi } from "../api/useApi";
 import { Aviso } from "../components/Aviso";
@@ -58,6 +59,7 @@ export function AgendaView({ onBack, onUseCliente }: { onBack: () => void; onUse
   const [autocompleting, setAutocompleting] = useState(false);
   const [rowMenuClienteId, setRowMenuClienteId] = useState<string | null>(null);
   const [draft, setDraft] = useState<FacturaClienteInput>(draftVacio);
+  const [direccionAbierta, setDireccionAbierta] = useState(false);
   const [naturalezaTouched, setNaturalezaTouched] = useState(false);
   // SPEC_VALIDACIONES_RECEPTOR_v0.1 RV-09: el error se ve al salir del campo o al intentar guardar.
   const [tocados, setTocados] = useState<Set<CampoReceptor>>(new Set());
@@ -119,16 +121,20 @@ export function AgendaView({ onBack, onUseCliente }: { onBack: () => void; onUse
         documento_tipo: cliente.documento_tipo,
         documento: cliente.documento,
         razon_social: cliente.razon_social,
+        ...direccionDe(cliente),
         direccion: cliente.direccion,
         telefono: cliente.telefono,
         email: cliente.email,
         naturaleza: cliente.naturaleza
       });
       setNaturalezaTouched(true);
+      // SPEC_DIRECCION_RECEPTOR_v0.1 RN-02: abierta solo si el cliente ya tiene direccion.
+      setDireccionAbierta(tieneDireccion(cliente));
     } else {
       setSelected(null);
       setDraft(draftVacio());
       setNaturalezaTouched(false);
+      setDireccionAbierta(false);
     }
     setEditorOpen(true);
   }
@@ -152,6 +158,7 @@ export function AgendaView({ onBack, onUseCliente }: { onBack: () => void; onUse
       documento_tipo: suggestion.documento_tipo,
       documento: suggestion.documento,
       razon_social: suggestion.razon_social,
+      ...(suggestion.source === "AGENDA_FACTURADOR" ? direccionDe(suggestion) : {}),
       direccion: suggestion.direccion ?? current.direccion ?? "",
       telefono: suggestion.telefono ?? current.telefono ?? "",
       email: suggestion.email ?? current.email ?? "",
@@ -238,7 +245,9 @@ export function AgendaView({ onBack, onUseCliente }: { onBack: () => void; onUse
         documento_tipo: n.documento_tipo,
         documento: n.documento,
         razon_social: n.razon_social,
+        ...direccionDe(draft),
         direccion: n.direccion ?? null,
+        numero_casa: n.numero_casa ?? null,
         telefono: n.telefono ?? null,
         email: n.email ?? null,
         ...(draft.naturaleza ? { naturaleza: draft.naturaleza } : {})
@@ -321,6 +330,7 @@ export function AgendaView({ onBack, onUseCliente }: { onBack: () => void; onUse
     documento: draft.documento,
     razon_social: draft.razon_social,
     direccion: draft.direccion ?? null,
+    numero_casa: draft.numero_casa ?? null,
     telefono: draft.telefono ?? null,
     email: draft.email ?? null
   });
@@ -461,16 +471,21 @@ export function AgendaView({ onBack, onUseCliente }: { onBack: () => void; onUse
           {errorCampo("email")}
         </label>
       </div>
-      <label>
-        Dirección
-        <input
-          aria-invalid={errorDe("direccion") ? true : undefined}
-          onBlur={() => tocar("direccion")}
-          onChange={(event) => setDraft((current) => ({ ...current, direccion: event.target.value }))}
-          value={draft.direccion ?? ""}
-        />
-        {errorCampo("direccion")}
-      </label>
+      <CampoDireccion
+        abierta={direccionAbierta || Boolean(revision.errores.find((e) => e.campo === "direccion" || e.campo === "numero_casa"))}
+        api={api}
+        avisoIncompleta="Completá calle, número, departamento y ciudad para que la dirección salga en las facturas."
+        errorCalle={revision.errores.find((e) => e.campo === "direccion")?.mensaje ?? null}
+        errorNumero={revision.errores.find((e) => e.campo === "numero_casa")?.mensaje ?? null}
+        idBase="agenda-direccion"
+        onAbrir={() => setDireccionAbierta(true)}
+        onCambiar={(cambio) => setDraft((current) => ({ ...current, ...cambio }))}
+        onQuitar={() => {
+          setDraft((current) => ({ ...current, ...DIRECCION_VACIA, direccion: "" }));
+          setDireccionAbierta(false);
+        }}
+        valor={draft}
+      />
       {intentoGuardar && revision.errores.length > 0 ? <small className="campo-error">Corregí los datos marcados para guardar.</small> : null}
       <div className="catalogo-form-acciones">
         <button className="primary-action" disabled={!puedeGuardar || (intentoGuardar && revision.errores.length > 0)} type="submit">
@@ -561,7 +576,7 @@ export function AgendaView({ onBack, onUseCliente }: { onBack: () => void; onUse
                               <PastillaEstado codigo="REVISAR_DATOS" texto="Revisar datos" tono="pending" />
                             </span>
                           ) : null}
-                          {cliente.direccion ? <small className="agenda-direccion">{cliente.direccion}</small> : null}
+                          {tieneDireccion(cliente) ? <small className="agenda-direccion">{textoDireccion(cliente)}</small> : null}
                         </td>
                         <td className="agenda-documento">
                           <span className="muted">{DOCUMENTO_TIPO_ETIQUETA[cliente.documento_tipo] ?? cliente.documento_tipo}</span> {cliente.documento}

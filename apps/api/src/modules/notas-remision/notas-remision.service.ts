@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import { HttpError } from "../../shared/errors/http-error";
-import { normalizarDocumento, normalizarNombre, normalizarTelefono } from "../../shared/validation/receptor";
+import { normalizarDireccion, normalizarDocumento, normalizarNombre, normalizarTelefono } from "../../shared/validation/receptor";
 import type { OperationalContextResponse } from "../context/context.types";
 import { withAccion } from "../facturas/facturas.service";
 import type { DocumentoResponse, FacturaItemPreview, FacturaPreviewInput, FacturaRepository } from "../facturas/facturas.types";
@@ -39,7 +39,7 @@ function localFe(local: NotaRemisionLocal | NotaRemisionDomicilio, extra: { tele
   const l = local as NotaRemisionLocal;
   const telefono = normalizarTelefono(extra.telefono ?? l.telefono ?? null);
   return {
-    direccion: normalizarNombre(local.direccion),
+    direccion: (normalizarDireccion(local.direccion) ?? ""),
     numeroCasa: local.numero_casa.trim(),
     departamento: local.departamento,
     ...(local.distrito ? { distrito: local.distrito } : {}),
@@ -80,7 +80,7 @@ function armarReceptor(
         documento_tipo: "RUC",
         documento: ruc,
         razon_social: context.facturador.razon_social,
-        direccion: normalizarNombre(entrega.direccion),
+        direccion: (normalizarDireccion(entrega.direccion) ?? ""),
         telefono: null,
         email: null,
         naturaleza
@@ -176,11 +176,11 @@ export function construirPedidoFe(
         ...(transportista.naturaleza === "CONTRIBUYENTE"
           ? { ruc: normalizarDocumento("RUC", transportista.ruc ?? "") }
           : { tipoDocumento: transportista.tipo_documento ?? 1, docNro: (transportista.doc_nro ?? "").trim() }),
-        domicilioFiscal: normalizarNombre(transportista.domicilio_fiscal),
+        domicilioFiscal: (normalizarDireccion(transportista.domicilio_fiscal) ?? ""),
         chofer: {
           docNro: transportista.chofer.doc_nro.trim(),
           nombre: normalizarNombre(transportista.chofer.nombre),
-          direccion: normalizarNombre(transportista.chofer.direccion)
+          direccion: (normalizarDireccion(transportista.chofer.direccion) ?? "")
         }
       }
     },

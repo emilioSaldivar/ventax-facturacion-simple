@@ -5,6 +5,7 @@ import { getOperationalContext } from "../context/context.service";
 import { operationalContextRepository } from "../context/context.repository";
 import { validateRequest } from "../../shared/validation/validate-request";
 import { agregarErroresReceptor, revisarReceptor } from "../../shared/validation/receptor";
+import { domicilioSchemaShape } from "../../shared/validation/domicilio.schema";
 import { clienteRepository } from "./clientes.repository";
 import { autocompleteClienteFromDnit, createCliente, deleteCliente, listClientes, searchClientes, updateCliente } from "./clientes.service";
 import { clienteNaturalezaTipos, documentoIdentidadTipos } from "./clientes.types";
@@ -18,7 +19,8 @@ export const clienteUpsertSchema = z
     direccion: z.string().trim().max(400).nullable().optional(),
     telefono: z.string().trim().max(60).nullable().optional(),
     email: z.string().trim().max(400).nullable().optional(),
-    naturaleza: z.enum(clienteNaturalezaTipos).optional()
+    naturaleza: z.enum(clienteNaturalezaTipos).optional(),
+    ...domicilioSchemaShape
   })
   .superRefine((cliente, ctx) => agregarErroresReceptor(ctx, revisarReceptor(cliente, { maxCorreo: 180 }).errores))
   .transform((cliente) => revisarReceptor(cliente).normalizado);

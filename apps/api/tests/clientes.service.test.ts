@@ -506,3 +506,34 @@ describe("sugerirNaturaleza", () => {
     expect(sugerirNaturaleza("1234567-8", "FRANCISCO EIRLANDA GONZALEZ")).toBe("FISICA");
   });
 });
+
+// SPEC_DIRECCION_RECEPTOR_v0.1 RN-05 (DIR-003): el domicilio llega al repositorio; sin domicilio, no se toca.
+describe("clientes service: domicilio", () => {
+  it("pasa numero de casa, departamento, distrito y ciudad al repositorio", async () => {
+    const repo = new FakeClienteRepository();
+    await createCliente(
+      context,
+      {
+        documento_tipo: "CI",
+        documento: "1234567",
+        razon_social: "Cliente Domicilio",
+        direccion: "Cerro Leon c/ Alejo Garcia",
+        numero_casa: "0",
+        departamento: 11,
+        departamento_descripcion: "CENTRAL",
+        distrito: 145,
+        ciudad: 3432,
+        ciudad_descripcion: "LUQUE"
+      },
+      repo
+    );
+    expect(repo.lastUpsertInput?.data).toMatchObject({ numero_casa: "0", departamento: 11, distrito: 145, ciudad: 3432, ciudad_descripcion: "LUQUE" });
+  });
+
+  it("sin campos de domicilio quedan undefined (el repositorio conserva lo guardado)", async () => {
+    const repo = new FakeClienteRepository();
+    await createCliente(context, { documento_tipo: "CI", documento: "1234567", razon_social: "Cliente Domicilio" }, repo);
+    expect(repo.lastUpsertInput?.data.numero_casa).toBeUndefined();
+    expect(repo.lastUpsertInput?.data.ciudad).toBeUndefined();
+  });
+});

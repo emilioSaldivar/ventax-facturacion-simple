@@ -1,4 +1,4 @@
-import { calcularDvRuc } from "../../shared/validation/receptor";
+import { calcularDvRuc, domicilioCompleto } from "../../shared/validation/receptor";
 import { logger } from "../../shared/logging/logger";
 import crypto from "node:crypto";
 import { env } from "../../config/env";
@@ -2030,6 +2030,16 @@ function buildReceptor(cliente: FiscalEmitFacturaRequest["cliente"]): Record<str
     ...(rucMatch ? { dv: rucMatch[2] } : {}),
     razonSocial: cliente.razon_social,
     direccion: cliente.direccion ?? null,
+    // SPEC_DIRECCION_RECEPTOR_v0.1 RN-01: el domicilio va solo completo (MT150 D213 con D218, D219 y D223; FE lo
+    // valida con 422 antes de numerar). Incompleto, FE descarta la direccion sola, como antes.
+    ...(domicilioCompleto(cliente)
+      ? {
+          numeroCasa: String(cliente.numero_casa).trim(),
+          departamento: cliente.departamento,
+          ...(cliente.distrito ? { distrito: cliente.distrito } : {}),
+          ciudad: cliente.ciudad
+        }
+      : {}),
     telefono: cliente.telefono ?? null,
     ...(email ? { email } : {}),
     ...(cliente.documento_tipo === "RUC" && cliente.naturaleza ? { naturaleza: cliente.naturaleza } : {})

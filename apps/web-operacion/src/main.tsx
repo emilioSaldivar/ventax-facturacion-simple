@@ -5,6 +5,7 @@ import "./styles.css";
 import { useConfirmar } from "./components/Dialogo";
 import { Icono, type NombreIcono } from "./components/Icono";
 import { CampoPlazo } from "./components/CampoPlazo";
+import { CampoDireccion, DIRECCION_VACIA, direccionDe, tieneDireccion } from "./components/CampoDireccion";
 import { PLAZO_CREDITO_DEFECTO, errorPlazo, plazoValido } from "./lib/plazoCredito";
 import { MenuFila } from "./components/MenuFila";
 import { MenuNuevo } from "./components/MenuNuevo";
@@ -1274,6 +1275,8 @@ function InvoiceEditor({
   // SPEC_UX_NUEVA_FACTURA_v0.1, B.3 y D-3: origen del cliente, opcionales plegados y guardado en la agenda al emitir.
   const [clienteOrigen, setClienteOrigen] = useState<"AGENDA" | "PADRON" | null>(null);
   const [opcionalesAbiertos, setOpcionalesAbiertos] = useState(false);
+  // SPEC_DIRECCION_RECEPTOR_v0.1 RN-02: la direccion va en su propia seccion, cerrada por defecto.
+  const [direccionAbierta, setDireccionAbierta] = useState(false);
   const [guardarEnAgenda, setGuardarEnAgenda] = useState(true);
   const esInnominado = esClienteInnominado(cliente);
   const [clienteSuggestions, setClienteSuggestions] = useState<ClienteSearchResult[]>([]);
@@ -1438,6 +1441,7 @@ function InvoiceEditor({
       documento_tipo: clientePrefillRequest.cliente.documento_tipo,
       documento: clientePrefillRequest.cliente.documento ?? "",
       razon_social: clientePrefillRequest.cliente.razon_social ?? "",
+      ...direccionDe(clientePrefillRequest.cliente),
       direccion: clientePrefillRequest.cliente.direccion ?? "",
       telefono: clientePrefillRequest.cliente.telefono ?? "",
       email: clientePrefillRequest.cliente.email ?? "",
@@ -1447,7 +1451,8 @@ function InvoiceEditor({
     setClienteSuggestions([]);
     setClienteOrigen(clientePrefillRequest.cliente.cliente_id ? "AGENDA" : null);
     setGuardarEnAgenda(!clientePrefillRequest.cliente.cliente_id);
-    setOpcionalesAbiertos(Boolean(clientePrefillRequest.cliente.direccion || clientePrefillRequest.cliente.telefono || clientePrefillRequest.cliente.email));
+    setOpcionalesAbiertos(Boolean(clientePrefillRequest.cliente.telefono || clientePrefillRequest.cliente.email));
+    setDireccionAbierta(tieneDireccion(clientePrefillRequest.cliente));
     setClienteMessage(null);
     lastAppliedClientePrefillIdRef.current = clientePrefillRequest.request_id;
     scrollSection(clientSectionRef);
@@ -1939,15 +1944,18 @@ function InvoiceEditor({
       documento_tipo: suggestion.documento_tipo,
       documento: suggestion.documento,
       razon_social: suggestion.razon_social,
+      ...direccionDe(suggestion),
       direccion: suggestion.direccion ?? "",
       telefono: suggestion.telefono ?? "",
       email: suggestion.email ?? "",
       naturaleza: suggestion.naturaleza
     });
     setClienteNaturalezaTouched(true);
+    // RN-02: si el cliente de la agenda trae direccion, la seccion se abre para que se vea que se envia.
+    setDireccionAbierta(tieneDireccion(suggestion));
     setClienteOrigen(suggestion.source === "AGENDA_FACTURADOR" ? "AGENDA" : "PADRON");
     setGuardarEnAgenda(!suggestion.cliente_id);
-    if (suggestion.direccion || suggestion.telefono || suggestion.email) setOpcionalesAbiertos(true);
+    if (suggestion.telefono || suggestion.email) setOpcionalesAbiertos(true);
     setClienteMessage(null);
     setClienteSuggestions([]);
   }
@@ -2027,7 +2035,10 @@ function InvoiceEditor({
         documento_tipo: cliente.documento_tipo,
         documento: cliente.documento,
         razon_social: cliente.razon_social,
+        // SPEC_DIRECCION_RECEPTOR_v0.1 RN-05: el domicilio se guarda con la agenda (vacio si se quito).
+        ...direccionDe(cliente),
         direccion: cliente.direccion || null,
+        numero_casa: cliente.numero_casa || null,
         telefono: cliente.telefono || null,
         email: cliente.email || null,
         ...(cliente.naturaleza ? { naturaleza: cliente.naturaleza } : {})
@@ -2167,6 +2178,7 @@ function InvoiceEditor({
     setClienteNaturalezaTouched(false);
     setClienteOrigen(null);
     setOpcionalesAbiertos(false);
+    setDireccionAbierta(false);
     setGuardarEnAgenda(true);
     setLines([]);
     setActiveLineId(null);
@@ -2218,7 +2230,8 @@ function InvoiceEditor({
     ) : null;
   };
   const tocarCliente = (campo: CampoReceptor) => setClienteTocados((actual) => new Set(actual).add(campo));
-  const erroresOpcionalesCliente = revisionCliente.errores.some((e) => e.campo === "direccion" || e.campo === "telefono" || e.campo === "email");
+  const erroresOpcionalesCliente = revisionCliente.errores.some((e) => e.campo === "telefono" || e.campo === "email");
+  const erroresDireccionCliente = revisionCliente.errores.some((e) => e.campo === "direccion" || e.campo === "numero_casa");
   // SPEC_UX_NUEVA_FACTURA_v0.1, RN-04: un unico motivo, el primero que aplica.
   const motivoBloqueo: string | null = (() => {
     if (hasEmissionResult || emitting) return null;
@@ -2297,11 +2310,6 @@ function InvoiceEditor({
   const camposOpcionales = (
     <div className="cliente-opcionales-campos">
       {!modoCompleto ? selectorTipoPersona : null}
-      <label>
-        Dirección
-        <input aria-invalid={errorCliente("direccion") ? true : undefined} onBlur={() => tocarCliente("direccion")} onChange={(event) => editarCliente({ direccion: event.target.value })} value={cliente.direccion ?? ""} />
-        {errorClienteVisible("direccion")}
-      </label>
       <label>
         Teléfono
         <input aria-invalid={errorCliente("telefono") ? true : undefined} inputMode="tel" onBlur={() => tocarCliente("telefono")} onChange={(event) => editarCliente({ telefono: event.target.value })} value={cliente.telefono ?? ""} />
@@ -2518,7 +2526,7 @@ function InvoiceEditor({
             type="button"
           >
             <Icono nombre={opcionalesAbiertos ? "chevron-abajo" : "chevron-derecha"} tamano={14} />
-            {modoCompleto ? "Dirección, teléfono y correo (opcionales)" : "Tipo de persona, dirección, teléfono y correo"}
+            {modoCompleto ? "Teléfono y correo (opcionales)" : "Tipo de persona, teléfono y correo"}
           </button>
           {modoCompleto && !esInnominado ? casillaAgenda : null}
         </div>
@@ -2540,6 +2548,22 @@ function InvoiceEditor({
           </Aviso>
         ) : null}
         {opcionalesAbiertos || erroresOpcionalesCliente ? camposOpcionales : null}
+        {esInnominado ? null : (
+          <CampoDireccion
+            abierta={direccionAbierta || erroresDireccionCliente}
+            api={api}
+            errorCalle={errorCliente("direccion")}
+            errorNumero={errorCliente("numero_casa")}
+            idBase="factura-direccion"
+            onAbrir={() => setDireccionAbierta(true)}
+            onCambiar={(cambio) => editarCliente(cambio)}
+            onQuitar={() => {
+              editarCliente({ ...DIRECCION_VACIA, direccion: "" });
+              setDireccionAbierta(false);
+            }}
+            valor={cliente}
+          />
+        )}
         {!modoCompleto && !esInnominado ? casillaAgenda : null}
       </section>
 

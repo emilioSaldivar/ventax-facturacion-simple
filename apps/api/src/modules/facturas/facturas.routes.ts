@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { cantidadEscalada, monedasFactura, tieneDecimalesValidos } from "@facturacion-simple/shared";
 import { z } from "zod";
+import { domicilioSchemaShape } from "../../shared/validation/domicilio.schema";
 import { requireAuth } from "../auth/auth.middleware";
 import { clienteRepository } from "../clientes/clientes.repository";
 import { clienteNaturalezaTipos } from "../clientes/clientes.types";
@@ -55,11 +56,13 @@ const facturaBaseSchema = z.object({
     documento_tipo: z.enum(facturaDocumentoTipos),
     documento: z.string().trim().min(1).max(40),
     razon_social: z.string().trim().min(1).max(240),
-    direccion: z.string().trim().max(240).nullable().optional(),
+    // SPEC_DIRECCION_RECEPTOR_v0.1 RN-06: el maximo de 255 y los caracteres los valida `revisarReceptor`.
+    direccion: z.string().max(600).nullable().optional(),
     telefono: z.string().trim().max(60).nullable().optional(),
     // SPEC_VALIDACIONES_RECEPTOR_v0.1 RV-03: el formato del correo lo valida `revisarReceptor` (refinarFactura).
     email: z.string().trim().max(240).nullable().optional(),
-    naturaleza: z.enum(clienteNaturalezaTipos).nullable().optional()
+    naturaleza: z.enum(clienteNaturalezaTipos).nullable().optional(),
+    ...domicilioSchemaShape
   }).transform((cliente) => revisarReceptor(cliente).normalizado),
   items: z
     .array(

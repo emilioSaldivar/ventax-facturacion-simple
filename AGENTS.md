@@ -197,6 +197,9 @@ La fuente de verdad de este proyecto es:
 - `docs/SPEC_NOTA_CREDITO_UNIFICADA_v0.1.md`
 - `docs/PLAN_NOTA_CREDITO_UNIFICADA_v0.1.md`
 - `docs/TASKS_NOTA_CREDITO_UNIFICADA_v0.1.md`
+- `docs/SPEC_DIRECCION_RECEPTOR_v0.1.md`
+- `docs/PLAN_DIRECCION_RECEPTOR_v0.1.md`
+- `docs/TASKS_DIRECCION_RECEPTOR_v0.1.md`
 - `docs/BACKLOG.md` (archivo unico de pendientes, hallazgos y estados; ver "Regla Del Backlog Unico")
 - `docs/HOJA_DE_RUTA_v0.1.md` (prioridades y decisiones del 2026-11-11; el estado vigente esta en `BACKLOG.md`)
 - `spec/openapi.yaml`

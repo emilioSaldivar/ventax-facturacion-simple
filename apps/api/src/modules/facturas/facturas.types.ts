@@ -1,4 +1,5 @@
 import type { AccionSugerida } from "./sifen-causa-catalogo";
+import type { DomicilioReceptor } from "../../shared/validation/receptor";
 import type { FiscalEmitNotaRemisionRequest, FiscalCancelStatus } from "../fiscal-gateway/fiscal-gateway.types";
 import type { TaxCalculatedLine, TaxTotals, TipoIva } from "@facturacion-simple/shared";
 import { documentoIdentidadTipos, type ClienteNaturaleza } from "../clientes/clientes.types";
@@ -29,7 +30,7 @@ export const TOPE_INNOMINADO_GS = 7_000_000;
 export const condicionesVenta = ["CONTADO", "CREDITO"] as const;
 export type CondicionVenta = (typeof condicionesVenta)[number];
 
-export interface FacturaClienteInput {
+export interface FacturaClienteInput extends DomicilioReceptor {
   cliente_id?: string | null;
   documento_tipo: FacturaDocumentoTipo;
   documento: string;

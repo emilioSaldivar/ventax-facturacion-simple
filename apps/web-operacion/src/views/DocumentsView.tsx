@@ -1,4 +1,5 @@
 // Movido de main.tsx sin cambios (PLAN_UX_RESTO_APP_v0.1 §10.9, URA-023).
+import { textoDireccion, tieneDireccion } from "../components/CampoDireccion";
 import { useEffect, useMemo, useState } from "react";
 import { CargaMasivaView, type TipoDeCarga } from "../carga-masiva";
 import { useConfirmar } from "../components/Dialogo";
@@ -1059,6 +1060,13 @@ export function DocumentsView({
                   <dt>Documento</dt>
                   <dd>{selected.cliente.documento}</dd>
                 </div>
+                {/* SPEC_DIRECCION_RECEPTOR_v0.1 RN-08: la direccion del cliente guardada en la factura. */}
+                {tieneDireccion(selected.cliente) ? (
+                  <div>
+                    <dt>Dirección</dt>
+                    <dd>{textoDireccion(selected.cliente)}</dd>
+                  </div>
+                ) : null}
                 {selected.origen ? (
                   /* SPEC_NOTA_CREDITO_FACTURA_EXTERNA_v0.1 D-6 (PLAN 7): de donde salieron los datos. */
                   <div className="ficha-origen-externa">

@@ -17,7 +17,13 @@ describe("paridad de validaciones del receptor entre API y web", () => {
     { documento_tipo: "PASAPORTE", documento: "AB 123456", razon_social: "John Smith", email: "john @mail.com" },
     { documento_tipo: "CI", documento: "1234567", razon_social: "Juan Perez", telefono: "12345", email: "juan@mail" },
     { documento_tipo: "CI", documento: "1234567", razon_social: "Juan Perez", direccion: "x".repeat(256) },
-    { documento_tipo: "INNOMINADO", documento: "0", razon_social: "Sin Nombre" }
+    { documento_tipo: "INNOMINADO", documento: "0", razon_social: "Sin Nombre" },
+    // SPEC_DIRECCION_RECEPTOR_v0.1 RN-03 y RN-06.
+    { documento_tipo: "CI", documento: "1234567", razon_social: "Juan Perez", direccion: "Avda. Mcal. López Nº 1234 (esq. Brasil) - Dpto. 3/B" },
+    { documento_tipo: "CI", documento: "1234567", razon_social: "Juan Perez", direccion: "Cerro\nleon\tc/ “alejo” garcía" },
+    { documento_tipo: "CI", documento: "1234567", razon_social: "Juan Perez", direccion: "Casa 🏠 azul" },
+    { documento_tipo: "CI", documento: "1234567", razon_social: "Juan Perez", direccion: "Ruta 2\u0007 Km 30" },
+    { documento_tipo: "CI", documento: "1234567", razon_social: "Juan Perez", direccion: "Ruta 2", numero_casa: "12a", departamento: 1, ciudad: 1 }
   ];
 
   it.each(receptores)("%j da el mismo resultado", (receptor) => {
@@ -28,6 +34,16 @@ describe("paridad de validaciones del receptor entre API y web", () => {
     for (const base of ["80012345", "4543629", "80044279", "80136968", "80120841", "5057016", "A123456", "ZZ9"]) {
       expect(web.calcularDvRuc(base)).toBe(api.calcularDvRuc(base));
     }
+  });
+
+  it("mismo domicilio completo", () => {
+    const casos = [
+      { direccion: "Calle 1", numero_casa: "0", departamento: 1, ciudad: 1 },
+      { direccion: "Calle 1", numero_casa: "0", departamento: 1, ciudad: null },
+      { direccion: null, numero_casa: "0", departamento: 1, ciudad: 1 },
+      { direccion: "Calle 1", numero_casa: "1234567", departamento: 1, ciudad: 1 }
+    ];
+    for (const c of casos) expect(web.domicilioCompleto(c)).toBe(api.domicilioCompleto(c));
   });
 
   it("mismo numero de casa", () => {

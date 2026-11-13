@@ -4,6 +4,8 @@
  * Formato del receptor y del RUC: SPEC_VALIDACIONES_RECEPTOR_v0.1 (RV-01 a RV-06).
  */
 import {
+  normalizarDireccion,
+  validarCaracteresDireccion,
   normalizarDocumento,
   normalizarTelefono,
   validarCorreo,
@@ -25,6 +27,9 @@ function validarLocal(local: NotaRemisionLocal | null | undefined, campo: string
     return;
   }
   if (largo(local.direccion) > 255) errores.push({ campo: `${campo}.direccion`, mensaje: "La dirección puede tener hasta 255 caracteres." });
+  // SPEC_DIRECCION_RECEPTOR_v0.1 RN-06 (FS-154).
+  const rDir = validarCaracteresDireccion(normalizarDireccion(local.direccion) ?? "");
+  if (!rDir.ok) errores.push({ campo: `${campo}.direccion`, mensaje: rDir.mensaje });
   const tel = normalizarTelefono(local.telefono);
   const rTel = validarTelefono(tel);
   if (!rTel.ok) errores.push({ campo: `${campo}.telefono`, mensaje: rTel.mensaje });
@@ -87,6 +92,9 @@ export function validarNotaRemision(input: NotaRemisionInput, ahora = new Date()
         add("cliente.domicilio", "Completá dirección, número de casa, departamento y ciudad del destinatario.");
       } else if (largo(d.direccion) > 255) {
         add("cliente.domicilio.direccion", "La dirección puede tener hasta 255 caracteres.");
+      } else {
+        const rDir = validarCaracteresDireccion(normalizarDireccion(d.direccion) ?? "");
+        if (!rDir.ok) add("cliente.domicilio.direccion", rDir.mensaje);
       }
     }
   }
@@ -139,11 +147,18 @@ export function validarNotaRemision(input: NotaRemisionInput, ahora = new Date()
   }
   if (largo(t.domicilio_fiscal) < 1 || largo(t.domicilio_fiscal) > 150) {
     add("transporte.transportista.domicilio_fiscal", "El domicilio fiscal del transportista va de 1 a 150 caracteres.");
+  } else {
+    const rFiscal = validarCaracteresDireccion(normalizarDireccion(t.domicilio_fiscal) ?? "", "El domicilio fiscal del transportista");
+    if (!rFiscal.ok) add("transporte.transportista.domicilio_fiscal", rFiscal.mensaje);
   }
   const ch = t.chofer;
   if (largo(ch?.nombre) < 4 || largo(ch?.nombre) > 60) add("transporte.transportista.chofer.nombre", "El nombre del chofer va de 4 a 60 caracteres.");
   if (!/^[^.]{1,20}$/.test((ch?.doc_nro ?? "").trim())) add("transporte.transportista.chofer.doc_nro", "El documento del chofer va sin puntos, de 1 a 20 caracteres.");
   if (largo(ch?.direccion) < 1 || largo(ch?.direccion) > 255) add("transporte.transportista.chofer.direccion", "La dirección del chofer va de 1 a 255 caracteres.");
+  else {
+    const rChofer = validarCaracteresDireccion(normalizarDireccion(ch?.direccion) ?? "", "La dirección del chofer");
+    if (!rChofer.ok) add("transporte.transportista.chofer.direccion", rChofer.mensaje);
+  }
 
   // Articulos (RN-17).
   const validos = input.items.filter((i) => largo(i.descripcion) > 0);

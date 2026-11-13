@@ -497,9 +497,14 @@ paths:
   /geografia/ciudades:
     get:
       tags: [Notas de remision]
-      summary: Ciudades de un distrito (RN-08)
+      summary: Ciudades de un distrito o de un departamento
+      description: >-
+        SPEC_NOTA_REMISION_v0.1 RN-08 y SPEC_DIRECCION_RECEPTOR_v0.1 RN-04 y RN-07. Indicar `distrito` o `departamento`
+        (uno solo). Por departamento, las ciudades de todos sus distritos, con `distrito`, ordenadas por descripcion.
+        Se excluyen las ciudades con descripcion de mas de 30 caracteres (SIFEN tDesCiudad; FS-155).
       parameters:
-        - { in: query, name: distrito, required: true, schema: { type: integer } }
+        - { in: query, name: distrito, required: false, schema: { type: integer } }
+        - { in: query, name: departamento, required: false, schema: { type: integer } }
       responses:
         "200": { description: Lista, content: { application/json: { schema: { $ref: "#/components/schemas/GeografiaResponse" } } } }
         "503": { description: FE no responde y no hay cache, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
@@ -3308,6 +3313,26 @@ components:
         direccion:
           type: string
           nullable: true
+        numero_casa:
+          type: string
+          nullable: true
+          pattern: '^\d{1,6}$'
+          description: SPEC_DIRECCION_RECEPTOR_v0.1. Numero de casa (MT150 D218), 1 a 6 digitos; 0 si no tiene.
+        departamento:
+          type: integer
+          nullable: true
+          description: Codigo de departamento (MT150 D219), de GET /geografia/departamentos.
+        departamento_descripcion: { type: string, nullable: true }
+        distrito:
+          type: integer
+          nullable: true
+          description: Codigo de distrito (MT150 D221); sale de la ciudad elegida.
+        distrito_descripcion: { type: string, nullable: true }
+        ciudad:
+          type: integer
+          nullable: true
+          description: Codigo de ciudad (MT150 D223), de GET /geografia/ciudades?departamento=N.
+        ciudad_descripcion: { type: string, nullable: true }
         telefono:
           type: string
           nullable: true
@@ -3449,7 +3474,27 @@ components:
         direccion:
           type: string
           nullable: true
-          description: Hasta 255 caracteres.
+          description: Hasta 255 caracteres. Letras con o sin tilde, ñ, digitos, espacio y . , / - º ª ° # ( ) ' \" &; saltos de linea pasan a espacio (SPEC_DIRECCION_RECEPTOR_v0.1 RN-06).
+        numero_casa:
+          type: string
+          nullable: true
+          pattern: '^\d{1,6}$'
+          description: SPEC_DIRECCION_RECEPTOR_v0.1. Numero de casa (MT150 D218), 1 a 6 digitos; 0 si no tiene.
+        departamento:
+          type: integer
+          nullable: true
+          description: Codigo de departamento (MT150 D219), de GET /geografia/departamentos.
+        departamento_descripcion: { type: string, nullable: true }
+        distrito:
+          type: integer
+          nullable: true
+          description: Codigo de distrito (MT150 D221); sale de la ciudad elegida.
+        distrito_descripcion: { type: string, nullable: true }
+        ciudad:
+          type: integer
+          nullable: true
+          description: Codigo de ciudad (MT150 D223), de GET /geografia/ciudades?departamento=N.
+        ciudad_descripcion: { type: string, nullable: true }
         telefono:
           type: string
           nullable: true
@@ -3797,6 +3842,26 @@ components:
         direccion:
           type: string
           nullable: true
+        numero_casa:
+          type: string
+          nullable: true
+          pattern: '^\d{1,6}$'
+          description: SPEC_DIRECCION_RECEPTOR_v0.1. Numero de casa (MT150 D218), 1 a 6 digitos; 0 si no tiene.
+        departamento:
+          type: integer
+          nullable: true
+          description: Codigo de departamento (MT150 D219), de GET /geografia/departamentos.
+        departamento_descripcion: { type: string, nullable: true }
+        distrito:
+          type: integer
+          nullable: true
+          description: Codigo de distrito (MT150 D221); sale de la ciudad elegida.
+        distrito_descripcion: { type: string, nullable: true }
+        ciudad:
+          type: integer
+          nullable: true
+          description: Codigo de ciudad (MT150 D223), de GET /geografia/ciudades?departamento=N.
+        ciudad_descripcion: { type: string, nullable: true }
         telefono:
           type: string
           nullable: true

@@ -8,6 +8,7 @@ import type {
   DocumentoIdentidadTipo
 } from "./clientes.types";
 import { normalizeDocumento } from "./clientes.utils";
+import type { DomicilioReceptor } from "../../shared/validation/receptor";
 
 interface ClienteRow {
   source: "AGENDA_FACTURADOR" | "IDENTIDAD_COMPARTIDA";
@@ -19,6 +20,13 @@ interface ClienteRow {
   telefono: string | null;
   email: string | null;
   naturaleza: ClienteNaturaleza;
+  numero_casa?: string | null;
+  departamento?: number | null;
+  departamento_descripcion?: string | null;
+  distrito?: number | null;
+  distrito_descripcion?: string | null;
+  ciudad?: number | null;
+  ciudad_descripcion?: string | null;
   activo?: boolean;
   total_count?: string;
 }
@@ -33,6 +41,26 @@ interface DnitRow {
   codigo_dnit: string | null;
   estado: string | null;
 }
+
+/**
+ * SPEC_DIRECCION_RECEPTOR_v0.1: el domicilio se escribe solo si el pedido lo trae (alguno de sus campos definido);
+ * si no, se conserva el guardado. Devuelve [traeDomicilio, numero_casa, departamento, departamento_descripcion,
+ * distrito, distrito_descripcion, ciudad, ciudad_descripcion].
+ */
+function parametrosDomicilio(data: DomicilioReceptor): unknown[] {
+  const campos = [
+    data.numero_casa,
+    data.departamento,
+    data.departamento_descripcion,
+    data.distrito,
+    data.distrito_descripcion,
+    data.ciudad,
+    data.ciudad_descripcion
+  ];
+  return [campos.some((v) => v !== undefined), ...campos.map((v) => v ?? null)];
+}
+
+const COLUMNAS_DOMICILIO_RETORNO = `numero_casa, departamento, departamento_descripcion, distrito, distrito_descripcion, ciudad, ciudad_descripcion`;
 
 export class PgClienteRepository implements ClienteRepository {
   async findDnitByDocumento(input: {
@@ -103,6 +131,13 @@ export class PgClienteRepository implements ClienteRepository {
             fc.telefono,
             fc.email::text as email,
             fc.naturaleza,
+            fc.numero_casa,
+            fc.departamento,
+            fc.departamento_descripcion,
+            fc.distrito,
+            fc.distrito_descripcion,
+            fc.ciudad,
+            fc.ciudad_descripcion,
             1 as priority
           from facturador_clientes fc
           join cliente_identidades ci on ci.id = fc.cliente_identidad_id
@@ -129,6 +164,13 @@ export class PgClienteRepository implements ClienteRepository {
             null::text as telefono,
             null::text as email,
             ci.naturaleza,
+            null::text as numero_casa,
+            null::integer as departamento,
+            null::text as departamento_descripcion,
+            null::integer as distrito,
+            null::text as distrito_descripcion,
+            null::integer as ciudad,
+            null::text as ciudad_descripcion,
             2 as priority
           from cliente_identidades ci
           where ci.deleted_at is null
@@ -177,6 +219,13 @@ export class PgClienteRepository implements ClienteRepository {
           fc.telefono,
           fc.email::text as email,
           fc.naturaleza,
+          fc.numero_casa,
+          fc.departamento,
+          fc.departamento_descripcion,
+          fc.distrito,
+          fc.distrito_descripcion,
+          fc.ciudad,
+          fc.ciudad_descripcion,
           fc.activo,
           count(*) over()::text as total_count
         from facturador_clientes fc
@@ -215,6 +264,13 @@ export class PgClienteRepository implements ClienteRepository {
           fc.telefono,
           fc.email::text as email,
           fc.naturaleza,
+          fc.numero_casa,
+          fc.departamento,
+          fc.departamento_descripcion,
+          fc.distrito,
+          fc.distrito_descripcion,
+          fc.ciudad,
+          fc.ciudad_descripcion,
           fc.activo
         from facturador_clientes fc
         join cliente_identidades ci on ci.id = fc.cliente_identidad_id
@@ -293,9 +349,16 @@ export class PgClienteRepository implements ClienteRepository {
             email,
             naturaleza,
             created_by,
-            updated_by
+            updated_by,
+            numero_casa,
+            departamento,
+            departamento_descripcion,
+            distrito,
+            distrito_descripcion,
+            ciudad,
+            ciudad_descripcion
           )
-          values ($1, $2, $3, $4, $5, $6, $7, coalesce($8, 'FISICA'), $9, $9)
+          values ($1, $2, $3, $4, $5, $6, $7, coalesce($8, 'FISICA'), $9, $9, $13, $14, $15, $16, $17, $18, $19)
           on conflict (facturador_id, cliente_identidad_id)
             where deleted_at is null
           do update set
@@ -304,6 +367,13 @@ export class PgClienteRepository implements ClienteRepository {
             telefono = excluded.telefono,
             email = excluded.email,
             naturaleza = coalesce($8, facturador_clientes.naturaleza),
+            numero_casa = case when $12 then excluded.numero_casa else facturador_clientes.numero_casa end,
+            departamento = case when $12 then excluded.departamento else facturador_clientes.departamento end,
+            departamento_descripcion = case when $12 then excluded.departamento_descripcion else facturador_clientes.departamento_descripcion end,
+            distrito = case when $12 then excluded.distrito else facturador_clientes.distrito end,
+            distrito_descripcion = case when $12 then excluded.distrito_descripcion else facturador_clientes.distrito_descripcion end,
+            ciudad = case when $12 then excluded.ciudad else facturador_clientes.ciudad end,
+            ciudad_descripcion = case when $12 then excluded.ciudad_descripcion else facturador_clientes.ciudad_descripcion end,
             activo = true,
             updated_by = excluded.updated_by
           returning
@@ -316,6 +386,7 @@ export class PgClienteRepository implements ClienteRepository {
             telefono,
             email::text as email,
             naturaleza,
+            ${COLUMNAS_DOMICILIO_RETORNO},
             activo
         `,
         [
@@ -329,7 +400,8 @@ export class PgClienteRepository implements ClienteRepository {
           input.data.naturaleza ?? null,
           input.userId,
           input.data.documento_tipo,
-          input.data.documento.trim()
+          input.data.documento.trim(),
+          ...parametrosDomicilio(input.data)
         ]
       );
 
@@ -419,6 +491,13 @@ export class PgClienteRepository implements ClienteRepository {
             telefono = $6,
             email = $7,
             naturaleza = coalesce($9, fc.naturaleza),
+            numero_casa = case when $10 then $11 else fc.numero_casa end,
+            departamento = case when $10 then $12::integer else fc.departamento end,
+            departamento_descripcion = case when $10 then $13 else fc.departamento_descripcion end,
+            distrito = case when $10 then $14::integer else fc.distrito end,
+            distrito_descripcion = case when $10 then $15 else fc.distrito_descripcion end,
+            ciudad = case when $10 then $16::integer else fc.ciudad end,
+            ciudad_descripcion = case when $10 then $17 else fc.ciudad_descripcion end,
             activo = true,
             updated_by = $8
           from cliente_identidades ci
@@ -436,6 +515,13 @@ export class PgClienteRepository implements ClienteRepository {
             fc.telefono,
             fc.email::text as email,
             fc.naturaleza,
+            fc.numero_casa,
+            fc.departamento,
+            fc.departamento_descripcion,
+            fc.distrito,
+            fc.distrito_descripcion,
+            fc.ciudad,
+            fc.ciudad_descripcion,
             fc.activo
         `,
         [
@@ -447,7 +533,8 @@ export class PgClienteRepository implements ClienteRepository {
           input.data.telefono ?? null,
           input.data.email ?? null,
           input.userId,
-          input.data.naturaleza ?? null
+          input.data.naturaleza ?? null,
+          ...parametrosDomicilio(input.data)
         ]
       );
 
@@ -493,7 +580,14 @@ function mapSearchRow(row: ClienteRow): ClienteSearchResult {
     direccion: row.direccion,
     telefono: row.telefono,
     email: row.email,
-    naturaleza: row.naturaleza
+    naturaleza: row.naturaleza,
+    numero_casa: row.numero_casa ?? null,
+    departamento: row.departamento ?? null,
+    departamento_descripcion: row.departamento_descripcion ?? null,
+    distrito: row.distrito ?? null,
+    distrito_descripcion: row.distrito_descripcion ?? null,
+    ciudad: row.ciudad ?? null,
+    ciudad_descripcion: row.ciudad_descripcion ?? null
   };
 }
 

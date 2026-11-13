@@ -1,10 +1,12 @@
+import type { DomicilioReceptor } from "../../shared/validation/receptor";
+
 export const documentoIdentidadTipos = ["RUC", "CI", "PASAPORTE", "CEDULA_EXTRANJERA", "NO_ESPECIFICADO"] as const;
 export type DocumentoIdentidadTipo = (typeof documentoIdentidadTipos)[number];
 
 export const clienteNaturalezaTipos = ["FISICA", "JURIDICA"] as const;
 export type ClienteNaturaleza = (typeof clienteNaturalezaTipos)[number];
 
-export interface ClienteUpsertInput {
+export interface ClienteUpsertInput extends DomicilioReceptor {
   documento_tipo: DocumentoIdentidadTipo;
   documento: string;
   razon_social: string;
@@ -14,7 +16,7 @@ export interface ClienteUpsertInput {
   naturaleza?: ClienteNaturaleza;
 }
 
-export interface ClienteSearchResult {
+export interface ClienteSearchResult extends DomicilioReceptor {
   source: "AGENDA_FACTURADOR" | "IDENTIDAD_COMPARTIDA";
   cliente_id: string | null;
   documento_tipo: DocumentoIdentidadTipo;

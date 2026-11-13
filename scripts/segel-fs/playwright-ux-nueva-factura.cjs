@@ -135,8 +135,9 @@ async function marco(page, v) {
     await page.waitForTimeout(600);
     check("CA-03 1440: con cliente y sin lineas, el motivo son las lineas", (await motivoBloqueo(page)).includes("Agregá al menos una línea"), await motivoBloqueo(page));
     check("CA-04 1440: tilde de origen y casilla de agenda visibles", (await page.locator(".cliente-origen.ok").count()) === 1 && (await page.locator(".casilla-agenda input").count()) === 1);
-    await page.getByRole("button", { name: /Direcci[oó]n, tel[eé]fono y correo/ }).click();
-    check("CA-04 1440: el desplegable abre direccion, telefono y correo", (await page.getByLabel("Dirección").isVisible()) && (await page.getByLabel("Teléfono").isVisible()) && (await page.getByLabel("Correo").isVisible()));
+    // SPEC_DIRECCION_RECEPTOR_v0.1 RN-02: la direccion paso a su propia seccion ("Agregar dirección").
+    await page.getByRole("button", { name: /Tel[eé]fono y correo/ }).click();
+    check("CA-04 1440: el desplegable abre telefono y correo", (await page.getByLabel("Teléfono").isVisible()) && (await page.getByLabel("Correo").isVisible()));
 
     // Fila invalida: precio 0 en USD (la grilla recorta los decimales de mas, asi que el caso de precision es CA-05 del editor PC).
     await filaGrilla(page, 0, { descripcion: "UX linea 1", cantidad: "2", precio: "150,25" });

@@ -201,7 +201,7 @@ async function casoEditor(browser, ancho, alto) {
     }
 
     // Correo invalido abre los opcionales y bloquea.
-    const opcionales = seccion.getByRole("button", { name: /dirección, teléfono y correo/i });
+    const opcionales = seccion.getByRole("button", { name: /teléfono y correo/i }); // SPEC_DIRECCION_RECEPTOR_v0.1: la direccion tiene su propia seccion
     if ((await seccion.getByLabel("Correo").count()) === 0) await opcionales.click();
     await seccion.getByLabel("Correo").fill("cliente@dominio");
     await seccion.getByLabel("Teléfono").click();

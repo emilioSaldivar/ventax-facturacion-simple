@@ -8,7 +8,7 @@ import { createFiscalGateway, fiscalGateway } from "../fiscal-gateway/fiscal-gat
 import { buildFiscalGatewayConfig } from "../fiscal-gateway/fiscal-gateway.config";
 import { permisosDelFacturador } from "../notas-remision/notas-remision.permiso";
 import { validateRequest } from "../../shared/validation/validate-request";
-import { leerGeografia } from "./geografia.service";
+import { leerCiudadesDeDepartamento, leerGeografia } from "./geografia.service";
 
 export const geografiaRouter = Router();
 
@@ -39,13 +39,24 @@ geografiaRouter.get(
   }
 );
 
+// SPEC_DIRECCION_RECEPTOR_v0.1 RN-04: `?distrito=N` (remision) o `?departamento=N` (factura y agenda).
 geografiaRouter.get(
   "/geografia/ciudades",
   requireAuth,
-  validateRequest("query", z.object({ distrito: z.coerce.number().int().min(1) })),
+  validateRequest(
+    "query",
+    z
+      .object({ distrito: z.coerce.number().int().min(1).optional(), departamento: z.coerce.number().int().min(1).optional() })
+      .refine((q) => Boolean(q.distrito) !== Boolean(q.departamento), "Indicá distrito o departamento.")
+  ),
   async (req, res, next) => {
     try {
-      res.json(await leerGeografia(await gatewayDelFacturador(req.user!), { distrito: Number(req.query.distrito) }));
+      const gateway = await gatewayDelFacturador(req.user!);
+      if (req.query.departamento) {
+        res.json(await leerCiudadesDeDepartamento(gateway, Number(req.query.departamento)));
+        return;
+      }
+      res.json(await leerGeografia(gateway, { distrito: Number(req.query.distrito) }));
     } catch (error) {
       next(error);
     }

@@ -307,6 +307,40 @@ describe("fiscal gateway", () => {
     expect(calls[0]?.payload.receptor).not.toHaveProperty("naturaleza");
   });
 
+  it("SPEC_DIRECCION_RECEPTOR_v0.1 RN-01: el domicilio va a FE solo completo (calle, numero, departamento, ciudad)", async () => {
+    const calls: Array<{ payload: Record<string, unknown> }> = [];
+    const gateway = new RealFiscalGateway({
+      mode: "real",
+      baseUrl: "https://fe-api.ventax.app/fcws",
+      apiKey: "secret",
+      timeoutMs: 20000,
+      environment: "test",
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init: RequestInit) => {
+        calls.push({ payload: JSON.parse(String(init.body)) as Record<string, unknown> });
+        return new Response(JSON.stringify({ document_id: "doc-dir", cdc: "D".repeat(44), nro_factura: "001-002-0000020", status: "APPROVED" }), {
+          status: 200,
+          headers: { "content-type": "application/json" }
+        });
+      })
+    );
+
+    await gateway.emitFactura({
+      ...request,
+      cliente: { ...request.cliente, direccion: "Cerro Leon c/ Alejo Garcia", numero_casa: "0", departamento: 1, distrito: 1, ciudad: 1 }
+    });
+    expect(calls[0]?.payload.receptor).toMatchObject({ direccion: "Cerro Leon c/ Alejo Garcia", numeroCasa: "0", departamento: 1, distrito: 1, ciudad: 1 });
+
+    await gateway.emitFactura({
+      ...request,
+      cliente: { ...request.cliente, direccion: "Cerro Leon c/ Alejo Garcia", numero_casa: "0", departamento: 1, distrito: null, ciudad: null }
+    });
+    expect(calls[1]?.payload.receptor).toMatchObject({ direccion: "Cerro Leon c/ Alejo Garcia" });
+    for (const campo of ["numeroCasa", "departamento", "distrito", "ciudad"]) expect(calls[1]?.payload.receptor).not.toHaveProperty(campo);
+  });
+
   it("omits receptor naturaleza when documento_tipo is not RUC even if the client has it set", async () => {
     const calls: Array<{ payload: Record<string, unknown> }> = [];
     const gateway = new RealFiscalGateway({
