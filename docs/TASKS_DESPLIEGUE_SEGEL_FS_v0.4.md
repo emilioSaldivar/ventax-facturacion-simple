@@ -39,3 +39,14 @@ Orden del usuario en esta sesion (03:20Z): procedimiento completo, `FE_NC_MONEDA
 - Retag `:antes-2026.11.13`; corte 03:33:10Z → 03:33:44Z (34 s): `migrate` aplico `0050`, `0051`, `0052` y salio 0; `api` y `frontend` recreados.
 - CA-03 `0050,0051,0052` (52). CA-04 `X-App-Version 44359dd` en API y frontend, `/app/` 200, ambos healthy, FE responde por la red interna. CA-05 358 documentos, 0 externas, 0 combinadas. CA-06 `true/true` en el contenedor. CA-07 0 errores desde el corte.
 - Vuelta atras disponible: `rollback.sh 2026.11.13` (imagenes `:antes-2026.11.13` = `8e5a172` y frontend `9481fc9`, `.env.segel.antes-2026.11.13`).
+
+### E-2. Hotfix FS-143 y FS-144 en produccion (2026-11-13, 09:42Z a 09:55Z; 06:55 -03)
+
+Autorizacion del usuario en esta sesion para lectura, imagenes y despliegue. Sin migraciones ni cambio de variables.
+
+- Lectura previa (`lectura.sh`): `44359dd` en API y frontend, migraciones 52 / `0052`, 362 documentos (1 externa, 3 combinadas, de las pruebas del usuario), 0 pendientes, 0 errores en 2 h, FE `fe-segel-api-1` = `sha256:5410b9161f34` (rc4.36).
+- Imagenes: tag local `segel-fs-2026.11.13.1` = `361e10a` (`4139a25` FS-143, `3613087` FS-144 y sus pruebas); `build.sh` construyo y cargo `segel-fs-prod-api:361e10a` (`612f8e47a896`) y `segel-fs-prod-frontend:361e10a` (`a0cf5ad86957`).
+- Primer intento 09:52Z: corte sano (CA-03 a CA-07 bien, `X-App-Version 361e10a`), pero CA-05 exigia 0 externas y 0 combinadas (condicion del estreno de 0050-0052) y la **vuelta atras automatica** volvio a `44359dd`, healthy. Corregido en `d708876`: `ESP_EXTERNAS` y `ESP_COMBINADAS` con lo que informa la lectura.
+- Segundo intento: respaldo `/home/esaldivar/segel/backups/fs/20261113T095447Z`, restauracion de prueba 362 / `0052` sin avisos; corte 09:54:59Z → 09:55:33Z (34 s), `migrate` sin migraciones nuevas; CA-03 `0050,0051,0052`; CA-04 `361e10a` en API y frontend, `/app/` 200, ambos healthy, FE responde; CA-05 362 / 1 externa / 3 combinadas (lo esperado); CA-06 `true/true`; CA-07 0 errores. Salida completa en el scratchpad de la sesion (`prod-deploy-2026.11.13.1-b.log`).
+- Vuelta atras disponible: `rollback.sh 2026.11.13.1` (`:antes-2026.11.13.1` = `44359dd`: api `4da89010a4a5`, frontend `dbaf373e2753`).
+- Pendiente: el usuario repite en produccion sus casos (0000361 solo ajuste sobre el total; 0000360 motivo con la factura entera).
