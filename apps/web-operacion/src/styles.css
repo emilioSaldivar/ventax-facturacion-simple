@@ -5349,3 +5349,27 @@ dd {
 .total-row.resta strong {
   color: var(--color-ink);
 }
+
+/* SPEC_NOTA_CREDITO_FACTURA_EXTERNA_v0.1 (PLAN 7): traer una factura que no emitio FS. */
+.factura-externa-pestanas,
+.factura-externa-referencia {
+  max-width: 420px;
+}
+
+.factura-externa-impresa,
+.factura-externa-cliente {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: var(--esp-3);
+}
+
+.factura-externa-lineas input,
+.factura-externa-lineas select {
+  width: 100%;
+  min-width: 0;
+}
+
+.nc-traer-externa {
+  justify-self: start;
+  margin-bottom: var(--esp-2);
+}

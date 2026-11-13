@@ -20,6 +20,18 @@ const ESTADOS_FE_TRABADA = new Set(["DRAFT", "TRANSMISSION_FAILED"]);
 // SPEC_NOTA_CREDITO_POR_MONTO_v0.1, RN-08: aplica a todos los modos (total, lineas y monto).
 export const MENSAJE_TOTAL_EXCEDIDO =
   "La suma de las notas de crédito supera el total de la factura. Requiere soporte si no hay otras notas en Documentos.";
+export const MENSAJE_FE_SIN_SOPORTE_EXTERNA =
+  "El servicio fiscal todavía no acepta notas de crédito sobre facturas emitidas en otro sistema.";
+
+/** SPEC_NOTA_CREDITO_FACTURA_EXTERNA_v0.1 RN-08 (SPEC de FE, RF1). */
+const MENSAJES_FACTURA_ASOCIADA: Record<string, string> = {
+  INVALID_REFERENCED_DOCUMENT_STATUS: "La factura no está aprobada en SIFEN o fue cancelada.",
+  INVALID_REFERENCED_RECEIVER: "El cliente de la nota no es el de la factura.",
+  UNIDENTIFIED_REFERENCED_RECEIVER: "SIFEN no admite nota de crédito de una factura sin nombre."
+};
+
+const ERRORES_CONSULTA_SIFEN = new Set(["RATE_LIMITED", "SIFEN_NO_DISPONIBLE", "SIFEN_TIMEOUT", "SIFEN_RESPUESTA_INVALIDA"]);
+
 export const MENSAJE_MONEDA_DISTINTA = "La moneda de la nota de credito no coincide con la de la factura.";
 
 export function clasificarRespuestaNotaCredito(
@@ -57,6 +69,28 @@ function clasificarError(error: FiscalGatewayError): ClasificacionNotaCredito {
     // RN-10: FE tiene una nota por esta factura que FS no conoce. Caso residual.
     // SPEC_NOTA_CREDITO_PARCIAL_v0.1, RN-05: tambien cuando la suma de notas parciales supera la factura.
     throw new HttpError(409, "CONFLICT", MENSAJE_TOTAL_EXCEDIDO, { gateway_code: error.code, fe_code: feError, details: error.details ?? null });
+  }
+  // SPEC_NOTA_CREDITO_FACTURA_EXTERNA_v0.1 RN-08: FE anterior a rc4.35 no conoce la factura externa (sin numerar).
+  if (feError === "REFERENCED_DOCUMENT_NOT_FOUND") {
+    throw new HttpError(409, "CONFLICT", MENSAJE_FE_SIN_SOPORTE_EXTERNA, {
+      reason: "NOTA_CREDITO_FE_SIN_SOPORTE_EXTERNA",
+      gateway_code: error.code,
+      fe_code: feError,
+      details: error.details ?? null
+    });
+  }
+  // RN-08 con rc4.35: rechazos de la factura asociada antes de numerar, con `details.cdc`.
+  if (feError && MENSAJES_FACTURA_ASOCIADA[feError]) {
+    throw new HttpError(409, "CONFLICT", MENSAJES_FACTURA_ASOCIADA[feError]!, { gateway_code: error.code, fe_code: feError, details: error.details ?? null });
+  }
+  // FE (rc4.35, RF1) relanza tal cual los errores de su consulta a SIFEN (§31) sobre la factura externa, antes de
+  // numerar: no queda nota ni numero. Solo esos codigos; un 429/503 cualquiera sigue como antes (502, sin guardar).
+  if (feError && ERRORES_CONSULTA_SIFEN.has(feError)) {
+    throw new HttpError(503, "INTERNAL_ERROR", "SIFEN está ocupado: reintentá la nota de crédito en unos segundos.", {
+      reason: "SIFEN_NO_DISPONIBLE",
+      gateway_code: error.code,
+      details: error.details ?? null
+    });
   }
   if (feError === "INVALID_REFERENCED_DOCUMENT") {
     // RN-05: la moneda de la nota no coincide con la de la factura. FE no numero.

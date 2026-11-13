@@ -13,7 +13,7 @@ import { HttpError } from "../../shared/errors/http-error";
 import { logger } from "../../shared/logging/logger";
 import { deriveAccion, esNotaTrabada, puedeReintentarEmision } from "./facturas.accion";
 import { clasificarRespuestaNotaCredito, type ClasificacionNotaCredito } from "./nota-credito.clasificacion";
-import { armarLineasMonto, calcularSaldoMonto, esNotaPorMonto, notasQueCuentanMonto, type MotivoNotaCreditoMonto } from "./nota-credito-monto";
+import { armarLineasMonto, calcularSaldoMonto, esNotaPorMonto, notasQueCuentanMonto, tasasDesdeTotals, type MotivoNotaCreditoMonto } from "./nota-credito-monto";
 import { notifyAccionRequerida } from "./facturas.notificaciones";
 import {
   buscarCodigoSifen,
@@ -222,7 +222,9 @@ export function withAccion(documento: DocumentoResponse): DocumentoResponse {
     accion,
     accion_detalle,
     puede_reintentar_emision: puedeReintentarEmision(documento),
-    puede_inutilizar: puedeInutilizar(documento)
+    puede_inutilizar: puedeInutilizar(documento),
+    // SPEC_NOTA_CREDITO_FACTURA_EXTERNA_v0.1 RN-09: el borrado verifica en el servidor que no tenga notas.
+    ...(documento.origen ? { puede_eliminar_externa: true } : {})
   };
 }
 
@@ -284,7 +286,8 @@ function getNotaCreditoIneligibility(documento: DocumentoResponse, creditedFactu
   if (esFacturaInnominada(documento)) {
     return MENSAJE_NOTA_CREDITO_INNOMINADA;
   }
-  if (!documento.cdc) {
+  // SPEC_NOTA_CREDITO_FACTURA_EXTERNA_v0.1: una externa impresa no tiene CDC; la referencia es la impresa.
+  if (!documento.cdc && !documento.referencia_impresa) {
     return "La factura no tiene CDC confirmado.";
   }
   if (creditedFacturaIds.has(documento.id)) {
@@ -307,7 +310,14 @@ export function esFacturaInnominada(documento: Pick<DocumentoResponse, "cliente"
   return documento.cliente?.documento_tipo === "INNOMINADO";
 }
 
+/** SPEC_NOTA_CREDITO_FACTURA_EXTERNA_v0.1 D-8: receptor del exterior leido del rDE de una factura externa. */
+export const MENSAJE_NOTA_CREDITO_EXTERIOR =
+  "La factura es a un comprador del exterior: la nota de crédito de esta factura se gestiona con soporte.";
+
 function rechazarNotaCreditoInnominada(documento: Pick<DocumentoResponse, "cliente">): void {
+  if ((documento.cliente as { exterior?: boolean } | null)?.exterior) {
+    throw new HttpError(409, "CONFLICT", MENSAJE_NOTA_CREDITO_EXTERIOR, { reason: "NOTA_CREDITO_EXTERIOR" });
+  }
   if (esFacturaInnominada(documento)) {
     throw new HttpError(409, "CONFLICT", MENSAJE_NOTA_CREDITO_INNOMINADA, { reason: "NOTA_CREDITO_INNOMINADA" });
   }
@@ -345,6 +355,8 @@ export async function refreshDocumentoStatus(
   // SPEC_NOTA_CREDITO_TRABADA_v0.1, RN-05: consultar una nota trabada pisaria su marca y FE no la mueve sola;
   // verificarla es reintentar con la misma clave, que es idempotente.
   const actual = await repository.findById({ facturadorId: context.facturador.id, documentoId });
+  // SPEC_NOTA_CREDITO_FACTURA_EXTERNA_v0.1 D-9: una factura externa no existe en FE; no se consulta.
+  if (actual?.origen) return withAccion(actual);
   if (actual && esNotaTrabada(actual)) {
     return reintentarNotaCredito(context, actual, repository, gateway);
   }
@@ -1285,7 +1297,7 @@ export async function emitNotaCreditoTotal(
   }
 
   const original = await getDocumentoById(context, facturaId, repository);
-  if (original.tipo !== "FACTURA" || original.estado !== "EMITIDA" || !original.cdc) {
+  if (original.tipo !== "FACTURA" || original.estado !== "EMITIDA" || (!original.cdc && !original.referencia_impresa)) {
     throw new HttpError(409, "CONFLICT", "Factura no elegible para nota de credito.");
   }
   rechazarNotaCreditoInnominada(original);
@@ -1311,7 +1323,16 @@ export async function emitNotaCreditoTotal(
 
   const intento = notas.length + 1;
   const externalRef = buildNotaCreditoExternalRef(context, facturaId, intento);
-  const fiscalRequest = buildFiscalNotaCreditoRequest(context, original, motivo, externalRef);
+  // SPEC_NOTA_CREDITO_FACTURA_EXTERNA_v0.1 D-3: externa con descuento o exonerado y FE sin descuentos en la NC
+  // (antes de rc4.35): la total va por tasa sobre el total neto; se guarda como MONTO (sus lineas no son las de la factura).
+  const totalPorTasa =
+    original.origen && !env.FE_NC_DESCUENTOS && ((original.totals?.descuento ?? 0) > 0 || (original.totals?.exonerada ?? 0) > 0)
+      ? armarLineasMonto(original.totals.total, tasasDesdeTotals(original.totals) ?? { iva_10: 0, iva_5: 0, exenta: 0 }, original.moneda ?? "PYG", 1)
+      : null;
+  if (original.origen && !env.FE_NC_DESCUENTOS && ((original.totals?.descuento ?? 0) > 0 || (original.totals?.exonerada ?? 0) > 0) && !totalPorTasa) {
+    throw new HttpError(409, "CONFLICT", "La factura no tiene montos para acreditar.", { reason: "NOTA_CREDITO_SIN_MONTOS" });
+  }
+  const fiscalRequest = buildFiscalNotaCreditoRequest(context, original, motivo, externalRef, totalPorTasa ?? undefined, totalPorTasa ? 1 : undefined);
   const clasificacion = await llamarNotaCredito(gateway, fiscalRequest);
 
   const created = await repository.createNotaCreditoFromFactura({
@@ -1323,6 +1344,7 @@ export async function emitNotaCreditoTotal(
     motivo,
     externalRef,
     idempotencyKey: externalRef,
+    ...(totalPorTasa ? { items: totalPorTasa.items, totals: totalPorTasa.totals, modo: "MONTO" as const, motivoCodigo: 1 } : {}),
     fiscalRequest,
     fiscalResponse: clasificacion.fiscalResponse,
     fiscalError: clasificacion.fiscalError,
@@ -1380,7 +1402,7 @@ export async function emitNotaCreditoParcial(
     throw new HttpError(400, "VALIDATION_ERROR", "Motivo de nota de credito requerido.");
   }
   const original = await getDocumentoById(context, facturaId, repository);
-  if (original.tipo !== "FACTURA" || original.estado !== "EMITIDA" || !original.cdc) {
+  if (original.tipo !== "FACTURA" || original.estado !== "EMITIDA" || (!original.cdc && !original.referencia_impresa)) {
     throw new HttpError(409, "CONFLICT", "Factura no elegible para nota de credito.");
   }
   rechazarNotaCreditoInnominada(original);
@@ -1409,6 +1431,19 @@ export async function emitNotaCreditoParcial(
     throw new HttpError(400, "VALIDATION_ERROR", "Las lineas de la nota de credito no son validas.", { lineas: errores });
   }
 
+  // SPEC_NOTA_CREDITO_FACTURA_EXTERNA_v0.1 D-4: sin descuentos en la NC (FE antes de rc4.35), una linea con
+  // descuento no se puede acreditar por cantidades: la nota saldria por el bruto.
+  if (!env.FE_NC_DESCUENTOS) {
+    const conDescuento = input.lineas.filter((pedida) => {
+      const item = original.items.find((candidato) => candidato.line_no === pedida.line_no);
+      return (item?.descuento ?? 0) > 0 || (item?.descuento_global ?? 0) > 0;
+    });
+    if (conDescuento.length > 0) {
+      throw new HttpError(400, "VALIDATION_ERROR", "Esta línea tiene descuento: usá la nota por monto.", {
+        lineas: conDescuento.map((linea) => ({ line_no: linea.line_no, motivo: "Esta línea tiene descuento: usá la nota por monto." }))
+      });
+    }
+  }
   const { items, totals } = armarLineasNotaCredito(original, input.lineas);
   // SPEC_NOTA_CREDITO_POR_MONTO_v0.1, RN-10: una nota por monto no descuenta cantidades; el importe no puede pasar el neto.
   if (notasQueCuentanMonto(notas, facturaId).some(esNotaPorMonto)) {
@@ -1484,7 +1519,8 @@ export async function emitNotaCreditoPorMonto(
     throw new HttpError(400, "VALIDATION_ERROR", "Motivo de nota de credito requerido.");
   }
   const original = await getDocumentoById(context, facturaId, repository);
-  if (original.tipo !== "FACTURA" || original.estado !== "EMITIDA" || !original.cdc || !original.document_uuid) {
+  // SPEC_NOTA_CREDITO_FACTURA_EXTERNA_v0.1 D-5: una externa no tiene `document_uuid`; sus tasas estan guardadas.
+  if (original.tipo !== "FACTURA" || original.estado !== "EMITIDA" || (!original.cdc && !original.referencia_impresa) || (!original.document_uuid && !original.origen)) {
     throw new HttpError(409, "CONFLICT", "Factura no elegible para nota de credito.");
   }
   rechazarNotaCreditoInnominada(original);
@@ -1507,26 +1543,36 @@ export async function emitNotaCreditoPorMonto(
   }
 
   // D-8 y RN-06: sin los totales netos de FE no se reparte ni se controla el saldo; no se llama a FE para emitir.
-  let fe: Awaited<ReturnType<FiscalGateway["getDocumentoTotales"]>>;
-  try {
-    fe = await gateway.getDocumentoTotales(original.document_uuid);
-  } catch (error) {
-    logger.warn({ err: error, documentoId: facturaId }, "nota de credito por monto: totales de FE no disponibles");
-    throw new HttpError(502, "INTERNAL_ERROR", MENSAJE_FE_TOTALES_NO_DISPONIBLES, { reason: "FE_TOTALES_NO_DISPONIBLES" });
-  }
-  if (fe.moneda !== moneda) {
-    throw new HttpError(502, "INTERNAL_ERROR", MENSAJE_FE_TOTALES_NO_DISPONIBLES, { reason: "FE_TOTALES_MONEDA_DISTINTA" });
+  // SPEC_NOTA_CREDITO_FACTURA_EXTERNA_v0.1 D-5: una externa no esta en FE; total y tasas salen de sus totales guardados.
+  let totalNeto: number;
+  let tasasFactura: MontosPorTasa | null;
+  if (original.origen) {
+    totalNeto = original.totals.total;
+    tasasFactura = tasasDesdeTotals(original.totals);
+  } else {
+    let fe: Awaited<ReturnType<FiscalGateway["getDocumentoTotales"]>>;
+    try {
+      fe = await gateway.getDocumentoTotales(original.document_uuid!);
+    } catch (error) {
+      logger.warn({ err: error, documentoId: facturaId }, "nota de credito por monto: totales de FE no disponibles");
+      throw new HttpError(502, "INTERNAL_ERROR", MENSAJE_FE_TOTALES_NO_DISPONIBLES, { reason: "FE_TOTALES_NO_DISPONIBLES" });
+    }
+    if (fe.moneda !== moneda) {
+      throw new HttpError(502, "INTERNAL_ERROR", MENSAJE_FE_TOTALES_NO_DISPONIBLES, { reason: "FE_TOTALES_MONEDA_DISTINTA" });
+    }
+    totalNeto = fe.totales.total;
+    tasasFactura = montosPorTasa(fe.totales, moneda);
   }
 
   // RN-04 (D-3): saldo neto calculado aca, con los totales de FE de las notas que ya los tengan.
   const notas = await notasConTotalesFe(context.facturador.id, notasGuardadas, repository, gateway);
-  const saldo = calcularSaldoMonto(fe.totales.total, notas, facturaId, moneda);
+  const saldo = calcularSaldoMonto(totalNeto, notas, facturaId, moneda);
   if (input.monto > saldo.saldo) {
     throw new HttpError(409, "CONFLICT", mensajeSuperaSaldo(saldo.saldo, moneda), { reason: "NOTA_CREDITO_SUPERA_SALDO", saldo: saldo.saldo });
   }
 
   // RN-05: reparto por tasa (§67.2).
-  const lineas = armarLineasMonto(input.monto, montosPorTasa(fe.totales, moneda), moneda, input.motivo_codigo);
+  const lineas = tasasFactura ? armarLineasMonto(input.monto, tasasFactura, moneda, input.motivo_codigo) : null;
   if (!lineas) {
     throw new HttpError(409, "CONFLICT", "La factura no tiene montos para acreditar.", { reason: "NOTA_CREDITO_SIN_MONTOS" });
   }
@@ -1603,9 +1649,10 @@ export async function getNotaCreditoSaldo(
 
   // SPEC_NOTA_CREDITO_POR_MONTO_v0.1: total neto de FE en el momento; si no responde, los totales guardados (D-8).
   let totalFactura = original.totals?.total ?? 0;
-  let tasas: MontosPorTasa | null = null;
+  // SPEC_NOTA_CREDITO_FACTURA_EXTERNA_v0.1 D-5: una externa trae sus tasas guardadas (no hay /totales de FE).
+  let tasas: MontosPorTasa | null = original.origen ? tasasDesdeTotals(original.totals) : null;
   let fuente: "FE" | "FS" = "FS";
-  if (gateway && original.estado === "EMITIDA" && original.document_uuid) {
+  if (gateway && original.estado === "EMITIDA" && original.document_uuid && !original.origen) {
     try {
       const fe = await gateway.getDocumentoTotales(original.document_uuid);
       if (fe.moneda === moneda) {
@@ -2186,7 +2233,7 @@ function buildFiscalNotaCreditoRequest(
   // SPEC_NOTA_CREDITO_POR_MONTO_v0.1: motivo SIFEN 3, 4 u 8; sin el, 1 (FS-44).
   motivoCodigo?: number
 ): FiscalEmitNotaCreditoRequest {
-  if (!original.cdc) {
+  if (!original.cdc && !original.referencia_impresa) {
     throw new HttpError(409, "CONFLICT", "Factura sin CDC fiscal para nota de credito.");
   }
 
@@ -2206,16 +2253,25 @@ function buildFiscalNotaCreditoRequest(
     factura_referencia: {
       documento_id: original.id,
       cdc: original.cdc,
-      numero_fiscal: original.numero_fiscal
+      numero_fiscal: original.numero_fiscal,
+      // SPEC_NOTA_CREDITO_FACTURA_EXTERNA_v0.1 RN-06: factura externa impresa → referencia IMPRESO.
+      ...(original.referencia_impresa ? { referencia_impresa: original.referencia_impresa } : {})
     },
+    // D-3/D-4: descuentos en los items solo con FE rc4.35+ (antes FE los descarta sin error).
+    ...(env.FE_NC_DESCUENTOS ? { enviar_descuentos: true } : {}),
     ...(parcial
       ? original.moneda && original.moneda !== "PYG"
         ? { moneda: original.moneda, tipo_cambio: original.tipo_cambio ?? null }
         : {}
       : // SPEC_MONEDA_EXTRANJERA_v0.1, D-1: en otra moneda va por referencia; FE toma moneda y tipo de cambio de la factura.
-        original.totals?.nota_credito_por_referencia || (original.moneda && original.moneda !== "PYG")
-        ? { por_referencia: true }
-        : {})
+        // SPEC_NOTA_CREDITO_FACTURA_EXTERNA_v0.1 RN-06: una externa nunca va por referencia (FE no la tiene).
+        original.origen
+        ? original.moneda && original.moneda !== "PYG"
+          ? { moneda: original.moneda, tipo_cambio: original.tipo_cambio ?? null }
+          : {}
+        : original.totals?.nota_credito_por_referencia || (original.moneda && original.moneda !== "PYG")
+          ? { por_referencia: true }
+          : {})
   };
 }
 
@@ -2289,7 +2345,7 @@ export async function guardarTotalesFe(
   repository: FacturaRepository,
   gateway: FiscalGateway
 ): Promise<DocumentoResponse> {
-  if (documento.estado !== "EMITIDA" || !documento.document_uuid) return documento;
+  if (documento.estado !== "EMITIDA" || !documento.document_uuid || documento.origen) return documento;
   if (documento.tipo !== "FACTURA" && documento.tipo !== "NOTA_CREDITO") return documento;
   if (documento.totals?.fuente === "FE") return documento;
   try {

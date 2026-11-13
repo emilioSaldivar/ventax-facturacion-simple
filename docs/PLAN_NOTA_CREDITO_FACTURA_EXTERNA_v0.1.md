@@ -7,6 +7,10 @@
 - Ningun vector de prueba (CDC, XML, totales) se escribe de memoria: se toma del stack local con una consulta y se pega. El 2026-11-12 un intento de prueba con CDC "reales" tipeados fallo 2/5 por eso; se revirtio.
 - Cada seccion nombra el archivo y la linea aproximada en `cf8e1a7`; si el archivo cambio, buscar por el nombre de la funcion.
 
+## Implementacion (2026-11-12): desvios respecto de este PLAN
+
+Ver la evidencia de `TASKS_NOTA_CREDITO_FACTURA_EXTERNA_v0.1` (ajustes a-g): indices solo sobre externas; NC total por tasa guardada como `MONTO`; `429`/`503` genericos sin cambio y solo los de §31 como "SIFEN ocupado"; la pantalla dentro de Notas de credito (sin `OperationView` nuevo) y al guardar abre la ficha; `puede_eliminar_externa` para toda externa con control en el servidor; la ficha de la externa oculta los pasos de emision; sin filtro `origen` ni `nc_descuentos_habilitados` por ahora. La carga a mano no ofrece descuentos ni buscador de la agenda en esta version.
+
 ## 1. CDC compartido (`packages/shared/src/fiscal/cdc.ts`, nuevo; export en `packages/shared/src/index.ts`)
 
 - Layout MT150 §10.1: pos 1-2 tipo (`01` factura), 3-10 RUC con ceros, 11 DV del RUC, 12-14 establecimiento, 15-17 punto, 18-24 numero, 25 tipo de contribuyente, 26-33 fecha `AAAAMMDD`, 34 tipo de emision, 35-43 codigo de seguridad, 44 DV del CDC. Comprobado con la 1010665: `01|05057016|1|001|001|1010665|1|20261112|1|591113610|2` (`dCodSeg` 591113610 y `dDVId` 2 del `rDE`).
@@ -50,7 +54,7 @@ create unique index if not exists facturas_operativas_ref_impresa_uidx
   on facturas_operativas (facturador_id, (referencia_impresa->>'timbrado'), (referencia_impresa->>'establecimiento'), (referencia_impresa->>'punto'), (referencia_impresa->>'numero'))
   where referencia_impresa is not null and deleted_at is null;
 ```
-- Antes de aplicar el indice unico por CDC, comprobar duplicados historicos en el stack local y en el dump de produccion mas reciente (`select facturador_id, cdc, count(*) ... having count(*) > 1`); si los hay, el indice lleva ademas `and origen is not null`.
+- **Adoptado en la implementacion (2026-11-12):** los dos indices unicos llevan `where origen is not null` (solo externas). En el stack local no hay CDC duplicados, pero produccion no se pudo revisar sin autorizacion y un indice que falle romperia el despliegue; el duplicado contra facturas propias lo controla el servicio con `findByCdc` (D-7).
 - Columnas `not null` de `facturas_operativas` (0007): comprobar `fiscal_request_snapshot` y `external_ref` al escribir el insert; la externa guarda `fiscal_request_snapshot = '{}'`, `external_ref = 'ext_' || id`, `idempotency_key null`.
 
 ## 5. Tipos, repositorio y servicio (`apps/api/src/modules/facturas`)

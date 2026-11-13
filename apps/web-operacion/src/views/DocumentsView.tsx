@@ -541,6 +541,29 @@ export function DocumentsView({
     openReasonModal("CANCEL_DETAIL", selected.id, selected.tipo);
   }
 
+  /** SPEC_NOTA_CREDITO_FACTURA_EXTERNA_v0.1 RN-09: borra una factura externa sin notas de credito. */
+  async function eliminarFacturaExterna() {
+    if (!selected?.origen) return;
+    const ok = await confirmar({
+      titulo: "Eliminar factura externa",
+      texto: `Se quita del sistema la factura ${selected.numero_fiscal ?? ""}. No cambia nada en SIFEN.`,
+      textoConfirmar: "Eliminar",
+      peligro: true
+    });
+    if (!ok) return;
+    setActionLoading(true);
+    setError(null);
+    try {
+      await api.request(`/facturas/externas/${selected.id}`, { method: "DELETE" });
+      setSelected(null);
+      await loadDocuments();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo eliminar la factura externa.");
+    } finally {
+      setActionLoading(false);
+    }
+  }
+
   async function emitSelectedNotaCredito() {
     if (!selected) {
       return;
@@ -1088,7 +1111,8 @@ export function DocumentsView({
                 </div>
                 <PastillaEstado {...estadoDocumento(selected)} />
               </div>
-              {selected.tipo !== "NOTA_REMISION" ? (
+              {/* SPEC_NOTA_CREDITO_FACTURA_EXTERNA_v0.1: una externa no se emitio aca; no tiene pasos de emision. */}
+              {selected.tipo !== "NOTA_REMISION" && !selected.origen ? (
                 <ol className="pasos ficha-pasos" aria-label="Pasos de la emisión">
                   {pasosPorEstado(selected.estado).map((paso, indice, pasos) => (
                     <li className={`paso ${paso.clase}`} key={paso.etiqueta}>
@@ -1123,6 +1147,18 @@ export function DocumentsView({
                   <dt>Documento</dt>
                   <dd>{selected.cliente.documento}</dd>
                 </div>
+                {selected.origen ? (
+                  /* SPEC_NOTA_CREDITO_FACTURA_EXTERNA_v0.1 D-6 (PLAN 7): de donde salieron los datos. */
+                  <div className="ficha-origen-externa">
+                    <dt>Origen</dt>
+                    <dd>
+                      {selected.origen === "SIFEN"
+                        ? `Externa · traída de SIFEN${selected.sifen_consulta?.protocolo ? ` (protocolo ${selected.sifen_consulta.protocolo})` : ""}`
+                        : "Externa · cargada a mano · datos no verificados en SIFEN"}
+                      {selected.referencia_impresa ? <small className="muted"> · Factura impresa, timbrado {selected.referencia_impresa.timbrado}</small> : null}
+                    </dd>
+                  </div>
+                ) : null}
                 {selected.tipo === "NOTA_REMISION" ? (
                   <>
                     <div>
@@ -1329,7 +1365,11 @@ export function DocumentsView({
               )}
               {emailStatus?.message ? <p className="editor-alert ready">{emailStatus.message}</p> : null}
 
-              {sinValidezFiscal(selected) ? (
+              {selected.origen ? (
+                <p className="muted" data-testid="externa-sin-entrega">
+                  Esta factura no se emitió en este sistema: no tiene PDF ni enlace para compartir.
+                </p>
+              ) : sinValidezFiscal(selected) ? (
                 <p className="editor-alert blocked" data-testid="sin-validez">
                   Esta {getDocumentoNombreLower(selected.tipo)} no tiene validez fiscal: no se puede ver ni compartir con el cliente.
                 </p>
@@ -1357,7 +1397,7 @@ export function DocumentsView({
               <div className="action-group action-group-secondary">
                 {/* URA-007 (SPEC C.4): lo que se emite desde esta factura, con el estado de cada tipo (A.2). */}
                 <h4 className="group-title">{selected.tipo === "FACTURA" ? "Desde esta factura" : `Acciones sobre esta ${getDocumentoNombreLower(selected.tipo)}`}</h4>
-                {selected.tipo === "FACTURA" && selected.condicion_venta === "CREDITO" ? (
+                {selected.tipo === "FACTURA" && selected.condicion_venta === "CREDITO" && !selected.origen ? (
                   <button
                     className="secondary-action"
                     disabled={actionLoading}
@@ -1382,7 +1422,12 @@ export function DocumentsView({
                   <Icono nombre="credito" /> Crear nota de crédito
                 </button>
                 ) : null}
-                {selected.tipo === "FACTURA" ? (
+                {selected.origen && selected.puede_eliminar_externa ? (
+                  <button className="secondary-action" disabled={actionLoading} onClick={() => void eliminarFacturaExterna()} type="button">
+                    <Icono nombre="alerta" /> Eliminar factura externa
+                  </button>
+                ) : null}
+                {selected.tipo === "FACTURA" && !selected.origen ? (
                   <>
                     <button className="secondary-action" disabled title="Disponible próximamente" type="button">
                       <Icono nombre="debito" /> Nota de débito <span className="menu-tag">Próximamente</span>
@@ -1398,7 +1443,7 @@ export function DocumentsView({
               </div>
               {/* SPEC_NOTA_REMISION_v0.1 RN-26: la nota de remision se anula como la factura (168 h en lugar de 48).
                   URA-007 (P-L6): anular se separa del resto, con estilo de peligro; pide motivo en su ventana. */}
-              {["FACTURA", "NOTA_CREDITO", "NOTA_REMISION"].includes(selected.tipo) ? (
+              {["FACTURA", "NOTA_CREDITO", "NOTA_REMISION"].includes(selected.tipo) && !selected.origen ? (
                 <div className="ficha-peligro">
                   <button className="danger-action" disabled={actionLoading || !canCancelDocumento(selected)} onClick={() => void cancelSelectedDocumento()} type="button">
                     <Icono nombre="alerta" /> Anular {getDocumentoNombreLower(selected.tipo)}
@@ -1812,7 +1857,8 @@ export function canCancelDocumento(documento: DocumentoResponse): boolean {
 export const AVISO_NOTA_CREDITO_CON_ANTICIPO = "Esta factura tiene anticipo: la nota de crédito se gestiona con soporte.";
 
 export function canEmitNotaCredito(documento: DocumentoResponse, documents: DocumentoResponse[], ncMonedaExtranjera = false): boolean {
-  if (documento.tipo !== "FACTURA" || documento.estado !== "EMITIDA" || !documento.cdc) {
+  // SPEC_NOTA_CREDITO_FACTURA_EXTERNA_v0.1: una externa impresa no tiene CDC; tiene referencia impresa.
+  if (documento.tipo !== "FACTURA" || documento.estado !== "EMITIDA" || (!documento.cdc && !documento.referencia_impresa)) {
     return false;
   }
   // SPEC_COMPRADOR_INNOMINADO_v0.1, RN-06: SIFEN no admite NC sobre una factura sin nombre.

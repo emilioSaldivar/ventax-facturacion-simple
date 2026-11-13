@@ -11,6 +11,7 @@ import { CampoFormulario } from "../components/CampoFormulario";
 import { NotaCreditoPorMonto, pedidoNotaCreditoMonto } from "../components/NotaCreditoPorMonto";
 import { EncabezadoPantalla } from "../components/EncabezadoPantalla";
 import { EstadoVacio } from "../components/EstadoVacio";
+import { FacturaExternaView } from "./FacturaExternaView";
 import { PastillaEstado } from "../components/PastillaEstado";
 import { ResultadoEmision } from "../components/ResultadoEmision";
 import { useBorradorSinEmitir } from "../lib/borradores";
@@ -41,13 +42,16 @@ export function CreditNoteView({
   context,
   mostrarPunto = false,
   onBack,
-  onVerEmitidas
+  onVerEmitidas,
+  onFacturaExternaGuardada
 }: {
   context?: OperationalContextResponse | null;
   mostrarPunto?: boolean;
   onBack: () => void;
   /** Abre Documentos en la pestaña de notas de credito. */
   onVerEmitidas?: () => void;
+  /** SPEC_NOTA_CREDITO_FACTURA_EXTERNA_v0.1 (PLAN 7): abre la ficha de la factura externa recien guardada. */
+  onFacturaExternaGuardada?: (documento: DocumentoResponse) => void;
 }) {
   const api = useApi();
   const entrega = useEntregaDocumento(api);
@@ -66,6 +70,7 @@ export function CreditNoteView({
   const [emitidas, setEmitidas] = useState<number | null>(null);
   // URA-017: el tono del aviso se decide donde se produce el mensaje, no buscando "emitida" en el texto.
   const [aviso, setAviso] = useState<{ tono: TonoAviso; texto: string } | null>(null);
+  const [traerExterna, setTraerExterna] = useState(false);
   // SPEC_MULTIPERFIL_USUARIO_v0.1 RN-06: una factura elegida con motivo y sin NC emitida es un borrador.
   useBorradorSinEmitir("nota-credito", () => Boolean(selected && !entrega.documento && motivo.trim()));
 
@@ -217,6 +222,19 @@ export function CreditNoteView({
   const fc = context?.fiscal_context;
   const seEmitePor = fc ? `Se emite por el ${[nombrePunto(fc), actividadPunto(fc)].filter(Boolean).join(" · ")}` : null;
 
+  if (traerExterna && context) {
+    return (
+      <FacturaExternaView
+        context={context}
+        onCancelar={() => setTraerExterna(false)}
+        onGuardada={(documento) => {
+          setTraerExterna(false);
+          onFacturaExternaGuardada?.(documento);
+        }}
+      />
+    );
+  }
+
   if (entrega.documento) {
     return (
       <section className="nc-espacio" aria-labelledby="credit-note-title">
@@ -302,6 +320,11 @@ export function CreditNoteView({
                     {loading ? "Buscando..." : "Buscar"}
                   </button>
                 </div>
+                {onFacturaExternaGuardada ? (
+                  <button className="enlace-accion nc-traer-externa" onClick={() => setTraerExterna(true)} type="button">
+                    ¿La factura no está en el sistema? Traela por CDC o cargala a mano
+                  </button>
+                ) : null}
                 <div className="documents-list nc-candidatas">
                   {candidates.length === 0 && !loading ? <EstadoVacio>Sin facturas para los filtros actuales.</EstadoVacio> : null}
                   {candidates.map((candidate) => (

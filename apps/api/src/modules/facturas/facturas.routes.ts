@@ -38,6 +38,7 @@ import {
 } from "./facturas.service";
 import { condicionesVenta, facturaDocumentoTipos, type DocumentoListFilters, type FacturaPreviewInput } from "./facturas.types";
 import { HttpError } from "../../shared/errors/http-error";
+import { cargarManual, eliminarExterna, previsualizarDeSifen, traerDeSifen, type FacturaExternaManualInput } from "./facturas-externas.service";
 
 const ivaTipos = ["IVA_10", "IVA_5", "EXENTA"] as const;
 const documentoTipos = ["FACTURA", "NOTA_CREDITO", "NOTA_REMISION"] as const;
@@ -131,6 +132,27 @@ function refinarFactura(input: FacturaBase, ctx: z.RefinementCtx): void {
 }
 
 export const facturaPreviewSchema = facturaBaseSchema.superRefine(refinarFactura);
+
+/** SPEC_NOTA_CREDITO_FACTURA_EXTERNA_v0.1 (PLAN 6). El formato fino del CDC y de la impresa lo valida el servicio (RN-01, RN-05). */
+const cdcExternaSchema = z.object({ cdc: z.string().trim().min(1).max(80) });
+const fechaSchema = z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/, "Fecha AAAA-MM-DD.");
+const facturaExternaManualSchema = facturaBaseSchema
+  .extend({
+    condicion_venta: z.enum(condicionesVenta).default("CONTADO"),
+    fecha_emision: fechaSchema.nullable().optional(),
+    referencia: z.discriminatedUnion("tipo", [
+      z.object({ tipo: z.literal("ELECTRONICO"), cdc: z.string().trim().min(1).max(80) }),
+      z.object({
+        tipo: z.literal("IMPRESO"),
+        timbrado: z.string().trim().min(1).max(8),
+        establecimiento: z.string().trim().min(1).max(3),
+        punto: z.string().trim().min(1).max(3),
+        numero: z.string().trim().min(1).max(7),
+        fecha: fechaSchema
+      })
+    ])
+  })
+  .superRefine(refinarFactura);
 
 const documentoListQuerySchema = z
   .object({
@@ -382,6 +404,46 @@ facturasRouter.post(
     }
   }
 );
+
+// SPEC_NOTA_CREDITO_FACTURA_EXTERNA_v0.1 (PLAN 6): traer una factura que no emitio FS para acreditarla.
+facturasRouter.post("/facturas/externas/sifen/previsualizar", requireAuth, validateRequest("body", cdcExternaSchema), async (req, res, next) => {
+  try {
+    const context = await getOperationalContext(req.user!, operationalContextRepository);
+    const gateway = await resolveConsumerGateway(context.facturador.id);
+    res.json(await previsualizarDeSifen(context, req.body.cdc, facturasRepository, gateway));
+  } catch (error) {
+    next(error);
+  }
+});
+
+facturasRouter.post("/facturas/externas/sifen", requireAuth, validateRequest("body", cdcExternaSchema), async (req, res, next) => {
+  try {
+    const context = await getOperationalContext(req.user!, operationalContextRepository);
+    const gateway = await resolveConsumerGateway(context.facturador.id);
+    res.status(201).json(await traerDeSifen(context, req.body.cdc, facturasRepository, gateway));
+  } catch (error) {
+    next(error);
+  }
+});
+
+facturasRouter.post("/facturas/externas/manual", requireAuth, validateRequest("body", facturaExternaManualSchema), async (req, res, next) => {
+  try {
+    const context = await getOperationalContext(req.user!, operationalContextRepository);
+    res.status(201).json(await cargarManual(context, req.body as FacturaExternaManualInput, facturasRepository));
+  } catch (error) {
+    next(error);
+  }
+});
+
+facturasRouter.delete("/facturas/externas/:documentoId", requireAuth, validateRequest("params", documentoParamsSchema), async (req, res, next) => {
+  try {
+    const context = await getOperationalContext(req.user!, operationalContextRepository);
+    await eliminarExterna(context, String(req.params.documentoId), facturasRepository);
+    res.status(204).end();
+  } catch (error) {
+    next(error);
+  }
+});
 
 facturasRouter.get("/facturas/:documentoId", requireAuth, validateRequest("params", documentoParamsSchema), async (req, res, next) => {
   try {

@@ -14,10 +14,12 @@ import type { DocumentoEstado, DocumentoResponse, FacturaItemPreview } from "./f
  */
 
 export const MOTIVOS_NOTA_CREDITO_MONTO = [3, 4, 8] as const;
-export type MotivoNotaCreditoMonto = (typeof MOTIVOS_NOTA_CREDITO_MONTO)[number];
+/** 1 solo lo usa FS para la NC total por tasa de una factura externa con descuentos (SPEC_NOTA_CREDITO_FACTURA_EXTERNA D-3). */
+export type MotivoNotaCreditoMonto = (typeof MOTIVOS_NOTA_CREDITO_MONTO)[number] | 1;
 
 /** D-7: lo que el cliente lee en el KUDE en cada linea. */
 export const DESCRIPCION_LINEA_MONTO: Record<MotivoNotaCreditoMonto, string> = {
+  1: "Devolución total de la factura",
   3: "Descuento posterior sobre la factura",
   4: "Bonificación sobre la factura",
   8: "Ajuste de precio sobre la factura"
@@ -84,4 +86,17 @@ export function armarLineasMonto(
 
 export function esNotaPorMonto(nota: Pick<DocumentoResponse, "nce_modo">): boolean {
   return nota.nce_modo === "MONTO";
+}
+
+/**
+ * SPEC_NOTA_CREDITO_FACTURA_EXTERNA_v0.1 D-5: montos por tasa (IVA incluido) de una factura externa, desde sus totales
+ * guardados (rDE o carga a mano), sin `/totales` de FE. null si faltan las bases por tasa.
+ */
+export function tasasDesdeTotals(totals: TaxTotals | null | undefined): MontosPorTasa | null {
+  if (!totals || totals.gravada_10 === undefined || totals.gravada_5 === undefined || totals.exenta === undefined) return null;
+  return {
+    iva_10: totals.gravada_10 + (totals.iva_10 ?? 0),
+    iva_5: totals.gravada_5 + (totals.iva_5 ?? 0),
+    exenta: totals.exenta + (totals.exonerada ?? 0)
+  };
 }

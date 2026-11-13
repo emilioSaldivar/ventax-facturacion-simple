@@ -1,3 +1,4 @@
+import { mismoEmisorDelCdc, partesDelCdc } from "@facturacion-simple/shared";
 import type { DocumentoResponse } from "./facturas.types";
 
 /**
@@ -20,17 +21,10 @@ export interface NumeracionDelCdc {
  * conoce del documento, por eso RN-B2 la toma de aca y no del pedido del operador.
  */
 export function leerNumeracionDelCdc(cdc: string | null | undefined): NumeracionDelCdc | null {
-  if (!cdc || !/^\d{44}$/.test(cdc)) {
-    return null;
-  }
-  return {
-    tipo: cdc.slice(0, 2),
-    ruc: cdc.slice(2, 10),
-    dv: cdc.slice(10, 11),
-    establecimiento: cdc.slice(11, 14),
-    punto: cdc.slice(14, 17),
-    numero: cdc.slice(17, 24)
-  };
+  // SPEC_NOTA_CREDITO_FACTURA_EXTERNA_v0.1 PLAN 1: la lectura del CDC vive en el paquete compartido.
+  const partes = cdc ? partesDelCdc(cdc) : null;
+  if (!partes) return null;
+  return { tipo: partes.tipo, ruc: partes.ruc, dv: partes.dv, establecimiento: partes.establecimiento, punto: partes.punto, numero: partes.numero };
 }
 
 /** Ultimo grupo de digitos del numero fiscal, con 7 cifras: acepta `1010565` y `001-001-1010565`. */
@@ -45,11 +39,7 @@ export function numeroComparable(numeroFiscal: string | null | undefined): strin
 
 /** `5057016-1` y el RUC `05057016` con DV `1` del CDC son el mismo emisor. */
 export function mismoEmisor(emisorId: string, numeracion: Pick<NumeracionDelCdc, "ruc" | "dv">): boolean {
-  const match = /^0*(\d+)-(\d)$/.exec(emisorId.trim());
-  if (!match) {
-    return false;
-  }
-  return match[1] === numeracion.ruc.replace(/^0+/, "") && match[2] === numeracion.dv;
+  return mismoEmisorDelCdc(numeracion, emisorId);
 }
 
 /** RN-B1. */

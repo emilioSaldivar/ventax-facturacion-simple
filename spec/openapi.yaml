@@ -811,6 +811,132 @@ paths:
         "422":
           $ref: "#/components/responses/ValidationError"
 
+  /facturas/externas/sifen/previsualizar:
+    post:
+      tags: [NotasCredito]
+      summary: Leer una factura que no emitio FS, desde SIFEN por CDC (sin guardar)
+      description: |
+        SPEC_NOTA_CREDITO_FACTURA_EXTERNA_v0.1. FS valida el CDC (44 digitos, DV, tipo 01, RUC del facturador),
+        consulta `GET /v1/consultar/de-sifen/{cdc}` de FE (guia §31) con la clave de consumidor del facturador y lee
+        el rDE firmado: receptor, lineas con descuentos e IVA, totales por tasa, moneda. No guarda nada.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FacturaExternaCdcRequest"
+      responses:
+        "200":
+          description: Factura leida del rDE
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FacturaExternaPrevia"
+        "400":
+          description: CDC invalido (`details.reason` CDC_FORMATO, CDC_DV, CDC_NO_ES_FACTURA, CDC_OTRO_EMISOR)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: >-
+            `details.reason`: FACTURA_YA_EXISTE (con `documento_id`), FACTURA_NO_APROBADA (inexistente, cancelada o sin
+            protocolo en SIFEN), FACTURA_NO_PROPIA, SIFEN_CONSULTA_NO_DISPONIBLE (sin clave o sin permiso
+            SIFEN_DE_CONSULTA), IVA_PARCIAL_NO_SOPORTADO
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: SIFEN o FE no respondieron (`details.reason` SIFEN_NO_DISPONIBLE); se reintenta una vez ante 429
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /facturas/externas/sifen:
+    post:
+      tags: [NotasCredito]
+      summary: Guardar una factura que no emitio FS, leida de SIFEN por CDC
+      description: Igual que `/previsualizar` y guarda la factura como `FACTURA` `EMITIDA` con `origen` SIFEN.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FacturaExternaCdcRequest"
+      responses:
+        "201":
+          description: Factura externa guardada; admite nota de credito total, por lineas o por monto
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DocumentoResponse"
+        "400":
+          description: CDC invalido
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Ver `/facturas/externas/sifen/previsualizar`
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: SIFEN o FE no respondieron
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /facturas/externas/manual:
+    post:
+      tags: [NotasCredito]
+      summary: Cargar a mano una factura que no emitio FS
+      description: |
+        `origen` MANUAL. Referencia electronica (CDC; la fecha sale del CDC si no se informa) o impresa (timbrado 8
+        digitos, establecimiento y punto 3, numero 7, fecha no futura; FS completa ceros a la izquierda). Los totales
+        los calcula FS como en Nueva factura. No se verifica en SIFEN.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FacturaExternaManualRequest"
+      responses:
+        "201":
+          description: Factura externa guardada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DocumentoResponse"
+        "400":
+          description: Cliente, lineas, CDC o referencia impresa invalidos (`details.errores[]` con `campo` y `mensaje`)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: FACTURA_YA_EXISTE
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /facturas/externas/{documentoId}:
+    delete:
+      tags: [NotasCredito]
+      summary: Eliminar una factura externa sin notas de credito
+      parameters:
+        - $ref: "#/components/parameters/DocumentoId"
+      responses:
+        "204":
+          description: Eliminada (borrado logico); no cambia nada en SIFEN
+        "409":
+          description: NO_ES_EXTERNA o EXTERNA_CON_NOTAS
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /facturas/{documentoId}:
     get:
       tags: [Facturas]
@@ -3530,6 +3656,67 @@ components:
         y SIFEN lo rechazo (codigo 1264), por lo que FE reintenta y despacha por lote.
       enum: [SYNC, BATCH, AUTO_FALLBACK_BATCH, SYNC_FALLBACK_BATCH]
 
+    ReferenciaImpresa:
+      type: object
+      required: [timbrado, establecimiento, punto, numero, fecha]
+      properties:
+        timbrado: { type: string, pattern: "^\\d{8}$" }
+        establecimiento: { type: string, pattern: "^\\d{1,3}$" }
+        punto: { type: string, pattern: "^\\d{1,3}$" }
+        numero: { type: string, pattern: "^\\d{1,7}$" }
+        fecha: { type: string, format: date }
+    FacturaExternaCdcRequest:
+      type: object
+      required: [cdc]
+      properties:
+        cdc:
+          type: string
+          description: 44 digitos; se aceptan espacios y guiones.
+    FacturaExternaPrevia:
+      type: object
+      properties:
+        cdc: { type: string }
+        numero_fiscal: { type: string }
+        fecha_emision: { type: string, format: date }
+        condicion_venta: { type: string, enum: [CONTADO, CREDITO] }
+        moneda: { type: string }
+        tipo_cambio: { type: number, nullable: true }
+        receptor:
+          type: object
+          properties:
+            documento_tipo: { type: string }
+            documento: { type: string }
+            razon_social: { type: string }
+            exterior: { type: boolean }
+        items:
+          type: array
+          items: { type: object, additionalProperties: true }
+        totals: { type: object, additionalProperties: true }
+        sifen:
+          type: object
+          properties:
+            dProtAut: { type: string, nullable: true }
+            dFecProc: { type: string, nullable: true }
+    FacturaExternaManualRequest:
+      allOf:
+        - $ref: "#/components/schemas/FacturaPreviewRequest"
+        - type: object
+          required: [referencia]
+          properties:
+            fecha_emision: { type: string, format: date, nullable: true }
+            referencia:
+              oneOf:
+                - type: object
+                  required: [tipo, cdc]
+                  properties:
+                    tipo: { type: string, enum: [ELECTRONICO] }
+                    cdc: { type: string }
+                - allOf:
+                    - type: object
+                      required: [tipo]
+                      properties:
+                        tipo: { type: string, enum: [IMPRESO] }
+                    - $ref: "#/components/schemas/ReferenciaImpresa"
     FacturaPreviewRequest:
       type: object
       required: [condicion_venta, tipo_transaccion, cliente, items]
@@ -3876,6 +4063,30 @@ components:
           type: integer
           nullable: true
           description: Motivo SIFEN (E401) con el que se emitio la nota; null en notas anteriores (1).
+        origen:
+          type: string
+          nullable: true
+          enum: [SIFEN, MANUAL, null]
+          description: >-
+            SPEC_NOTA_CREDITO_FACTURA_EXTERNA_v0.1. Factura que no emitio FS: SIFEN (leida del rDE) o MANUAL. null =
+            emitida por FS. Una externa no tiene KUDE, XML, enlace, correo, anulacion ni verificacion fiscal.
+        referencia_impresa:
+          allOf:
+            - $ref: "#/components/schemas/ReferenciaImpresa"
+          nullable: true
+        sifen_consulta:
+          type: object
+          nullable: true
+          properties:
+            protocolo: { type: string, nullable: true }
+            fecha_proceso: { type: string, nullable: true }
+            consultado_en: { type: string, format: date-time }
+        fecha_emision:
+          type: string
+          format: date
+          nullable: true
+        puede_eliminar_externa:
+          type: boolean
         emitido_por:
           $ref: "#/components/schemas/DocumentoEmisor"
         delivery:

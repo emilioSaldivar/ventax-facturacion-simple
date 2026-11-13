@@ -329,6 +329,12 @@ export interface DocumentoResponse {
   corregida_por?: DocumentoVinculo | null;
   inutilizacion?: DocumentoInutilizacion | null;
   puede_inutilizar?: boolean;
+  /** SPEC_NOTA_CREDITO_FACTURA_EXTERNA_v0.1: factura que no emitio FS, traida para acreditarla. */
+  origen?: "SIFEN" | "MANUAL" | null;
+  referencia_impresa?: ReferenciaImpresa | null;
+  sifen_consulta?: { protocolo: string | null; fecha_proceso: string | null; consultado_en: string } | null;
+  fecha_emision?: string | null;
+  puede_eliminar_externa?: boolean;
   documento_relacionado_id: string | null;
   nce_motivo: string | null;
   /** Quien emitio el documento. Opcional: respuestas previas al cambio no lo traen. */
@@ -728,4 +734,27 @@ export interface ReciboRecord {
   verification_token: string | null;
   emitido_at: string | null;
   created_at: string;
+}
+
+/** SPEC_NOTA_CREDITO_FACTURA_EXTERNA_v0.1 (MT150 H011-H014). */
+export interface ReferenciaImpresa {
+  timbrado: string;
+  establecimiento: string;
+  punto: string;
+  numero: string;
+  fecha: string;
+}
+
+/** POST /facturas/externas/sifen/previsualizar: la factura leida del rDE, sin guardar. */
+export interface FacturaExternaPrevia {
+  cdc: string;
+  numero_fiscal: string;
+  fecha_emision: string;
+  condicion_venta: CondicionVenta;
+  moneda: string;
+  tipo_cambio: number | null;
+  receptor: { documento_tipo: string; documento: string; razon_social: string; exterior: boolean };
+  items: Array<{ line_no: number; codigo: string | null; descripcion: string; cantidad: number; precio_unitario: number; descuento?: number; descuento_global?: number; subtotal: number; iva_tipo: string }>;
+  totals: { subtotal: number; descuento?: number; total: number; total_iva: number; iva_10: number; iva_5: number };
+  sifen: { dProtAut: string | null; dFecProc: string | null };
 }

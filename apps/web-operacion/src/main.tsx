@@ -1132,6 +1132,7 @@ function OperationHome({
           mostrarPunto={variosPerfiles}
           onBack={() => goTo("status")}
           onVerEmitidas={() => abrirDocumentos("NOTAS_CREDITO")}
+          onFacturaExternaGuardada={(documento) => abrirDocumentos("FACTURAS", undefined, documento.id)}
         />
       ) : operationView === "remision" && context ? (
         <RemisionView

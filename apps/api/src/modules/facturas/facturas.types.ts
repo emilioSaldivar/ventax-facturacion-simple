@@ -2,6 +2,8 @@ import type { AccionSugerida } from "./sifen-causa-catalogo";
 import type { FiscalEmitNotaRemisionRequest, FiscalCancelStatus } from "../fiscal-gateway/fiscal-gateway.types";
 import type { TaxCalculatedLine, TaxTotals, TipoIva } from "@facturacion-simple/shared";
 import { documentoIdentidadTipos, type ClienteNaturaleza } from "../clientes/clientes.types";
+import type { ReferenciaImpresa } from "../fiscal-gateway/fiscal-gateway.types";
+export type { ReferenciaImpresa };
 import type {
   FiscalDeliveryMode,
   FiscalEmitFacturaRequest,
@@ -250,6 +252,40 @@ export interface DocumentoResponse {
   inutilizacion?: DocumentoInutilizacion | null;
   /** RN-B1, derivado en el service. */
   puede_inutilizar?: boolean;
+  /**
+   * SPEC_NOTA_CREDITO_FACTURA_EXTERNA_v0.1: factura que no emitio FS, traida para emitir notas de credito.
+   * `SIFEN`: leida del rDE (consulta de FE §31); `MANUAL`: cargada por el operador. null: emitida por FS.
+   */
+  origen?: FacturaOrigen | null;
+  /** Referencia de una factura externa impresa (MT150 H011-H014). */
+  referencia_impresa?: ReferenciaImpresa | null;
+  /** Protocolo y fecha de la consulta a SIFEN de una externa `SIFEN`. */
+  sifen_consulta?: { protocolo: string | null; fecha_proceso: string | null; consultado_en: string } | null;
+  /** `AAAA-MM-DD`: fecha de emision de una factura externa. */
+  fecha_emision?: string | null;
+  /** RN-09, derivado en el service: externa sin notas de credito. */
+  puede_eliminar_externa?: boolean;
+}
+
+export type FacturaOrigen = "SIFEN" | "MANUAL";
+
+/** SPEC_NOTA_CREDITO_FACTURA_EXTERNA_v0.1 RN-04: lo que se guarda de una factura externa. */
+export interface FacturaExternaPersistInput {
+  tenantId: string;
+  facturadorId: string;
+  userId: string;
+  origen: FacturaOrigen;
+  cdc: string | null;
+  referenciaImpresa: ReferenciaImpresa | null;
+  numeroFiscal: string;
+  fechaEmision: string;
+  condicionVenta: CondicionVenta;
+  moneda: string;
+  tipoCambio: number | null;
+  cliente: FacturaClienteInput;
+  items: FacturaItemPreview[];
+  totals: TaxTotals;
+  sifenConsulta: DocumentoResponse["sifen_consulta"];
 }
 
 export interface DocumentoListFilters {
@@ -546,6 +582,14 @@ export interface FacturaRepository {
   }): Promise<DocumentoResponse | null>;
   /** Clave de consumidor de FE del facturador (`facturadores.fe_consumer_api_key`), si tiene. */
   getFacturadorApiKey(facturadorId: string): Promise<string | null>;
+  /** SPEC_NOTA_CREDITO_FACTURA_EXTERNA_v0.1 (PLAN 5): guarda una factura externa `EMITIDA`, sin outbox ni verificacion. */
+  createFacturaExterna(input: FacturaExternaPersistInput): Promise<DocumentoResponse>;
+  /** Cualquier documento vivo del facturador con ese CDC (propio o externo). D-7. */
+  findByCdc(input: { facturadorId: string; cdc: string }): Promise<DocumentoResponse | null>;
+  /** Factura externa viva con esa referencia impresa. D-7. */
+  findByReferenciaImpresa(input: { facturadorId: string; referencia: ReferenciaImpresa }): Promise<DocumentoResponse | null>;
+  /** RN-09: borrado logico de una externa sin notas. false si no es externa o tiene notas. */
+  softDeleteFacturaExterna(input: { facturadorId: string; documentoId: string }): Promise<boolean>;
   /** SPEC_CORRECCION_INUTILIZACION_RECHAZADAS_v0.1, RN-B4: guarda el intento y lo deja en auditoria. */
   registrarInutilizacion(input: InutilizacionPersistInput): Promise<DocumentoResponse | null>;
   /**

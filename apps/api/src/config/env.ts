@@ -31,6 +31,9 @@ const envSchema = z.object({
   CARGA_MASIVA_ENABLED: z.enum(["true", "false"]).default("false").transform((value) => value === "true"),
   // SPEC_MONEDA_EXTRANJERA_v0.1, D-1: encender solo con FE segel-rc4.27 o posterior (NC en la moneda de la factura).
   FE_NC_MONEDA_EXTRANJERA: z.enum(["true", "false"]).default("false").transform((value) => value === "true"),
+  // SPEC_NOTA_CREDITO_FACTURA_EXTERNA_v0.1 D-3/D-4: encender solo con FE segel-rc4.35 o posterior. Antes, POST
+  // /v1/nota-credito descarta `descuento` y `descuentoGlobal` sin error y la nota saldria por el precio bruto.
+  FE_NC_DESCUENTOS: z.enum(["true", "false"]).default("false").transform((value) => value === "true"),
   /** RN-01b: por encima del tope de FE (20 MB) y por debajo del nginx (25 MB), para que el 413 normal lo de FE. */
   CARGA_MAX_BYTES: z.coerce.number().int().positive().default(25165824),
   CARGA_SUBIDAS_SIMULTANEAS: z.coerce.number().int().positive().default(2),

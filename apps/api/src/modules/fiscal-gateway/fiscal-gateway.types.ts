@@ -128,6 +128,25 @@ export interface FiscalGeografiaResponse {
   items: FiscalGeografiaItem[];
 }
 
+/** SPEC_NOTA_CREDITO_FACTURA_EXTERNA_v0.1: respuesta de §31. */
+export interface FiscalConsultaDeSifenResponse {
+  cdc: string;
+  estado: "APROBADO" | "CANCELADO" | "SIN_PROTOCOLO";
+  sifen: { dCodRes: string | null; dMsgRes: string | null; dFecProc: string | null; dProtAut: string | null };
+  /** El elemento rDE tal cual lo firmo su emisor (usar este, no `xml`). */
+  xml_rde: string;
+  desde_cache: boolean;
+}
+
+/** SPEC_NOTA_CREDITO_FACTURA_EXTERNA_v0.1 RN-05: referencia a una factura impresa (MT150 H011-H014). */
+export interface ReferenciaImpresa {
+  timbrado: string;
+  establecimiento: string;
+  punto: string;
+  numero: string;
+  fecha: string;
+}
+
 export interface FiscalEmitNotaCreditoRequest {
   external_ref: string;
   facturador: FacturadorSummary;
@@ -142,11 +161,19 @@ export interface FiscalEmitNotaCreditoRequest {
   motivo_codigo?: number;
   factura_referencia: {
     documento_id: string;
-    cdc: string;
+    /** null solo con `referencia_impresa` (factura externa impresa). */
+    cdc: string | null;
     numero_fiscal: string | null;
+    /** SPEC_NOTA_CREDITO_FACTURA_EXTERNA_v0.1: con este campo la NC va con `referencia { tipo: IMPRESO }`. */
+    referencia_impresa?: ReferenciaImpresa;
   };
   /** SPEC_TOTALES_FE_EN_CARGA_v0.1, RN-07: `POST /v1/nota-credito/total`, sin receptor ni items (FE `rc4.13`). */
   por_referencia?: boolean;
+  /**
+   * SPEC_NOTA_CREDITO_FACTURA_EXTERNA_v0.1 D-3/D-4: con `true` (bandera FE_NC_DESCUENTOS, FE rc4.35+) los items llevan
+   * `descuento` por unidad y la nota `descuentoGlobal` (suma del prorrateo de sus lineas). Sin el, no se mandan.
+   */
+  enviar_descuentos?: boolean;
   /**
    * SPEC_NOTA_CREDITO_PARCIAL_v0.1: la nota con lineas lleva la moneda y el tipo de cambio de su factura fuera de
    * PYG (FE `rc4.27`). En la nota por referencia FE los toma de la factura y no se mandan.
@@ -539,6 +566,11 @@ export interface FiscalGateway {
   getDocumentoCanonico(documentUuid: string): Promise<FiscalDocumentoCanonicoResponse>;
   /** Clave compartida de la instancia (mismo grupo que `/sifen`). 404 `XML_NOT_AVAILABLE` llega como `UPSTREAM_ERROR`. */
   getDocumentoTotales(documentUuid: string): Promise<FiscalDocumentoTotalesResponse>;
+  /**
+   * SPEC_NOTA_CREDITO_FACTURA_EXTERNA_v0.1 (PLAN 2): `GET /consultar/de-sifen/{cdc}` (guia §31) con la clave de
+   * consumidor del facturador. Devuelve el rDE firmado de un documento aprobado en SIFEN, este o no en FE.
+   */
+  consultarDeSifen?(cdc: string, emisorId: string): Promise<FiscalConsultaDeSifenResponse>;
   cancelFactura(request: FiscalCancelFacturaRequest): Promise<FiscalCancelFacturaResponse>;
   inutilizarNumeracion(request: FiscalInutilizarNumeracionRequest): Promise<FiscalInutilizarNumeracionResponse>;
   getDocumentoEventos(documentUuid: string): Promise<FiscalDocumentoEventosResponse>;

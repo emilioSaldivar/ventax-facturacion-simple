@@ -36,6 +36,7 @@ import {
   type FiscalFacturalistaResponse,
   type FiscalDocumentoCanonicoResponse,
   type FiscalDocumentoTotalesResponse,
+  type FiscalConsultaDeSifenResponse,
   type FeDetalleTotales,
   type FiscalEstadoCanonico,
   type FiscalIdempotencyReconciliationItem,
@@ -121,6 +122,12 @@ function escenarioMockNotaCredito(request: FiscalEmitNotaCreditoRequest): Fiscal
         result_message: "RUC del receptor inexistente",
         raw: { mode: "mock", document_uuid, status: "REJECTED", dCodRes: "1306" }
       };
+    case "FE-404-REF":
+      // SPEC_NOTA_CREDITO_FACTURA_EXTERNA_v0.1 RN-08: FE anterior a segel-rc4.35 no conoce la factura externa.
+      throw new FiscalGatewayError("UPSTREAM_ERROR", "Backend fiscal rechazo la nota de credito.", {
+        status: 404,
+        body: { error: "REFERENCED_DOCUMENT_NOT_FOUND", message: "Factura electrónica referenciada no encontrada" }
+      });
     case "FE-TOTAL":
       throw new FiscalGatewayError("UPSTREAM_ERROR", "Backend fiscal rechazo la nota de credito.", {
         status: 409,
@@ -160,7 +167,34 @@ function registrarTotalesMock(
   totalesMockPorDocumento.set(documentUuid, { moneda: request.moneda ?? "PYG", tipo_cambio: request.tipo_cambio ?? null, totals: request.totals, tasas });
 }
 
+/**
+ * SPEC_NOTA_CREDITO_FACTURA_EXTERNA_v0.1 (PLAN 2): respuestas de §31 que el mock devuelve, por CDC. Las pruebas y el
+ * guion local registran un rDE; un CDC no registrado responde como SIFEN 0420 (`404 CDC_INEXISTENTE`).
+ */
+const deSifenMock = new Map<string, { xml_rde: string; estado: FiscalConsultaDeSifenResponse["estado"] }>();
+
+export function registrarDeSifenMock(cdc: string, valor: { xml_rde: string; estado?: FiscalConsultaDeSifenResponse["estado"] }): void {
+  deSifenMock.set(cdc, { xml_rde: valor.xml_rde, estado: valor.estado ?? "APROBADO" });
+}
+
 export class MockFiscalGateway implements FiscalGateway {
+  async consultarDeSifen(cdc: string, _emisorId: string): Promise<FiscalConsultaDeSifenResponse> {
+    const guardado = deSifenMock.get(cdc);
+    if (!guardado) {
+      throw new FiscalGatewayError("UPSTREAM_ERROR", "Backend fiscal rechazo la consulta a SIFEN.", {
+        status: 404,
+        body: { error: "CDC_INEXISTENTE", message: "SIFEN no tiene un documento aprobado con ese CDC" }
+      });
+    }
+    return {
+      cdc,
+      estado: guardado.estado,
+      sifen: { dCodRes: "0422", dMsgRes: "CDC encontrado", dFecProc: new Date().toISOString(), dProtAut: "mock-protocolo" },
+      xml_rde: guardado.xml_rde,
+      desde_cache: false
+    };
+  }
+
   private readonly recibos = new Map<string, FiscalReciboResult>();
 
   constructor(private readonly config: FiscalGatewayConfig) {}
@@ -1074,6 +1108,37 @@ export class RealFiscalGateway implements FiscalGateway {
     return extraerMotivoRechazo((body as { status?: unknown } | null)?.status);
   }
 
+  /** SPEC_NOTA_CREDITO_FACTURA_EXTERNA_v0.1 (PLAN 2), guia §31. `Retry-After` va en `details.retry_after`. */
+  async consultarDeSifen(cdc: string, emisorId: string): Promise<FiscalConsultaDeSifenResponse> {
+    const url = new URL(`${this.config.baseUrl}/consultar/de-sifen/${encodeURIComponent(cdc)}`);
+    url.searchParams.set("emisor_id", emisorId);
+    url.searchParams.set("env", this.config.environment);
+    const response = await this.fetchWithTimeout(url.toString(), { method: "GET", headers: this.buildHeaders() });
+    const body = await readJson(response);
+    if (!response.ok) {
+      const retryAfter = Number(response.headers.get("retry-after"));
+      throw new FiscalGatewayError(
+        response.status === 408 || response.status === 504 ? "TIMEOUT" : "UPSTREAM_ERROR",
+        "Backend fiscal rechazo la consulta a SIFEN.",
+        { status: response.status, body, ...(Number.isFinite(retryAfter) && retryAfter > 0 ? { retry_after: retryAfter } : {}) }
+      );
+    }
+    const raw = (body && typeof body === "object" ? body : {}) as Record<string, unknown>;
+    const sifen = (raw.sifen && typeof raw.sifen === "object" ? raw.sifen : {}) as Record<string, unknown>;
+    const texto = (v: unknown) => (typeof v === "string" && v ? v : null);
+    const estado = raw.estado === "CANCELADO" || raw.estado === "SIN_PROTOCOLO" ? raw.estado : raw.estado === "APROBADO" ? "APROBADO" : null;
+    if (!estado || typeof raw.xml_rde !== "string" || !raw.xml_rde) {
+      throw new FiscalGatewayError("INVALID_RESPONSE", "Respuesta de la consulta a SIFEN sin estado o sin xml_rde.", { status: 200, body });
+    }
+    return {
+      cdc: texto(raw.cdc) ?? cdc,
+      estado,
+      sifen: { dCodRes: texto(sifen.dCodRes), dMsgRes: texto(sifen.dMsgRes), dFecProc: texto(sifen.dFecProc), dProtAut: texto(sifen.dProtAut) },
+      xml_rde: raw.xml_rde,
+      desde_cache: raw.desde_cache === true
+    };
+  }
+
   async getDocumentoTotales(documentUuid: string): Promise<FiscalDocumentoTotalesResponse> {
     const url = new URL(`${this.config.baseUrl}/documentos/${encodeURIComponent(documentUuid)}/totales`);
     url.searchParams.set("env", this.config.environment);
@@ -1858,19 +1923,34 @@ export class RealFiscalGateway implements FiscalGateway {
         codigo: request.motivo_codigo ?? 1,
         descripcion: request.motivo
       },
-      referencia: {
-        tipo: "ELECTRONICO",
-        cdc: request.factura_referencia.cdc
-      },
+      // SPEC_NOTA_CREDITO_FACTURA_EXTERNA_v0.1: una factura externa impresa va como IMPRESO (H011-H014, ceros a la izquierda).
+      referencia: request.factura_referencia.referencia_impresa
+        ? {
+            tipo: "IMPRESO",
+            timbrado: request.factura_referencia.referencia_impresa.timbrado,
+            establecimiento: request.factura_referencia.referencia_impresa.establecimiento,
+            puntoExpedicion: request.factura_referencia.referencia_impresa.punto,
+            numero: request.factura_referencia.referencia_impresa.numero,
+            fecha: request.factura_referencia.referencia_impresa.fecha
+          }
+        : {
+            tipo: "ELECTRONICO",
+            cdc: request.factura_referencia.cdc
+          },
       items: request.items.map((item) => ({
         codigo: item.codigo ?? `L${String(item.line_no).padStart(3, "0")}`,
         descripcion: item.descripcion,
         cantidad: item.cantidad,
         precioUnitario: item.precio_unitario,
-        ivaTipo: mapIvaTipo(item.iva_tipo)
+        ivaTipo: mapIvaTipo(item.iva_tipo),
+        ...(request.enviar_descuentos && (item.descuento ?? 0) > 0 ? { descuento: item.descuento } : {})
       })),
       envio: buildEnvio(request.fiscal_context.fiscal_envio_modo)
     };
+    if (request.enviar_descuentos) {
+      const descuentoGlobal = request.items.reduce((suma, item) => suma + (item.descuento_global ?? 0), 0);
+      if (descuentoGlobal > 0) payload.descuentoGlobal = Math.round(descuentoGlobal * 100) / 100;
+    }
 
     // SPEC_NOTA_CREDITO_PARCIAL_v0.1: la nota con lineas en moneda extranjera lleva moneda y tipo de cambio.
     if (request.moneda && request.moneda !== "PYG") {

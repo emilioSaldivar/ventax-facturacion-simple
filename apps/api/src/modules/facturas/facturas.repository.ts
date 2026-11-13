@@ -5,6 +5,8 @@ import { resumenRemision } from "./nota-remision.resumen";
 import { pool } from "../../db/pool";
 import { HttpError } from "../../shared/errors/http-error";
 import type {
+  FacturaExternaPersistInput,
+  ReferenciaImpresa,
   DocumentoListFilters,
   DocumentoListResponse,
   FacturaQueuedPersistInput,
@@ -28,6 +30,10 @@ interface FacturaRow {
   /** SPEC_MULTIPERFIL_USUARIO_v0.1 §E.7 */
   perfil_emision?: DocumentoPerfilEmision | null;
   carga_masiva_id?: string | null;
+  origen?: string | null;
+  referencia_impresa?: unknown;
+  sifen_consulta?: unknown;
+  fecha_emision?: string | null;
   carga_numero_archivo?: string | null;
   document_uuid: string | null;
   usuario_id: string | null;
@@ -159,6 +165,10 @@ const COLUMNAS_DOCUMENTO = `
           inutilizacion_last_at,
           carga_masiva_id,
           carga_numero_archivo,
+          origen,
+          referencia_impresa,
+          sifen_consulta,
+          to_char(fecha_emision, 'YYYY-MM-DD') as fecha_emision,
           (
             select jsonb_build_object(
                      'establecimiento', e.codigo,
@@ -315,6 +325,131 @@ export class PgFacturaRepository implements FacturaRepository {
       notas.push(await this.toResponse(row, await this.findItems(row.id)));
     }
     return notas;
+  }
+
+  async findByCdc(input: { facturadorId: string; cdc: string }): Promise<DocumentoResponse | null> {
+    const result = await pool.query<FacturaRow>(
+      `select ${COLUMNAS_DOCUMENTO} from facturas_operativas
+        where facturador_id = $1 and cdc = $2 and deleted_at is null
+        order by created_at asc limit 1`,
+      [input.facturadorId, input.cdc]
+    );
+    const row = result.rows[0];
+    return row ? this.toResponse(row, await this.findItems(row.id)) : null;
+  }
+
+  async findByReferenciaImpresa(input: { facturadorId: string; referencia: ReferenciaImpresa }): Promise<DocumentoResponse | null> {
+    const r = input.referencia;
+    const result = await pool.query<FacturaRow>(
+      `select ${COLUMNAS_DOCUMENTO} from facturas_operativas
+        where facturador_id = $1 and origen is not null and deleted_at is null
+          and referencia_impresa ->> 'timbrado' = $2 and referencia_impresa ->> 'establecimiento' = $3
+          and referencia_impresa ->> 'punto' = $4 and referencia_impresa ->> 'numero' = $5
+        limit 1`,
+      [input.facturadorId, r.timbrado, r.establecimiento, r.punto, r.numero]
+    );
+    const row = result.rows[0];
+    return row ? this.toResponse(row, await this.findItems(row.id)) : null;
+  }
+
+  /** SPEC_NOTA_CREDITO_FACTURA_EXTERNA_v0.1 (PLAN 5): `EMITIDA` sin outbox; `verificacion_next_at` null (D-9). */
+  async createFacturaExterna(input: FacturaExternaPersistInput): Promise<DocumentoResponse> {
+    const client = await pool.connect();
+    try {
+      await client.query("begin");
+      const inserted = await client.query<FacturaRow>(
+        `
+          insert into facturas_operativas (
+            tenant_id, facturador_id, usuario_id, tipo, condicion_venta, estado, external_ref,
+            cliente_snapshot, totals_snapshot, fiscal_request_snapshot, fiscal_response_snapshot,
+            cdc, numero_fiscal, moneda, tipo_cambio, emitted_at,
+            origen, referencia_impresa, sifen_consulta, fecha_emision
+          )
+          values (
+            $1, $2, $3, 'FACTURA', $4, 'EMITIDA', 'ext_' || replace(gen_random_uuid()::text, '-', ''),
+            $5::jsonb, $6::jsonb, '{}'::jsonb, '{}'::jsonb,
+            $7, $8, $9, $10, $11::date,
+            $12, $13::jsonb, $14::jsonb, $11::date
+          )
+          returning ${COLUMNAS_DOCUMENTO}
+        `,
+        [
+          input.tenantId,
+          input.facturadorId,
+          input.userId,
+          input.condicionVenta,
+          JSON.stringify(input.cliente),
+          JSON.stringify(input.totals),
+          input.cdc,
+          input.numeroFiscal,
+          input.moneda,
+          input.moneda !== "PYG" ? input.tipoCambio : null,
+          input.fechaEmision,
+          input.origen,
+          input.referenciaImpresa ? JSON.stringify(input.referenciaImpresa) : null,
+          input.sifenConsulta ? JSON.stringify(input.sifenConsulta) : null
+        ]
+      );
+      const factura = inserted.rows[0]!;
+      for (const item of input.items) {
+        await client.query(
+          `
+            insert into factura_items_snapshot (
+              tenant_id, facturador_id, factura_operativa_id, catalogo_item_id, line_no, codigo, descripcion,
+              cantidad, precio_unitario, iva_tipo, subtotal, base_imponible, iva_monto, descuento, descuento_global
+            )
+            values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+          `,
+          [
+            input.tenantId,
+            input.facturadorId,
+            factura.id,
+            item.catalogo_item_id ?? null,
+            item.line_no,
+            item.codigo ?? null,
+            item.descripcion,
+            item.cantidad,
+            item.precio_unitario,
+            item.iva_tipo,
+            item.subtotal,
+            item.base_imponible,
+            item.iva_monto,
+            item.descuento ?? 0,
+            item.descuento_global ?? 0
+          ]
+        );
+      }
+      await client.query(
+        `
+          insert into audit_events (tenant_id, facturador_id, usuario_id, entity_type, entity_id, event_type, metadata)
+          values ($1, $2, $3, 'factura_operativa', $4, 'FACTURA_EXTERNA_REGISTRADA', $5::jsonb)
+        `,
+        [input.tenantId, input.facturadorId, input.userId, factura.id, JSON.stringify({ origen: input.origen, cdc: input.cdc, numero_fiscal: input.numeroFiscal })]
+      );
+      await client.query("commit");
+      return this.toResponse(factura, input.items);
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async softDeleteFacturaExterna(input: { facturadorId: string; documentoId: string }): Promise<boolean> {
+    const result = await pool.query(
+      `
+        update facturas_operativas f
+           set deleted_at = now(), updated_at = now()
+         where f.facturador_id = $1 and f.id = $2 and f.origen is not null and f.deleted_at is null
+           and not exists (
+             select 1 from facturas_operativas n
+              where n.documento_relacionado_id = f.id and n.tipo = 'NOTA_CREDITO' and n.deleted_at is null
+           )
+      `,
+      [input.facturadorId, input.documentoId]
+    );
+    return (result.rowCount ?? 0) > 0;
   }
 
   /**
@@ -2003,17 +2138,22 @@ function mapFacturaRow(
     corrige_a: vinculos?.corrige_a ?? null,
     corregida_por: vinculos?.corregida_por ?? null,
     carga: row.carga_masiva_id ? { id: row.carga_masiva_id, numero_archivo: row.carga_numero_archivo ?? null } : null,
+    // SPEC_NOTA_CREDITO_FACTURA_EXTERNA_v0.1: una externa no tiene documentos en FE (sin KUDE ni XML).
+    origen: (row.origen as DocumentoResponse["origen"]) ?? null,
+    referencia_impresa: (row.referencia_impresa as DocumentoResponse["referencia_impresa"]) ?? null,
+    sifen_consulta: (row.sifen_consulta as DocumentoResponse["sifen_consulta"]) ?? null,
+    fecha_emision: row.fecha_emision ?? null,
     delivery: {
       public_url: null,
       whatsapp_url: null,
       email_status: emailStatus,
       artifacts: {
         kude_pdf: {
-          available: Boolean(cdc),
+          available: Boolean(cdc) && !row.origen,
           url: null
         },
         xml: {
-          available: Boolean(cdc),
+          available: Boolean(cdc) && !row.origen,
           url: null
         }
       }

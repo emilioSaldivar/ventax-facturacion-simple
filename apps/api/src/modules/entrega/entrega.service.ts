@@ -27,6 +27,12 @@ export async function createOrGetDeliveryLink(
   }
 ): Promise<DeliveryLinkResponse> {
   const documento = await getDocumentoById(context, documentoId, repositories.facturas);
+  // SPEC_NOTA_CREDITO_FACTURA_EXTERNA_v0.1 (alcance 5): una factura externa no tiene documentos en FE para compartir.
+  if (documento.origen) {
+    throw new HttpError(409, "CONFLICT", "La factura externa no tiene documentos en el servicio fiscal para compartir.", {
+      reason: "FACTURA_EXTERNA"
+    });
+  }
   if (ESTADOS_SIN_VALIDEZ.has(documento.estado)) {
     throw new HttpError(409, "CONFLICT", "La factura no tiene validez fiscal: no se puede compartir con el cliente.", {
       reason: "DOCUMENTO_SIN_VALIDEZ",

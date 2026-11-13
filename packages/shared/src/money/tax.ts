@@ -45,7 +45,16 @@ export interface TaxTotals {
    * SPEC_MONEDA_EXTRANJERA_v0.1, A-2 / RN-07: origen de los totales. "FE": los de `GET /documentos/{uuid}/totales`
    * del documento aprobado (oficiales). Ausente o "FS": el calculo de la vista previa.
    */
-  fuente?: "FS" | "FE";
+  fuente?: "FS" | "FE" | "SIFEN" | "MANUAL";
+  /**
+   * SPEC_NOTA_CREDITO_FACTURA_EXTERNA_v0.1 (PLAN 3, D-5): base gravada por tasa, exenta y exonerada de una factura
+   * externa (del `gTotSub` del rDE, o calculadas en la carga a mano). Con ellas se reparte la nota por monto sin
+   * pedir `/totales` a FE, que no tiene la factura.
+   */
+  gravada_10?: PygAmount;
+  gravada_5?: PygAmount;
+  exenta?: PygAmount;
+  exonerada?: PygAmount;
   /** dTotalGs (F023) de FE: total en guaranies; en PYG, el total. Solo con `fuente: "FE"`. */
   total_guaranies?: number;
   /** dRedon (F013) de FE. Solo con `fuente: "FE"`. */

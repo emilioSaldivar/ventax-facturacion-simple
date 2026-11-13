@@ -351,6 +351,23 @@ class FakeFacturaRepository implements FacturaRepository {
     return null;
   }
 
+  // SPEC_NOTA_CREDITO_FACTURA_EXTERNA_v0.1: fuera del alcance de estas pruebas.
+  async createFacturaExterna(): Promise<DocumentoResponse> {
+    throw new Error("no implementado en el fake");
+  }
+
+  async findByCdc(): Promise<DocumentoResponse | null> {
+    return null;
+  }
+
+  async findByReferenciaImpresa(): Promise<DocumentoResponse | null> {
+    return null;
+  }
+
+  async softDeleteFacturaExterna(): Promise<boolean> {
+    return false;
+  }
+
   // Refleja el repositorio real: la adopcion deja identidad fiscal y PENDIENTE_SIFEN.
   async adoptarDocumentoFiscalExistente(
     input: Parameters<FacturaRepository["adoptarDocumentoFiscalExistente"]>[0]
