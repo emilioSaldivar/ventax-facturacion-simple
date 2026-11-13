@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// HISTORICO: prueba la ventana de nota de credito anterior a SPEC_NOTA_CREDITO_UNIFICADA_v0.1 (reemplazada); no corre contra esa version.
 // Cuerpo de POST /facturas/{id}/nota-credito que arma la UI (PLAN_UX_RESTO_APP_v0.1 §7, URA-001 y URA-005).
 // No emite: el POST de la nota de credito se intercepta con page.route, se guarda su cuerpo y se responde 422.
 // El resto va contra el stack local de Segel.

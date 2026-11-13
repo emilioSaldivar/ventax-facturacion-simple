@@ -7,9 +7,6 @@ import { PastillaEstado } from "../components/PastillaEstado";
 import { EncabezadoPantalla } from "../components/EncabezadoPantalla";
 import { TIPOS_PROXIMAMENTE } from "../lib/tiposEmision";
 import { AvisoPuntoDistinto } from "../components/AvisoPuntoDistinto";
-import { NotaCreditoPorMonto, pedidoNotaCreditoMonto } from "../components/NotaCreditoPorMonto";
-import { modoInicialNotaCredito, type ModoNotaCredito, type MotivoCodigoMonto } from "../lib/notaCreditoMonto";
-import { useBorradorSinEmitir } from "../lib/borradores";
 import { filaDescuento } from "../lib/descuentos";
 import { etiquetaPunto, nombrePunto, numeroConPunto } from "../lib/punto";
 import { Icono } from "../components/Icono";
@@ -34,7 +31,8 @@ export function DocumentsView({
   mostrarPunto = false,
   pestanaInicial = "FACTURAS",
   tipoCargaInicial,
-  documentoInicialId
+  documentoInicialId,
+  onCrearNotaCredito
 }: {
   onBack: () => void;
   onGoTo?: (view: OperationView) => void;
@@ -49,6 +47,8 @@ export function DocumentsView({
   tipoCargaInicial?: TipoDeCarga;
   /** URA-006: abre la ficha de este documento al entrar (desde la carga masiva de Notas de remision). */
   documentoInicialId?: string | null;
+  /** SPEC_NOTA_CREDITO_UNIFICADA_v0.1 D-8 (FS-77): "Crear nota de crédito" abre la pantalla de notas con la factura. */
+  onCrearNotaCredito?: (facturaId: string) => void;
 }) {
   const api = useApi();
   const todayYmd = useMemo(() => formatYmdFromDate(new Date()), []);
@@ -94,25 +94,14 @@ export function DocumentsView({
   const [decision, setDecision] = useState<DocumentoDecisionResponse | null>(null);
   const [cdcImpact, setCdcImpact] = useState<DocumentoValidateCdcImpactResponse | null>(null);
   const [reasonModal, setReasonModal] = useState<{
-    action: "CANCEL_DETAIL" | "CANCEL_LIST" | "CREDIT_NOTE_DETAIL" | "CREDIT_NOTE_LIST" | "VOID_NUMBER";
+    action: "CANCEL_DETAIL" | "CANCEL_LIST" | "VOID_NUMBER";
     documentoId: string;
     tipo?: DocumentoResponse["tipo"];
     reintentar?: boolean;
   } | null>(null);
   const [reasonDraft, setReasonDraft] = useState("");
-  // URA-021 (P-P4, H-08): un motivo escrito en el modal de nota de credito es un borrador para el cambio de punto.
-  useBorradorSinEmitir("nota-credito-documentos", () =>
-    Boolean(reasonModal && (reasonModal.action === "CREDIT_NOTE_DETAIL" || reasonModal.action === "CREDIT_NOTE_LIST") && reasonDraft.trim())
-  );
   const [reasonError, setReasonError] = useState<string | null>(null);
   const [notaCreditoPopup, setNotaCreditoPopup] = useState<DocumentoResponse | null>(null);
-  // SPEC_NOTA_CREDITO_PARCIAL_v0.1: modo de la nota y cantidades a acreditar por linea.
-  const [ncSaldo, setNcSaldo] = useState<NotaCreditoSaldoResponse | null>(null);
-  const [ncModo, setNcModo] = useState<ModoNotaCredito>("TOTAL");
-  const [ncCantidades, setNcCantidades] = useState<Record<number, string>>({});
-  // SPEC_NOTA_CREDITO_POR_MONTO_v0.1: monto y motivo SIFEN de la nota por monto.
-  const [ncMontoTexto, setNcMontoTexto] = useState("");
-  const [ncMotivoCodigo, setNcMotivoCodigo] = useState<MotivoCodigoMonto>(3);
   // Lo acreditado por notas de credito, para la ficha de una factura (SPEC_NOTA_CREDITO_PARCIAL_v0.1, alcance 6).
   const [fichaSaldo, setFichaSaldo] = useState<NotaCreditoSaldoResponse | null>(null);
   // Lista blanca a proposito: un rol nuevo no hereda permisos de soporte por descarte
@@ -286,7 +275,7 @@ export function DocumentsView({
   }
 
   function openReasonModal(
-    action: "CANCEL_DETAIL" | "CANCEL_LIST" | "CREDIT_NOTE_DETAIL" | "CREDIT_NOTE_LIST" | "VOID_NUMBER",
+    action: "CANCEL_DETAIL" | "CANCEL_LIST" | "VOID_NUMBER",
     documentoId: string,
     tipo?: DocumentoResponse["tipo"],
     reintentar?: boolean
@@ -294,36 +283,6 @@ export function DocumentsView({
     setReasonModal({ action, documentoId, tipo, reintentar });
     setReasonDraft("");
     setReasonError(null);
-    setNcSaldo(null);
-    setNcModo("TOTAL");
-    setNcCantidades({});
-    setNcMontoTexto("");
-    setNcMotivoCodigo(3);
-    if (action === "CREDIT_NOTE_DETAIL" || action === "CREDIT_NOTE_LIST") {
-      void api
-        .get<NotaCreditoSaldoResponse>(`/facturas/${documentoId}/nota-credito/saldo`)
-        .then((saldo) => {
-          setNcSaldo(saldo);
-          setNcModo(modoInicialNotaCredito(saldo));
-        })
-        .catch(() => setNcSaldo(null));
-    }
-  }
-
-  /** Lineas pedidas en modo parcial; null con el motivo si algo no vale (RN-01 en pantalla). */
-  function lineasNotaParcial(): { lineas: Array<{ line_no: number; cantidad: number }>; error: string | null } {
-    if (!ncSaldo) return { lineas: [], error: "No se pudo cargar el saldo de la factura." };
-    const lineas: Array<{ line_no: number; cantidad: number }> = [];
-    for (const linea of ncSaldo.lineas) {
-      const texto = ncCantidades[linea.line_no]?.trim();
-      if (!texto) continue;
-      const cantidad = Number(texto);
-      if (!cantidadValida(cantidad)) return { lineas, error: `Linea ${linea.line_no}: cantidad no valida (hasta 4 decimales).` };
-      if (cantidad > linea.saldo + 1e-9) return { lineas, error: `Linea ${linea.line_no}: supera el saldo (${formatCantidad(linea.saldo)}).` };
-      lineas.push({ line_no: linea.line_no, cantidad });
-    }
-    if (lineas.length === 0) return { lineas, error: "Indicá la cantidad a acreditar en al menos una línea." };
-    return { lineas, error: null };
   }
 
   function closeReasonModal() {
@@ -346,31 +305,6 @@ export function DocumentsView({
       return;
     }
 
-    const esNotaCredito = reasonModal.action === "CREDIT_NOTE_DETAIL" || reasonModal.action === "CREDIT_NOTE_LIST";
-    let cuerpoNotaCredito: { motivo: string; lineas?: Array<{ line_no: number; cantidad: number }>; monto?: number; motivo_codigo?: number } = {
-      motivo
-    };
-    if (esNotaCredito && ncModo === "MONTO") {
-      if (!ncSaldo) {
-        setReasonError("No se pudo cargar el saldo de la factura.");
-        return;
-      }
-      const pedido = pedidoNotaCreditoMonto(ncSaldo, ncMontoTexto);
-      if (pedido.error || pedido.monto === null) {
-        setReasonError(pedido.error);
-        return;
-      }
-      cuerpoNotaCredito = { motivo, monto: pedido.monto, motivo_codigo: ncMotivoCodigo };
-    }
-    if (esNotaCredito && ncModo === "PARCIAL") {
-      const { lineas, error } = lineasNotaParcial();
-      if (error) {
-        setReasonError(error);
-        return;
-      }
-      cuerpoNotaCredito = { motivo, lineas };
-    }
-
     setReasonError(null);
     setActionLoading(true);
     setMessage(null);
@@ -390,28 +324,6 @@ export function DocumentsView({
         const updated = await api.post<DocumentoResponse>(`/facturas/${reasonModal.documentoId}/cancelar`, { motivo });
         setMessage(mensajeCancelacion(updated));
         await loadDocuments();
-      } else if (reasonModal.action === "CREDIT_NOTE_DETAIL") {
-        const notaCredito = await api.request<DocumentoResponse>(`/facturas/${reasonModal.documentoId}/nota-credito`, {
-          method: "POST",
-          body: JSON.stringify(cuerpoNotaCredito)
-        });
-        setSelected(notaCredito);
-        setDocuments((current) => [notaCredito, ...current.filter((item) => item.id !== notaCredito.id)]);
-        setDeliveryLink(null);
-        setEmailStatus(null);
-        setNotaCreditoPopup(notaCredito);
-        await loadDeliveryFor(notaCredito);
-      } else if (reasonModal.action === "CREDIT_NOTE_LIST") {
-        const notaCredito = await api.request<DocumentoResponse>(`/facturas/${reasonModal.documentoId}/nota-credito`, {
-          method: "POST",
-          body: JSON.stringify(cuerpoNotaCredito)
-        });
-        setSelected(notaCredito);
-        setDocuments((current) => [notaCredito, ...current.filter((item) => item.id !== notaCredito.id)]);
-        setDeliveryLink(null);
-        setEmailStatus(null);
-        setNotaCreditoPopup(notaCredito);
-        await loadDeliveryFor(notaCredito);
       } else {
         const result = await api.post<DocumentoGestionVoidResponse>(`/facturas/${reasonModal.documentoId}/gestion/void-number`, {
           motivo
@@ -531,7 +443,7 @@ export function DocumentsView({
   }
 
   function openNuevaNotaCredito(nota: DocumentoResponse) {
-    if (nota.documento_relacionado_id) openReasonModal("CREDIT_NOTE_DETAIL", nota.documento_relacionado_id);
+    if (nota.documento_relacionado_id) onCrearNotaCredito?.(nota.documento_relacionado_id);
   }
 
   async function cancelSelectedDocumento() {
@@ -568,11 +480,11 @@ export function DocumentsView({
     if (!selected) {
       return;
     }
-    openReasonModal("CREDIT_NOTE_DETAIL", selected.id);
+    onCrearNotaCredito?.(selected.id);
   }
 
   async function emitNotaCreditoFromList(documentoId: string) {
-    openReasonModal("CREDIT_NOTE_LIST", documentoId);
+    onCrearNotaCredito?.(documentoId);
   }
 
   async function cancelDocumentoFromList(documentoId: string, tipo?: DocumentoResponse["tipo"]) {
@@ -1241,8 +1153,8 @@ export function DocumentsView({
               </section>
 
               {selected.tipo === "FACTURA" && fichaSaldo && fichaSaldo.lineas.some((linea) => linea.cantidad_acreditada > 0) ? (
-                <section className="invoice-lines nc-acreditado" aria-label="Acreditado por notas de crédito">
-                  <h4>Acreditado por notas de crédito</h4>
+                <section className="invoice-lines nc-acreditado" aria-label="Devuelto por notas de crédito">
+                  <h4>Devuelto por notas de crédito</h4>
                   <div className="invoice-lines-list">
                     {fichaSaldo.lineas
                       .filter((linea) => linea.cantidad_acreditada > 0)
@@ -1251,7 +1163,7 @@ export function DocumentsView({
                           <strong>
                             {formatCantidad(linea.cantidad_acreditada)} de {formatCantidad(linea.cantidad_facturada)} x {linea.descripcion}
                           </strong>
-                          <small>{linea.saldo > 0 ? `Saldo ${formatCantidad(linea.saldo)}` : "Acreditada"}</small>
+                          <small>{linea.saldo > 0 ? `Saldo ${formatCantidad(linea.saldo)}` : "Devuelta"}</small>
                         </article>
                       ))}
                   </div>
@@ -1586,106 +1498,6 @@ export function DocumentsView({
               <h3 id="reason-modal-title">{getReasonModalTitle(reasonModal.action, reasonModal.tipo)}</h3>
               <p className="muted">Escribí el motivo para continuar.</p>
             </header>
-            {(reasonModal.action === "CREDIT_NOTE_DETAIL" || reasonModal.action === "CREDIT_NOTE_LIST") && ncSaldo ? (
-              <div className="nc-parcial">
-                <div className="segmented" role="group" aria-label="Tipo de nota de crédito">
-                  <button
-                    aria-pressed={ncModo === "TOTAL"}
-                    className={ncModo === "TOTAL" ? "active" : ""}
-                    disabled={!ncSaldo.admite_total}
-                    onClick={() => setNcModo("TOTAL")}
-                    title={ncSaldo.admite_total ? undefined : "La factura ya tiene notas de crédito"}
-                    type="button"
-                  >
-                    Total
-                  </button>
-                  <button
-                    aria-pressed={ncModo === "PARCIAL"}
-                    className={ncModo === "PARCIAL" ? "active" : ""}
-                    disabled={!ncSaldo.admite_parcial}
-                    onClick={() => setNcModo("PARCIAL")}
-                    title={ncSaldo.motivo_no_parcial ?? undefined}
-                    type="button"
-                  >
-                    Parcial
-                  </button>
-                  <button
-                    aria-pressed={ncModo === "MONTO"}
-                    className={ncModo === "MONTO" ? "active" : ""}
-                    disabled={!ncSaldo.monto.admite}
-                    onClick={() => setNcModo("MONTO")}
-                    title={ncSaldo.monto.motivo_no_admite ?? undefined}
-                    type="button"
-                  >
-                    Por monto
-                  </button>
-                </div>
-                {!ncSaldo.admite_total && !ncSaldo.admite_parcial && !ncSaldo.monto.admite ? (
-                  <p className="form-error">{ncSaldo.monto.motivo_no_admite ?? ncSaldo.motivo_no_parcial ?? "La factura no admite nota de crédito."}</p>
-                ) : null}
-                {ncModo === "MONTO" ? (
-                  <NotaCreditoPorMonto
-                    montoTexto={ncMontoTexto}
-                    motivoCodigo={ncMotivoCodigo}
-                    onMontoTexto={setNcMontoTexto}
-                    onMotivoCodigo={setNcMotivoCodigo}
-                    saldo={ncSaldo}
-                  />
-                ) : null}
-                {ncModo === "PARCIAL" ? (
-                  <>
-                    <div className="nc-parcial-tabla-wrap">
-                      <table className="nc-parcial-tabla">
-                        <thead>
-                          <tr>
-                            <th>Producto</th>
-                            <th>Precio</th>
-                            <th>Facturado</th>
-                            <th>Acreditado</th>
-                            <th>A acreditar</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {ncSaldo.lineas.map((linea) => (
-                            <tr key={linea.line_no}>
-                              <td>{linea.descripcion}</td>
-                              <td>{formatMonto(linea.precio_unitario, ncSaldo.moneda)}</td>
-                              <td>{formatCantidad(linea.cantidad_facturada)}</td>
-                              <td>{formatCantidad(linea.cantidad_acreditada)}</td>
-                              <td>
-                                <input
-                                  aria-label={`Cantidad a acreditar, línea ${linea.line_no}`}
-                                  disabled={linea.saldo <= 0}
-                                  inputMode="decimal"
-                                  onChange={(event) =>
-                                    setNcCantidades((actual) => ({ ...actual, [linea.line_no]: normalizeDecimalInput(event.target.value, 4) }))
-                                  }
-                                  placeholder={linea.saldo > 0 ? `max. ${formatCantidad(linea.saldo)}` : "sin saldo"}
-                                  value={(ncCantidades[linea.line_no] ?? "").replace(".", ",")}
-                                />
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                    <p className="nc-parcial-total">
-                      Total de la nota (estimado):{" "}
-                      <strong>
-                        {formatMonto(
-                          ncSaldo.lineas.reduce((suma, linea) => {
-                            const cantidad = Number(ncCantidades[linea.line_no] || 0);
-                            const subtotal = Number.isFinite(cantidad) ? cantidad * linea.precio_unitario : 0;
-                            return suma + (ncSaldo.moneda === "PYG" ? Math.round(subtotal) : Math.round(subtotal * 100) / 100);
-                          }, 0),
-                          ncSaldo.moneda
-                        )}
-                      </strong>
-                    </p>
-                  </>
-                ) : null}
-              </div>
-            ) : null}
             <label className="credit-note-motivo">
               Motivo
               <textarea
@@ -1697,12 +1509,6 @@ export function DocumentsView({
                 value={reasonDraft}
               />
             </label>
-            {reasonModal.action === "CREDIT_NOTE_DETAIL" || reasonModal.action === "CREDIT_NOTE_LIST" ? (
-              <AvisoPuntoDistinto
-                perfilDocumento={(documents.find((d) => d.id === reasonModal.documentoId) ?? (selected?.id === reasonModal.documentoId ? selected : null))?.perfil_emision}
-                puntoActivo={context?.fiscal_context}
-              />
-            ) : null}
             {reasonError ? <p className="form-error">{reasonError}</p> : null}
             <div className="result-actions">
               <button className="secondary-action" disabled={actionLoading} onClick={closeReasonModal} type="button">
@@ -1814,26 +1620,20 @@ export function formatEmisor(documento: DocumentoResponse): string | null {
 }
 
 export function getReasonModalTitle(
-  action: "CANCEL_DETAIL" | "CANCEL_LIST" | "CREDIT_NOTE_DETAIL" | "CREDIT_NOTE_LIST" | "VOID_NUMBER",
+  action: "CANCEL_DETAIL" | "CANCEL_LIST" | "VOID_NUMBER",
   tipo?: DocumentoResponse["tipo"]
 ): string {
   if (action === "VOID_NUMBER") {
     return "Inutilizar numeración";
   }
-  if (action === "CREDIT_NOTE_DETAIL" || action === "CREDIT_NOTE_LIST") {
-    return "Crear nota de crédito";
-  }
   return `Anular ${getDocumentoNombreLower(tipo ?? "FACTURA")}`;
 }
 
 export function getReasonModalPlaceholder(
-  action: "CANCEL_DETAIL" | "CANCEL_LIST" | "CREDIT_NOTE_DETAIL" | "CREDIT_NOTE_LIST" | "VOID_NUMBER"
+  action: "CANCEL_DETAIL" | "CANCEL_LIST" | "VOID_NUMBER"
 ): string {
   if (action === "VOID_NUMBER") {
     return "Explicá por qué necesitás inutilizar la numeración.";
-  }
-  if (action === "CREDIT_NOTE_DETAIL" || action === "CREDIT_NOTE_LIST") {
-    return "Ej: devolución de mercadería, error en monto o cliente.";
   }
   return "Ej: error en datos del comprobante o anulación solicitada por cliente.";
 }

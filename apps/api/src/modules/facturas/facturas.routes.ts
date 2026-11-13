@@ -225,30 +225,43 @@ const inutilizarSchema = z.object({
   motivo: z.string().trim().min(5).max(150)
 });
 
+const acreditacionSchema = z.object({ tipo: z.enum(["MONTO", "PORCENTAJE"]), valor: z.number().positive() });
+
 const notaCreditoSchema = z
   .object({
     motivo: z.string().trim().min(1).max(300),
     // SPEC_NOTA_CREDITO_PARCIAL_v0.1: con lineas, nota parcial; sin ellas, la total de siempre.
+    // SPEC_NOTA_CREDITO_UNIFICADA_v0.1 RN-01: cada linea puede llevar cantidad, acreditacion o las dos.
     lineas: z
-      .array(z.object({ line_no: z.number().int().positive(), cantidad: z.number().positive() }))
+      .array(z.object({ line_no: z.number().int().positive(), cantidad: z.number().positive().optional(), acreditacion: acreditacionSchema.optional() }))
       .min(1)
       .max(200)
       .optional(),
     // SPEC_NOTA_CREDITO_POR_MONTO_v0.1: nota por monto (la regla de 50 Gs o 2 decimales la aplica el servicio, RN-01).
     monto: z.number().positive().optional(),
-    motivo_codigo: z.union([z.literal(3), z.literal(4), z.literal(8)]).optional()
+    motivo_codigo: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4), z.literal(8)]).optional(),
+    // SPEC_NOTA_CREDITO_UNIFICADA_v0.1: pedido de la pantalla unificada y acreditacion sobre el total.
+    combinada: z.boolean().optional(),
+    acreditacion_total: acreditacionSchema.optional()
   })
   .superRefine((input, ctx) => {
-    // RN-02: lineas y monto son excluyentes; el motivo SIFEN solo acompaña al monto.
-    if (input.monto !== undefined && input.lineas !== undefined) {
+    const combinada = input.combinada === true || input.acreditacion_total !== undefined || (input.lineas ?? []).some((l) => l.acreditacion !== undefined);
+    // RN-02 de por monto: lineas y monto son excluyentes; el motivo SIFEN solo acompaña al monto o a la combinada.
+    if (input.monto !== undefined && (input.lineas !== undefined || combinada)) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["monto"], message: "La nota va por lineas o por monto, no las dos cosas." });
     }
-    if (input.motivo_codigo !== undefined && input.monto === undefined) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["motivo_codigo"], message: "motivo_codigo solo se usa con monto." });
+    if (input.motivo_codigo !== undefined && input.monto === undefined && !combinada) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["motivo_codigo"], message: "motivo_codigo solo se usa con monto o en la nota combinada." });
+    }
+    if (input.monto !== undefined && input.motivo_codigo !== undefined && ![3, 4, 8].includes(input.motivo_codigo)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["motivo_codigo"], message: "Con monto, el motivo es 3, 4 u 8." });
     }
     const vistas = new Set<number>();
     input.lineas?.forEach((linea, indice) => {
-      if (cantidadEscalada(linea.cantidad) === null) {
+      if (linea.cantidad === undefined && linea.acreditacion === undefined) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["lineas", indice], message: "La linea necesita cantidad o acreditacion." });
+      }
+      if (linea.cantidad !== undefined && cantidadEscalada(linea.cantidad) === null) {
         ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["lineas", indice, "cantidad"], message: "La cantidad admite hasta 4 decimales." });
       }
       if (vistas.has(linea.line_no)) {

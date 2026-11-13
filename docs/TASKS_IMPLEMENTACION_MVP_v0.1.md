@@ -338,3 +338,9 @@ sin validar por Playwright.
 
 Matriz y evidencia en `docs/TASKS_COMPRADOR_INNOMINADO_v0.1.md`. Rama `hotfix/comprador-innominado` desde `b252627` (FS de
 `segel-fs`). API 774 tests OK; web typecheck, lint y build OK; Playwright 21/21 en 1440, 1280 y 390 contra stack aislado con FE mock.
+
+### Nota de credito unificada (2026-11-13)
+
+Matriz y evidencia en `docs/TASKS_NOTA_CREDITO_UNIFICADA_v0.1.md` (FS-141). Rama `feat/identidad-segel`, sin commit. Shared 43/43,
+API 987 OK, typecheck, lint y build OK; Playwright 18/18 y 29/29 (1440, 1280, 390) y regresion de factura externa 22/22 contra el stack
+local con `fe-segel` `segel-rc4.36` en SIFEN test (NC 1010045 a 1010048 aprobadas).

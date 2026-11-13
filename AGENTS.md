@@ -173,6 +173,9 @@ La fuente de verdad de este proyecto es:
 - `docs/SPEC_DESPLIEGUE_SEGEL_FS_v0.3.md`
 - `docs/PLAN_DESPLIEGUE_SEGEL_FS_v0.3.md`
 - `docs/TASKS_DESPLIEGUE_SEGEL_FS_v0.3.md`
+- `docs/SPEC_DESPLIEGUE_SEGEL_FS_v0.4.md`
+- `docs/PLAN_DESPLIEGUE_SEGEL_FS_v0.4.md`
+- `docs/TASKS_DESPLIEGUE_SEGEL_FS_v0.4.md`
 - `docs/SPEC_PLAZO_CREDITO_v0.1.md`
 - `docs/PLAN_PLAZO_CREDITO_v0.1.md`
 - `docs/TASKS_PLAZO_CREDITO_v0.1.md`
@@ -185,6 +188,9 @@ La fuente de verdad de este proyecto es:
 - `docs/SPEC_NOTA_CREDITO_FACTURA_EXTERNA_v0.1.md`
 - `docs/PLAN_NOTA_CREDITO_FACTURA_EXTERNA_v0.1.md`
 - `docs/TASKS_NOTA_CREDITO_FACTURA_EXTERNA_v0.1.md`
+- `docs/SPEC_NOTA_CREDITO_UNIFICADA_v0.1.md`
+- `docs/PLAN_NOTA_CREDITO_UNIFICADA_v0.1.md`
+- `docs/TASKS_NOTA_CREDITO_UNIFICADA_v0.1.md`
 - `docs/BACKLOG.md` (archivo unico de pendientes, hallazgos y estados; ver "Regla Del Backlog Unico")
 - `docs/HOJA_DE_RUTA_v0.1.md` (prioridades y decisiones del 2026-11-11; el estado vigente esta en `BACKLOG.md`)
 - `spec/openapi.yaml`

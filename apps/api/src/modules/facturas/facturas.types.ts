@@ -67,6 +67,10 @@ export interface FacturaPreviewInput {
 
 export interface FacturaItemPreview extends TaxCalculatedLine {
   catalogo_item_id: string | null;
+  /** SPEC_NOTA_CREDITO_UNIFICADA_v0.1 RN-06: en una nota, la linea de la factura (null: reparto sobre el total). */
+  linea_factura?: number | null;
+  /** RN-06: de donde salio la linea de la nota. null en notas anteriores y en facturas. */
+  origen_nc?: "DEVOLUCION" | "ACREDITACION_LINEA" | "ACREDITACION_TOTAL" | null;
 }
 
 export interface FacturaPreviewResponse {
@@ -85,7 +89,7 @@ export type DocumentoEstado =
   | "CANCELADO_LOCAL";
 
 /** SPEC_DOCUMENTOS_ESCRITORIO_v0.1, fase B1: la nota de remision llega por la carga masiva. */
-export type NotaCreditoModo = "TOTAL" | "LINEAS" | "MONTO";
+export type NotaCreditoModo = "TOTAL" | "LINEAS" | "MONTO" | "COMBINADA";
 export type DocumentoTipo = "FACTURA" | "NOTA_CREDITO" | "NOTA_REMISION";
 export type DocumentoTipoOperativo = CondicionVenta | "NOTA_CREDITO";
 export type EmailStatus = "NOT_APPLICABLE" | "DELEGATED" | "PENDING" | "SENT" | "FAILED" | "UNKNOWN";

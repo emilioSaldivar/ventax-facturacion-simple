@@ -1493,7 +1493,16 @@ paths:
         (total de FE menos las notas no rechazadas, anuladas ni canceladas) y reparte el monto por tasa
         (una linea por tasa, cantidad 1) con `motivo_codigo` 3, 4 u 8. En guaranies el monto es multiplo de
         50; en otra moneda, hasta 2 decimales. Admite facturas con descuento. `monto` y `lineas` son
-        excluyentes. El envio fiscal usa `envio.mode=BATCH`
+        excluyentes.
+
+        Pedido combinado (SPEC_NOTA_CREDITO_UNIFICADA_v0.1, FS-141): con `combinada: true`, `acreditacion_total`
+        o alguna linea con `acreditacion` (o sin `cantidad`), una sola nota junta devoluciones por cantidad,
+        acreditaciones por linea (monto o %) y una acreditacion sobre el total (monto o %, sobre el saldo neto y
+        repartida por tasa). FS convierte los % a monto, controla el tope por linea (D-4, `400` con
+        `details.lineas[]`) y el total contra el saldo neto (D-5, `409 NOTA_CREDITO_SUPERA_SALDO`), y guarda la
+        nota con `nce_modo` `COMBINADA` y cada linea con `linea_factura` y `origen_nc`. `motivo_codigo` 1, 2, 3,
+        4 u 8; sin el, el sugerido (solo devoluciones 2, solo acreditaciones 3, mezcla 1). Los cuerpos `{motivo}`,
+        `{motivo, lineas}` y `{motivo, monto, motivo_codigo}` siguen aceptados. El envio fiscal usa `envio.mode=BATCH`
         y puede quedar `PENDIENTE_SIFEN` mientras SIFEN procesa el lote.
 
         La clave de idempotencia hacia FE la deriva el servidor a partir de la factura
@@ -3875,6 +3884,15 @@ components:
         descuento_global:
           type: number
           description: Parte del descuento global de la linea; solo si existe. `subtotal` es el neto de la linea.
+        linea_factura:
+          type: integer
+          nullable: true
+          description: SPEC_NOTA_CREDITO_UNIFICADA_v0.1 RN-06. En una nota combinada, la linea de la factura que acredita; null en el reparto sobre el total.
+        origen_nc:
+          type: string
+          nullable: true
+          enum: [DEVOLUCION, ACREDITACION_LINEA, ACREDITACION_TOTAL, null]
+          description: RN-06. Origen de la linea en una nota combinada; null en notas anteriores y en facturas.
 
     DocumentoTotals:
       type: object
@@ -4057,8 +4075,8 @@ components:
         nce_modo:
           type: string
           nullable: true
-          enum: [TOTAL, LINEAS, MONTO, null]
-          description: SPEC_NOTA_CREDITO_POR_MONTO_v0.1. Modo de la nota de credito; null en notas anteriores.
+          enum: [TOTAL, LINEAS, MONTO, COMBINADA, null]
+          description: SPEC_NOTA_CREDITO_POR_MONTO_v0.1. Modo de la nota de credito; null en notas anteriores. `COMBINADA` (SPEC_NOTA_CREDITO_UNIFICADA_v0.1) para el pedido combinado.
         nce_motivo_codigo:
           type: integer
           nullable: true
@@ -4704,7 +4722,8 @@ components:
             copia todas las lineas.
           items:
             type: object
-            required: [line_no, cantidad]
+            required: [line_no]
+            description: Cada linea lleva `cantidad`, `acreditacion` o las dos (SPEC_NOTA_CREDITO_UNIFICADA_v0.1 RN-01).
             properties:
               line_no:
                 type: integer
@@ -4714,6 +4733,8 @@ components:
                 exclusiveMinimum: 0
                 multipleOf: 0.0001
                 description: Hasta 4 decimales, no mayor que el saldo de la linea.
+              acreditacion:
+                $ref: "#/components/schemas/NotaCreditoAcreditacion"
         monto:
           type: number
           exclusiveMinimum: 0
@@ -4722,8 +4743,31 @@ components:
             50; otra moneda hasta 2 decimales). Excluyente con `lineas`.
         motivo_codigo:
           type: integer
-          enum: [3, 4, 8]
-          description: Motivo SIFEN de la nota por monto (3 Descuento, 4 Bonificacion, 8 Ajuste de precio). Solo con `monto`; por defecto 3.
+          enum: [1, 2, 3, 4, 8]
+          description: >-
+            Motivo SIFEN (1 Devolucion y ajuste de precios, 2 Devolucion, 3 Descuento, 4 Bonificacion, 8 Ajuste de
+            precio). Con `monto`, solo 3, 4 u 8 (por defecto 3); en el pedido combinado, cualquiera (por defecto el
+            sugerido). No se acepta en los cuerpos total ni de lineas sin `combinada`.
+        combinada:
+          type: boolean
+          description: SPEC_NOTA_CREDITO_UNIFICADA_v0.1. Fuerza el pedido combinado aunque solo haya devoluciones. Excluyente con `monto`.
+        acreditacion_total:
+          $ref: "#/components/schemas/NotaCreditoAcreditacion"
+
+    NotaCreditoAcreditacion:
+      type: object
+      required: [tipo, valor]
+      description: >-
+        SPEC_NOTA_CREDITO_UNIFICADA_v0.1 D-2. `PORCENTAJE` de 0,01 a 100 (sobre el importe neto de la linea o el saldo
+        neto de la factura); `MONTO` en la moneda de la factura (entero en PYG, hasta 2 decimales en otra).
+      properties:
+        tipo:
+          type: string
+          enum: [MONTO, PORCENTAJE]
+        valor:
+          type: number
+          minimum: 0
+          exclusiveMinimum: true
 
     NotaCreditoSaldoResponse:
       type: object
@@ -4752,6 +4796,14 @@ components:
               cantidad_facturada: { type: number }
               cantidad_acreditada: { type: number }
               saldo: { type: number }
+              importe_neto: { type: number, description: "SPEC_NOTA_CREDITO_UNIFICADA_v0.1 RN-08. Importe neto de la linea en la factura." }
+              importe_acreditado: { type: number, description: "RN-08. Devoluciones al neto y acreditaciones de la linea en notas no rechazadas." }
+              saldo_importe: { type: number, description: "RN-08. Lo que queda por acreditar sobre la linea (D-4)." }
+              descuento: { type: number, description: "Descuento por unidad de la factura; solo si la linea lo tiene." }
+              descuento_global: { type: number, description: "Parte del descuento global de la linea; solo si existe." }
+        descuentos_en_nc:
+          type: boolean
+          description: SPEC_NOTA_CREDITO_UNIFICADA_v0.1 D-6. `FE_NC_DESCUENTOS`; sin ella no se devuelven lineas con descuento (se acreditan por monto).
         monto:
           type: object
           description: >-

@@ -687,6 +687,8 @@ function OperationHome({
   // URA-006: Notas de remision puede abrir "Nueva carga" y ver un documento en Documentos.
   const [remisionNuevaCarga, setRemisionNuevaCarga] = useState(false);
   const [documentoInicialId, setDocumentoInicialId] = useState<string | null>(null);
+  // SPEC_NOTA_CREDITO_UNIFICADA_v0.1 D-8 (FS-77): factura con la que abre la pantalla de notas de credito.
+  const [notaCreditoFacturaId, setNotaCreditoFacturaId] = useState<string | null>(null);
   // URA-019 (P-A3): Escape cierra el menu de celular.
   useEffect(() => {
     if (!menuOpen) return undefined;
@@ -789,6 +791,7 @@ function OperationHome({
     setOperationView(view);
     setMenuOpen(false);
     setDocumentoInicialId(null);
+    setNotaCreditoFacturaId(null);
     if (avisoPerfil && view !== "status") onCerrarAvisoPerfil();
   }
 
@@ -879,6 +882,11 @@ function OperationHome({
     setPestanaDocumentos(pestana);
     setTipoCarga(tipo);
     setDocumentoInicialId(documentoId);
+  }
+  function abrirNotaCredito(facturaId: string) {
+    goTo("credit-note");
+    // Despues de goTo, que limpia la factura inicial: React aplica el ultimo valor.
+    setNotaCreditoFacturaId(facturaId);
   }
   function abrirRemision(nuevaCarga: boolean) {
     setRemisionNuevaCarga(nuevaCarga);
@@ -1129,6 +1137,8 @@ function OperationHome({
       ) : operationView === "credit-note" ? (
         <CreditNoteView
           context={context}
+          facturaInicialId={notaCreditoFacturaId}
+          key={notaCreditoFacturaId ?? "nota-credito"}
           mostrarPunto={variosPerfiles}
           onBack={() => goTo("status")}
           onVerEmitidas={() => abrirDocumentos("NOTAS_CREDITO")}
@@ -1153,6 +1163,7 @@ function OperationHome({
           context={context}
           mostrarPunto={variosPerfiles}
           documentoInicialId={documentoInicialId}
+          onCrearNotaCredito={abrirNotaCredito}
           key={`${pestanaDocumentos}-${tipoCarga ?? ""}-${documentoInicialId ?? ""}`}
           pestanaInicial={pestanaDocumentos}
           tipoCargaInicial={tipoCarga}

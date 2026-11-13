@@ -104,6 +104,8 @@ interface FacturaItemRow {
   iva_monto: number;
   descuento?: number | string | null;
   descuento_global?: number | string | null;
+  linea_factura?: number | null;
+  origen_nc?: FacturaItemPreview["origen_nc"];
 }
 
 interface PendingFiscalEmissionRow {
@@ -1066,9 +1068,11 @@ export class PgFacturaRepository implements FacturaRepository {
               base_imponible,
               iva_monto,
               descuento,
-              descuento_global
+              descuento_global,
+              linea_factura,
+              origen_nc
             )
-            values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+            values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
           `,
           [
             input.tenantId,
@@ -1085,7 +1089,9 @@ export class PgFacturaRepository implements FacturaRepository {
             item.base_imponible,
             item.iva_monto,
             item.descuento ?? 0,
-            item.descuento_global ?? 0
+            item.descuento_global ?? 0,
+            item.linea_factura ?? null,
+            item.origen_nc ?? null
           ]
         );
       }
@@ -1890,7 +1896,9 @@ export class PgFacturaRepository implements FacturaRepository {
           base_imponible,
           iva_monto,
           descuento,
-          descuento_global
+          descuento_global,
+          linea_factura,
+          origen_nc
         from factura_items_snapshot
         where factura_operativa_id = $1
         order by line_no
@@ -1910,7 +1918,10 @@ export class PgFacturaRepository implements FacturaRepository {
       base_imponible: Number(row.base_imponible),
       iva_monto: Number(row.iva_monto),
       ...(Number(row.descuento ?? 0) > 0 ? { descuento: Number(row.descuento) } : {}),
-      ...(Number(row.descuento_global ?? 0) > 0 ? { descuento_global: Number(row.descuento_global) } : {})
+      ...(Number(row.descuento_global ?? 0) > 0 ? { descuento_global: Number(row.descuento_global) } : {}),
+      // SPEC_NOTA_CREDITO_UNIFICADA_v0.1 RN-06.
+      ...(row.linea_factura != null ? { linea_factura: Number(row.linea_factura) } : {}),
+      ...(row.origen_nc ? { origen_nc: row.origen_nc } : {})
     }));
   }
 
@@ -1935,7 +1946,9 @@ export class PgFacturaRepository implements FacturaRepository {
           base_imponible,
           iva_monto,
           descuento,
-          descuento_global
+          descuento_global,
+          linea_factura,
+          origen_nc
         from factura_items_snapshot
         where factura_operativa_id = any($1::uuid[])
         order by factura_operativa_id, line_no
@@ -1958,7 +1971,10 @@ export class PgFacturaRepository implements FacturaRepository {
         iva_monto: Number(row.iva_monto),
         // SPEC_DESCUENTOS_FACTURA_v0.1 RN-08: solo cuando la linea tiene descuento (sin cambio para las demas).
         ...(Number(row.descuento ?? 0) > 0 ? { descuento: Number(row.descuento) } : {}),
-        ...(Number(row.descuento_global ?? 0) > 0 ? { descuento_global: Number(row.descuento_global) } : {})
+        ...(Number(row.descuento_global ?? 0) > 0 ? { descuento_global: Number(row.descuento_global) } : {}),
+        // SPEC_NOTA_CREDITO_UNIFICADA_v0.1 RN-06.
+        ...(row.linea_factura != null ? { linea_factura: Number(row.linea_factura) } : {}),
+        ...(row.origen_nc ? { origen_nc: row.origen_nc } : {})
       });
       byFacturaId.set(row.factura_operativa_id, items);
     }

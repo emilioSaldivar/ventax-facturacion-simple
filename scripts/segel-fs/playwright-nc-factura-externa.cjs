@@ -186,22 +186,23 @@ async function esperarAprobado(page, id, etiqueta) {
 
     const boton = page.getByRole("button", { name: /Crear nota de cr[eé]dito/ }).first();
     await page.waitForFunction((b) => b && !b.disabled, await boton.elementHandle(), { timeout: 20000 });
+    // SPEC_NOTA_CREDITO_UNIFICADA_v0.1 D-8: la ficha abre la pantalla de Notas de credito con la factura elegida.
     await boton.click();
-    await page.getByRole("group", { name: "Tipo de nota de crédito" }).waitFor({ timeout: 15000 });
-    await page.locator(".modal-panel textarea").fill(`Devolucion de factura impresa ${marca}`);
+    await page.getByRole("heading", { name: "Qué se devuelve o ajusta" }).waitFor({ timeout: 15000 });
+    await page.getByRole("button", { name: "Toda la factura" }).click();
+    await page.getByLabel("Detalle para el cliente").fill(`Devolucion de factura impresa ${marca}`);
     let nota = null;
-    // ENSAYO_EXTERNA_CON_NOTA_ID: la NC real ya se emitio en una corrida anterior; aca solo se abre la ventana.
+    // ENSAYO_EXTERNA_CON_NOTA_ID: la NC real ya se emitio en una corrida anterior; aca solo se abre la pantalla.
     const sinEmitir = Boolean(process.env.ENSAYO_EXTERNA_CON_NOTA_ID);
     if (sinEmitir) {
-      const ventana = await plano(page.locator(".modal-panel"));
-      check("CA-05: la ventana de NC se abre sobre la externa con Total habilitado", /Total/.test(ventana) && (await page.getByRole("group", { name: "Tipo de nota de crédito" }).getByRole("button", { name: "Total" }).isEnabled()), ventana.slice(0, 200));
+      const panel = await plano(page.locator(".nc-panel"));
+      check("CA-05: la pantalla de NC se abre sobre la externa con la factura entera", /factura entera/.test(panel) && (await page.getByRole("button", { name: "Emitir nota de crédito" }).isEnabled()), panel.slice(0, 200));
       await page.screenshot({ path: path.join(outDir, "1440-ventana-nc-externa.png"), fullPage: true });
-      await page.getByRole("button", { name: "Cancelar" }).click();
     } else {
-      await page.getByRole("button", { name: "Confirmar" }).click();
-      const popup = page.locator('section[aria-labelledby="nc-success-title"]');
-      const emitida = await popup.waitFor({ timeout: 90000 }).then(() => true, () => false);
-      check("CA-05: NC total sobre la impresa emitida desde la ficha", emitida, emitida ? await plano(popup) : await plano(page.locator(".modal-panel")).catch(() => ""));
+      await page.getByRole("button", { name: "Emitir nota de crédito" }).click();
+      const resultado = page.getByRole("button", { name: /Crear nueva/ }).first();
+      const emitida = await resultado.waitFor({ timeout: 90000 }).then(() => true, () => false);
+      check("CA-05: NC total sobre la impresa emitida desde la ficha", emitida, emitida ? await plano(page.locator(".nc-espacio")) : await plano(page.locator(".nc-panel")).catch(() => ""));
       await page.screenshot({ path: path.join(outDir, "1440-nc-impresa.png"), fullPage: true });
       const notas = (await api(page, "GET", "/facturas?tipo=NOTA_CREDITO&limit=20&offset=0")).json?.items ?? [];
       nota = notas.find((n) => n.documento_relacionado_id === externa?.id) ?? null;

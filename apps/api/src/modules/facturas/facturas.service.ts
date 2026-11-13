@@ -2,7 +2,10 @@ import crypto from "node:crypto";
 import { env } from "../../config/env";
 import {
   DescuentoInvalidoError,
+  armarNotaCombinada,
   calculateDocumentTotalsMoneda,
+  type AcreditacionPedida,
+  type ItemFacturaNc,
   montosPorTasa,
   validarMontoNotaCredito,
   type MontosPorTasa,
@@ -1363,13 +1366,43 @@ export const MENSAJE_NOTA_CREDITO_TRABADA_PENDIENTE =
   "La factura tiene una nota de credito pendiente de reintento. Reintentala antes de emitir otra.";
 
 /** POST /facturas/:id/nota-credito: sin `lineas`, la total de siempre; con `lineas`, la parcial. */
+/** SPEC_NOTA_CREDITO_UNIFICADA_v0.1 RN-01: linea del pedido unificado (cantidad, acreditacion o las dos). */
+export interface LineaNotaCombinadaPedida {
+  line_no: number;
+  cantidad?: number;
+  acreditacion?: AcreditacionPedida;
+}
+
+export interface NotaCreditoEmitInputUnificado {
+  motivo: string;
+  lineas?: Array<LineaNotaCombinadaPedida>;
+  monto?: number;
+  motivo_codigo?: number;
+  /** Pedido de la pantalla unificada: va siempre por la nota combinada. */
+  combinada?: boolean;
+  acreditacion_total?: AcreditacionPedida;
+}
+
 export async function emitNotaCredito(
   context: OperationalContextResponse,
   facturaId: string,
-  input: { motivo: string; lineas?: LineaNotaCreditoPedida[]; monto?: number; motivo_codigo?: MotivoNotaCreditoMonto },
+  input: NotaCreditoEmitInputUnificado,
   repository: FacturaRepository,
   gateway: FiscalGateway
 ): Promise<{ documento: DocumentoResponse; reintento: boolean }> {
+  // SPEC_NOTA_CREDITO_UNIFICADA_v0.1 D-9: el pedido unificado va por la nota combinada; los cuerpos anteriores
+  // ({motivo}, {motivo, lineas}, {motivo, monto}) siguen por sus caminos de siempre.
+  const esCombinada =
+    input.combinada === true ||
+    input.acreditacion_total !== undefined ||
+    (input.lineas ?? []).some((linea) => linea.acreditacion !== undefined || linea.cantidad === undefined);
+  if (esCombinada) {
+    if (input.monto !== undefined) {
+      throw new HttpError(400, "VALIDATION_ERROR", "El monto va como acreditacion_total en la nota combinada.");
+    }
+    const documento = await emitNotaCreditoCombinada(context, facturaId, input, repository, gateway);
+    return { documento, reintento: false };
+  }
   if (input.monto !== undefined) {
     if (input.lineas && input.lineas.length > 0) {
       throw new HttpError(400, "VALIDATION_ERROR", "Una nota de credito va por lineas o por monto, no las dos cosas.");
@@ -1377,7 +1410,7 @@ export async function emitNotaCredito(
     const documento = await emitNotaCreditoPorMonto(
       context,
       facturaId,
-      { motivo: input.motivo, monto: input.monto, motivo_codigo: input.motivo_codigo ?? 3 },
+      { motivo: input.motivo, monto: input.monto, motivo_codigo: (input.motivo_codigo ?? 3) as MotivoNotaCreditoMonto },
       repository,
       gateway
     );
@@ -1386,7 +1419,174 @@ export async function emitNotaCredito(
   if (!input.lineas || input.lineas.length === 0) {
     return emitNotaCreditoTotal(context, facturaId, { motivo: input.motivo }, repository, gateway);
   }
-  return { documento: await emitNotaCreditoParcial(context, facturaId, { motivo: input.motivo, lineas: input.lineas }, repository, gateway), reintento: false };
+  // SPEC_NOTA_CREDITO_UNIFICADA_v0.1 D-6: con descuentos habilitados en la NC, una devolucion de una linea con
+  // descuento va por la combinada (que copia el descuento); el camino por lineas la acreditaria al bruto.
+  if (env.FE_NC_DESCUENTOS) {
+    const original = await getDocumentoById(context, facturaId, repository);
+    const conDescuento = input.lineas.some((pedida) => {
+      const item = original.items.find((candidato) => candidato.line_no === pedida.line_no);
+      return (item?.descuento ?? 0) > 0 || (item?.descuento_global ?? 0) > 0;
+    });
+    if (conDescuento) {
+      const documento = await emitNotaCreditoCombinada(context, facturaId, { ...input, combinada: true }, repository, gateway);
+      return { documento, reintento: false };
+    }
+  }
+  const lineas = input.lineas.map((linea) => ({ line_no: linea.line_no, cantidad: linea.cantidad ?? 0 }));
+  return { documento: await emitNotaCreditoParcial(context, facturaId, { motivo: input.motivo, lineas }, repository, gateway), reintento: false };
+}
+
+export const MOTIVOS_NOTA_CREDITO_COMBINADA = [1, 2, 3, 4, 8] as const;
+
+/**
+ * SPEC_NOTA_CREDITO_UNIFICADA_v0.1: nota combinada (devoluciones, acreditaciones por item y sobre el total) armada
+ * con el calculo compartido `armarNotaCombinada`, con los topes D-4 y D-5 controlados en el servidor (RN-03).
+ */
+export async function emitNotaCreditoCombinada(
+  context: OperationalContextResponse,
+  facturaId: string,
+  input: NotaCreditoEmitInputUnificado,
+  repository: FacturaRepository,
+  gateway: FiscalGateway
+): Promise<DocumentoResponse> {
+  const motivo = input.motivo.trim();
+  if (!motivo) {
+    throw new HttpError(400, "VALIDATION_ERROR", "Motivo de nota de credito requerido.");
+  }
+  if (input.motivo_codigo !== undefined && !(MOTIVOS_NOTA_CREDITO_COMBINADA as readonly number[]).includes(input.motivo_codigo)) {
+    throw new HttpError(400, "VALIDATION_ERROR", "Motivo SIFEN no admitido (1, 2, 3, 4 u 8).");
+  }
+  const original = await getDocumentoById(context, facturaId, repository);
+  if (original.tipo !== "FACTURA" || original.estado !== "EMITIDA" || (!original.cdc && !original.referencia_impresa) || (!original.document_uuid && !original.origen)) {
+    throw new HttpError(409, "CONFLICT", "Factura no elegible para nota de credito.");
+  }
+  rechazarNotaCreditoInnominada(original);
+  const moneda = original.moneda ?? "PYG";
+  if (moneda !== "PYG" && !env.FE_NC_MONEDA_EXTRANJERA) {
+    throw new HttpError(409, "CONFLICT", MENSAJE_NOTA_CREDITO_MONEDA_EXTRANJERA, { reason: "NOTA_CREDITO_MONEDA_EXTRANJERA" });
+  }
+  if ((original.totals?.anticipo ?? 0) > 0) {
+    throw new HttpError(409, "CONFLICT", MENSAJE_NOTA_CREDITO_CON_ANTICIPO, { reason: "NOTA_CREDITO_CON_ANTICIPO" });
+  }
+  const notasGuardadas = await repository.findNotasCreditoByOriginal({ facturadorId: context.facturador.id, documentoId: facturaId });
+  if (notasGuardadas.some((nota) => nota.estado !== "RECHAZADA" && esNotaTrabada(nota))) {
+    throw new HttpError(409, "CONFLICT", MENSAJE_NOTA_CREDITO_TRABADA_PENDIENTE, { reason: "NOTA_CREDITO_TRABADA" });
+  }
+
+  // Saldo neto y tasas: factura propia, `/totales` de FE en el momento; externa, sus totales guardados (D-5).
+  let totalNeto: number;
+  let tasas: MontosPorTasa | null;
+  if (original.origen) {
+    totalNeto = original.totals.total;
+    tasas = tasasDesdeTotals(original.totals);
+  } else {
+    let fe: Awaited<ReturnType<FiscalGateway["getDocumentoTotales"]>>;
+    try {
+      fe = await gateway.getDocumentoTotales(original.document_uuid!);
+    } catch (error) {
+      logger.warn({ err: error, documentoId: facturaId }, "nota de credito combinada: totales de FE no disponibles");
+      throw new HttpError(502, "INTERNAL_ERROR", MENSAJE_FE_TOTALES_NO_DISPONIBLES, { reason: "FE_TOTALES_NO_DISPONIBLES" });
+    }
+    if (fe.moneda !== moneda) {
+      throw new HttpError(502, "INTERNAL_ERROR", MENSAJE_FE_TOTALES_NO_DISPONIBLES, { reason: "FE_TOTALES_MONEDA_DISTINTA" });
+    }
+    totalNeto = fe.totales.total;
+    tasas = montosPorTasa(fe.totales, moneda);
+  }
+  const notas = await notasConTotalesFe(context.facturador.id, notasGuardadas, repository, gateway);
+  const saldoMonto = calcularSaldoMonto(totalNeto, notas, facturaId, moneda);
+  const saldosLinea = new Map(saldoAcreditablePorLinea(original, notas).map((linea) => [linea.line_no, linea]));
+  const itemsNc: ItemFacturaNc[] = original.items.map((item) => {
+    const saldo = saldosLinea.get(item.line_no);
+    return {
+      line_no: item.line_no,
+      codigo: item.codigo ?? null,
+      descripcion: item.descripcion,
+      cantidad: Number(item.cantidad),
+      precio_unitario: Number(item.precio_unitario),
+      iva_tipo: item.iva_tipo,
+      ...((item.descuento ?? 0) > 0 ? { descuento: Number(item.descuento) } : {}),
+      ...((item.descuento_global ?? 0) > 0 ? { descuento_global: Number(item.descuento_global) } : {}),
+      subtotal: Number(item.subtotal),
+      cantidad_disponible: saldo?.saldo ?? 0,
+      importe_disponible: saldo?.saldo_importe ?? 0
+    };
+  });
+
+  const armada = armarNotaCombinada({
+    moneda,
+    items: itemsNc,
+    tasas,
+    saldo: saldoMonto.saldo,
+    descuentosEnNc: env.FE_NC_DESCUENTOS,
+    pedido: {
+      lineas: (input.lineas ?? []).map((linea) => ({ line_no: linea.line_no, cantidad: linea.cantidad ?? null, acreditacion: linea.acreditacion ?? null })),
+      acreditacion_total: input.acreditacion_total ?? null
+    }
+  });
+  if (armada.errores.length > 0) {
+    const superaSaldo = armada.errores.find((error) => error.campo === "total" && error.mensaje.includes("saldo"));
+    if (superaSaldo) {
+      throw new HttpError(409, "CONFLICT", mensajeSuperaSaldo(saldoMonto.saldo, moneda), { reason: "NOTA_CREDITO_SUPERA_SALDO", saldo: saldoMonto.saldo });
+    }
+    throw new HttpError(400, "VALIDATION_ERROR", armada.errores[0]!.mensaje, { lineas: armada.errores });
+  }
+
+  // Lineas de la nota con su origen (RN-06); totales con el calculo de la moneda (presentacion; FE manda al aprobar).
+  let calculo: ReturnType<typeof calculateDocumentTotalsMoneda>;
+  try {
+    calculo = calculateDocumentTotalsMoneda(
+      armada.lineas.map((linea) => ({
+        codigo: linea.codigo,
+        descripcion: linea.descripcion,
+        cantidad: linea.cantidad,
+        precio_unitario: linea.precio_unitario,
+        iva_tipo: linea.iva_tipo,
+        ...(linea.descuento ? { descuento: linea.descuento } : {})
+      })),
+      moneda
+    );
+  } catch (error) {
+    if (error instanceof DescuentoInvalidoError) {
+      throw new HttpError(400, "VALIDATION_ERROR", error.message, { campo: error.path.join(".") });
+    }
+    throw error;
+  }
+  const items: FacturaItemPreview[] = calculo.items.map((item, indice) => ({
+    ...item,
+    codigo: item.codigo ?? null,
+    line_no: indice + 1,
+    catalogo_item_id: null,
+    linea_factura: armada.lineas[indice]!.linea_factura,
+    origen_nc: armada.lineas[indice]!.origen
+  }));
+  const motivoCodigo = input.motivo_codigo ?? armada.motivo_sugerido;
+
+  const intento = notasGuardadas.length + 1;
+  const externalRef = buildNotaCreditoExternalRef(context, facturaId, intento);
+  const fiscalRequest = buildFiscalNotaCreditoRequest(context, original, motivo, externalRef, { items, totals: calculo.totals }, motivoCodigo);
+  const clasificacion = await llamarNotaCredito(gateway, fiscalRequest);
+  const created = await repository.createNotaCreditoFromFactura({
+    tenantId: context.tenant.id,
+    actividadPuntoPerfilId: context.actividad_punto_perfil_id,
+    facturadorId: context.facturador.id,
+    userId: context.user.id,
+    original,
+    motivo,
+    externalRef,
+    idempotencyKey: externalRef,
+    items,
+    totals: calculo.totals,
+    modo: "COMBINADA",
+    motivoCodigo,
+    fiscalRequest,
+    fiscalResponse: clasificacion.fiscalResponse,
+    fiscalError: clasificacion.fiscalError,
+    estado: clasificacion.estado,
+    trabada: clasificacion.trabada
+  });
+  const conTotales = await guardarTotalesFe(context.facturador.id, created, repository, gateway);
+  return withAccion(conTotales);
 }
 
 /** SPEC_NOTA_CREDITO_PARCIAL_v0.1: nota de credito por lineas y cantidades de la factura. */
@@ -1627,6 +1827,8 @@ export interface NotaCreditoSaldoResponse {
   lineas: SaldoLinea[];
   /** SPEC_NOTA_CREDITO_POR_MONTO_v0.1: saldo neto y tasas para la nota por monto. */
   monto: NotaCreditoSaldoMontoResponse;
+  /** SPEC_NOTA_CREDITO_UNIFICADA_v0.1 D-6: `FE_NC_DESCUENTOS`; sin ella no se devuelven lineas con descuento. */
+  descuentos_en_nc: boolean;
 }
 
 /** GET /facturas/:id/nota-credito/saldo: lo que la ventana de nota de credito necesita para ofrecer total o parcial. */
@@ -1696,7 +1898,8 @@ export async function getNotaCreditoSaldo(
       saldo: saldoMonto.saldo,
       tasas,
       fuente
-    }
+    },
+    descuentos_en_nc: env.FE_NC_DESCUENTOS
   };
 }
 
@@ -1717,7 +1920,8 @@ export async function reintentarNotaCredito(
   const original = originalCargada ?? (await getDocumentoById(context, nota.documento_relacionado_id, repository));
   // SPEC_NOTA_CREDITO_PARCIAL_v0.1: una parcial se reintenta con sus mismas lineas y la misma clave.
   // SPEC_NOTA_CREDITO_POR_MONTO_v0.1, RN-07: la nota por monto repite sus lineas por tasa y su motivo SIFEN.
-  const parcial = esNotaPorMonto(nota) || esNotaParcial(nota, original) ? { items: nota.items, totals: nota.totals } : undefined;
+  const parcial =
+    esNotaPorMonto(nota) || nota.nce_modo === "COMBINADA" || esNotaParcial(nota, original) ? { items: nota.items, totals: nota.totals } : undefined;
   const fiscalRequest = buildFiscalNotaCreditoRequest(
     context,
     original,

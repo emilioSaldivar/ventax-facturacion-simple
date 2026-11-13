@@ -264,6 +264,13 @@ export interface NotaCreditoSaldoResponse {
     cantidad_facturada: number;
     cantidad_acreditada: number;
     saldo: number;
+    /** SPEC_NOTA_CREDITO_UNIFICADA_v0.1 RN-08: importe neto, lo ya acreditado y lo que queda, por importe. */
+    importe_neto: number;
+    importe_acreditado: number;
+    saldo_importe: number;
+    /** Descuento por unidad y prorrateo del global de la factura (D-6). */
+    descuento?: number;
+    descuento_global?: number;
   }>;
   /** SPEC_NOTA_CREDITO_POR_MONTO_v0.1: saldo neto y montos por tasa para la nota por monto. */
   monto: {
@@ -275,6 +282,8 @@ export interface NotaCreditoSaldoResponse {
     tasas: { iva_10: number; iva_5: number; exenta: number } | null;
     fuente: "FE" | "FS";
   };
+  /** D-6: con `FE_NC_DESCUENTOS` se pueden devolver lineas con descuento. */
+  descuentos_en_nc?: boolean;
 }
 
 export interface DocumentoResponse {

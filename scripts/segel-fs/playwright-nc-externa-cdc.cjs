@@ -135,12 +135,14 @@ async function notaDe(page, facturaId, total) {
     // ---- CA-02: NC total sobre A (con descuentos) desde la ficha: va por tasa (D-3).
     const boton = page.getByRole("button", { name: /Crear nota de cr[eé]dito/ }).first();
     await page.waitForFunction((b) => b && !b.disabled, await boton.elementHandle(), { timeout: 20000 });
+    // SPEC_NOTA_CREDITO_UNIFICADA_v0.1 D-8: la ficha abre la pantalla de Notas de credito con la factura elegida.
     await boton.click();
-    await page.getByRole("group", { name: "Tipo de nota de crédito" }).waitFor({ timeout: 15000 });
-    await page.locator(".modal-panel textarea").fill("Devolucion total de factura externa");
-    await page.getByRole("button", { name: "Confirmar" }).click();
-    const popup = page.locator('section[aria-labelledby="nc-success-title"]');
-    check("CA-02: NC total sobre A emitida desde la ficha", await popup.waitFor({ timeout: 90000 }).then(() => true, () => false));
+    await page.getByRole("heading", { name: "Qué se devuelve o ajusta" }).waitFor({ timeout: 15000 });
+    await page.getByRole("button", { name: "Toda la factura" }).click();
+    await page.getByLabel("Detalle para el cliente").fill("Devolucion total de factura externa");
+    await page.getByRole("button", { name: "Emitir nota de crédito" }).click();
+    const resultadoNc = page.getByRole("button", { name: /Crear nueva/ }).first();
+    check("CA-02: NC total sobre A emitida desde la ficha", await resultadoNc.waitFor({ timeout: 90000 }).then(() => true, () => false));
     const ncA = await notaDe(page, a?.id);
     const ncADetalle = ncA ? (await api(page, "GET", `/facturas/${ncA.id}`)).json : null;
     const resumenNcA = JSON.stringify(ncADetalle ? { modo: ncADetalle.nce_modo, items: ncADetalle.items.map((i) => [i.codigo, i.cantidad, i.precio_unitario, i.descuento ?? 0, i.descuento_global ?? 0]), total: ncADetalle.totals.total } : null);

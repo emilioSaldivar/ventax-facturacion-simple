@@ -21,6 +21,15 @@ export interface SaldoLinea {
   cantidad_facturada: number;
   cantidad_acreditada: number;
   saldo: number;
+  /** SPEC_NOTA_CREDITO_UNIFICADA_v0.1 RN-08: importe neto de la linea en la factura. */
+  importe_neto: number;
+  /** RN-08: devoluciones (al neto) + acreditaciones sobre esta linea en notas vivas. */
+  importe_acreditado: number;
+  /** RN-08: lo que queda por acreditar sobre la linea (D-4). */
+  saldo_importe: number;
+  /** Descuento por unidad y prorrateo del global de la factura (D-6). */
+  descuento?: number;
+  descuento_global?: number;
 }
 
 const ESCALA = 10_000;
@@ -40,14 +49,23 @@ export function notasQueDescuentan(notas: DocumentoResponse[], facturaId: string
 
 export function saldoAcreditablePorLinea(original: DocumentoResponse, notas: DocumentoResponse[]): SaldoLinea[] {
   const acreditadas = new Map<number, number>();
+  const importes = new Map<number, number>();
   for (const nota of notasQueDescuentan(notas, original.id)) {
     for (const item of nota.items) {
-      acreditadas.set(item.line_no, (acreditadas.get(item.line_no) ?? 0) + escalar(Number(item.cantidad)));
+      // SPEC_NOTA_CREDITO_UNIFICADA_v0.1 RN-06: en una nota combinada la linea de la factura va en `linea_factura`;
+      // el reparto sobre el total no es de ninguna linea. En notas anteriores, `line_no` es la de la factura.
+      if (item.origen_nc === "ACREDITACION_TOTAL") continue;
+      const linea = item.linea_factura ?? item.line_no;
+      importes.set(linea, (importes.get(linea) ?? 0) + Number(item.subtotal ?? 0));
+      if (item.origen_nc === "ACREDITACION_LINEA") continue;
+      acreditadas.set(linea, (acreditadas.get(linea) ?? 0) + escalar(Number(item.cantidad)));
     }
   }
   return original.items.map((item) => {
     const facturada = escalar(Number(item.cantidad));
     const acreditada = Math.min(acreditadas.get(item.line_no) ?? 0, facturada);
+    const importeNeto = Number(item.subtotal ?? 0);
+    const importeAcreditado = Math.min(importes.get(item.line_no) ?? 0, importeNeto);
     return {
       line_no: item.line_no,
       descripcion: item.descripcion,
@@ -56,7 +74,12 @@ export function saldoAcreditablePorLinea(original: DocumentoResponse, notas: Doc
       iva_tipo: item.iva_tipo,
       cantidad_facturada: desescalar(facturada),
       cantidad_acreditada: desescalar(acreditada),
-      saldo: desescalar(facturada - acreditada)
+      saldo: desescalar(facturada - acreditada),
+      importe_neto: importeNeto,
+      importe_acreditado: importeAcreditado,
+      saldo_importe: Math.round((importeNeto - importeAcreditado) * 100) / 100,
+      ...((item.descuento ?? 0) > 0 ? { descuento: Number(item.descuento) } : {}),
+      ...((item.descuento_global ?? 0) > 0 ? { descuento_global: Number(item.descuento_global) } : {})
     };
   });
 }

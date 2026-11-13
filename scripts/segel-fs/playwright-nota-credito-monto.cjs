@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// HISTORICO: prueba la ventana de nota de credito anterior a SPEC_NOTA_CREDITO_UNIFICADA_v0.1 (reemplazada); no corre contra esa version.
 // Nota de credito por monto (SPEC_NOTA_CREDITO_POR_MONTO_v0.1, CA-01 a CA-05 y CA-07; TASKS NCM-008). Solo stack
 // local de Segel con SIFEN test, FS con FE_NC_MONEDA_EXTRANJERA=true y FE segel-rc4.34 o posterior.
 //

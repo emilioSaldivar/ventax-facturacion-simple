@@ -2922,73 +2922,6 @@ dd {
   font-weight: 600;
 }
 
-/* SPEC_NOTA_CREDITO_PARCIAL_v0.1: ventana de nota de credito total o parcial. */
-.nc-parcial {
-  display: grid;
-  gap: 10px;
-  margin-bottom: var(--esp-2);
-}
-
-.nc-parcial .segmented {
-  display: grid;
-  /* SPEC_NOTA_CREDITO_POR_MONTO_v0.1: Total, Parcial y Por monto. */
-  grid-template-columns: repeat(3, 1fr);
-  gap: 0;
-}
-
-.nc-parcial .segmented button {
-  padding: var(--esp-2) var(--esp-3);
-  border: 1px solid var(--border, var(--color-line));
-  background: transparent;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-.nc-parcial .segmented button.active {
-  background: var(--accent, var(--color-danger));
-  border-color: var(--accent, var(--color-danger));
-  color: var(--color-on-brand);
-}
-
-.nc-parcial .segmented button:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
-.nc-parcial-tabla-wrap {
-  max-height: 280px;
-  overflow: auto;
-}
-
-.nc-parcial-tabla {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.9rem;
-}
-
-.nc-parcial-tabla th,
-.nc-parcial-tabla td {
-  padding: 6px;
-  border-bottom: 1px solid var(--border, var(--color-line));
-  text-align: left;
-}
-
-.nc-parcial-tabla td:nth-child(n + 2),
-.nc-parcial-tabla th:nth-child(n + 2) {
-  text-align: right;
-  white-space: nowrap;
-}
-
-.nc-parcial-tabla input {
-  width: 96px;
-  text-align: right;
-}
-
-.nc-parcial-total {
-  margin: 0;
-  text-align: right;
-}
-
 /* SPEC_EDITOR_FACTURA_PC_v0.1: editor de factura en modo completo (>= 1024 px). */
 .sr-only {
   position: absolute;
@@ -4636,37 +4569,6 @@ dd {
   min-width: 0;
 }
 
-.nc-modo {
-  max-width: 560px;
-  /* SPEC_NOTA_CREDITO_POR_MONTO_v0.1: tres modos (toda la factura, algunas lineas, un monto). */
-  grid-template-columns: repeat(3, 1fr);
-}
-
-/* SPEC_NOTA_CREDITO_POR_MONTO_v0.1: modo "Por monto" (componente NotaCreditoPorMonto). */
-.nc-monto {
-  display: grid;
-  gap: var(--esp-3);
-}
-
-.nc-monto-campos {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: var(--esp-3);
-}
-
-.nc-monto-campos input {
-  text-align: right;
-}
-
-.nc-monto-reparto {
-  display: grid;
-  gap: var(--esp-2);
-}
-
-.nc-monto-reparto p {
-  margin: 0;
-}
-
 .nc-pestanas {
   display: flex;
   gap: var(--esp-1);
@@ -4835,6 +4737,143 @@ dd {
   .nc-panel {
     position: sticky;
     top: calc(var(--altura-barra) + var(--esp-4));
+  }
+}
+
+/* SPEC_NOTA_CREDITO_UNIFICADA_v0.1 (PLAN 4, canvas 01 y 03): grilla de la nota con devoluciones y acreditaciones. */
+.nc-editor {
+  display: grid;
+  gap: var(--esp-3);
+}
+
+.nc-editor-acciones {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--esp-3);
+}
+
+.nc-lineas-editor .descuento-cabecera {
+  justify-content: flex-end;
+}
+
+.nc-celda-campo {
+  min-width: 110px;
+}
+
+.nc-celda-campo input,
+.nc-tarjeta-campos input,
+.nc-acreditacion-total input {
+  text-align: right;
+}
+
+.nc-editor input.invalido {
+  border-color: var(--color-danger);
+}
+
+.nc-celda-error,
+.nc-celda-aviso,
+.nc-celda-sub {
+  display: block;
+  font-size: var(--fs-12);
+  text-align: right;
+  white-space: normal;
+}
+
+.nc-celda-error {
+  color: var(--color-danger);
+}
+
+.nc-celda-aviso {
+  color: var(--color-warn);
+}
+
+.nc-tarjetas-linea {
+  display: grid;
+  gap: var(--esp-3);
+}
+
+.nc-tarjetas-conmutador {
+  display: flex;
+  align-items: center;
+  gap: var(--esp-2);
+  color: var(--color-muted);
+  font-size: var(--fs-13);
+}
+
+.nc-tarjetas-conmutador .descuento-modo button {
+  min-height: 44px;
+  min-width: 44px;
+}
+
+.nc-tarjeta-linea {
+  display: grid;
+  gap: var(--esp-2);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-card);
+  padding: var(--esp-3);
+}
+
+.nc-tarjeta-linea header {
+  display: grid;
+  gap: 2px;
+}
+
+.nc-tarjeta-campos {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: var(--esp-2);
+}
+
+.nc-tarjeta-campos label {
+  display: grid;
+  gap: 4px;
+  font-size: var(--fs-13);
+  color: var(--color-muted);
+}
+
+.nc-tarjeta-campos input {
+  min-height: 44px;
+}
+
+.nc-tarjeta-importe {
+  display: flex;
+  justify-content: space-between;
+  margin: 0;
+}
+
+.nc-acreditacion-total {
+  display: grid;
+  gap: 4px;
+  max-width: 420px;
+}
+
+.nc-acreditacion-total-campo {
+  display: grid;
+  gap: 4px;
+  font-weight: 600;
+}
+
+.nc-motivo-campos {
+  display: grid;
+  gap: var(--esp-3);
+}
+
+.nc-totales .nc-desglose {
+  display: grid;
+  gap: 2px;
+}
+
+.nc-totales .nc-desglose dd {
+  font-weight: 400;
+  font-size: var(--fs-13);
+  text-align: right;
+}
+
+@media (min-width: 1024px) {
+  .nc-motivo-campos {
+    grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
+    align-items: start;
   }
 }
 
