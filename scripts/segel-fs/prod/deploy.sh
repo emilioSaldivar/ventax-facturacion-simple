@@ -92,7 +92,8 @@ echo "CA-07 errores api desde el corte: $ERR"
 docker ps --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}' | grep segel-fs
 [[ "$MIG" == "0050,0051,0052" ]] || FALLA=1
 [[ "$VA" == "$SHA" && "$VF" == "$SHA" && "$APP" == "200" && "$HA" == "healthy" && "$HF" == "healthy" ]] || FALLA=1
-[[ "$NF" == "$ESP_F" && "$NE" == "0" && "$NC" == "0" ]] || FALLA=1
+# Externas y combinadas esperadas: 0 en el estreno de 0050-0052; despues, las que informe lectura.sh (hotfix 2026.11.13.1).
+[[ "$NF" == "$ESP_F" && "$NE" == "${ESP_EXTERNAS:-0}" && "$NC" == "${ESP_COMBINADAS:-0}" ]] || FALLA=1
 [[ "$EV" == "true/$MONEDA" && -n "$FEH" && "$ERR" == "0" ]] || FALLA=1
 echo "RESPALDO=$B"
 if [[ "$FALLA" != "0" ]]; then
