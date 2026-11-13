@@ -123,6 +123,23 @@ describe("nota de credito combinada", () => {
     ]);
   });
 
+  it("FS-143: solo ajuste sobre el total (sin lineas o con lineas vacias) va por la combinada con las lineas AJ por tasa", async () => {
+    for (const cuerpo of [
+      { motivo: "Ajuste de precio", combinada: true, motivo_codigo: 8 as const, acreditacion_total: { tipo: "MONTO" as const, valor: 5000 } },
+      { motivo: "Ajuste de precio", combinada: true, motivo_codigo: 8 as const, lineas: [], acreditacion_total: { tipo: "MONTO" as const, valor: 5000 } }
+    ]) {
+      const { repo, creadas } = repositorio(factura());
+      const { g, pedidos } = gateway();
+      await emitNotaCredito(context, FACTURA_ID, cuerpo, repo, g);
+      const pedido = pedidos[0]!;
+      expect(pedido.motivo_codigo).toBe(8);
+      expect(pedido.items.map((i) => i.codigo)).toEqual(["AJ-IVA10", "AJ-IVA5", "AJ-EXE"]);
+      expect(pedido.totals.total).toBe(5000);
+      expect(creadas[0]).toMatchObject({ modo: "COMBINADA" });
+      expect(creadas[0]!.items!.every((i) => i.origen_nc === "ACREDITACION_TOTAL" && i.linea_factura === null)).toBe(true);
+    }
+  });
+
   it("el operador puede elegir otro motivo (1, 2, 3, 4 u 8)", async () => {
     const { repo } = repositorio(factura());
     const { g, pedidos } = gateway();

@@ -2,7 +2,7 @@
 
 Archivo **unico** de pendientes, hallazgos y estados del proyecto (decision del usuario del 2026-11-11, reforzada el 2026-11-12). No hay otra lista valida: ni `docs/HOJA_DE_RUTA_v0.1.md` (historico), ni las memorias de sesion, ni notas sueltas en `TASKS`. Cada punto se refina a SPEC → PLAN → TASKS antes de implementarse (flujo SDD).
 
-**Proximo ID libre: FS-143**
+**Proximo ID libre: FS-144**
 
 ## Protocolo de registro (obligatorio para toda sesion)
 
@@ -34,7 +34,7 @@ Archivo **unico** de pendientes, hallazgos y estados del proyecto (decision del 
 
 ## Abiertos
 
-96 puntos, ordenados por prioridad y despues por ID.
+97 puntos, ordenados por prioridad y despues por ID.
 
 | ID | Prioridad | Ambito | Tema y detalle | Estado | Siguiente paso |
 |---|---|---|---|---|---|
@@ -54,6 +54,7 @@ Archivo **unico** de pendientes, hallazgos y estados del proyecto (decision del 
 | FS-97 | Alta | Segel | **Motivo de anulacion mas corto que el minimo de FE:** la pantalla acepta 3 caracteres y la API 1 (`cancelacionSchema` `min(1)`), pero FE pide 5 y con menos el evento falla (guia §7.3). Alinear a 5 en pantalla y API, como ya hace la inutilizacion. H-30 | **PENDIENTE** (sin cadena, 2026-11-12) **Verificado en codigo (2026-11-12):** `facturas.routes.ts` `cancelacionSchema` `motivo ... min(1)`; `DocumentsView.tsx` corta en `motivo.length < 3`; la inutilizacion ya usa `min(5)` (`facturas.routes.ts`, `cargas.routes.ts`) y muestra el contador "Mínimo N". | Cadena SDD |
 | FS-110 | Alta | Ventax | Backups — no hay dump automatizado de las DB de facturacion simple en la VPS; el ultimo es del 2026-05-23 y `scripts/install-backup-cron.sh` nunca se instalo para este stack. Documento: Pendiente de SPEC. Registrada: 2026-08-28 | **PENDIENTE** (de refinamiento) | Cadena SDD |
 | FS-124 | Alta | Ventax | **El logger de la API no redacta los encabezados de clave de FE** (`x-api-key`, `api-key`, `x-consumer-key`; solo `authorization`). Unas pruebas del 2026-09-02 dejaron la clave compartida de produccion en texto plano en los logs del contenedor de staging de Ventax. La misma clave se usa en produccion, staging y el POS: rotarla exige inventariar los tres stacks. Arreglo: sumar esos encabezados a `redact` de pino (revisar tambien la rama Segel) y planificar la rotacion. Nunca escribir la clave en el repo | **PENDIENTE** (sin cadena; estaba solo en la memoria de sesiones) | Cadena chica + decision de rotacion |
+| FS-143 | Alta | Segel | **Nota de credito con solo "Ajuste sobre el total" rechazada.** En la pantalla unica de NC (FS-141), si el operador carga solo el ajuste sobre el total (sin Devolver ni Ajuste por item), la pantalla manda `lineas: []` y la API responde 400 "La solicitud contiene datos invalidos. (lineas: Array must contain at least 1 element(s))". Visto por el usuario en `segel-fs` el 2026-11-13 sobre la factura 0000361 (USD 2,23, ajuste USD 0,23). Causa en `44359dd`: `apps/web-operacion/src/lib/notaCreditoUnificada.ts` (`cuerpoNotaCredito` siempre manda `lineas`, aunque este vacio) contra `apps/api/src/modules/facturas/facturas.routes.ts` (`notaCreditoSchema.lineas` con `.min(1)`). El servicio (`emitNotaCreditoCombinada`) ya acepta lineas vacias con `acreditacion_total`; falta un caso de prueba de solo ajuste total en `nota-credito-combinada.test.ts` | **PENDIENTE** (sin confirmar en produccion mas alla de la captura del usuario) | Arreglo propuesto: no mandar `lineas` vacio en la nota combinada y/o aceptar `lineas: []` cuando hay `acreditacion_total`; prueba unitaria y Playwright; despliegue solo con la orden del usuario |
 | FS-04 | Media | Segel | La cola emite 12 facturas por minuto: una rafaga de 200 tarda 17 min | **PENDIENTE (medir con FE)**. Antes: Confirmado en mock. A medir con FE | Cadena SDD |
 | FS-07 | Media | Segel | Una factura aprobada se ve "Procesando" hasta la siguiente consulta (min 5, 35, 95) | **PENDIENTE: ver FS-71 (frecuencia de verificacion)**. Antes: Confirmado en `real-e8`: 19 aprobadas en FE sin reflejar, hasta 51 min | Cadena SDD |
 | FS-08 | Media | Segel | Cancelar usa el CDC local, que puede quedar viejo tras un reenvio | **PENDIENTE (hipotesis)**. Antes: Hipotesis | Cadena SDD |

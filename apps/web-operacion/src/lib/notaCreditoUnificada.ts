@@ -132,15 +132,17 @@ export function cuerpoNotaCredito(
   motivoCodigo: MotivoCodigoNc
 ): CuerpoNotaCredito {
   if (esFacturaEntera(saldo, pedido)) return { motivo };
+  const lineas = (pedido.lineas ?? []).map((linea) => ({
+    line_no: linea.line_no,
+    ...(linea.cantidad ? { cantidad: linea.cantidad } : {}),
+    ...(linea.acreditacion ? { acreditacion: linea.acreditacion } : {})
+  }));
   return {
     motivo,
     combinada: true,
     motivo_codigo: motivoCodigo,
-    lineas: (pedido.lineas ?? []).map((linea) => ({
-      line_no: linea.line_no,
-      ...(linea.cantidad ? { cantidad: linea.cantidad } : {}),
-      ...(linea.acreditacion ? { acreditacion: linea.acreditacion } : {})
-    })),
+    // FS-143: con solo "Ajuste sobre el total" no hay lineas; un arreglo vacio lo rechazaba la API desplegada.
+    ...(lineas.length > 0 ? { lineas } : {}),
     ...(pedido.acreditacion_total ? { acreditacion_total: pedido.acreditacion_total } : {})
   };
 }

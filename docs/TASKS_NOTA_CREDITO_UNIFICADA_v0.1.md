@@ -26,6 +26,7 @@ Implementada y validada en el stack local (`.local/segel-ensayo`, FS `ncu-local3
 | NCU-008 | Prueba manual del usuario en el stack local antes del despliegue | Visto bueno del usuario | Reemplazada por la revision en produccion (CA-08 de la cadena de despliegue v0.4, decision del usuario del 2026-11-13) |
 | NCU-009 | Repaso SPEC/PLAN/TASKS; BACKLOG FS-141 y FS-77; preparar el plan de despliegue de FS-136/138/139/141 con `segel-rc4.36` | Lectura cruzada; plan presentado al usuario | DONE: desplegada en `segel-fs` el 2026-11-13 (`TASKS_DESPLIEGUE_SEGEL_FS_v0.4` E-1) |
 | NCU-010 | Nombre "Ajuste" en pantalla y en las lineas enviadas a SIFEN (SPEC D-10, PLAN §7) | `test` shared y API, `typecheck`, `build`; Playwright con las etiquetas nuevas | DONE |
+| NCU-011 | Hotfix FS-143: `notaCreditoSchema` acepta `lineas: []` solo en la combinada; `cuerpoNotaCredito` no manda `lineas` vacio (CA-10) | `test` (esquema y servicio), `typecheck`, `lint`, `build`; Playwright en el stack local; despliegue solo con la orden del usuario | EN CURSO |
 
 ## Evidencia
 

@@ -76,3 +76,4 @@ Que el operador arme la nota de credito en una sola pantalla, como arma una fact
 - **CA-07.** Desde la ficha, "Crear nota de crédito" abre esta pantalla con la factura elegida (no la ventana corta).
 - **CA-08.** Compatibilidad: los tres cuerpos actuales de `POST .../nota-credito` siguen funcionando (pruebas existentes verdes).
 - **CA-09.** Playwright 1440 y 1280 (pantalla completa) y 390 (tarjetas por linea) sin desplazamiento horizontal; emisiones reales de CA-01, CA-02 y CA-05 en SIFEN test con `fe-segel` `segel-rc4.36`.
+- **CA-10.** (FS-143, hotfix 2026-11-13) Solo "Ajuste sobre el total", sin devoluciones ni ajustes por item → la pantalla manda la combinada sin `lineas` y la API la acepta (tambien con `lineas: []`); el cuerpo viejo `{motivo, lineas: []}` sigue rechazado con 400 para no convertirse en la nota total. Visto en `segel-fs` sobre la factura 0000361 (USD 2,23, ajuste 0,23).

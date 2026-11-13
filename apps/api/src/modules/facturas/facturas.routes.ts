@@ -227,14 +227,13 @@ const inutilizarSchema = z.object({
 
 const acreditacionSchema = z.object({ tipo: z.enum(["MONTO", "PORCENTAJE"]), valor: z.number().positive() });
 
-const notaCreditoSchema = z
+export const notaCreditoSchema = z
   .object({
     motivo: z.string().trim().min(1).max(300),
     // SPEC_NOTA_CREDITO_PARCIAL_v0.1: con lineas, nota parcial; sin ellas, la total de siempre.
     // SPEC_NOTA_CREDITO_UNIFICADA_v0.1 RN-01: cada linea puede llevar cantidad, acreditacion o las dos.
     lineas: z
       .array(z.object({ line_no: z.number().int().positive(), cantidad: z.number().positive().optional(), acreditacion: acreditacionSchema.optional() }))
-      .min(1)
       .max(200)
       .optional(),
     // SPEC_NOTA_CREDITO_POR_MONTO_v0.1: nota por monto (la regla de 50 Gs o 2 decimales la aplica el servicio, RN-01).
@@ -246,6 +245,14 @@ const notaCreditoSchema = z
   })
   .superRefine((input, ctx) => {
     const combinada = input.combinada === true || input.acreditacion_total !== undefined || (input.lineas ?? []).some((l) => l.acreditacion !== undefined);
+    // FS-143: `lineas: []` solo vale en la combinada (p. ej. solo ajuste sobre el total, RN-01). En el cuerpo viejo
+    // `{motivo, lineas: []}` se sigue rechazando: el servicio lo tomaria como la nota total.
+    if (input.lineas !== undefined && input.lineas.length === 0 && !combinada) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["lineas"], message: "Indica al menos una linea." });
+    }
+    if (combinada && (input.lineas ?? []).length === 0 && input.acreditacion_total === undefined) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["lineas"], message: "Indicá qué se devuelve o se ajusta." });
+    }
     // RN-02 de por monto: lineas y monto son excluyentes; el motivo SIFEN solo acompaña al monto o a la combinada.
     if (input.monto !== undefined && (input.lineas !== undefined || combinada)) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["monto"], message: "La nota va por lineas o por monto, no las dos cosas." });
