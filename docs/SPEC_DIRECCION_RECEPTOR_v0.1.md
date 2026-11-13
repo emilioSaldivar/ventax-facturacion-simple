@@ -40,7 +40,7 @@ Todos los clientes piden que la dirección del comprador salga en la factura. Ho
   - máximo 255 caracteres; un campo que queda vacío después de limpiar se trata como sin dirección.
   La misma regla se aplica en la pantalla y en la API.
 - **RN-07 — Ciudades largas (FS-155).** Las listas de ciudades que entrega la API de FS excluyen las de descripción de más de 30 caracteres, hasta que FE publique la corrección.
-- **RN-08 — Snapshot.** La factura guarda el domicilio enviado en `cliente_snapshot`, y la ficha muestra la dirección completa cuando la tiene.
+- **RN-08 — Snapshot y ficha.** La factura guarda el domicilio en `cliente_snapshot`. La ficha muestra la dirección (calle, Nº, ciudad y departamento). Si el domicilio estaba incompleto, la dirección no fue a SIFEN ni sale en el KuDE, y la ficha lo aclara debajo: "No sale en la factura: falta número, departamento y ciudad." (decisión del usuario del 2026-11-13, hallazgo de la verificación de la factura 1010683).
 
 ## 5. Criterios de aceptación
 
@@ -61,4 +61,5 @@ Todos los clientes piden que la dirección del comprador salga en la factura. Ho
 | D-2 | Caracteres: la regla recomendada por FE (RN-06) | Decidida (usuario, 2026-11-13) |
 | D-3 | No usar J003 para imprimir una dirección que no va en el XML | Decidida (recomendación de FE aceptada por el usuario al elegir enviar completo, 2026-11-13) |
 | D-5 | Listas departamento → ciudad (sin distrito visible) con los códigos del MT150; sección de dirección opcional y cerrada por defecto | Decidida (usuario, 2026-11-13) |
+| D-6 | Ficha con dirección incompleta: se muestra con la aclaración de que no sale en la factura | Decidida (usuario, 2026-11-13) |
 | D-4 | Las plantillas del KuDE las corrige FE (`segel-rc4.37`); FS prueba con esa versión cuando esté | Orden del usuario a FE, 2026-11-13 |

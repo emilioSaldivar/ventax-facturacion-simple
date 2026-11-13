@@ -51,6 +51,9 @@ export function textoDireccion(origen: DireccionCliente): string {
   return [calle, lugar].filter(Boolean).join(", ");
 }
 
+/** RN-08 y D-6: aclaracion de la ficha cuando el domicilio no fue a SIFEN. */
+export const DIRECCION_NO_ENVIADA = "No sale en la factura: falta número, departamento y ciudad.";
+
 export const AVISO_DIRECCION_INCOMPLETA = "Completá calle, número, departamento y ciudad para que la dirección salga en la factura.";
 
 export function CampoDireccion({

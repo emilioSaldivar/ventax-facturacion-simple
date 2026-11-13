@@ -3620,6 +3620,15 @@ dd {
   }
 }
 
+/* SPEC_DIRECCION_RECEPTOR_v0.1 RN-08 (D-6): la ficha aclara que una direccion incompleta no salio en la factura. */
+.ficha-direccion-no-enviada {
+  display: block;
+  margin-top: var(--esp-1);
+  color: var(--color-muted);
+  font-size: var(--fs-12);
+  font-weight: 500;
+}
+
 .casilla-agenda {
   display: inline-flex;
   align-items: center;

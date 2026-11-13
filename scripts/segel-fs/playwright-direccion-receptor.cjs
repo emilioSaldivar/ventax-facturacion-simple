@@ -353,6 +353,112 @@ async function casoCiudadLarga(browser) {
   }
 }
 
+
+// Punta a punta (pedido del usuario, 2026-11-13): nota de credito total sobre la factura con domicilio. FE arma la
+// nota con el receptor de la factura; se lee el KuDE de la nota.
+async function casoSifenNc(browser) {
+  const { ctx, page } = await entrar(browser, 1440, 900, "completo");
+  try {
+    const objetivo = process.env.ENSAYO_NC_FACTURA ?? "1010682";
+    const lista = await api(page, "GET", `/facturas?tipo=FACTURA&q=${objetivo}&limit=10&offset=0`);
+    const fac = (lista.json?.items ?? []).find((d) => (d.numero_fiscal ?? "").endsWith(objetivo));
+    check(`NC: factura ${objetivo} encontrada y emitida`, fac?.estado === "EMITIDA", fac?.estado ?? "no encontrada");
+    if (!fac) return;
+    const r = await api(page, "POST", `/facturas/${fac.id}/nota-credito`, { motivo: "Devolucion total de prueba de punta a punta DIR" }, { "Idempotency-Key": `dir-nc-${Date.now()}` });
+    let nc = r.json ?? {};
+    check("NC: la API acepto la nota total", r.status === 200 || r.status === 201, `${r.status} ${JSON.stringify(nc).slice(0, 200)}`);
+    const inicio = Date.now();
+    while (nc.id && !["EMITIDA", "RECHAZADA", "ERROR_OPERATIVO"].includes(nc.estado) && Date.now() - inicio < ESPERA_APROBACION_MS) {
+      await page.waitForTimeout(20000);
+      nc = (await api(page, "GET", `/facturas/${nc.id}`)).json ?? nc;
+    }
+    check(`NC: ${nc.numero_fiscal ?? "sin numero"} aprobada en SIFEN test`, nc.estado === "EMITIDA", nc.estado);
+    check("NC: el total es el de la factura", Math.abs(Number(nc.totals?.total) - Number(fac.totals?.total)) < 0.005, `${nc.totals?.total} vs ${fac.totals?.total}`);
+    if (nc.estado === "EMITIDA") {
+      const link = await api(page, "POST", `/facturas/${nc.id}/delivery-link`, {});
+      const resp = await page.request.get(new URL(`${link.json.public_url}/kude.pdf`.replace("localhost", "127.0.0.1")).toString());
+      const pdf = path.join(outDir, "sifen-nc-kude.pdf");
+      fs.writeFileSync(pdf, await resp.body());
+      const kude = execFileSync("pdftotext", ["-layout", pdf, "-"], { encoding: "utf8" }).replace(/\s+/g, " ");
+      const linea = (kude.match(/Direcci[oó]n:.{0,90}/) ?? [""])[0];
+      console.log(`INFO NC KuDE: ${linea}`);
+      check("NC: el KuDE de la nota se descarga", resp.ok());
+    }
+    fs.writeFileSync(path.join(outDir, "sifen-nc.json"), JSON.stringify({ factura: fac.numero_fiscal, nc: nc.numero_fiscal, estado: nc.estado, cdc: nc.cdc }, null, 2));
+  } catch (e) {
+    check("sifen-nc: sin excepciones", false, e.message);
+  } finally {
+    await ctx.close();
+  }
+}
+
+
+// DIR-018 (RN-08, D-6): la ficha muestra la direccion; si no fue a SIFEN, lo aclara. Usa las facturas de la ultima
+// corrida `sifen` (sifen-emitidas.json) o ENSAYO_FICHA_COMPLETA / ENSAYO_FICHA_INCOMPLETA.
+async function casoFicha(browser) {
+  let completa = process.env.ENSAYO_FICHA_COMPLETA;
+  let incompleta = process.env.ENSAYO_FICHA_INCOMPLETA;
+  try {
+    const e = JSON.parse(fs.readFileSync(path.join(outDir, "sifen-emitidas.json"), "utf8"));
+    completa = completa ?? e.find((x) => x.caso === "domicilio completo")?.numero;
+    incompleta = incompleta ?? e.find((x) => x.caso === "calle sola")?.numero;
+  } catch {}
+  for (const [ancho, alto, modo] of [[1440, 900, "completo"], [390, 844, "simple"]]) {
+    for (const [num, esperaAclaracion] of [[completa, false], [incompleta, true]]) {
+      if (!num) {
+        check(`DIR-018 ${ancho}: hay factura para el caso ${esperaAclaracion ? "incompleta" : "completa"}`, false, "correr antes el caso sifen");
+        continue;
+      }
+      const { ctx, page } = await entrar(browser, ancho, alto, modo);
+      try {
+        await abrirVista(page, "Documentos");
+        await page.getByPlaceholder("Buscar factura...").fill(num);
+        await page.getByRole("button", { name: "Buscar", exact: true }).click().catch(() => undefined);
+        await page.waitForTimeout(1500);
+        const fila = page.locator("tr", { hasText: num }).first();
+        if (await fila.count()) await fila.locator(".enlace-fila").first().click();
+        else await page.getByText(num).first().click();
+        await page.getByText("Dirección", { exact: true }).first().waitFor();
+        const t = await texto(page);
+        const tieneAclaracion = t.includes("No sale en la factura: falta número, departamento y ciudad.");
+        check(`DIR-018 ${ancho}: ${num} ${esperaAclaracion ? "con" : "sin"} la aclaracion de direccion no enviada`, tieneAclaracion === esperaAclaracion, (t.match(/Dirección .{0,120}/) ?? [""])[0]);
+        check(`DIR-018 ${ancho}: ${num} sin desborde`, await sinDesborde(page));
+        await page.screenshot({ path: path.join(outDir, `ficha-${num}-${ancho}.png`), fullPage: true });
+      } catch (e) {
+        check(`ficha ${num} ${ancho}: sin excepciones`, false, e.message);
+      } finally {
+        await ctx.close();
+      }
+    }
+  }
+}
+
+// DIR-014/DIR-019: KuDE de la ultima nota de remision aprobada (o ENSAYO_NRE): destinatario y punto de entrega.
+async function casoKudeRemision(browser) {
+  const { ctx, page } = await entrar(browser, 1440, 900, "completo");
+  try {
+    const lista = (await api(page, "GET", "/facturas?tipo=NOTA_REMISION&limit=10&offset=0")).json?.items ?? [];
+    const nre = process.env.ENSAYO_NRE ? lista.find((d) => (d.numero_fiscal ?? "").endsWith(process.env.ENSAYO_NRE)) : lista.find((d) => d.estado === "EMITIDA");
+    check(`KuDE remision: hay una nota aprobada (${nre?.numero_fiscal ?? "-"})`, nre?.estado === "EMITIDA");
+    if (!nre) return;
+    const link = await api(page, "POST", `/facturas/${nre.id}/delivery-link`, {});
+    const resp = await page.request.get(`${link.json.public_url}/kude.pdf`.replace("localhost", "127.0.0.1"));
+    const pdf = path.join(outDir, `kude-remision-${nre.numero_fiscal}.pdf`);
+    fs.writeFileSync(pdf, await resp.body());
+    const kude = execFileSync("pdftotext", ["-layout", pdf, "-"], { encoding: "utf8" }).replace(/\s+/g, " ");
+    const destinatario = (kude.match(/Direccion: (?!Avda\.? Eusebio)(.{0,100}?) Motivo/) ?? kude.match(/Direccion: .{0,100}/) ?? [""])[0];
+    check("KuDE remision: el destinatario lleva direccion con Nº, ciudad y departamento", /Direccion: \S.*Nº \d+, .+ - .+/.test(destinatario), destinatario);
+    check("KuDE remision: rotulo \"Direccion del Punto de Entrega:\" completo", kude.includes("Direccion del Punto de Entrega:"));
+    check("KuDE remision: rotulo \"Ciudad del Punto de Entrega:\" completo", kude.includes("Ciudad del Punto de Entrega:"));
+    check("KuDE remision: departamento del punto de entrega", /Departamento del punto de entrega: \S/.test(kude));
+    execFileSync("pdftoppm", ["-r", "120", "-png", "-f", "1", "-l", "1", pdf, path.join(outDir, `kude-remision-${nre.numero_fiscal}`)]);
+  } catch (e) {
+    check("kude-remision: sin excepciones", false, e.message);
+  } finally {
+    await ctx.close();
+  }
+}
+
 (async () => {
   const browser = await chromium.launch();
   try {
@@ -363,6 +469,9 @@ async function casoCiudadLarga(browser) {
     if (corre("agenda")) await casoAgenda(browser);
     if (corre("sifen")) await casoSifen(browser);
     if (corre("ciudad-larga")) await casoCiudadLarga(browser);
+    if (corre("sifen-nc")) await casoSifenNc(browser);
+    if (corre("ficha")) await casoFicha(browser);
+    if (corre("kude-remision")) await casoKudeRemision(browser);
   } finally {
     await browser.close();
   }

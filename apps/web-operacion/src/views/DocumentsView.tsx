@@ -1,5 +1,6 @@
 // Movido de main.tsx sin cambios (PLAN_UX_RESTO_APP_v0.1 §10.9, URA-023).
-import { textoDireccion, tieneDireccion } from "../components/CampoDireccion";
+import { DIRECCION_NO_ENVIADA, textoDireccion, tieneDireccion } from "../components/CampoDireccion";
+import { domicilioCompleto } from "../lib/validacionReceptor";
 import { useEffect, useMemo, useState } from "react";
 import { CargaMasivaView, type TipoDeCarga } from "../carga-masiva";
 import { useConfirmar } from "../components/Dialogo";
@@ -1064,7 +1065,12 @@ export function DocumentsView({
                 {tieneDireccion(selected.cliente) ? (
                   <div>
                     <dt>Dirección</dt>
-                    <dd>{textoDireccion(selected.cliente)}</dd>
+                    <dd>
+                      {textoDireccion(selected.cliente)}
+                      {domicilioCompleto(selected.cliente) ? null : (
+                        <small className="ficha-direccion-no-enviada">{DIRECCION_NO_ENVIADA}</small>
+                      )}
+                    </dd>
                   </div>
                 ) : null}
                 {selected.origen ? (

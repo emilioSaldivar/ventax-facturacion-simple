@@ -21,6 +21,8 @@
 | DIR-013 | SIFEN test: factura con domicilio completo y con calle sola (aviso a FE); XML en `fe-segel` y KuDE | CA-01, CA-02 | Números, XML y KuDE | Hecha (2026-11-13): 1010682 (domicilio) y 1010683 (calle sola) aprobadas; 6531 sin número |
 | DIR-014 | Con `segel-rc4.37` de FE: factura y remisión con número, ciudad y departamento impresos | FS-153 | KuDE de las dos | Hecha (2026-11-13) con `segel-rc4.37` local: factura y remisión 0000514 con la dirección completa en el KuDE; rótulos de entrega cortados, corregidos en `segel-rc4.37.1` (cbec3e7) y verificados con la misma remisión |
 | DIR-017 | Con `segel-rc4.38`: la ruta de ciudades por departamento reenvía la de FE, revalidación por `ETag`, filtro por la marca del catálogo | RN-04, RN-07 | Pruebas del servicio y Playwright de CA-04b | Espera FE |
+| DIR-018 | Ficha: dirección incompleta con la aclaración "No sale en la factura: falta número, departamento y ciudad." | RN-08, D-6 | Playwright 1440/390 con 1010687 (completa, sin aclaración) y 1010688 (incompleta, con aclaración) | Hecha (2026-11-13) |
+| DIR-019 | Cierre de pruebas antes del despliegue: Playwright de pantallas de FS y de KuDE de factura y remisión en SIFEN test | Regla de cierre | Corrida completa en el stack local | Hecha (2026-11-13) |
 | DIR-015 | Cierre: repaso SPEC/PLAN/TASKS y BACKLOG | Regla de cierre | — | Pendiente |
 | DIR-016 | Despliegue en `segel-fs` (API, migración y frontend) | PLAN §2 | Solo con autorización explícita del usuario | Espera usuario |
 
@@ -41,3 +43,23 @@
   | Nota de remisión motivo 1 | 001-001-0000514 | Aprobada; KuDE con la dirección del destinatario y del punto de entrega con ciudad y departamento. Rótulos "Direccion del Punto de" y "Ciudad del Punto de" cortados (falta "Entrega"); informado a FE |
 - **Regresión:** `playwright-validaciones-receptor.cjs` 67/67 (tras actualizar el nombre del botón de opcionales); `playwright-reconocimiento-ux.cjs` sin subas. `playwright-ux-nueva-factura.cjs` actualizado pero no corrido (emite tres facturas reales). `scripts/playwright-mock-flow.cjs` usa el campo viejo y ya fallaba antes (no se toca).
 - **2026-11-13, FE `segel-rc4.37.1` (cbec3e7, local):** KuDE de la remisión 0000514 regenerado: "Direccion del Punto de Entrega:" y "Ciudad del Punto de Entrega:" completos (PDF a 200 dpi). FE lo registra como V021/FIX008 y cierra KD-12. El "Nº 1234" repetido en la dirección del destinatario viene del dato de prueba del guion de remisión (calle con número), no de FS ni de FE. El corte de la dirección del punto de partida, ya existente antes, quedó registrado aparte.
+- **2026-11-13, verificaciones de documentos sin emitir (después del commit `2fb80c9`):** `playwright-nota-remision.cjs permiso validaciones pantallas` **25/25** con la regla de caracteres en la remisión. Ficha del documento (Playwright, 1440 y 390): 1010682 muestra "Dirección Avda. Mcal. López c/ Ñandutí Nº 1234, LUQUE (CENTRAL)". **Hallazgo:** 1010683 (calle sola, sin domicilio en el XML) muestra "Dirección Solo la calle 123", aunque esa dirección no está en el DTE ni en el KuDE. Pendiente de decisión del usuario: marcarla como no enviada o mostrar solo el domicilio completo (BACKLOG FS-152).
+- **2026-11-13, punta a punta en SIFEN test (pedido del usuario; solo stack local, aviso previo a FE), FS `2fb80c9` + FE `segel-rc4.37.1`:**
+  - `playwright-ux-nueva-factura.cjs` **41/41**: 1010684 (USD, tres líneas), 1010685 (PYG) y 1010686 (PYG desde 390), aprobadas.
+  - `playwright-direccion-receptor.cjs sifen sifen-nc` **11/11**: 1010687 con domicilio completo (XML y KuDE con calle, Nº, ciudad y departamento), 1010688 con calle sola (sin `dDirRec`), nota de crédito total 001-001-1010060 sobre 1010682 aprobada con el mismo total.
+  - **Hallazgo FS-161 (FE):** la nota de crédito sale sin domicilio (XML sin `dDirRec`, KuDE "Dirección:" vacío) porque el contrato de FE para la NC solo admite `receptor.direccion`. FS ya manda el domicilio. Informado a FE; no bloquea el despliegue.
+- **2026-11-13, DIR-018:** la ficha muestra "No sale en la factura: falta número, departamento y ciudad." debajo de una dirección incompleta (RN-08, D-6).
+- **2026-11-13, DIR-019, cierre antes del despliegue** (stack local de ensayo, FS con el hotfix y DIR-018, FE `segel-rc4.37.1`; aviso previo a FE; guion `test-results/direccion-receptor/cierre.sh`):
+
+  | Etapa | Resultado |
+  |---|---|
+  | Pantallas de Nueva factura y agenda (1440, 1280, 390) | 56/56 |
+  | Validaciones del receptor | 67/67 |
+  | Remisión: permiso, validaciones y pantallas | 25/25 |
+  | SIFEN test: facturas 1010689 (domicilio completo; XML y KuDE "Dirección: Avda. Mcal. López c/ Ñandutí Nº 1234, LUQUE - CENTRAL") y 1010690 (calle sola, sin `dDirRec`) | 6/6, aprobadas |
+  | SIFEN test: nota de remisión 001-001-0000515 | 1/1, aprobada |
+  | KuDE de la remisión 0000515 (destinatario con Nº, ciudad y departamento; "Direccion del Punto de Entrega:" y "Ciudad del Punto de Entrega:" completos) y ficha de 1010689 / 1010690 en 1440 y 390 | 13/13 |
+  | Reconocimiento UX | sin subas |
+
+  Pruebas de código: API `vitest` 1015 OK, `lint` y `typecheck` sin errores; frontend `typecheck` y `build` sin errores.
+
