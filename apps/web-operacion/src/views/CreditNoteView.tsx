@@ -145,9 +145,11 @@ export function CreditNoteView({
   const moneda = saldo?.moneda ?? selected?.documento.moneda ?? "PYG";
   const vista = useMemo(() => (saldo ? armarVistaPrevia(saldo, form) : null), [saldo, form]);
   const armada = vista?.armada ?? null;
-  const facturaEntera = saldo && vista ? esFacturaEntera(saldo, vista.pedido) : false;
-  // RN-07: solo devoluciones 2, solo ajustes 3, mezcla 1; la factura entera va por la nota total, que manda 1.
-  const motivoCodigo: MotivoCodigoNc = motivoCodigoElegido ?? armada?.motivo_sugerido ?? 2;
+  const esEntera = saldo && vista ? esFacturaEntera(saldo, vista.pedido) : false;
+  // RN-07: solo devoluciones 2, solo ajustes 3, mezcla 1; la factura entera sugiere 1 (la nota total de siempre).
+  // FS-144 (D-7 ajustado): el operador puede elegir otro motivo tambien con la factura entera; entonces va combinada.
+  const motivoCodigo: MotivoCodigoNc = motivoCodigoElegido ?? (esEntera ? 1 : armada?.motivo_sugerido ?? 2);
+  const facturaEntera = esEntera && motivoCodigo === 1;
   const totalNota = facturaEntera ? saldo?.monto.saldo ?? 0 : armada?.total_redondeado ?? 0;
   const queda = saldo ? Math.max(0, Math.round((saldo.monto.saldo - totalNota) * 100) / 100) : 0;
   const desglose = armada ? desglosePorTasa(armada) : [];
@@ -363,13 +365,12 @@ export function CreditNoteView({
               <h3 id="nc-motivo-titulo">Motivo</h3>
               <div className="nc-motivo-campos">
                 <CampoFormulario
-                  ayuda={facturaEntera ? "La nota de la factura entera sale con este motivo." : "Sugerido según lo que cargaste; podés cambiarlo."}
+                  ayuda={esEntera ? "Para toda la factura se sugiere este motivo; podés cambiarlo." : "Sugerido según lo que cargaste; podés cambiarlo."}
                   etiqueta="Motivo en SIFEN"
                 >
                   <select
-                    disabled={facturaEntera}
                     onChange={(event) => setMotivoCodigoElegido(Number(event.target.value) as MotivoCodigoNc)}
-                    value={facturaEntera ? 1 : motivoCodigo}
+                    value={motivoCodigo}
                   >
                     {MOTIVOS_NOTA_CREDITO.map((m) => (
                       <option key={m.codigo} value={m.codigo}>

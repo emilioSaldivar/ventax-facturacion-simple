@@ -140,6 +140,19 @@ describe("nota de credito combinada", () => {
     }
   });
 
+  it("FS-144: toda la factura con otro motivo elegido va por la combinada con ese motivo, no por la total", async () => {
+    const { repo, creadas } = repositorio(factura());
+    const { g, pedidos } = gateway();
+    const cuerpo = { motivo: "Devolucion", combinada: true, motivo_codigo: 2 as const, lineas: [{ line_no: 1, cantidad: 2 }, { line_no: 2, cantidad: 1 }, { line_no: 3, cantidad: 3 }] };
+    await emitNotaCredito(context, FACTURA_ID, cuerpo, repo, g);
+    const pedido = pedidos[0]!;
+    expect(pedido.por_referencia).toBeUndefined();
+    expect(pedido.motivo_codigo).toBe(2);
+    expect(pedido.items.map((i) => [i.codigo, i.cantidad])).toEqual([["L001", 2], ["L002", 1], ["L003", 3]]);
+    expect(pedido.totals.total).toBe(211500);
+    expect(creadas[0]).toMatchObject({ modo: "COMBINADA", motivoCodigo: 2 });
+  });
+
   it("el operador puede elegir otro motivo (1, 2, 3, 4 u 8)", async () => {
     const { repo } = repositorio(factura());
     const { g, pedidos } = gateway();

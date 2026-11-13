@@ -131,7 +131,9 @@ export function cuerpoNotaCredito(
   motivo: string,
   motivoCodigo: MotivoCodigoNc
 ): CuerpoNotaCredito {
-  if (esFacturaEntera(saldo, pedido)) return { motivo };
+  // FS-144 (D-7 ajustado): la factura entera va por la total de siempre solo con el motivo 1, que es el que manda
+  // FE en esa nota; con otro motivo elegido por el operador va como combinada con ese motivo.
+  if (esFacturaEntera(saldo, pedido) && motivoCodigo === 1) return { motivo };
   const lineas = (pedido.lineas ?? []).map((linea) => ({
     line_no: linea.line_no,
     ...(linea.cantidad ? { cantidad: linea.cantidad } : {}),
