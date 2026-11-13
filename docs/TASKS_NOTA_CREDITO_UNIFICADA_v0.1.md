@@ -26,7 +26,7 @@ Implementada y validada en el stack local (`.local/segel-ensayo`, FS `ncu-local3
 | NCU-008 | Prueba manual del usuario en el stack local antes del despliegue | Visto bueno del usuario | Reemplazada por la revision en produccion (CA-08 de la cadena de despliegue v0.4, decision del usuario del 2026-11-13) |
 | NCU-009 | Repaso SPEC/PLAN/TASKS; BACKLOG FS-141 y FS-77; preparar el plan de despliegue de FS-136/138/139/141 con `segel-rc4.36` | Lectura cruzada; plan presentado al usuario | DONE: desplegada en `segel-fs` el 2026-11-13 (`TASKS_DESPLIEGUE_SEGEL_FS_v0.4` E-1) |
 | NCU-010 | Nombre "Ajuste" en pantalla y en las lineas enviadas a SIFEN (SPEC D-10, PLAN §7) | `test` shared y API, `typecheck`, `build`; Playwright con las etiquetas nuevas | DONE |
-| NCU-011 | Hotfix FS-143: `notaCreditoSchema` acepta `lineas: []` solo en la combinada; `cuerpoNotaCredito` no manda `lineas` vacio (CA-10) | `test` (esquema y servicio), `typecheck`, `lint`, `build`; Playwright en el stack local; despliegue solo con la orden del usuario | EN CURSO |
+| NCU-011 | Hotfix FS-143: `notaCreditoSchema` acepta `lineas: []` solo en la combinada; `cuerpoNotaCredito` no manda `lineas` vacio (CA-10) | `test` (esquema y servicio), `typecheck`, `lint`, `build`; Playwright en el stack local; despliegue solo con la orden del usuario | DONE en la rama (`4139a25`), sin desplegar |
 
 ## Evidencia
 
@@ -43,3 +43,4 @@ Implementada y validada en el stack local (`.local/segel-ensayo`, FS `ncu-local3
   - Ajuste hallado en la prueba: la factura entera va por la nota total, que manda motivo 1; la pantalla mostraba 2. Corregido (SPEC D-7).
   - Hallazgo fuera de esta cadena: FS-142 (busqueda por numero de facturas externas).
 - **NCU-010** textos "Ajuste" (SPEC D-10) verificados en las pasadas 1 y 2.
+- **NCU-011** (FS-143, hotfix, 2026-11-13) commit `4139a25`. API: `nota-credito-esquema.test.ts` 4/4 (solo ajuste total con y sin `lineas: []`; cuerpo viejo `{motivo, lineas: []}` rechazado; combinada vacia rechazada; cuerpos de siempre validos) y `nota-credito-combinada.test.ts` 8/8 (solo ajuste total → `AJ-IVA10`/`AJ-IVA5`/`AJ-EXE`, COMBINADA). Suite API 992 OK / 48 omitidas; `typecheck` y `lint` en 0; `typecheck` y `build` de `web-operacion` en 0. Playwright `scripts/segel-fs/playwright-nc-ajuste-total.cjs` en el stack local (FS `4139a25`, `fe-segel` `segel-rc4.36`, SIFEN test): **13/13**. Facturas 1010675 (USD 2,23) y 1010676 (Gs. 110.000); a 1280 la nota con solo ajuste total USD 0,23 sale sin `lineas` y queda aprobada NC **1010049** (COMBINADA, motivo 8, 0422); a 1440 Gs. 10.000 NC **1010050** aprobada; a 390 el boton se habilita sin desborde.
