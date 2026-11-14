@@ -46,6 +46,7 @@ const makeFiscalResult = (overrides: Partial<FiscalReciboResult> = {}): FiscalRe
   referencia_bancaria: null,
   referencia_documento_numero_display: null,
   actividad_economica_codigo: null,
+  emission_profile_code: null,
   xml_hash: null,
   pdf_hash: null,
   anulacion_motivo: null,
@@ -79,6 +80,7 @@ const makeRecibo = (overrides: Partial<ReciboRecord> = {}): ReciboRecord => ({
   pdf_hash: null,
   anulacion_motivo: null,
   verification_token: null,
+  emission_profile_code: null,
   emitido_at: null,
   created_at: "2026-06-25T00:00:00Z",
   updated_at: "2026-06-25T00:00:00Z",
@@ -349,5 +351,71 @@ describe("verificarRecibo", () => {
     const result = await verificarRecibo("tok-abc", repo, gateway);
     expect(result.valido).toBe(false);
     expect(result.concepto).toBeUndefined();
+  });
+});
+
+describe("SPEC_RECIBO_DINERO_v0.6: perfil de emision y moneda", () => {
+  const base = { fecha_cobro: "2026-11-13", pagador_nombre: "Juan Perez", concepto: "Cobro", importe: 150.5, moneda: "USD" };
+  const rechazoFe = (body: Record<string, unknown>) =>
+    vi.fn().mockRejectedValue(new FiscalGatewayError("UPSTREAM_ERROR", "rejected", { status: 422, body }));
+
+  it("D-2: al crear manda el perfil del punto del usuario", async () => {
+    const gateway = makeGateway();
+    await crearRecibo(context, base, makeRepo(), gateway);
+    expect(gateway.crearRecibo).toHaveBeenCalledWith(expect.objectContaining({ emission_profile_code: "SERV", moneda: "USD", importe: 150.5 }));
+  });
+
+  it("D-2: con NO_REQUERIDO no manda el perfil", async () => {
+    const gateway = makeGateway();
+    const sinPerfil = { ...context, fiscal_context: { ...context.fiscal_context, perfil_emision_codigo: "NO_REQUERIDO" } };
+    await crearRecibo(sinPerfil, base, makeRepo(), gateway);
+    expect(vi.mocked(gateway.crearRecibo).mock.calls[0]![0]).not.toHaveProperty("emission_profile_code");
+  });
+
+  it("D-3: editar no manda perfil ni actividad", async () => {
+    const gateway = makeGateway();
+    await editarRecibo("r1", context, { concepto: "Otro" }, makeRepo(), gateway);
+    const patch = vi.mocked(gateway.editarRecibo).mock.calls[0]![0].patch;
+    expect(patch).not.toHaveProperty("emission_profile_code");
+    expect(patch.actividad_economica_codigo).toBeUndefined();
+  });
+
+  it("CA-04: cambiar de USD a PYG con importe con decimales se rechaza sin llamar a FE", async () => {
+    const gateway = makeGateway();
+    const repo = makeRepo({ findById: vi.fn().mockResolvedValue(makeRecibo({ moneda: "USD", importe: 150.5 })) });
+    await expect(editarRecibo("r1", context, { moneda: "PYG" }, repo, gateway)).rejects.toMatchObject({
+      statusCode: 400,
+      details: { fieldErrors: { importe: ["En guaraníes, el importe va sin decimales."] } },
+    });
+    expect(gateway.editarRecibo).not.toHaveBeenCalled();
+  });
+
+  it("RN-02: en USD admite 2 decimales al editar y rechaza 3", async () => {
+    const repo = makeRepo({ findById: vi.fn().mockResolvedValue(makeRecibo({ moneda: "USD", importe: 10 })) });
+    await expect(editarRecibo("r1", context, { importe: 10.25 }, repo, makeGateway())).resolves.toBeDefined();
+    await expect(editarRecibo("r1", context, { importe: 10.255 }, repo, makeGateway())).rejects.toMatchObject({ statusCode: 400 });
+  });
+
+  it("CA-06: EMISSION_PROFILE_NOT_AVAILABLE se traduce a 422 con mensaje para el operador", async () => {
+    const gateway = makeGateway({ crearRecibo: rechazoFe({ error: "EMISSION_PROFILE_NOT_AVAILABLE" }) });
+    await expect(crearRecibo(context, base, makeRepo(), gateway)).rejects.toMatchObject({
+      statusCode: 422,
+      message: expect.stringContaining("perfil de emisión"),
+    });
+  });
+
+  it("CA-06: ACTIVITY_PROFILE_MISMATCH se traduce a 422", async () => {
+    const gateway = makeGateway({ emitirRecibo: rechazoFe({ error: "ACTIVITY_PROFILE_MISMATCH" }) });
+    await expect(emitirRecibo("r1", context, makeRepo(), gateway)).rejects.toMatchObject({
+      statusCode: 422,
+      message: expect.stringContaining("perfil de tu punto"),
+    });
+  });
+
+  it("RN-05: VALIDATION_ERROR de FE en moneda o importe se traduce a 422", async () => {
+    const moneda = makeGateway({ crearRecibo: rechazoFe({ error: "VALIDATION_ERROR", details: [{ path: ["moneda"] }] }) });
+    await expect(crearRecibo(context, base, makeRepo(), moneda)).rejects.toMatchObject({ statusCode: 422, message: expect.stringContaining("dólares") });
+    const importe = makeGateway({ crearRecibo: rechazoFe({ error: "VALIDATION_ERROR", details: [{ path: ["importe"] }] }) });
+    await expect(crearRecibo(context, base, makeRepo(), importe)).rejects.toMatchObject({ statusCode: 422, message: expect.stringContaining("sin decimales") });
   });
 });

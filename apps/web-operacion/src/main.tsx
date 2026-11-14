@@ -4389,6 +4389,12 @@ function NotasView({
 
 // ─── Componente RecibosView ───────────────────────────────────────────────────
 
+/** SPEC_RECIBO_DINERO_v0.6 D-1 y RN-06: monedas del recibo manual; las demas llegan solo desde una factura. */
+const MONEDAS_RECIBO_MANUAL = [
+  { valor: "PYG", etiqueta: "Guaraníes (Gs.)" },
+  { valor: "USD", etiqueta: "Dólares (USD)" }
+] as const;
+
 function RecibosView({
   onBack,
 }: {
@@ -4418,6 +4424,8 @@ function RecibosView({
   const [formImporte, setFormImporte] = useState("");
   // SPEC_MONEDA_EXTRANJERA_v0.1: el recibo desde una factura en moneda extranjera conserva esa moneda.
   const [formMoneda, setFormMoneda] = useState("PYG");
+  // SPEC_RECIBO_DINERO_v0.6 D-4: la moneda del recibo que nace de una factura no se cambia.
+  const [formMonedaFija, setFormMonedaFija] = useState(false);
   const [formFormaPago, setFormFormaPago] = useState<ReciboFormaPago>("EFECTIVO");
   const [formFechaCobro, setFormFechaCobro] = useState(() => new Date().toISOString().slice(0, 10));
   const [formRefBancaria, setFormRefBancaria] = useState("");
@@ -4554,6 +4562,7 @@ function RecibosView({
     setFormConcepto("");
     setFormImporte("");
     setFormMoneda("PYG");
+    setFormMonedaFija(false);
     setFormFormaPago("EFECTIVO");
     setFormFechaCobro(new Date().toISOString().slice(0, 10));
     setFormRefBancaria("");
@@ -4575,6 +4584,7 @@ function RecibosView({
     setFormConcepto(r.concepto);
     setFormImporte(String(r.importe));
     setFormMoneda(r.moneda ?? "PYG");
+    setFormMonedaFija(Boolean(r.referencia_documento_uuid) || !MONEDAS_RECIBO_MANUAL.some((m) => m.valor === (r.moneda ?? "PYG")));
     setFormFormaPago(r.forma_pago);
     setFormFechaCobro(r.fecha_cobro);
     setFormRefBancaria(r.referencia_bancaria ?? "");
@@ -4885,6 +4895,23 @@ function RecibosView({
             <label>
               Concepto *
               <input type="text" value={formConcepto} onChange={(e) => setFormConcepto(e.target.value)} placeholder="Pago de servicio mensual" />
+            </label>
+            <label>
+              Moneda
+              <select
+                disabled={formMonedaFija}
+                onChange={(e) => {
+                  const nueva = e.target.value;
+                  // RN-06: al pasar a guaraníes el importe pierde los decimales.
+                  if (nueva === "PYG" && formImporte) setFormImporte(String(Math.trunc(Number(formImporte)) || ""));
+                  setFormMoneda(nueva);
+                }}
+                value={formMoneda}
+              >
+                {MONEDAS_RECIBO_MANUAL.map((m) => <option key={m.valor} value={m.valor}>{m.etiqueta}</option>)}
+                {MONEDAS_RECIBO_MANUAL.some((m) => m.valor === formMoneda) ? null : <option value={formMoneda}>{formMoneda}</option>}
+              </select>
+              {formMonedaFija ? <small>El recibo de una factura va en la moneda de la factura.</small> : null}
             </label>
             <label>
               Importe ({formMoneda === "PYG" ? "Gs." : formMoneda}) *

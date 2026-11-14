@@ -504,6 +504,8 @@ export interface FiscalCrearReciboRequest {
   referencia_bancaria?: string | null;
   referencia_documento_uuid?: string | null;
   referencia_documento_numero_display?: string | null;
+  /** SPEC_RECIBO_DINERO_v0.6 D-2 (guia FE §71): perfil del punto; solo al crear. */
+  emission_profile_code?: string;
   client_reference?: { idempotency_key: string };
 }
 
@@ -523,6 +525,8 @@ export interface FiscalReciboResult {
   referencia_bancaria: string | null;
   referencia_documento_numero_display: string | null;
   actividad_economica_codigo: string | null;
+  /** SPEC_RECIBO_DINERO_v0.6 RN-07: perfil usado por FE, o null (FE sin v0.56 no lo devuelve). */
+  emission_profile_code: string | null;
   xml_hash: string | null;
   pdf_hash: string | null;
   anulacion_motivo: string | null;

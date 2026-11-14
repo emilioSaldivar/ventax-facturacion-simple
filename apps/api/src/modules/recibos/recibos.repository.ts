@@ -7,6 +7,17 @@ import type {
   UpsertReciboFromFiscalInput,
 } from "./recibos.types.js";
 
+/** SPEC_RECIBO_DINERO_v0.6 RN-07: el perfil sale de la ultima respuesta de FE guardada, sin columna nueva. */
+function perfilDelSnapshot(snapshot: unknown): string | null {
+  const data = typeof snapshot === "string" ? safeJson(snapshot) : snapshot;
+  const value = data && typeof data === "object" ? (data as Record<string, unknown>).emission_profile_code : null;
+  return typeof value === "string" && value ? value : null;
+}
+
+function safeJson(value: string): unknown {
+  try { return JSON.parse(value); } catch { return null; }
+}
+
 function mapRow(row: Record<string, unknown>): ReciboRecord {
   return {
     id: row.id as string,
@@ -35,6 +46,7 @@ function mapRow(row: Record<string, unknown>): ReciboRecord {
     pdf_hash: (row.pdf_hash as string | null) ?? null,
     anulacion_motivo: (row.anulacion_motivo as string | null) ?? null,
     verification_token: (row.verification_token as string | null) ?? null,
+    emission_profile_code: perfilDelSnapshot(row.fiscal_response_snapshot),
     emitido_at: row.emitido_at ? new Date(row.emitido_at as string | Date).toISOString() : null,
     created_at: new Date(row.created_at as string | Date).toISOString(),
     updated_at: new Date(row.updated_at as string | Date).toISOString(),

@@ -5705,6 +5705,10 @@ components:
         moneda:
           type: string
           default: PYG
+        emission_profile_code:
+          type: string
+          nullable: true
+          description: SPEC_RECIBO_DINERO_v0.6 RN-07. Perfil de emision con que FE genero el recibo (el del punto del usuario al crearlo), o null.
         forma_pago:
           $ref: "#/components/schemas/ReciboFormaPago"
         referencia_bancaria:
@@ -5792,6 +5796,10 @@ components:
           exclusiveMinimum: 0
         moneda:
           type: string
+          enum: [PYG, USD, EUR, BRL]
+          description: >-
+            SPEC_RECIBO_DINERO_v0.6 RN-01 y RN-02. PYG con importe entero; USD, EUR y BRL con hasta 2 decimales.
+            El formulario manual ofrece PYG y USD; EUR y BRL llegan desde una factura en esa moneda. Fuera de regla, 400 VALIDATION_ERROR.
           default: PYG
         forma_pago:
           $ref: "#/components/schemas/ReciboFormaPago"
@@ -5831,6 +5839,10 @@ components:
           exclusiveMinimum: 0
         moneda:
           type: string
+          enum: [PYG, USD, EUR, BRL]
+          description: >-
+            SPEC_RECIBO_DINERO_v0.6 RN-01 y RN-02. PYG con importe entero; USD, EUR y BRL con hasta 2 decimales.
+            El formulario manual ofrece PYG y USD; EUR y BRL llegan desde una factura en esa moneda. Fuera de regla, 400 VALIDATION_ERROR.
         forma_pago:
           $ref: "#/components/schemas/ReciboFormaPago"
         referencia_bancaria:

@@ -684,6 +684,7 @@ export class MockFiscalGateway implements FiscalGateway {
   }
 
   async crearRecibo(request: FiscalCrearReciboRequest): Promise<FiscalReciboResult> {
+    validarMockRecibo(request.moneda ?? "PYG", request.importe, request.emission_profile_code);
     const id = crypto.randomUUID();
     const now = new Date().toISOString();
     const result: FiscalReciboResult = {
@@ -702,6 +703,7 @@ export class MockFiscalGateway implements FiscalGateway {
       referencia_bancaria: request.referencia_bancaria ?? null,
       referencia_documento_numero_display: request.referencia_documento_numero_display ?? null,
       actividad_economica_codigo: request.actividad_economica_codigo ?? null,
+      emission_profile_code: request.emission_profile_code ?? null,
       xml_hash: null,
       pdf_hash: null,
       anulacion_motivo: null,
@@ -720,6 +722,11 @@ export class MockFiscalGateway implements FiscalGateway {
     if (existing.estado !== "BORRADOR") {
       throw mockReciboError(409, "RECIBO_NOT_EDITABLE", "El recibo ya no esta en estado BORRADOR.");
     }
+    validarMockRecibo(
+      request.patch.moneda ?? existing.moneda,
+      request.patch.importe ?? Number(existing.importe),
+      request.patch.emission_profile_code
+    );
     const updated: FiscalReciboResult = {
       ...existing,
       fecha_cobro: request.patch.fecha_cobro ?? existing.fecha_cobro,
@@ -735,6 +742,8 @@ export class MockFiscalGateway implements FiscalGateway {
         request.patch.referencia_documento_numero_display ?? existing.referencia_documento_numero_display,
       actividad_economica_codigo:
         request.patch.actividad_economica_codigo ?? existing.actividad_economica_codigo,
+      emission_profile_code:
+        request.patch.emission_profile_code !== undefined ? request.patch.emission_profile_code ?? null : existing.emission_profile_code,
       updated_at: new Date().toISOString()
     };
     this.recibos.set(request.reciboId, updated);
@@ -1531,10 +1540,13 @@ export class RealFiscalGateway implements FiscalGateway {
   }
 
   async crearRecibo(request: FiscalCrearReciboRequest): Promise<FiscalReciboResult> {
+    // SPEC_RECIBO_DINERO_v0.6 D-2: mismo flag que la factura para no mandar el perfil.
+    const { emission_profile_code: profileCode, ...resto } = request;
+    const payload = this.config.sendEmissionProfileCode !== false && profileCode ? { ...resto, emission_profile_code: profileCode } : resto;
     const response = await this.fetchWithTimeout(`${this.config.baseUrl}/recibos`, {
       method: "POST",
       headers: { ...this.buildHeaders(), "content-type": "application/json" },
-      body: JSON.stringify(request)
+      body: JSON.stringify(payload)
     });
     const body = await readJson(response);
     if (!response.ok) {
@@ -2238,6 +2250,7 @@ function mapFiscalReciboResponse(body: unknown): FiscalReciboResult {
     referencia_bancaria: stringOrNull(data.referencia_bancaria),
     referencia_documento_numero_display: stringOrNull(data.referencia_documento_numero_display),
     actividad_economica_codigo: stringOrNull(data.actividad_economica_codigo),
+    emission_profile_code: stringOrNull(data.emission_profile_code),
     xml_hash: stringOrNull(data.xml_hash),
     pdf_hash: stringOrNull(data.pdf_hash),
     anulacion_motivo: stringOrNull(data.anulacion_motivo),
@@ -2844,8 +2857,21 @@ function mapFiscalIdempotencyReconciliationResponse(
   };
 }
 
-function mockReciboError(status: number, code: string, message: string): FiscalGatewayError {
-  return new FiscalGatewayError("UPSTREAM_ERROR", message, { status, body: { error: code, message } });
+function mockReciboError(status: number, code: string, message: string, details?: unknown): FiscalGatewayError {
+  return new FiscalGatewayError("UPSTREAM_ERROR", message, { status, body: { error: code, message, ...(details !== undefined ? { details } : {}) } });
+}
+
+/** Reglas de la guia de FE §71.3 y §71.4 (v0.56) en el mock: monedas, decimales en PYG y perfil inexistente. */
+function validarMockRecibo(moneda: string, importe: number, profileCode: string | null | undefined): void {
+  if (!["PYG", "USD", "EUR", "BRL"].includes(moneda)) {
+    throw mockReciboError(422, "VALIDATION_ERROR", "moneda no admitida", [{ path: ["moneda"], message: "moneda no admitida" }]);
+  }
+  if (moneda === "PYG" && !Number.isInteger(importe)) {
+    throw mockReciboError(422, "VALIDATION_ERROR", "importe en PYG no admite decimales", [{ path: ["importe"], message: "importe en PYG no admite decimales" }]);
+  }
+  if (profileCode === "NO-EXISTE") {
+    throw mockReciboError(422, "EMISSION_PROFILE_NOT_AVAILABLE", "Perfil de emisión no encontrado o inactivo para el emisor", { emission_profile_code: profileCode });
+  }
 }
 
 function mapFetchError(error: unknown): FiscalGatewayError {

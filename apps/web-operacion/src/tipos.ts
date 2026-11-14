@@ -743,6 +743,8 @@ export interface ReciboRecord {
   referencia_documento_numero_display: string | null;
   anulacion_motivo: string | null;
   verification_token: string | null;
+  /** SPEC_RECIBO_DINERO_v0.6 RN-07: perfil con que FE genero el recibo (no se muestra en esta version). */
+  emission_profile_code?: string | null;
   emitido_at: string | null;
   created_at: string;
 }

@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { tieneDecimalesValidos } from "@facturacion-simple/shared";
 import { HttpError } from "../../shared/errors/http-error.js";
 import {
   FiscalGatewayError,
@@ -59,12 +60,40 @@ function mapFiscalGatewayError(error: unknown, accion: string): HttpError {
       return new HttpError(422, "VALIDATION_ERROR", "La factura referenciada no existe o no pertenece a este facturador.");
     case "ACTIVITY_NOT_AVAILABLE":
       return new HttpError(422, "VALIDATION_ERROR", "La actividad economica indicada no esta declarada/activa para este facturador.");
+    // SPEC_RECIBO_DINERO_v0.6 RN-05 (guia FE §71.4).
+    case "EMISSION_PROFILE_NOT_AVAILABLE":
+      return new HttpError(422, "VALIDATION_ERROR", "El perfil de emisión de tu punto no está disponible en el sistema fiscal. Avisá a soporte.");
+    case "ACTIVITY_PROFILE_MISMATCH":
+      return new HttpError(422, "VALIDATION_ERROR", "La actividad del recibo no corresponde al perfil de tu punto. Avisá a soporte.");
+    case "VALIDATION_ERROR": {
+      const campo = campoDeValidacionFiscal(body.details);
+      if (campo === "moneda") return new HttpError(422, "VALIDATION_ERROR", MENSAJE_MONEDA);
+      if (campo === "importe") return new HttpError(422, "VALIDATION_ERROR", "En guaraníes, el importe va sin decimales.");
+      return new HttpError(502, "INTERNAL_ERROR", `Backend fiscal rechazo ${accion}.`, { gateway_code: error.code, details: error.details ?? null });
+    }
     default:
       return new HttpError(502, "INTERNAL_ERROR", `Backend fiscal rechazo ${accion}.`, {
         gateway_code: error.code,
         details: error.details ?? null
       });
   }
+}
+
+export const MENSAJE_MONEDA = "La moneda del recibo debe ser guaraníes, dólares, euros o reales.";
+
+/** SPEC_RECIBO_DINERO_v0.6 RN-02: mensaje si el importe no respeta los decimales de la moneda, o null. */
+export function mensajeImporteMoneda(importe: number, moneda: string): string | null {
+  if (tieneDecimalesValidos(importe, moneda)) return null;
+  return moneda === "PYG" ? "En guaraníes, el importe va sin decimales." : "El importe admite hasta 2 decimales.";
+}
+
+function campoDeValidacionFiscal(details: unknown): string | null {
+  if (!Array.isArray(details)) return null;
+  for (const item of details) {
+    const path = item && typeof item === "object" ? (item as { path?: unknown }).path : null;
+    if (Array.isArray(path) && (path[0] === "moneda" || path[0] === "importe")) return path[0] as string;
+  }
+  return null;
 }
 
 function buildFiscalCrearReciboRequest(
@@ -87,6 +116,10 @@ function buildFiscalCrearReciboRequest(
     referencia_bancaria: input.referencia_bancaria ?? null,
     referencia_documento_uuid: input.referencia_documento_uuid ?? null,
     referencia_documento_numero_display: input.referencia_documento_numero_display ?? null,
+    // SPEC_RECIBO_DINERO_v0.6 D-2: perfil del punto del usuario, como la factura.
+    ...(context.fiscal_context.perfil_emision_codigo && context.fiscal_context.perfil_emision_codigo !== "NO_REQUERIDO"
+      ? { emission_profile_code: context.fiscal_context.perfil_emision_codigo }
+      : {}),
     ...(idempotencyKey ? { client_reference: { idempotency_key: externalRef } } : {})
   };
 }
@@ -164,12 +197,17 @@ export async function editarRecibo(
   if (input.importe !== undefined && input.importe <= 0) {
     throw new HttpError(400, "VALIDATION_ERROR", "El importe debe ser mayor a cero.");
   }
+  // SPEC_RECIBO_DINERO_v0.6 RN-02: la regla se controla sobre el recibo resultante.
+  const mensaje = mensajeImporteMoneda(input.importe ?? existing.importe, input.moneda ?? existing.moneda);
+  if (mensaje) {
+    throw new HttpError(400, "VALIDATION_ERROR", mensaje, { formErrors: [], fieldErrors: { importe: [mensaje] } });
+  }
 
   try {
+    // SPEC_RECIBO_DINERO_v0.6 D-3: editar no cambia perfil ni actividad; el borrador queda en su punto.
     const fiscalResult = await gateway.editarRecibo({
       reciboId: id,
       patch: {
-        actividad_economica_codigo: context.fiscal_context.actividad_economica_codigo,
         fecha_cobro: input.fecha_cobro,
         pagador_nombre: input.pagador_nombre,
         pagador_documento_tipo: input.pagador_documento_tipo as ReciboPagadorDocumentoTipo | undefined,

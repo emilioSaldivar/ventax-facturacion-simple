@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
+import { monedasFactura } from "@facturacion-simple/shared";
 import { requireAuth } from "../auth/auth.middleware.js";
 import { operationalContextRepository } from "../context/context.repository.js";
 import { getOperationalContext } from "../context/context.service.js";
@@ -22,6 +23,8 @@ import {
   getReciboPdf,
   getReciboXml,
   listRecibos,
+  mensajeImporteMoneda,
+  MENSAJE_MONEDA,
 } from "./recibos.service.js";
 
 /**
@@ -56,7 +59,8 @@ const createBodySchema = z.object({
   pagador_documento: z.string().nullish(),
   concepto: z.string().min(1),
   importe: z.number().positive(),
-  moneda: z.string().min(1).optional(),
+  // SPEC_RECIBO_DINERO_v0.6 RN-01 y D-1: las monedas de la factura.
+  moneda: z.enum(monedasFactura, { errorMap: () => ({ message: MENSAJE_MONEDA }) }).optional(),
   forma_pago: formaPagoSchema.optional(),
   referencia_bancaria: z.string().nullish(),
   referencia_documento_uuid: z.string().uuid().nullish(),
@@ -78,7 +82,17 @@ function refinarPagador(
   }
 }
 
-const updateBodySchema = createBodySchema
+/** SPEC_RECIBO_DINERO_v0.6 RN-01 y RN-02: moneda admitida e importe con los decimales de la moneda. */
+function refinarMonedaImporte(body: { importe?: number; moneda?: string }, ctx: z.RefinementCtx): void {
+  if (body.importe === undefined) return;
+  const mensaje = mensajeImporteMoneda(body.importe, body.moneda ?? "PYG");
+  if (mensaje) ctx.addIssue({ code: "custom", path: ["importe"], message: mensaje, params: ISSUE_OPERADOR });
+}
+
+/** Cuerpo de `POST /recibos` (exportado para las pruebas de RN-01 y RN-02). */
+export const reciboCreateBodySchema = createBodySchema.superRefine(refinarPagador).superRefine(refinarMonedaImporte);
+
+export const updateBodySchema = createBodySchema
   .omit({ fecha_cobro: true, referencia_documento_uuid: true, referencia_documento_numero_display: true })
   .partial()
   .extend({
@@ -110,7 +124,7 @@ function parseIdempotencyKey(value: string | undefined): string | undefined {
 recibosRouter.post(
   "/recibos",
   requireAuth,
-  validateRequest("body", createBodySchema.superRefine(refinarPagador)),
+  validateRequest("body", reciboCreateBodySchema),
   async (req, res, next) => {
     try {
       const context = await getOperationalContext(req.user!, operationalContextRepository);
