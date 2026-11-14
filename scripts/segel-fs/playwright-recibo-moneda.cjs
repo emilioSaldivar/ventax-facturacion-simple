@@ -4,10 +4,13 @@
 //   ENSAYO_PASSWORD_FILE=/ruta/clave node scripts/segel-fs/playwright-recibo-moneda.cjs [caso ...]
 //
 // Casos: pantalla (RN-06, CA-02, CA-09 en 1440, 1280 y 390), api (CA-03, CA-04), emitir (CA-01 en USD y CA-08: crea y
-// emite un recibo firmado por el FE de la pila; el recibo no es un DE de SIFEN). Sin casos: todos.
+// emite un recibo firmado por el FE de la pila; el recibo no es un DE de SIFEN). Sin casos: los tres.
+// Caso candidato (RDM-010, FE con guia §71): perfil en la respuesta y cabecera del perfil en el PDF, recibo desde la
+// factura a credito USD de RECIBO_FACTURA_ID (ya emitida; no emite facturas) y recibo EUR por la API.
 // Variables: SEGEL_APP_URL, ENSAYO_USER. Escribe test-results/recibo-moneda/.
 const fs = require("node:fs");
 const path = require("node:path");
+const { execFileSync } = require("node:child_process");
 const { chromium } = require(path.join(__dirname, "../../node_modules/playwright"));
 const { abrirVista, esperarSesion } = require(path.join(__dirname, "../lib/navegacion.cjs"));
 
@@ -17,7 +20,8 @@ const clave = fs.readFileSync(process.env.ENSAYO_PASSWORD_FILE ?? "", "utf8").tr
 const outDir = path.join(process.cwd(), "test-results", "recibo-moneda");
 fs.mkdirSync(outDir, { recursive: true });
 const pedidos = process.argv.slice(2);
-const corre = (caso) => pedidos.length === 0 || pedidos.includes(caso);
+const corre = (caso) => (pedidos.length === 0 ? ["pantalla", "api", "emitir"].includes(caso) : pedidos.includes(caso));
+const FACTURA_USD = process.env.RECIBO_FACTURA_ID ?? "";
 
 const resultados = [];
 function check(escenario, ok, detalle = "") {
@@ -157,6 +161,59 @@ const cuerpoBase = { fecha_cobro: new Date().toISOString().slice(0, 10), pagador
           return { status: r.status, tipo: r.headers.get("content-type"), inicio: String.fromCharCode(...b.slice(0, 5)), largo: b.length };
         }, { id: recibo.id, token: page.__token ?? "" });
         check("CA-01/CA-08: el PDF firmado de FE se descarga", pdf.status === 200 && pdf.inicio === "%PDF-", JSON.stringify(pdf));
+      }
+      await ctx.close();
+    }
+    if (corre("candidato")) {
+      const { ctx, page } = await entrar(browser, 1440, 900);
+      await abrirVista(page, "Cobros / Recibos");
+      const textoPdf = async (id, nombre) => {
+        const b64 = await page.evaluate(async ({ id, token }) => {
+          const r = await fetch(`/api/v1/recibos/${id}/pdf`, { headers: { authorization: token }, credentials: "include" });
+          const b = new Uint8Array(await r.arrayBuffer());
+          let s = "";
+          for (const x of b) s += String.fromCharCode(x);
+          return btoa(s);
+        }, { id, token: page.__token ?? "" });
+        const archivo = path.join(outDir, nombre);
+        fs.writeFileSync(archivo, Buffer.from(b64, "base64"));
+        return execFileSync("pdftotext", ["-layout", archivo, "-"]).toString().replace(/\s+/g, " ");
+      };
+      const emitir = async (id) => api(page, "POST", `/recibos/${id}/emitir`);
+
+      const usd = await api(page, "POST", "/recibos", { ...cuerpoBase, concepto: "RDM-010 recibo USD perfil", moneda: "USD", importe: 150.5 });
+      check("RDM-010 CA-01: el recibo vuelve con el perfil del punto", usd.status === 201 && Boolean(usd.json?.emission_profile_code), JSON.stringify(usd.json?.emission_profile_code ?? usd.json));
+      if (usd.status === 201) {
+        const e = await emitir(usd.json.id);
+        const t = await textoPdf(usd.json.id, "rdm010-usd.pdf");
+        check("RDM-010 CA-01: emitido; PDF en USD con letras", e.status === 200 && t.includes("USD 150,50") && /DÓLARES ESTADOUNIDENSES CON 50\/100/.test(t), t.slice(0, 400));
+        console.log(`PDF USD: ${t.slice(0, 600)}`);
+      }
+
+      const eur = await api(page, "POST", "/recibos", { ...cuerpoBase, concepto: "RDM-010 recibo EUR", moneda: "EUR", importe: 1250.75 });
+      check("RDM-010 CA-02: recibo EUR 1250,75 creado", eur.status === 201 && eur.json?.moneda === "EUR", JSON.stringify(eur.json).slice(0, 300));
+      if (eur.status === 201) {
+        const e = await emitir(eur.json.id);
+        const t = await textoPdf(eur.json.id, "rdm010-eur.pdf");
+        check("RDM-010 CA-02: PDF en EUR con letras", e.status === 200 && t.includes("EUR 1.250,75") && /EUROS CON 75\/100/.test(t), t.slice(0, 400));
+      }
+
+      if (FACTURA_USD) {
+        const desde = await api(page, "POST", `/facturas/${FACTURA_USD}/recibo`);
+        check("RDM-010 CA-07: recibo desde la factura a credito USD, en USD por su total y con perfil", desde.status === 201 && desde.json?.moneda === "USD" && Boolean(desde.json?.emission_profile_code), JSON.stringify(desde.json).slice(0, 300));
+        if (desde.status === 201) {
+          await page.reload();
+          await esperarSesion(page);
+          await abrirVista(page, "Cobros / Recibos");
+          const tarjeta = page.locator(".nota-card", { hasText: desde.json.concepto }).first();
+          await tarjeta.getByRole("button", { name: "Ver" }).click();
+          await page.getByRole("button", { name: "Editar", exact: true }).click();
+          check("RDM-010 D-4: al editar, la moneda del recibo de factura no se cambia", await page.getByLabel("Moneda").isDisabled());
+          await page.screenshot({ path: path.join(outDir, "1440-recibo-factura-moneda-fija.png"), fullPage: true });
+          const e = await emitir(desde.json.id);
+          const t = await textoPdf(desde.json.id, "rdm010-desde-factura.pdf");
+          check("RDM-010 CA-07: emitido; PDF en USD", e.status === 200 && t.includes("USD"), t.slice(0, 300));
+        }
       }
       await ctx.close();
     }
