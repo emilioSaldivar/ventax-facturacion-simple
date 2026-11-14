@@ -51,7 +51,7 @@ Autorizacion del usuario en esta sesion para lectura, imagenes y despliegue. Sin
 - Vuelta atras disponible: `rollback.sh 2026.11.13.1` (`:antes-2026.11.13.1` = `44359dd`: api `4da89010a4a5`, frontend `dbaf373e2753`).
 - Pendiente: el usuario repite en produccion sus casos (0000361 solo ajuste sobre el total; 0000360 motivo con la factura entera).
 
-### E-3. Hotfix de dirección del cliente (FS-152 a FS-155) — PREPARADO, sin ejecutar (2026-11-13)
+### E-3. Hotfix de dirección del cliente (FS-152 a FS-155) — REEMPLAZADO por E-4 (no se ejecutó solo; su contenido va en E-4)
 
 Alcance: FS `061e36a` (hotfix `2fb80c9` más la aclaración de la ficha, D-6) (API, migración `0053_domicilio_cliente.sql` aditiva y frontend; `SPEC/PLAN/TASKS_DIRECCION_RECEPTOR_v0.1`) y FE `segel-rc4.37.1` (`cbec3e7`, plantillas del KuDE y validaciones del domicilio; sesión `facturacion-electronica-da`). Validado en el stack local de ensayo con las dos versiones juntas (TASKS DIR-012 a DIR-014 y cierre DIR-019: 56/56, 67/67, 25/25, 6/6, 1/1, 13/13, reconocimiento sin subas; SIFEN test 1010689, 1010690 y remisión 0000515). Sin cambio de variables.
 
@@ -69,4 +69,38 @@ Ajuste de `deploy.sh` para este corte: la verificación CA-03 comparaba con la l
 Después del despliegue: los clientes ya cargados conservan su calle y su dirección no sale en la factura hasta completar número, departamento y ciudad (RN-05).
 
 **Ensayo de E-3 en el stack local (2026-11-13, 23:11Z; sin producción).** Stack de ensayo llevado al estado de producción (FS `3613087`, migración `0052`, sin las columnas de `0053`); imágenes `segel-fs-prod-api:061e36a` y `segel-fs-prod-frontend:061e36a` construidas desde el tag como `build.sh`, sin transferir. `lectura.sh` (variables al stack local): 52 / `0052`, 781 documentos, 16 externas, 12 combinadas, 0 errores. `ESP_MIGRACIONES=0050,0051,0052,0053 ESP_EXTERNAS=16 ESP_COMBINADAS=12 deploy.sh 061e36a ensayo-dir 781 0052 true fe-segel-api-1=sha256:d79fabd0c6e1 rollback_auto` → **OK**, exit 0: guarda de FE OK; respaldo y restauración de prueba 781 / `0052` sin avisos; corte 23:11:36Z → 23:12:09Z (33 s), `migrate` aplicó `0053`; CA-03 `0050,0051,0052,0053` (53); CA-04 `061e36a` en API y frontend, `/app/` 200, healthy, FE responde; CA-05 781 / 16 / 12; CA-06 `true/true`; CA-07 0 errores. Playwright de pantalla después del corte 17/17. `rollback.sh ensayo-dir` → OK: volvió a `3613087`, healthy, con las columnas de `0053` presentes (la versión anterior las ignora). Después se dejó el stack en `061e36a`. Registros: `test-results/direccion-receptor/ensayo-deploy.log` y `ensayo-rollback.log`.
+
+### E-4. Dirección del cliente + recibos v0.6 con FE `segel-rc4.37.2` — PREPARADO y ensayado, sin ejecutar (2026-11-14)
+
+Alcance FS: tag local `segel-fs-2026.11.14` = `4a3beb3` (rama `feat/identidad-segel`). Incluye E-3 (`061e36a`, FS-152/154/155, migración `0053_domicilio_cliente.sql` aditiva) más `RECIBO_DINERO_v0.6` (FS-158; sin migración). Migraciones nuevas respecto de producción (`361e10a`, `0052`): solo `0053`. FE: tren `segel-rc4.37.2` (`f70812b`; recibo con perfil y moneda, descuento global en el KuDE, migración FE `053`), desplegado por FE.
+
+Orden (cada paso con autorización explícita del usuario en esta sesión; Regla de Oro):
+
+1. FE despliega `segel-rc4.37.2` en `segel-fs`, hace su humo e informa el id de imagen de `fe-segel-api-1`.
+2. `lectura.sh` en `segel-fs`: versión `361e10a`, migraciones 52 / `0052`, documentos, externas, combinadas, pendientes e id de FE.
+3. `build.sh segel-fs-2026.11.14`: construye `segel-fs-prod-api:4a3beb3` y `segel-fs-prod-frontend:4a3beb3` y los transfiere.
+4. Corte: `ssh segel-fs 'ESP_MIGRACIONES=0050,0051,0052,0053 ESP_EXTERNAS=<lectura> ESP_COMBINADAS=<lectura> bash -s -- 4a3beb3 2026.11.14 <documentos> 0052 true fe-segel-api-1=<id rc4.37.2> rollback_auto' < scripts/segel-fs/prod/deploy.sh`.
+5. Verificación: CA-03 `0050,0051,0052,0053`; CA-04 `X-App-Version 4a3beb3`; CA-05 conteos iguales a la lectura; CA-07 0 errores.
+6. Humo de FS, solo lectura salvo que el usuario pida emitir:
+   - formulario de recibo con "Moneda" (Gs. y USD), sin guardar;
+   - Nueva factura con "Agregar dirección" y Departamento → Ciudad;
+   - KuDE de una factura existente por su enlace público.
+   - Un recibo USD real solo con la orden del usuario y en el emisor que indique.
+7. Vuelta atrás: `rollback.sh 2026.11.14` → imágenes `:antes-2026.11.14` (`361e10a`). Las columnas de `0053` quedan nulas y la versión anterior las ignora. FE no necesita volver: `361e10a` funciona con `rc4.37.2`, porque el recibo de `361e10a` solo ofrece PYG y la factura no cambió de API.
+
+**Ensayo en el stack local (2026-11-14 02:41Z a 02:44Z, sin producción).**
+- Stack `.local/segel-ensayo` (FS `061e36a-rdm06`, `0053` ya aplicada) con FE `fe-segel` en `55ff65f`: mismo `src` que `segel-rc4.37.2`; solo difieren 3 archivos de docs, verificado con `git diff`.
+- Imágenes `segel-fs-prod-api:4a3beb3` y `segel-fs-prod-frontend:4a3beb3` construidas desde el tag como `build.sh`, sin transferir.
+- `lectura.sh` (variables al stack local): 53 / `0053`, 783 documentos, 16 externas, 12 combinadas, 0 pendientes, 0 errores.
+- `deploy.sh 4a3beb3 ensayo-rdm 783 0053 true fe-segel-api-1=sha256:845c89119592 rollback_auto` con `ESP_MIGRACIONES=0050,0051,0052,0053 ESP_EXTERNAS=16 ESP_COMBINADAS=12` → **OK**, exit 0:
+  - corte 02:41:47Z → 02:42:20Z (33 s);
+  - CA-03 53;
+  - CA-04 `4a3beb3` en API y frontend, `/app/` 200, healthy, FE responde;
+  - CA-05 783 / 16 / 12;
+  - CA-06 `true/true`;
+  - CA-07 0 errores.
+- `rollback.sh ensayo-rdm` → OK, healthy.
+- Segundo `deploy.sh`: **abortó en la fase 1b** (restauración de prueba del respaldo), con `createdb` sin conexión al Postgres temporal. El stack no se tocó y siguió en la versión anterior. El tercer intento (`ensayo-rdm3`) dio **OK** con los mismos CA (corte 02:43:23Z → 02:43:56Z). Registrado como BACKLOG FS-170. Si pasa en producción, el guion aborta antes del corte y se reintenta.
+- Humo después del corte: `playwright-recibo-moneda.cjs api` 7/7.
+- Logs en el scratchpad de la sesión: `ensayo-deploy-rdm.log`, `ensayo-rollback-rdm.log`, `ensayo-deploy-rdm2.log` y `ensayo-deploy-rdm3.log`.
 
